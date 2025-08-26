@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Chamados</h1>
+        <p class="text-gray-600 mt-2">Gerencie seus chamados e solicitações</p>
+    </div>
+    
+    <!-- User Info Section -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center">
+                    <i class="fas fa-user text-2xl text-gray-600"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">{{ user.first_name }} {{ user.last_name }}</h2>
+                    <p class="text-gray-600">{{ user.get_hierarchy_display }} de Operações</p>
+                </div>
+            </div>
+            <a href="{% url 'ticket_create' %}" class="bg-secondary text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors">
+                Novo Chamado
+            </a>
+        </div>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100">
+                    <i class="fas fa-ticket-alt text-blue-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Total de Chamados</p>
+                    <p class="text-2xl font-semibold text-gray-900">24</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100">
+                    <i class="fas fa-clock text-yellow-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Em Andamento</p>
+                    <p class="text-2xl font-semibold text-gray-900">8</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100">
+                    <i class="fas fa-check-circle text-green-600"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Resolvidos</p>
+                    <p class="text-2xl font-semibold text-gray-900">16</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-primary/10">
+                    <i class="fas fa-coins text-primary"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600">Saldo C$</p>
+                    <p class="text-2xl font-semibold text-primary">{{ user.balance_cs }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Tickets -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">Chamados Recentes</h3>
+                <a href="{% url 'tickets_list' %}" class="text-primary hover:text-orange-600 text-sm font-medium">Ver todos</a>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            <div class="space-y-4">
+                <!-- Sample ticket item -->
+                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex-shrink-0">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Em Andamento
+                            </span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Problema no sistema de vendas</p>
+                            <p class="text-sm text-gray-500">ID: #001 - Solicitado em 22/08/2025</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">Responsável</p>
+                            <p class="text-sm font-medium text-gray-900">João Silva</p>
+                        </div>
+                        <a href="#" class="text-secondary hover:text-gray-800">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex-shrink-0">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Concluído
+                            </span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Solicitação de equipamento</p>
+                            <p class="text-sm text-gray-500">ID: #002 - Solicitado em 20/08/2025</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">Responsável</p>
+                            <p class="text-sm font-medium text-gray-900">Maria Santos</p>
+                        </div>
+                        <a href="#" class="text-secondary hover:text-gray-800">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+# Logo Placeholder
+# Coloque aqui o arquivo logo.png da empresa Rede Confiança
+# Dimensões recomendadas: 256x256 pixels ou maior
+# Formato: PNG com fundo transparente
+
+# Para agora, você pode usar qualquer logo temporário ou criar um SVG simples

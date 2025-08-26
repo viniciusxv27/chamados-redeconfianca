@@ -1,0 +1,42 @@
+<!-- Logo SVG - Rede Confiança com Montserrat -->
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <style>
+            .logo-text { 
+                font-family: 'Montserrat', sans-serif; 
+                font-weight: 700; 
+                fill: #2C3E50;
+                font-size: 6px;
+            }
+        </style>
+        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#F39C12;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+    
+    <!-- Hexágono externo -->
+    <polygon points="32,4 52,16 52,36 32,48 12,36 12,16" 
+             fill="url(#grad1)" 
+             stroke="#2C3E50" 
+             stroke-width="2"/>
+    
+    <!-- Hexágono interno -->
+    <polygon points="32,12 44,20 44,32 32,40 20,32 20,20" 
+             fill="#2C3E50" 
+             opacity="0.8"/>
+    
+    <!-- Pontos de conexão (rede) -->
+    <circle cx="32" cy="20" r="2" fill="#FF6B35"/>
+    <circle cx="38" cy="24" r="2" fill="#FF6B35"/>
+    <circle cx="38" cy="32" r="2" fill="#FF6B35"/>
+    <circle cx="26" cy="28" r="2" fill="#FF6B35"/>
+    
+    <!-- Linhas de conexão -->
+    <line x1="32" y1="20" x2="38" y2="24" stroke="#FF6B35" stroke-width="2"/>
+    <line x1="38" y1="24" x2="38" y2="32" stroke="#FF6B35" stroke-width="2"/>
+    <line x1="38" y1="24" x2="26" y2="28" stroke="#FF6B35" stroke-width="2"/>
+    
+    <!-- Texto (opcional para logo pequeno) -->
+    <text x="32" y="56" text-anchor="middle" class="logo-text">RC</text>
+</svg>

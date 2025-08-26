@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Rede Confiança - Portal{% endblock %}</title>
+    <!-- Google Fonts - Montserrat -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Montserrat', 'ui-sans-serif', 'system-ui'],
+                        'montserrat': ['Montserrat', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#FF6B35',
+                        'secondary': '#2C3E50',
+                        'success': '#27AE60',
+                        'warning': '#F39C12',
+                        'danger': '#E74C3C',
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+</head>
+<body class="bg-gray-100 min-h-screen font-montserrat">
+    {% if user.is_authenticated %}
+        <!-- Sidebar Navigation -->
+        <div class="flex">
+            <aside class="w-64 bg-black text-white min-h-screen fixed left-0 top-0 z-40">
+                <!-- Logo -->
+                <div class="p-6 border-b border-gray-800">
+                    <div class="flex items-center space-x-3">
+                        <img src="{% static 'images/logo.png' %}" alt="Rede Confiança" class="w-25 h-25">
+                    </div>
+                </div>
+                
+                <!-- User Info -->
+                <div class="p-4">
+                    <div class="flex flex-col items-center">
+                        <div class="w-20 h-20 bg-gray-500 rounded-full flex items-center justify-center mb-2">
+                            <i class="fas fa-user text-white text-2xl"></i>
+                        </div>
+                        <div class="bg-white text-black px-3 py-1 rounded-full text-sm font-bold mb-2">
+                            C$ {{ user.balance_cs }}
+                        </div>
+                        <div class="text-center">
+                            <div class="font-semibold text-lg">{{ user.first_name }} {{ user.last_name }}</div>
+                            <div class="text-sm text-gray-400">{{ user.get_hierarchy_display }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Navigation Menu -->
+                <nav class="p-4">
+                    <ul class="space-y-2">
+                        <li>
+                            <a href="{% url 'dashboard' %}" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-home"></i>
+                                <span>Home</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-newspaper"></i>
+                                <span>Feed</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-users"></i>
+                                <span>Nossa Rede</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-bullhorn"></i>
+                                <span>Comunicados</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'tickets_list' %}" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-ticket-alt"></i>
+                                <span>Chamados</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        
+                        <!-- Sub Menu Chamados -->
+                        <li class="ml-6">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'tickets_list' %}" class="flex items-center space-x-3 p-2 text-sm rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-list"></i>
+                                        <span>Abrir Chamado</span>
+                                        <div class="absolute bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="#" class="flex items-center space-x-3 p-2 text-sm rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-history"></i>
+                                        <span>Acompanhar Chamados</span>
+                                        <div class="absolute bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                        
+                        <!-- Menu específico para níveis superiores -->
+                        {% if user.hierarchy != 'PADRAO' %}
+                        <li class="border-t border-gray-800 pt-4 mt-4">
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-user-tie"></i>
+                                <span>Colaborador</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'admin_panel' %}" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-cogs"></i>
+                                <span>Painel Gestão</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-briefcase"></i>
+                                <span>Vagas e Recrutamento</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-handshake"></i>
+                                <span>Confianças</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-calendar-alt"></i>
+                                <span>Eventos e Cultura</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-graduation-cap"></i>
+                                <span>Treinamento e Desenvolvimento</span>
+                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </aside>
+            
+            <!-- Main Content -->
+            <main class="flex-1 ml-64">
+                <!-- Top Header -->
+                <header class="bg-white shadow-sm border-b border-gray-200">
+                    <div class="flex items-center justify-between px-6 py-4">
+                        <div class="flex items-center space-x-4">
+                            {% block header_nav %}
+                            <nav class="flex space-x-6">
+                                <a href="{% url 'dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if request.resolver_match.url_name == 'dashboard' %}text-primary border-b-2 border-primary{% endif %}">Home</a>
+                                <a href="#" class="text-gray-600 hover:text-primary transition-colors">Feed</a>
+                                <a href="#" class="text-gray-600 hover:text-primary transition-colors">Nossa Rede</a>
+                                <a href="#" class="text-gray-600 hover:text-primary transition-colors">Comunicados</a>
+                            </nav>
+                            {% endblock %}
+                        </div>
+                        
+                        <div class="flex items-center space-x-4">
+                            <!-- Search -->
+                            <div class="relative">
+                                <input type="text" placeholder="Pesquisar..." class="bg-gray-100 rounded-full px-4 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-primary">
+                                <i class="fas fa-search absolute right-3 top-3 text-gray-400"></i>
+                            </div>
+                            
+                            <!-- User Menu -->
+                            <div class="relative">
+                                <button class="flex items-center space-x-2 text-gray-600 hover:text-primary">
+                                    <span>{{ user.first_name }}</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg hidden">
+                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Perfil</a>
+                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Configurações</a>
+                                    <hr>
+                                    <a href="{% url 'logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sair</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+                
+                <!-- Page Content -->
+                <div class="p-6">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="mb-4 p-4 rounded-md {% if message.tags == 'error' %}bg-red-100 text-red-700{% elif message.tags == 'success' %}bg-green-100 text-green-700{% elif message.tags == 'warning' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    {% block content %}
+                    {% endblock %}
+                </div>
+            </main>
+        </div>
+    {% else %}
+        {% block login_content %}
+        {% endblock %}
+    {% endif %}
+    
+    <script src="{% static 'js/app.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

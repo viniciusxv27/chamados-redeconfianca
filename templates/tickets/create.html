@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Novo Chamado - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Chamados</h1>
+        <p class="text-gray-600 mt-2">Criar novo chamado</p>
+    </div>
+    
+    <!-- User Info Section -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div class="flex items-center space-x-4">
+            <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center">
+                <i class="fas fa-user text-2xl text-gray-600"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900">{{ user.first_name }} {{ user.last_name }}</h2>
+                <p class="text-gray-600">{{ user.get_hierarchy_display }} de Operações</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tabs Navigation -->
+    <div class="mb-6">
+        <nav class="flex space-x-8 border-b border-gray-200">
+            <a href="#" class="border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium">
+                Novo Chamado
+            </a>
+        </nav>
+    </div>
+    
+    <!-- Form -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <div class="text-right text-sm text-gray-500 mb-4">
+                ID: #0004
+            </div>
+            
+            <div>
+                <label for="title" class="block text-sm font-medium text-gray-700 mb-2">Título</label>
+                <input 
+                    type="text" 
+                    name="title" 
+                    id="title" 
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    placeholder="Digite o título do chamado"
+                >
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                    <select 
+                        name="sector" 
+                        id="sector" 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        onchange="loadCategories()"
+                    >
+                        <option value="">Selecione o setor</option>
+                        {% for sector in sectors %}
+                            <option value="{{ sector.id }}">{{ sector.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="category" class="block text-sm font-medium text-gray-700 mb-2">Departamento</label>
+                    <select 
+                        name="category" 
+                        id="category" 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        onchange="updateDefaultDescription()"
+                    >
+                        <option value="">Selecione o departamento</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <label for="copy" class="block text-sm font-medium text-gray-700 mb-2">Em cópia</label>
+                <select 
+                    name="copy" 
+                    id="copy"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                    <option value="">Selecione usuários para cópia</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Chamado precisa de autorização ?</label>
+                <div class="flex items-center space-x-6">
+                    <label class="flex items-center">
+                        <input type="radio" name="requires_approval" value="yes" class="mr-2">
+                        <span class="text-sm text-gray-700">Sim</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="requires_approval" value="no" checked class="mr-2">
+                        <span class="text-sm text-gray-700">Não</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="approval-user-section" class="hidden">
+                <label for="approval_user" class="block text-sm font-medium text-gray-700 mb-2">Responsável pela autorização?</label>
+                <select 
+                    name="approval_user" 
+                    id="approval_user"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                    <option value="">Selecionar</option>
+                </select>
+            </div>
+            
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Mensagem</label>
+                <div class="border border-gray-300 rounded-md">
+                    <!-- Toolbar -->
+                    <div class="flex items-center space-x-2 px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm">
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Negrito">
+                            <i class="fas fa-bold"></i>
+                        </button>
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Itálico">
+                            <i class="fas fa-italic"></i>
+                        </button>
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Sublinhado">
+                            <i class="fas fa-underline"></i>
+                        </button>
+                        <div class="border-l border-gray-300 h-4 mx-2"></div>
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Lista">
+                            <i class="fas fa-list"></i>
+                        </button>
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Lista Numerada">
+                            <i class="fas fa-list-ol"></i>
+                        </button>
+                        <div class="border-l border-gray-300 h-4 mx-2"></div>
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Link">
+                            <i class="fas fa-link"></i>
+                        </button>
+                        <button type="button" class="p-1 hover:bg-gray-200 rounded" title="Imagem">
+                            <i class="fas fa-image"></i>
+                        </button>
+                        <div class="ml-auto flex items-center space-x-2">
+                            <span class="text-gray-500">Código-Fonte</span>
+                            <select class="text-xs border-0 bg-transparent">
+                                <option>Ralei</option>
+                            </select>
+                            <button type="button" class="p-1 hover:bg-gray-200 rounded">
+                                <i class="fas fa-question-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Textarea -->
+                    <textarea 
+                        name="description" 
+                        id="description" 
+                        rows="8"
+                        required
+                        class="w-full px-3 py-2 border-0 focus:outline-none focus:ring-0 resize-none"
+                        placeholder="Descreva detalhadamente o problema ou solicitação..."
+                    ></textarea>
+                </div>
+                
+                <div class="flex items-center justify-between mt-2 text-sm text-gray-500">
+                    <div class="flex items-center space-x-4">
+                        <button type="button" class="hover:text-primary">Escolher arquivo</button>
+                        <span>Nenhum arquivo escolhido</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end">
+                <button 
+                    type="submit" 
+                    class="bg-secondary text-white px-8 py-3 rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                >
+                    Abrir Chamado
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function loadCategories() {
+    const sectorId = document.getElementById('sector').value;
+    const categorySelect = document.getElementById('category');
+    
+    categorySelect.innerHTML = '<option value="">Carregando...</option>';
+    
+    if (sectorId) {
+        fetch(`/tickets/api/categories-by-sector/?sector_id=${sectorId}`)
+            .then(response => response.json())
+            .then(data => {
+                categorySelect.innerHTML = '<option value="">Selecione o departamento</option>';
+                data.categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.name;
+                    option.dataset.defaultDescription = category.default_description;
+                    categorySelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Erro ao carregar categorias:', error);
+                categorySelect.innerHTML = '<option value="">Erro ao carregar</option>';
+            });
+    } else {
+        categorySelect.innerHTML = '<option value="">Selecione o departamento</option>';
+    }
+}
+
+function updateDefaultDescription() {
+    const categorySelect = document.getElementById('category');
+    const descriptionTextarea = document.getElementById('description');
+    const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+    
+    if (selectedOption && selectedOption.dataset.defaultDescription) {
+        descriptionTextarea.value = selectedOption.dataset.defaultDescription;
+    }
+}
+
+// Show/hide approval user section
+document.addEventListener('DOMContentLoaded', function() {
+    const approvalRadios = document.querySelectorAll('input[name="requires_approval"]');
+    const approvalSection = document.getElementById('approval-user-section');
+    
+    approvalRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'yes') {
+                approvalSection.classList.remove('hidden');
+            } else {
+                approvalSection.classList.add('hidden');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

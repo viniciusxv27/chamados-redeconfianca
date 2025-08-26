@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chamado #{{ ticket.id }} - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Page Header -->
+    <div class="mb-8 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Chamados</h1>
+            <p class="text-gray-600 mt-2">Visualizar e responder chamado</p>
+        </div>
+        <div class="flex space-x-3">
+            {% if ticket.created_by == user and ticket.status == 'RESOLVIDO' %}
+                <button class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                    Concluir e Fechar
+                </button>
+            {% endif %}
+            {% if user.can_view_sector_tickets and ticket.status != 'FECHADO' %}
+                <button class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                    Atualizar Status
+                </button>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- User Info Section -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div class="flex items-center space-x-4">
+            <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center">
+                <i class="fas fa-user text-2xl text-gray-600"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900">{{ user.first_name }} {{ user.last_name }}</h2>
+                <p class="text-gray-600">{{ user.get_hierarchy_display }} de Operações</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tabs Navigation -->
+    <div class="mb-6">
+        <nav class="flex space-x-8 border-b border-gray-200">
+            <a href="#" class="border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium">
+                Ver/Responder
+            </a>
+        </nav>
+    </div>
+    
+    <!-- Ticket Details -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Ticket Info -->
+            <div class="lg:col-span-2">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-900">{{ ticket.title }}</h3>
+                        <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                            <span>ID: #{{ ticket.id|stringformat:"04d" }}</span>
+                            <span>Título: {{ ticket.title }}</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                {% if ticket.status == 'ABERTO' %}bg-primary text-white
+                                {% elif ticket.status == 'EM_ANDAMENTO' %}bg-blue-500 text-white
+                                {% elif ticket.status == 'RESOLVIDO' %}bg-success text-white
+                                {% elif ticket.status == 'FECHADO' %}bg-gray-500 text-white
+                                {% endif %}">
+                                {{ ticket.get_status_display }}
+                            </span>
+                            <span>Data da solicitação: {{ ticket.created_at|date:"d/m/Y" }}</span>
+                            <span>Última Resposta: 
+                                {% if ticket.comments.last %}
+                                    {{ ticket.comments.last.user.first_name|upper }} {{ ticket.comments.last.user.last_name|upper }}
+                                {% else %}
+                                    {{ ticket.created_by.first_name|upper }} {{ ticket.created_by.user.last_name|upper }}
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Original Message -->
+                <div class="mb-6">
+                    <div class="flex items-center space-x-3 mb-3">
+                        <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                            <i class="fas fa-user text-gray-600"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">{{ ticket.created_by.first_name }} {{ ticket.created_by.last_name }}</p>
+                            <p class="text-sm text-gray-500">{{ ticket.created_at|date:"d/m/Y \à\s H:i" }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                        <p class="text-sm text-gray-600">Prezados, bom dia! Solicito Reembolso de R$ 1500,00 referente a compra do Coeficiente de Treinamento de formação.</p>
+                        <p class="text-sm text-gray-600 mt-2">Pix: (10) 555-5511</p>
+                    </div>
+                    
+                    {% if ticket.status == 'RESOLVIDO' %}
+                        <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                            <div class="flex items-start">
+                                <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                                <div>
+                                    <p class="font-medium text-green-900">Aprovado por: {{ ticket.approved_by.first_name }} {{ ticket.approved_by.last_name }}</p>
+                                    <p class="text-sm text-green-700 mt-1">Hoje 25/08 às 08:55</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Comments Section -->
+                <div class="space-y-4">
+                    {% for comment in ticket.comments.all %}
+                        <div class="flex items-start space-x-3">
+                            <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-user text-gray-600"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="bg-gray-50 rounded-lg p-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <p class="font-medium text-gray-900">{{ comment.user.first_name }} {{ comment.user.last_name }}</p>
+                                        <p class="text-sm text-gray-500">{{ comment.created_at|date:"d/m/Y H:i" }}</p>
+                                    </div>
+                                    <p class="text-gray-700">{{ comment.comment }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Right Sidebar -->
+            <div class="space-y-6">
+                {% if ticket.status == 'RESOLVIDO' and ticket.created_by == user %}
+                    <!-- User Approval Section -->
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <h4 class="font-medium text-yellow-900 mb-3">Aprovação Pendente</h4>
+                        <p class="text-sm text-yellow-700 mb-4">O chamado foi marcado como resolvido. Você precisa aprovar a solução para fechar o chamado.</p>
+                        <div class="flex space-x-2">
+                            <button class="bg-success text-white px-3 py-2 rounded text-sm hover:bg-green-600 transition-colors">
+                                Aprovar
+                            </button>
+                            <button class="bg-danger text-white px-3 py-2 rounded text-sm hover:bg-red-600 transition-colors">
+                                Reprovar
+                            </button>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- Ticket Info -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h4 class="font-medium text-gray-900 mb-3">Informações do Chamado</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Setor:</span>
+                            <span class="text-gray-900">{{ ticket.sector.name }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Categoria:</span>
+                            <span class="text-gray-900">{{ ticket.category.name }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Criado por:</span>
+                            <span class="text-gray-900">{{ ticket.created_by.first_name }}</span>
+                        </div>
+                        {% if ticket.assigned_to %}
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Responsável:</span>
+                            <span class="text-gray-900">{{ ticket.assigned_to.first_name }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Action Panel -->
+                {% if user.can_view_sector_tickets and ticket.status != 'FECHADO' %}
+                    <div class="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 class="font-medium text-gray-900 mb-3">Ações Rápidas</h4>
+                        <div class="space-y-2">
+                            {% if ticket.status == 'ABERTO' %}
+                                <button class="w-full bg-blue-500 text-white py-2 px-3 rounded text-sm hover:bg-blue-600 transition-colors">
+                                    Assumir Chamado
+                                </button>
+                            {% endif %}
+                            {% if ticket.status == 'EM_ANDAMENTO' %}
+                                <button class="w-full bg-success text-white py-2 px-3 rounded text-sm hover:bg-green-600 transition-colors">
+                                    Marcar como Resolvido
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Reply Section -->
+        {% if ticket.status != 'FECHADO' %}
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <h4 class="font-medium text-gray-900 mb-4">Responder</h4>
+                <form method="post" action="#" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label for="message" class="block text-sm font-medium text-gray-700 mb-2">Mensagem:</label>
+                        <textarea 
+                            name="message" 
+                            id="message" 
+                            rows="4"
+                            required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                            placeholder="Digite sua resposta..."
+                        ></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <button 
+                            type="submit" 
+                            class="bg-secondary text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                            Enviar Resposta
+                        </button>
+                    </div>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Status History -->
+    {% if ticket.status == 'FECHADO' %}
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h3 class="font-medium text-gray-900 mb-4">Chamado fechado por: {{ ticket.approved_by.first_name }} {{ ticket.approved_by.last_name }} - Hoje 25/08 às 09:00</h3>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

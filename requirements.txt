@@ -1,0 +1,27 @@
+# Django Framework
+Django==5.2.5
+djangorestframework==3.15.2
+
+# Database
+mysqlclient==2.2.4
+
+# Environment Variables
+python-decouple==3.8
+
+# Image Processing
+Pillow==10.4.0
+
+# Development Tools
+django-debug-toolbar==4.4.6
+
+# Date and Time utilities
+python-dateutil==2.9.0
+
+# HTTP Requests
+requests==2.32.3
+
+# CORS Headers (para API)
+django-cors-headers==4.4.0
+
+# Timezone support
+pytz==2024.1

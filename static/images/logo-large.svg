@@ -1,0 +1,52 @@
+<!-- Logo SVG - Rede Confiança Large -->
+<svg width="120" height="60" viewBox="0 0 120 60" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <style>
+            .logo-text-main { 
+                font-family: 'Montserrat', sans-serif; 
+                font-weight: 700; 
+                fill: #2C3E50;
+                font-size: 14px;
+            }
+            .logo-text-sub { 
+                font-family: 'Montserrat', sans-serif; 
+                font-weight: 600; 
+                fill: #FF6B35;
+                font-size: 10px;
+            }
+        </style>
+        <linearGradient id="gradLarge" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#F39C12;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+    
+    <!-- Hexágono logo -->
+    <polygon points="30,5 45,13 45,27 30,35 15,27 15,13" 
+             fill="url(#gradLarge)" 
+             stroke="#2C3E50" 
+             stroke-width="1.5"/>
+    
+    <!-- Rede interna -->
+    <polygon points="30,10 40,15 40,25 30,30 20,25 20,15" 
+             fill="#2C3E50" 
+             opacity="0.7"/>
+    
+    <!-- Pontos de conexão -->
+    <circle cx="30" cy="15" r="1.5" fill="#FF6B35"/>
+    <circle cx="35" cy="18" r="1.5" fill="#FF6B35"/>
+    <circle cx="35" cy="22" r="1.5" fill="#FF6B35"/>
+    <circle cx="25" cy="20" r="1.5" fill="#FF6B35"/>
+    
+    <!-- Linhas de conexão -->
+    <line x1="30" y1="15" x2="35" y2="18" stroke="#FF6B35" stroke-width="1.5"/>
+    <line x1="35" y1="18" x2="35" y2="22" stroke="#FF6B35" stroke-width="1.5"/>
+    <line x1="35" y1="18" x2="25" y2="20" stroke="#FF6B35" stroke-width="1.5"/>
+    
+    <!-- Texto principal -->
+    <text x="55" y="22" class="logo-text-main">REDE</text>
+    <text x="55" y="38" class="logo-text-main">CONFIANÇA</text>
+    
+    <!-- Subtítulo -->
+    <text x="55" y="50" class="logo-text-sub">Portal Corporativo</text>
+</svg>

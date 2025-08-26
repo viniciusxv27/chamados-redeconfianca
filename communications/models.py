@@ -1,0 +1,80 @@
+from django.db import models
+from django.conf import settings
+import requests
+
+
+class Communication(models.Model):
+    title = models.CharField(max_length=200, verbose_name="Título")
+    message = models.TextField(verbose_name="Mensagem")
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='sent_communications',
+        verbose_name="Remetente"
+    )
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, 
+        related_name='received_communications',
+        blank=True,
+        verbose_name="Destinatários"
+    )
+    send_to_all = models.BooleanField(default=False, verbose_name="Enviar para Todos")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Envio")
+    
+    class Meta:
+        verbose_name = "Comunicado"
+        verbose_name_plural = "Comunicados"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.sender.full_name}"
+    
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        if is_new:
+            self.trigger_notification()
+    
+    def trigger_notification(self):
+        """Dispara notificação via webhook para WhatsApp"""
+        try:
+            # Obter números dos destinatários
+            if self.send_to_all:
+                from users.models import User
+                recipients = User.objects.filter(is_active=True)
+            else:
+                recipients = self.recipients.all()
+            
+            phone_numbers = [user.phone for user in recipients if user.phone]
+            
+            if phone_numbers:
+                payload = {
+                    'title': self.title,
+                    'message': self.message,
+                    'sender': self.sender.full_name,
+                    'phone_numbers': phone_numbers,
+                    'created_at': self.created_at.isoformat()
+                }
+                
+                # URL do webhook para WhatsApp (configurar conforme necessário)
+                webhook_url = "https://your-whatsapp-webhook.com/notify"
+                requests.post(webhook_url, json=payload, timeout=10)
+        except Exception as e:
+            # Log do erro (implementar logging posteriormente)
+            pass
+
+
+class CommunicationRead(models.Model):
+    communication = models.ForeignKey(Communication, on_delete=models.CASCADE, verbose_name="Comunicado")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário")
+    read_at = models.DateTimeField(auto_now_add=True, verbose_name="Lido em")
+    
+    class Meta:
+        verbose_name = "Leitura de Comunicado"
+        verbose_name_plural = "Leituras de Comunicados"
+        unique_together = ['communication', 'user']
+        ordering = ['-read_at']
+    
+    def __str__(self):
+        return f"{self.communication.title} - {self.user.full_name}"
