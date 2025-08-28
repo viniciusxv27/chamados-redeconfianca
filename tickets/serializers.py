@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Ticket, Category, TicketLog, TicketComment
+from .models import Ticket, Category, TicketLog, TicketComment, Webhook
 from users.serializers import UserSerializer
 
 
@@ -39,6 +39,9 @@ class TicketSerializer(serializers.ModelSerializer):
     sector_name = serializers.CharField(source='sector.name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    is_overdue = serializers.ReadOnlyField()
+    time_remaining = serializers.ReadOnlyField()
     logs = TicketLogSerializer(many=True, read_only=True)
     comments = TicketCommentSerializer(many=True, read_only=True)
     
@@ -47,8 +50,23 @@ class TicketSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'sector', 'sector_name',
             'category', 'category_name', 'status', 'status_display',
-            'solution', 'created_by', 'created_by_name',
-            'assigned_to', 'assigned_to_name', 'created_at',
+            'priority', 'priority_display', 'solution', 'solution_time_hours',
+            'due_date', 'is_overdue', 'time_remaining', 'created_by', 
+            'created_by_name', 'assigned_to', 'assigned_to_name', 'created_at',
             'updated_at', 'resolved_at', 'closed_at',
             'requires_approval', 'approval_user', 'logs', 'comments'
+        ]
+
+
+class WebhookSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    sector_name = serializers.CharField(source='sector.name', read_only=True)
+    event_display = serializers.CharField(source='get_event_display', read_only=True)
+    
+    class Meta:
+        model = Webhook
+        fields = [
+            'id', 'name', 'url', 'event', 'event_display',
+            'category', 'category_name', 'sector', 'sector_name',
+            'is_active', 'headers', 'created_at'
         ]

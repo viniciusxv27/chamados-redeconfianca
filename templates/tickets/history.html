@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+
+{% block title %}Histórico de Chamados{% endblock %}
+
+{% block page_title %}Histórico de Chamados{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-sm">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-medium text-gray-900">
+                <i class="fas fa-history mr-2 text-gray-500"></i>
+                Chamados Finalizados
+            </h2>
+            <a href="{% url 'tickets_list' %}" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Voltar aos Chamados Ativos
+            </a>
+        </div>
+        <p class="mt-1 text-sm text-gray-600">
+            Visualize o histórico de chamados que foram finalizados
+        </p>
+    </div>
+
+    <div class="overflow-hidden">
+        {% if tickets %}
+            <div class="min-w-full divide-y divide-gray-200">
+                <div class="bg-gray-50 px-6 py-3">
+                    <div class="grid grid-cols-6 gap-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <div>Código</div>
+                        <div>Título</div>
+                        <div>Setor</div>
+                        <div>Responsável</div>
+                        <div>Fechado em</div>
+                        <div>Status</div>
+                    </div>
+                </div>
+                <div class="bg-white divide-y divide-gray-200">
+                    {% for ticket in tickets %}
+                    <div class="px-6 py-4 hover:bg-gray-50">
+                        <div class="grid grid-cols-6 gap-4">
+                            <div class="flex items-center">
+                                <a href="{% url 'ticket_detail' ticket.id %}" class="text-blue-600 hover:text-blue-800 font-medium">
+                                    #{{ ticket.id }}
+                                </a>
+                            </div>
+                            <div class="flex items-center">
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900 truncate">
+                                        {{ ticket.title }}
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        por {{ ticket.created_by.get_full_name }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    {{ ticket.sector.name }}
+                                </span>
+                            </div>
+                            <div class="flex items-center">
+                                {% if ticket.assigned_to %}
+                                    <div class="flex items-center">
+                                        <div class="flex-shrink-0 h-8 w-8">
+                                            <div class="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+                                                <span class="text-xs font-medium text-white">
+                                                    {{ ticket.assigned_to.first_name|first|upper }}{{ ticket.assigned_to.last_name|first|upper }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="ml-3">
+                                            <div class="text-sm font-medium text-gray-900">
+                                                {{ ticket.assigned_to.get_full_name }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <span class="text-sm text-gray-500 italic">Não atribuído</span>
+                                {% endif %}
+                            </div>
+                            <div class="flex items-center">
+                                <div class="text-sm text-gray-900">
+                                    {% if ticket.closed_at %}
+                                        {{ ticket.closed_at|date:"d/m/Y H:i" }}
+                                    {% else %}
+                                        <span class="text-gray-500">-</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    <i class="fas fa-check-circle mr-1 text-green-500"></i>
+                                    Fechado
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-history text-gray-400 text-4xl mb-4"></i>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">Nenhum chamado no histórico</h3>
+                <p class="mt-1 text-sm text-gray-500">
+                    Não há chamados finalizados para exibir.
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Estatísticas do histórico -->
+{% if tickets %}
+<div class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-check-circle text-2xl text-green-500"></i>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            Total de Chamados Finalizados
+                        </dt>
+                        <dd class="text-lg font-medium text-gray-900">
+                            {{ tickets|length }}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-calendar text-2xl text-blue-500"></i>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            Período
+                        </dt>
+                        <dd class="text-lg font-medium text-gray-900">
+                            {% if tickets %}
+                                {% with first_ticket=tickets|last last_ticket=tickets|first %}
+                                    {% if first_ticket.closed_at and last_ticket.closed_at %}
+                                        {{ first_ticket.closed_at|date:"m/Y" }} - {{ last_ticket.closed_at|date:"m/Y" }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% endwith %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-chart-line text-2xl text-purple-500"></i>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            Status
+                        </dt>
+                        <dd class="text-lg font-medium text-gray-900">
+                            Concluídos
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

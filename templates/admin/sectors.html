@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Setores{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-building text-primary mr-3"></i>
+                        Gerenciar Setores
+                    </h1>
+                    <p class="text-gray-600 mt-1">Organize sua empresa em departamentos e equipes</p>
+                </div>
+                <div class="flex space-x-3">
+                    <a href="{% url 'create_sector' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                        <i class="fas fa-plus mr-2"></i>
+                        Novo Setor
+                    </a>
+                    <a href="{% url 'admin_panel' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-building text-blue-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ sectors.count }}</h3>
+                    <p class="text-gray-600 text-sm">Total de Setores</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-users text-green-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">0</h3>
+                    <p class="text-gray-600 text-sm">Usuários Vinculados</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 rounded-lg">
+                    <i class="fas fa-chart-line text-purple-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">0</h3>
+                    <p class="text-gray-600 text-sm">Chamados Ativos</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sectors Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for sector in sectors %}
+        <div class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                        <i class="fas fa-building text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">{{ sector.name }}</h3>
+                        <p class="text-sm text-gray-500">Criado em {{ sector.created_at|date:"d/m/Y" }}</p>
+                    </div>
+                </div>
+                
+                <div class="flex space-x-1">
+                    <button class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors" title="Editar">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors" title="Excluir">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <p class="text-gray-600 mb-4">{{ sector.description|default:"Sem descrição"|truncatewords:15 }}</p>
+            
+            <div class="flex items-center justify-between text-sm">
+                <div class="flex items-center text-gray-500">
+                    <i class="fas fa-users mr-1"></i>
+                    <span>0 usuários</span>
+                </div>
+                <div class="flex items-center text-gray-500">
+                    <i class="fas fa-ticket-alt mr-1"></i>
+                    <span>0 chamados</span>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full bg-white rounded-xl shadow-sm p-12 text-center">
+            <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-building text-gray-400 text-3xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Nenhum setor encontrado</h3>
+            <p class="text-gray-600 mb-4">Organize sua empresa criando setores e departamentos</p>
+            <a href="{% url 'create_sector' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center">
+                <i class="fas fa-plus mr-2"></i>
+                Criar Primeiro Setor
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

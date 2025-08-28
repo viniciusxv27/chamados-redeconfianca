@@ -63,29 +63,70 @@
     </div>
     
     <!-- Quick Actions -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Gerenciar Usuários</h3>
-            <p class="text-gray-600 mb-4">Criar, editar e gerenciar usuários do sistema</p>
-            <a href="{% url 'manage_users' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
-                Acessar
-            </a>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-users text-blue-600 mr-2"></i>
+                Usuários
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">Criar, editar e gerenciar usuários</p>
+            <div class="space-y-2">
+                <a href="{% url 'manage_users' %}" class="block bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-center text-sm">
+                    Gerenciar Usuários
+                </a>
+                <a href="{% url 'create_user' %}" class="block bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-center text-sm">
+                    Criar Usuário
+                </a>
+            </div>
         </div>
         
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Gerenciar Setores</h3>
-            <p class="text-gray-600 mb-4">Configurar setores e categorias</p>
-            <a href="#" class="bg-secondary text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
-                Acessar
-            </a>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-building text-green-600 mr-2"></i>
+                Setores
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">Configurar setores e categorias</p>
+            <div class="space-y-2">
+                <a href="{% url 'manage_sectors' %}" class="block bg-secondary text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-center text-sm">
+                    Gerenciar Setores
+                </a>
+                <a href="{% url 'manage_categories' %}" class="block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center text-sm">
+                    Gerenciar Categorias
+                </a>
+            </div>
         </div>
         
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Gerenciar Prêmios</h3>
-            <p class="text-gray-600 mb-4">Configurar prêmios e sistema C$</p>
-            <a href="#" class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
-                Acessar
-            </a>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-coins text-yellow-600 mr-2"></i>
+                Confianças C$
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">Gerenciar sistema de pontos</p>
+            <div class="space-y-2">
+                <a href="{% url 'manage_cs' %}" class="block bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-center text-sm">
+                    Gerenciar C$
+                </a>
+                <a href="#" class="block bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center text-sm">
+                    Prêmios
+                </a>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-cog text-purple-600 mr-2"></i>
+                Sistema
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">Comunicados e webhooks</p>
+            <div class="space-y-2">
+                <a href="{% url 'create_communication' %}" class="block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center text-sm">
+                    Criar Comunicado
+                </a>
+                <a href="{% url 'manage_webhooks' %}" class="block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-center text-sm">
+                    <i class="fas fa-cloud mr-2"></i>
+                    Webhooks
+                </a>
+            </div>
         </div>
     </div>
     

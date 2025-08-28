@@ -51,16 +51,16 @@ class User(AbstractUser):
         return f"{self.first_name} {self.last_name}".strip()
     
     def can_manage_users(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN']
-    
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
+
     def can_manage_prizes(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN']
-    
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
+
     def can_manage_cs(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN']
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
     
     def can_view_all_tickets(self):
-        return self.hierarchy in ['SUPERADMIN']
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO']
     
     def can_view_sector_tickets(self):
-        return self.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO', 'SUPERADMIN']
+        return self.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERADMIN']

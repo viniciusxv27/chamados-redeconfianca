@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Comunicado{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-edit text-primary mr-3"></i>
+                        Editar Comunicado
+                    </h1>
+                    <p class="text-gray-600 mt-1">Modifique as informações do comunicado</p>
+                </div>
+                <a href="{% url 'communication_detail' communication.id %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="p-6">
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+                    
+                    <!-- Título -->
+                    <div>
+                        <label for="title" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Título <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                               id="title" 
+                               name="title" 
+                               value="{{ communication.title }}"
+                               placeholder="Digite o título do comunicado"
+                               required>
+                    </div>
+
+                    <!-- Mensagem -->
+                    <div>
+                        <label for="message" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Mensagem <span class="text-red-500">*</span>
+                        </label>
+                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                  id="message" 
+                                  name="message" 
+                                  rows="8" 
+                                  placeholder="Digite a mensagem do comunicado"
+                                  required>{{ communication.message }}</textarea>
+                        <p class="text-sm text-gray-500 mt-1">Use uma linguagem clara e objetiva para melhor compreensão.</p>
+                    </div>
+
+                    <!-- Período de Ativação -->
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <i class="fas fa-calendar-alt text-blue-600 mr-2"></i>
+                            Período de Ativação
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Ativo a partir de -->
+                            <div>
+                                <label for="active_from" class="block text-sm font-semibold text-gray-900 mb-2">
+                                    Ativo a partir de
+                                </label>
+                                <input type="datetime-local" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                       id="active_from" 
+                                       name="active_from"
+                                       value="{% if communication.active_from %}{{ communication.active_from|date:'Y-m-d\TH:i' }}{% endif %}">
+                                <p class="text-sm text-gray-500 mt-1">Deixe em branco para ativar imediatamente</p>
+                            </div>
+
+                            <!-- Ativo até -->
+                            <div>
+                                <label for="active_until" class="block text-sm font-semibold text-gray-900 mb-2">
+                                    Ativo até
+                                </label>
+                                <input type="datetime-local" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                       id="active_until" 
+                                       name="active_until"
+                                       value="{% if communication.active_until %}{{ communication.active_until|date:'Y-m-d\TH:i' }}{% endif %}">
+                                <p class="text-sm text-gray-500 mt-1">Deixe em branco para não ter data limite</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Opções de Envio -->
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Opções de Envio</h3>
+                        
+                        <div class="space-y-4">
+                            <!-- Enviar para todos -->
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                                           type="checkbox" 
+                                           id="send_to_all" 
+                                           name="send_to_all" 
+                                           {% if communication.send_to_all %}checked{% endif %}
+                                           onchange="toggleRecipients()">
+                                </div>
+                                <div class="ml-3">
+                                    <label for="send_to_all" class="text-sm font-medium text-gray-900">
+                                        Enviar para todos os usuários
+                                    </label>
+                                    <p class="text-sm text-gray-500">O comunicado será enviado para todos os usuários ativos do sistema</p>
+                                </div>
+                            </div>
+
+                            <!-- Destinatários específicos -->
+                            <div id="recipients-section">
+                                <label for="recipients" class="block text-sm font-semibold text-gray-900 mb-2">
+                                    Destinatários Específicos
+                                </label>
+                                <div class="border border-gray-300 rounded-lg p-3 bg-white max-h-64 overflow-y-auto">
+                                    {% for u in users %}
+                                    <div class="flex items-center py-2 px-2 hover:bg-gray-50 rounded">
+                                        <input type="checkbox" 
+                                               name="recipients" 
+                                               value="{{ u.id }}" 
+                                               id="user_{{ u.id }}"
+                                               {% if u in communication.recipients.all %}checked{% endif %}
+                                               class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                                        <label for="user_{{ u.id }}" class="ml-3 flex-1 cursor-pointer">
+                                            <div class="flex items-center">
+                                                <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
+                                                    <i class="fas fa-user text-white text-xs"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="text-sm font-medium text-gray-900">{{ u.full_name }}</div>
+                                                    <div class="text-xs text-gray-500">{{ u.email }} • {{ u.sector.name|default:"Sem setor" }}</div>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <p class="text-sm text-gray-500 mt-1">Selecione os usuários que devem receber este comunicado</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botões -->
+                    <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                        <a href="{% url 'communication_detail' communication.id %}" 
+                           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                            <i class="fas fa-save mr-2"></i>
+                            Salvar Alterações
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleRecipients() {
+    const sendToAll = document.getElementById('send_to_all');
+    const recipientsSection = document.getElementById('recipients-section');
+    const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]');
+    
+    if (sendToAll.checked) {
+        recipientsSection.style.display = 'none';
+        recipientCheckboxes.forEach(checkbox => {
+            checkbox.required = false;
+            checkbox.checked = false;
+        });
+    } else {
+        recipientsSection.style.display = 'block';
+    }
+}
+
+// Executar na carga da página
+document.addEventListener('DOMContentLoaded', function() {
+    toggleRecipients();
+    
+    // Validação do formulário
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        const sendToAll = document.getElementById('send_to_all');
+        const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]:checked');
+        
+        if (!sendToAll.checked && recipientCheckboxes.length === 0) {
+            e.preventDefault();
+            alert('Por favor, selecione "Enviar para todos" ou escolha destinatários específicos.');
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

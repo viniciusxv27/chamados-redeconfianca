@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block title %}Meu Perfil{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-user text-primary mr-3"></i>
+                        Meu Perfil
+                    </h1>
+                    <p class="text-gray-600 mt-1">Gerencie suas informações pessoais</p>
+                </div>
+                <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        <!-- Profile Summary -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div class="flex items-center space-x-4">
+                    <div class="w-20 h-20 bg-primary rounded-full flex items-center justify-center">
+                        <span class="text-white font-bold text-2xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-900">{{ user.full_name }}</h2>
+                        <p class="text-gray-600">{{ user.get_hierarchy_display }}</p>
+                        {% if user.sector %}
+                        <p class="text-gray-600">{{ user.sector.name }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                            <i class="fas fa-coins text-green-600 text-xl"></i>
+                        </div>
+                        <p class="text-sm text-gray-600">Saldo C$</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ user.balance_cs }}</p>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                            <i class="fas fa-ticket-alt text-blue-600 text-xl"></i>
+                        </div>
+                        <p class="text-sm text-gray-600">Chamados Abertos</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ user_tickets_count|default:0 }}</p>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                            <i class="fas fa-calendar text-purple-600 text-xl"></i>
+                        </div>
+                        <p class="text-sm text-gray-600">Membro desde</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ user.date_joined|date:"M/Y" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Personal Information -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900">Informações Pessoais</h3>
+                    <button onclick="toggleEdit()" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm">
+                        <i class="fas fa-edit mr-2"></i>
+                        Editar
+                    </button>
+                </div>
+            </div>
+            
+            <form method="post" action="{% url 'update_profile' %}" class="p-6">
+                {% csrf_token %}
+                <div class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="first_name" class="block text-sm font-medium text-gray-700 mb-2">Nome</label>
+                            <input type="text" 
+                                   id="first_name" 
+                                   name="first_name" 
+                                   value="{{ user.first_name }}"
+                                   disabled
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                        </div>
+                        
+                        <div>
+                            <label for="last_name" class="block text-sm font-medium text-gray-700 mb-2">Sobrenome</label>
+                            <input type="text" 
+                                   id="last_name" 
+                                   name="last_name" 
+                                   value="{{ user.last_name }}"
+                                   disabled
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                            <input type="email" 
+                                   id="email" 
+                                   name="email" 
+                                   value="{{ user.email }}"
+                                   disabled
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                        </div>
+                        
+                        <div>
+                            <label for="phone" class="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
+                            <input type="tel" 
+                                   id="phone" 
+                                   name="phone" 
+                                   value="{{ user.phone }}"
+                                   disabled
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                            <div class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
+                                {{ user.sector.name|default:"Não informado" }}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Hierarquia</label>
+                            <div class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
+                                {{ user.get_hierarchy_display }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="edit-buttons" class="hidden pt-6 border-t border-gray-200 mt-6">
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="cancelEdit()" 
+                                class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Cancelar
+                        </button>
+                        <button type="submit" 
+                                class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
+                            <i class="fas fa-save mr-2"></i>
+                            Salvar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Security Settings -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Segurança</h3>
+            </div>
+            
+            <div class="p-6">
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Alterar Senha</h4>
+                            <p class="text-sm text-gray-600">Mantenha sua conta segura com uma senha forte</p>
+                        </div>
+                        <a href="{% url 'change_password' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+                            Alterar Senha
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleEdit() {
+    const inputs = document.querySelectorAll('#first_name, #last_name, #email, #phone');
+    const buttons = document.getElementById('edit-buttons');
+    
+    inputs.forEach(input => {
+        input.disabled = !input.disabled;
+        if (!input.disabled) {
+            input.classList.remove('disabled:bg-gray-100');
+            input.classList.add('bg-white');
+        } else {
+            input.classList.add('disabled:bg-gray-100');
+            input.classList.remove('bg-white');
+        }
+    });
+    
+    buttons.classList.toggle('hidden');
+}
+
+function cancelEdit() {
+    const inputs = document.querySelectorAll('#first_name, #last_name, #email, #phone');
+    const buttons = document.getElementById('edit-buttons');
+    
+    inputs.forEach(input => {
+        input.disabled = true;
+        input.classList.add('disabled:bg-gray-100');
+        input.classList.remove('bg-white');
+    });
+    
+    buttons.classList.add('hidden');
+    
+    // Reset form values
+    location.reload();
+}
+</script>
+{% endblock %}

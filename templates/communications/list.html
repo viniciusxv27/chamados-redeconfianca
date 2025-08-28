@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load dict_extras %}
+
+{% block title %}Comunicados{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-bullhorn text-primary mr-3"></i>
+                        Comunicados
+                    </h1>
+                    <p class="text-gray-600 mt-1">Acompanhe todas as comunicações importantes</p>
+                </div>
+                {% if user.hierarchy != 'PADRAO' %}
+                <a href="{% url 'create_communication' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    Novo Comunicado
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-envelope text-blue-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ communications.count }}</h3>
+                    <p class="text-gray-600 text-sm">Total de Comunicados</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        {% for comm in communications %}
+                            {% with status_info=communication_statuses|get_item:comm.id %}
+                                {% if status_info.status == 'NAO_VISUALIZADO' %}{{ forloop.counter }}{% endif %}
+                            {% endwith %}
+                        {% endfor %}
+                    </h3>
+                    <p class="text-gray-600 text-sm">Não Visualizados</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        {% for comm in communications %}
+                            {% with status_info=communication_statuses|get_item:comm.id %}
+                                {% if status_info.status == 'ESTOU_CIENTE' %}{{ forloop.counter }}{% endif %}
+                            {% endwith %}
+                        {% endfor %}
+                    </h3>
+                    <p class="text-gray-600 text-sm">Estou Ciente</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Communications List -->
+    <div class="space-y-4">
+        {% for communication in communications %}
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+            <div class="p-6">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center mb-3">
+                            {% with status_info=communication_statuses|get_item:communication.id %}
+                            {% if status_info.status == 'NAO_VISUALIZADO' %}
+                                <span class="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium mr-3">
+                                    <i class="fas fa-circle text-gray-400 mr-1"></i>{{ status_info.status_display }}
+                                </span>
+                            {% elif status_info.status == 'ESTOU_CIENTE' %}
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium mr-3">
+                                    <i class="fas fa-check-circle mr-1"></i>{{ status_info.status_display }}
+                                </span>
+                            {% elif status_info.status == 'ESTOU_COM_DUVIDA' %}
+                                <span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium mr-3">
+                                    <i class="fas fa-question-circle mr-1"></i>{{ status_info.status_display }}
+                                </span>
+                            {% endif %}
+                            {% endwith %}
+                            
+                            {% if communication.send_to_all %}
+                                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-globe mr-1"></i>Para todos
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">{{ communication.title }}</h3>
+                        <p class="text-gray-600 mb-4 leading-relaxed">{{ communication.message|truncatewords:30 }}</p>
+                        
+                        <div class="flex items-center text-sm text-gray-500 space-x-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-user mr-1"></i>
+                                <span>{{ communication.sender.full_name }}</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-clock mr-1"></i>
+                                <span>{{ communication.created_at|date:"d/m/Y H:i" }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="ml-6">
+                        <a href="{% url 'communication_detail' communication.id %}" 
+                           class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                            <i class="fas fa-eye mr-2"></i>
+                            Ver detalhes
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-xl shadow-sm p-12 text-center">
+            <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-inbox text-gray-400 text-3xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Nenhum comunicado encontrado</h3>
+            <p class="text-gray-600">Você não possui comunicados no momento.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

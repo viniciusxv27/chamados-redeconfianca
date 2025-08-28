@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Webhooks{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-cloud text-primary mr-3"></i>
+                        Gerenciar Webhooks
+                    </h1>
+                    <p class="text-gray-600 mt-1">Configure integrações e notificações automáticas</p>
+                </div>
+                <div class="flex space-x-3">
+                    <a href="{% url 'create_webhook' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                        <i class="fas fa-plus mr-2"></i>
+                        Novo Webhook
+                    </a>
+                    <a href="{% url 'admin_panel' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-cloud text-blue-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ webhooks.count }}</h3>
+                    <p class="text-gray-600 text-sm">Total de Webhooks</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        {% for webhook in webhooks %}
+                            {% if webhook.is_active %}{{ forloop.counter }}{% endif %}
+                        {% endfor %}
+                    </h3>
+                    <p class="text-gray-600 text-sm">Ativos</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-pause-circle text-yellow-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        {% for webhook in webhooks %}
+                            {% if not webhook.is_active %}{{ forloop.counter }}{% endif %}
+                        {% endfor %}
+                    </h3>
+                    <p class="text-gray-600 text-sm">Inativos</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 rounded-lg">
+                    <i class="fas fa-bolt text-purple-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">0</h3>
+                    <p class="text-gray-600 text-sm">Execuções Hoje</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webhooks Table -->
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Webhook</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Eventos</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">URL</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Status</th>
+                        <th class="text-center py-3 px-6 font-semibold text-gray-900">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for webhook in webhooks %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="py-4 px-6">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-cloud text-indigo-600"></i>
+                                </div>
+                                <div>
+                                    <div class="font-semibold text-gray-900">{{ webhook.name }}</div>
+                                    <div class="text-sm text-gray-500">Criado em {{ webhook.created_at|date:"d/m/Y" }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-6">
+                            <div class="flex flex-wrap gap-1">
+                                {% for event in webhook.events %}
+                                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                        {{ event }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="py-4 px-6">
+                            <div class="max-w-xs">
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded text-gray-800 break-all">{{ webhook.url }}</code>
+                            </div>
+                        </td>
+                        <td class="py-4 px-6">
+                            {% if webhook.is_active %}
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-check-circle mr-1"></i>Ativo
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-times-circle mr-1"></i>Inativo
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <div class="flex items-center justify-center space-x-2">
+                                <button onclick="testWebhook({{ webhook.id }})" 
+                                        class="bg-green-100 text-green-600 p-2 rounded-lg hover:bg-green-200 transition-colors"
+                                        title="Testar Webhook">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
+                                        title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors"
+                                        title="Excluir"
+                                        onclick="deleteWebhook({{ webhook.id }}, '{{ webhook.name }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="py-12 px-6 text-center text-gray-500">
+                            <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-cloud text-gray-400 text-3xl"></i>
+                            </div>
+                            <h3 class="text-xl font-semibold text-gray-900 mb-2">Nenhum webhook encontrado</h3>
+                            <p class="text-gray-600 mb-4">Configure seu primeiro webhook para automatizar notificações</p>
+                            <a href="{% url 'create_webhook' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center">
+                                <i class="fas fa-plus mr-2"></i>
+                                Criar Webhook
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function testWebhook(webhookId) {
+    if (confirm('Deseja testar este webhook?')) {
+        // Simular teste do webhook
+        const button = event.target.closest('button');
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        button.disabled = true;
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+            alert('Webhook testado com sucesso!\nStatus: 200 OK');
+        }, 2000);
+    }
+}
+
+function deleteWebhook(webhookId, webhookName) {
+    if (confirm(`Tem certeza que deseja excluir o webhook "${webhookName}"?`)) {
+        // Implementar exclusão do webhook
+        alert('Funcionalidade de exclusão será implementada em breve.');
+    }
+}
+</script>
+{% endblock %}

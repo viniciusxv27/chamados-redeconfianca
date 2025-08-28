@@ -36,84 +36,70 @@
     {% if user.is_authenticated %}
         <!-- Sidebar Navigation -->
         <div class="flex">
-            <aside class="w-64 bg-black text-white min-h-screen fixed left-0 top-0 z-40">
+            <aside class="w-64 bg-black text-white min-h-screen fixed left-0 top-0 z-40 overflow-y-auto">
                 <!-- Logo -->
-                <div class="p-6 border-b border-gray-800">
-                    <div class="flex items-center space-x-3">
-                        <img src="{% static 'images/logo.png' %}" alt="Rede Confiança" class="w-25 h-25">
+                <div class="p-4 border-b border-gray-800">
+                    <div class="flex items-center justify-center">
+                        <img src="{% static 'images/logo.png' %}" alt="Rede Confiança" class="w-20 h-20">
                     </div>
                 </div>
                 
                 <!-- User Info -->
-                <div class="p-4">
+                <div class="p-3">
                     <div class="flex flex-col items-center">
-                        <div class="w-20 h-20 bg-gray-500 rounded-full flex items-center justify-center mb-2">
-                            <i class="fas fa-user text-white text-2xl"></i>
+                        <div class="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-2">
+                            <span class="text-white font-bold text-lg">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
                         </div>
-                        <div class="bg-white text-black px-3 py-1 rounded-full text-sm font-bold mb-2">
+                        <div class="bg-primary text-white px-2 py-1 rounded-full text-xs font-bold mb-2">
                             C$ {{ user.balance_cs }}
                         </div>
                         <div class="text-center">
-                            <div class="font-semibold text-lg">{{ user.first_name }} {{ user.last_name }}</div>
-                            <div class="text-sm text-gray-400">{{ user.get_hierarchy_display }}</div>
+                            <div class="font-medium text-sm">{{ user.first_name }} {{ user.last_name }}</div>
+                            <div class="text-xs text-gray-400">{{ user.get_hierarchy_display }}</div>
                         </div>
                     </div>
                 </div>
                 
                 <!-- Navigation Menu -->
-                <nav class="p-4">
-                    <ul class="space-y-2">
+                <nav class="p-2">
+                    <ul class="space-y-1">
                         <li>
-                            <a href="{% url 'dashboard' %}" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-home"></i>
-                                <span>Home</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            <a href="{% url 'dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-home text-primary"></i>
+                                <span class="text-sm">Home</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-newspaper"></i>
-                                <span>Feed</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            <a href="{% url 'communications_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-bullhorn text-primary"></i>
+                                <span class="text-sm">Comunicados</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-users"></i>
-                                <span>Nossa Rede</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-bullhorn"></i>
-                                <span>Comunicados</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{% url 'tickets_list' %}" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-ticket-alt"></i>
-                                <span>Chamados</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-ticket-alt text-primary"></i>
+                                <span class="text-sm">Chamados</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         
                         <!-- Sub Menu Chamados -->
-                        <li class="ml-6">
+                        <li class="ml-4">
                             <ul class="space-y-1">
                                 <li>
-                                    <a href="{% url 'tickets_list' %}" class="flex items-center space-x-3 p-2 text-sm rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                        <i class="fas fa-list"></i>
-                                        <span>Abrir Chamado</span>
-                                        <div class="absolute bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    <a href="{% url 'ticket_create' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-plus text-green-400"></i>
+                                        <span>Novo</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
                                 <li>
-                                    <a href="#" class="flex items-center space-x-3 p-2 text-sm rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                        <i class="fas fa-history"></i>
-                                        <span>Acompanhar Chamados</span>
-                                        <div class="absolute bottom-1 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-list text-blue-400"></i>
+                                        <span>Meus Tickets</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
                             </ul>
@@ -121,49 +107,78 @@
                         
                         <!-- Menu específico para níveis superiores -->
                         {% if user.hierarchy != 'PADRAO' %}
-                        <li class="border-t border-gray-800 pt-4 mt-4">
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-user-tie"></i>
-                                <span>Colaborador</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                        <li class="border-t border-gray-800 pt-2 mt-2">
+                            <div class="px-2 py-1">
+                                <span class="text-xs text-gray-400 font-medium">GESTÃO</span>
+                            </div>
                         </li>
+                        
+                        <!-- Sub Menu Gestão -->
                         <li>
-                            <a href="{% url 'admin_panel' %}" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-cogs"></i>
-                                <span>Painel Gestão</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-briefcase"></i>
-                                <span>Vagas e Recrutamento</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-handshake"></i>
-                                <span>Confianças</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-calendar-alt"></i>
-                                <span>Eventos e Cultura</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-graduation-cap"></i>
-                                <span>Treinamento e Desenvolvimento</span>
-                                <div class="absolute bottom-2 left-4 right-4 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'manage_users' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-users text-blue-400"></i>
+                                        <span>Usuários</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'manage_sectors' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-building text-green-400"></i>
+                                        <span>Setores</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'manage_categories' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-tags text-purple-400"></i>
+                                        <span>Categorias</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'manage_cs' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-coins text-yellow-400"></i>
+                                        <span>Confianças C$</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'manage_webhooks' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-cloud text-indigo-400"></i>
+                                        <span>Webhooks</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'create_communication' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-bullhorn text-red-400"></i>
+                                        <span>Criar Comunicado</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                         {% endif %}
+                        
+                        <!-- Menu Ajuda e Configurações -->
+                        <li class="border-t border-gray-800 pt-2 mt-2">
+                            <div class="px-2 py-1">
+                                <span class="text-xs text-gray-400 font-medium">CONFIGURAÇÕES</span>
+                            </div>
+                        </li>
+                        <li>
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'help' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-question-circle text-cyan-400"></i>
+                                        <span>Ajuda</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
                     </ul>
                 </nav>
             </aside>
@@ -177,9 +192,8 @@
                             {% block header_nav %}
                             <nav class="flex space-x-6">
                                 <a href="{% url 'dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if request.resolver_match.url_name == 'dashboard' %}text-primary border-b-2 border-primary{% endif %}">Home</a>
-                                <a href="#" class="text-gray-600 hover:text-primary transition-colors">Feed</a>
-                                <a href="#" class="text-gray-600 hover:text-primary transition-colors">Nossa Rede</a>
-                                <a href="#" class="text-gray-600 hover:text-primary transition-colors">Comunicados</a>
+                                <a href="{% url 'communications_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'communications' in request.path %}text-primary border-b-2 border-primary{% endif %}">Comunicados</a>
+                                <a href="{% url 'tickets_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'tickets' in request.path %}text-primary border-b-2 border-primary{% endif %}">Chamados</a>
                             </nav>
                             {% endblock %}
                         </div>
@@ -193,15 +207,36 @@
                             
                             <!-- User Menu -->
                             <div class="relative">
-                                <button class="flex items-center space-x-2 text-gray-600 hover:text-primary">
+                                <button id="userMenuToggle" class="flex items-center space-x-2 text-gray-600 hover:text-primary focus:outline-none">
+                                    <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-user text-white text-sm"></i>
+                                    </div>
                                     <span>{{ user.first_name }}</span>
-                                    <i class="fas fa-chevron-down"></i>
+                                    <i class="fas fa-chevron-down text-xs"></i>
                                 </button>
-                                <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg hidden">
-                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Perfil</a>
-                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Configurações</a>
-                                    <hr>
-                                    <a href="{% url 'logout' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sair</a>
+                                <div id="userMenuDropdown" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50 hidden">
+                                    <div class="px-4 py-2 border-b border-gray-100">
+                                        <p class="text-sm font-medium text-gray-900">{{ user.full_name }}</p>
+                                        <p class="text-xs text-gray-500">{{ user.email }}</p>
+                                    </div>
+                                    <a href="{% url 'profile' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                        <i class="fas fa-user mr-2"></i> Meu Perfil
+                                    </a>
+                                    <a href="{% url 'settings' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                        <i class="fas fa-cog mr-2"></i> Configurações
+                                    </a>
+                                    <a href="{% url 'help' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                        <i class="fas fa-question-circle mr-2"></i> Ajuda
+                                    </a>
+                                    {% if user.can_manage_users %}
+                                    <a href="{% url 'admin_panel' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                        <i class="fas fa-cogs mr-2"></i> Painel Administrativo
+                                    </a>
+                                    {% endif %}
+                                    <div class="border-t border-gray-100"></div>
+                                    <a href="{% url 'logout' %}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
+                                        <i class="fas fa-sign-out-alt mr-2"></i> Sair da conta
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -229,6 +264,28 @@
     {% endif %}
     
     <script src="{% static 'js/app.js' %}"></script>
+    <script>
+        // Dropdown do menu do usuário
+        document.addEventListener('DOMContentLoaded', function() {
+            const userMenuToggle = document.getElementById('userMenuToggle');
+            const userMenuDropdown = document.getElementById('userMenuDropdown');
+
+            if (userMenuToggle && userMenuDropdown) {
+                userMenuToggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    userMenuDropdown.classList.toggle('hidden');
+                });
+
+                // Fechar dropdown ao clicar fora
+                document.addEventListener('click', function(e) {
+                    if (!userMenuToggle.contains(e.target) && !userMenuDropdown.contains(e.target)) {
+                        userMenuDropdown.classList.add('hidden');
+                    }
+                });
+            }
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

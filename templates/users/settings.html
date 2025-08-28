@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block title %}Configurações{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-cog text-primary mr-3"></i>
+                        Configurações
+                    </h1>
+                    <p class="text-gray-600 mt-1">Personalize sua experiência no sistema</p>
+                </div>
+                <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        <!-- Notifications Settings -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Notificações</h3>
+                <p class="text-sm text-gray-600 mt-1">Configure como deseja receber notificações</p>
+            </div>
+            
+            <form method="post" action="{% url 'update_settings' %}" class="p-6">
+                {% csrf_token %}
+                <div class="space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Email de Novos Chamados</h4>
+                            <p class="text-sm text-gray-600">Receber email quando um novo chamado for criado</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="email_new_tickets" class="sr-only peer" {% if user.email_new_tickets %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Email de Status de Chamados</h4>
+                            <p class="text-sm text-gray-600">Receber email quando status de chamado for alterado</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="email_ticket_updates" class="sr-only peer" {% if user.email_ticket_updates %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Email de Comunicados</h4>
+                            <p class="text-sm text-gray-600">Receber email quando novos comunicados forem enviados</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="email_communications" class="sr-only peer" {% if user.email_communications %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-gray-200 mt-6">
+                    <div class="flex justify-end">
+                        <button type="submit" 
+                                class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
+                            <i class="fas fa-save mr-2"></i>
+                            Salvar Configurações
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Display Settings -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Exibição</h3>
+                <p class="text-sm text-gray-600 mt-1">Personalize a aparência do sistema</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Tema Escuro</h4>
+                            <p class="text-sm text-gray-600">Usar tema escuro para interface (Em breve)</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer opacity-50">
+                            <input type="checkbox" class="sr-only peer" disabled>
+                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Items por Página</h4>
+                            <p class="text-sm text-gray-600">Quantidade de itens exibidos por página nas listas</p>
+                        </div>
+                        <select class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="10">10 itens</option>
+                            <option value="25" selected>25 itens</option>
+                            <option value="50">50 itens</option>
+                            <option value="100">100 itens</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Settings -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Segurança</h3>
+                <p class="text-sm text-gray-600 mt-1">Configurações de segurança da conta</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Última vez que alterou a senha</h4>
+                            <p class="text-sm text-gray-600">{{ user.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</p>
+                        </div>
+                        <a href="{% url 'change_password' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm">
+                            Alterar Senha
+                        </a>
+                    </div>
+                    
+                    <hr class="border-gray-200">
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Sessões Ativas</h4>
+                            <p class="text-sm text-gray-600">Gerencie dispositivos conectados à sua conta</p>
+                        </div>
+                        <button class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+                            Ver Sessões
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Export -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Dados</h3>
+                <p class="text-sm text-gray-600 mt-1">Gerencie seus dados pessoais</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Exportar Dados</h4>
+                            <p class="text-sm text-gray-600">Baixar uma cópia dos seus dados</p>
+                        </div>
+                        <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                            <i class="fas fa-download mr-2"></i>
+                            Exportar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

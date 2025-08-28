@@ -17,11 +17,6 @@
                     Concluir e Fechar
                 </button>
             {% endif %}
-            {% if user.can_view_sector_tickets and ticket.status != 'FECHADO' %}
-                <button class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
-                    Atualizar Status
-                </button>
-            {% endif %}
         </div>
     </div>
     
@@ -57,7 +52,6 @@
                         <h3 class="text-xl font-semibold text-gray-900">{{ ticket.title }}</h3>
                         <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                             <span>ID: #{{ ticket.id|stringformat:"04d" }}</span>
-                            <span>Título: {{ ticket.title }}</span>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
                                 {% if ticket.status == 'ABERTO' %}bg-primary text-white
                                 {% elif ticket.status == 'EM_ANDAMENTO' %}bg-blue-500 text-white
@@ -91,8 +85,7 @@
                     </div>
                     
                     <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                        <p class="text-sm text-gray-600">Prezados, bom dia! Solicito Reembolso de R$ 1500,00 referente a compra do Coeficiente de Treinamento de formação.</p>
-                        <p class="text-sm text-gray-600 mt-2">Pix: (10) 555-5511</p>
+                        <div class="text-gray-700">{{ ticket.description|linebreaks }}</div>
                     </div>
                     
                     {% if ticket.status == 'RESOLVIDO' %}
@@ -113,15 +106,43 @@
                     {% for comment in ticket.comments.all %}
                         <div class="flex items-start space-x-3">
                             <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                                <i class="fas fa-user text-gray-600"></i>
+                                {% if comment.comment_type == 'ASSUMPTION' %}
+                                    <i class="fas fa-user-check text-blue-600"></i>
+                                {% elif comment.comment_type == 'ASSIGNMENT' %}
+                                    <i class="fas fa-user-plus text-purple-600"></i>
+                                {% elif comment.comment_type == 'STATUS_CHANGE' %}
+                                    <i class="fas fa-exchange-alt text-orange-600"></i>
+                                {% elif comment.comment_type == 'FOLLOW_UP' %}
+                                    <i class="fas fa-eye text-green-600"></i>
+                                {% else %}
+                                    <i class="fas fa-comment text-gray-600"></i>
+                                {% endif %}
                             </div>
                             <div class="flex-1">
                                 <div class="bg-gray-50 rounded-lg p-4">
                                     <div class="flex items-center justify-between mb-2">
-                                        <p class="font-medium text-gray-900">{{ comment.user.first_name }} {{ comment.user.last_name }}</p>
+                                        <div class="flex items-center space-x-2">
+                                            <p class="font-medium text-gray-900">{{ comment.user.first_name }} {{ comment.user.last_name }}</p>
+                                            <span class="text-xs px-2 py-1 rounded-full
+                                                {% if comment.comment_type == 'ASSUMPTION' %}bg-blue-100 text-blue-800
+                                                {% elif comment.comment_type == 'ASSIGNMENT' %}bg-purple-100 text-purple-800
+                                                {% elif comment.comment_type == 'STATUS_CHANGE' %}bg-orange-100 text-orange-800
+                                                {% elif comment.comment_type == 'FOLLOW_UP' %}bg-green-100 text-green-800
+                                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                                {{ comment.get_comment_type_display }}
+                                            </span>
+                                        </div>
                                         <p class="text-sm text-gray-500">{{ comment.created_at|date:"d/m/Y H:i" }}</p>
                                     </div>
                                     <p class="text-gray-700">{{ comment.comment }}</p>
+                                    {% if comment.assigned_to %}
+                                        <div class="mt-2 pt-2 border-t border-gray-200">
+                                            <p class="text-sm text-purple-700">
+                                                <i class="fas fa-user-plus mr-1"></i>
+                                                Atribuído para: <strong>{{ comment.assigned_to.full_name }}</strong>
+                                            </p>
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -131,17 +152,52 @@
             
             <!-- Right Sidebar -->
             <div class="space-y-6">
+                {% if can_assume %}
+                    <!-- Assume Ticket Section -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 class="font-medium text-blue-900 mb-3">Assumir Chamado</h4>
+                        <p class="text-sm text-blue-700 mb-4">Você pode assumir este chamado para ser o responsável pela resolução.</p>
+                        <form method="post" action="{% url 'assume_ticket' ticket.id %}">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <textarea 
+                                    name="comment" 
+                                    class="w-full px-3 py-2 border border-blue-300 rounded text-sm" 
+                                    rows="2" 
+                                    placeholder="Comentário opcional..."
+                                ></textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-500 text-white py-2 px-3 rounded text-sm hover:bg-blue-600 transition-colors">
+                                <i class="fas fa-user-check mr-2"></i>Assumir Chamado
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+                
                 {% if ticket.status == 'RESOLVIDO' and ticket.created_by == user %}
                     <!-- User Approval Section -->
                     <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                         <h4 class="font-medium text-yellow-900 mb-3">Aprovação Pendente</h4>
                         <p class="text-sm text-yellow-700 mb-4">O chamado foi marcado como resolvido. Você precisa aprovar a solução para fechar o chamado.</p>
+                        
+                        {% if ticket.solution %}
+                        <div class="bg-white rounded p-3 mb-4">
+                            <h5 class="font-medium text-gray-900 mb-2">Solução apresentada:</h5>
+                            <p class="text-sm text-gray-700">{{ ticket.solution }}</p>
+                        </div>
+                        {% endif %}
+                        
                         <div class="flex space-x-2">
-                            <button class="bg-success text-white px-3 py-2 rounded text-sm hover:bg-green-600 transition-colors">
-                                Aprovar
-                            </button>
-                            <button class="bg-danger text-white px-3 py-2 rounded text-sm hover:bg-red-600 transition-colors">
-                                Reprovar
+                            <form method="post" action="{% url 'update_ticket_status' ticket.id %}" class="flex-1">
+                                {% csrf_token %}
+                                <input type="hidden" name="status" value="FECHADO">
+                                <input type="hidden" name="observation" value="Aprovado pelo usuário">
+                                <button type="submit" class="w-full bg-success text-white px-3 py-2 rounded text-sm hover:bg-green-600 transition-colors">
+                                    <i class="fas fa-check mr-1"></i>Aprovar Solução
+                                </button>
+                            </form>
+                            <button onclick="showRejectModal()" class="flex-1 bg-danger text-white px-3 py-2 rounded text-sm hover:bg-red-600 transition-colors">
+                                <i class="fas fa-times mr-1"></i>Reprovar
                             </button>
                         </div>
                     </div>
@@ -160,50 +216,125 @@
                             <span class="text-gray-900">{{ ticket.category.name }}</span>
                         </div>
                         <div class="flex justify-between">
+                            <span class="text-gray-600">Prioridade:</span>
+                            <span class="text-gray-900 
+                                {% if ticket.priority == 'CRITICA' %}text-red-600
+                                {% elif ticket.priority == 'ALTA' %}text-orange-600
+                                {% elif ticket.priority == 'MEDIA' %}text-yellow-600
+                                {% else %}text-green-600{% endif %}">
+                                {{ ticket.get_priority_display }}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
                             <span class="text-gray-600">Criado por:</span>
-                            <span class="text-gray-900">{{ ticket.created_by.first_name }}</span>
+                            <span class="text-gray-900">{{ ticket.created_by.full_name }}</span>
                         </div>
                         {% if ticket.assigned_to %}
                         <div class="flex justify-between">
                             <span class="text-gray-600">Responsável:</span>
-                            <span class="text-gray-900">{{ ticket.assigned_to.first_name }}</span>
+                            <span class="text-gray-900">{{ ticket.assigned_to.full_name }}</span>
+                        </div>
+                        {% endif %}
+                        {% if additional_assignments %}
+                        <div class="pt-2 border-t">
+                            <span class="text-gray-600 block mb-1">Auxiliares:</span>
+                            {% for assignment in additional_assignments %}
+                                <div class="text-sm text-gray-900">
+                                    {{ assignment.user.full_name }}
+                                    <span class="text-xs text-gray-500">(por {{ assignment.assigned_by.full_name }})</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% if ticket.due_date %}
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Prazo:</span>
+                            <span class="text-gray-900 {% if ticket.is_overdue %}text-red-600{% endif %}">
+                                {{ ticket.due_date|date:"d/m/Y H:i" }}
+                                {% if ticket.is_overdue %}
+                                    <i class="fas fa-exclamation-triangle text-red-500 ml-1"></i>
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endif %}
+                        {% if ticket.solution and ticket.status in 'RESOLVIDO,FECHADO' %}
+                        <div class="pt-2 border-t">
+                            <span class="text-gray-600 block mb-1">Solução:</span>
+                            <div class="bg-green-50 border border-green-200 rounded p-2">
+                                <span class="text-gray-900 text-sm">{{ ticket.solution }}</span>
+                            </div>
                         </div>
                         {% endif %}
                     </div>
                 </div>
                 
                 <!-- Action Panel -->
-                {% if user.can_view_sector_tickets and ticket.status != 'FECHADO' %}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4">
-                        <h4 class="font-medium text-gray-900 mb-3">Ações Rápidas</h4>
-                        <div class="space-y-2">
-                            {% if ticket.status == 'ABERTO' %}
-                                <button class="w-full bg-blue-500 text-white py-2 px-3 rounded text-sm hover:bg-blue-600 transition-colors">
-                                    Assumir Chamado
-                                </button>
-                            {% endif %}
-                            {% if ticket.status == 'EM_ANDAMENTO' %}
-                                <button class="w-full bg-success text-white py-2 px-3 rounded text-sm hover:bg-green-600 transition-colors">
-                                    Marcar como Resolvido
-                                </button>
-                            {% endif %}
+                {% if user.can_view_sector_tickets or ticket.assigned_to == user or user in assigned_users %}
+                    {% if ticket.status != 'FECHADO' %}
+                        <div class="bg-white border border-gray-200 rounded-lg p-4">
+                            <h4 class="font-medium text-gray-900 mb-3">Ações Rápidas</h4>
+                            <div class="space-y-2">
+                {% if ticket.status == 'EM_ANDAMENTO' and ticket.assigned_to == user or user.can_view_sector_tickets or user.can_view_all_tickets %}
+                    <button onclick="showResolveModal()" class="w-full bg-success text-white py-2 px-3 rounded text-sm hover:bg-green-600 transition-colors">
+                        <i class="fas fa-check mr-2"></i>Marcar como Resolvido
+                    </button>
+                {% endif %}                                {% if can_assign %}
+                                    <!-- Assign User Modal Trigger -->
+                                    <button onclick="toggleAssignModal()" class="w-full bg-purple-500 text-white py-2 px-3 rounded text-sm hover:bg-purple-600 transition-colors">
+                                        <i class="fas fa-user-plus mr-2"></i>Atribuir Usuário
+                                    </button>
+                                {% endif %}
+                                
+                                <!-- Update Status Button -->
+                                {% if ticket.status != 'FECHADO' and ticket.status != 'RESOLVIDO' %}
+                                    <button onclick="showStatusModal()" class="w-full bg-orange-500 text-white py-2 px-3 rounded text-sm hover:bg-orange-600 transition-colors">
+                                        <i class="fas fa-edit mr-2"></i>Atualizar Status
+                                    </button>
+                                {% endif %}
+                            </div>
                         </div>
-                    </div>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
         
         <!-- Reply Section -->
-        {% if ticket.status != 'FECHADO' %}
+        {% if ticket.status != 'FECHADO' and ticket.status != 'AGUARDANDO_APROVACAO' and ticket.status != 'RESOLVIDO' %}
             <div class="mt-8 pt-6 border-t border-gray-200">
                 <h4 class="font-medium text-gray-900 mb-4">Responder</h4>
-                <form method="post" action="#" class="space-y-4">
+                <form method="post" action="{% url 'add_comment' ticket.id %}" class="space-y-4">
                     {% csrf_token %}
+                    
+                    <!-- Comment Type Selection -->
                     <div>
-                        <label for="message" class="block text-sm font-medium text-gray-700 mb-2">Mensagem:</label>
+                        <label for="comment_type" class="block text-sm font-medium text-gray-700 mb-2">Tipo de Resposta:</label>
+                        <select name="comment_type" id="comment_type" onchange="toggleAssignField()" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="COMMENT">Comentário</option>
+                            <option value="FOLLOW_UP">Acompanhamento</option>
+                            {% if can_assign %}
+                                <option value="ASSIGNMENT">Atribuir Usuário</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    
+                    <!-- User Assignment Field (hidden by default) -->
+                    <div id="assignUserField" class="hidden">
+                        <label for="assigned_to" class="block text-sm font-medium text-gray-700 mb-2">Atribuir para:</label>
+                        <select name="assigned_to" id="assigned_to" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="">Selecione um usuário...</option>
+                            {% if sector_users %}
+                                {% for sector_user in sector_users %}
+                                    <option value="{{ sector_user.id }}">{{ sector_user.full_name }} ({{ sector_user.sector.name }}) - {{ sector_user.email }}</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label for="comment" class="block text-sm font-medium text-gray-700 mb-2">Mensagem:</label>
                         <textarea 
-                            name="message" 
-                            id="message" 
+                            name="comment" 
+                            id="comment" 
                             rows="4"
                             required
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -216,7 +347,7 @@
                             type="submit" 
                             class="bg-secondary text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors"
                         >
-                            Enviar Resposta
+                            <i class="fas fa-paper-plane mr-2"></i>Enviar Resposta
                         </button>
                     </div>
                 </form>
@@ -225,10 +356,327 @@
     </div>
     
     <!-- Status History -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h3 class="font-medium text-gray-900 mb-4">Histórico do Chamado</h3>
+        <div class="space-y-3">
+            {% for log in logs %}
+            <div class="flex items-start space-x-3 py-2 border-b border-gray-100 last:border-b-0">
+                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-history text-blue-600 text-xs"></i>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-sm font-medium text-gray-900">{{ log.user.full_name }}</span>
+                            <span class="text-sm text-gray-600">
+                                {% if log.old_status %}
+                                    alterou status de "{{ log.old_status }}" para "{{ log.new_status }}"
+                                {% else %}
+                                    definiu status como "{{ log.new_status }}"
+                                {% endif %}
+                            </span>
+                        </div>
+                        <span class="text-xs text-gray-500">{{ log.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    {% if log.observation %}
+                    <p class="text-sm text-gray-600 mt-1">{{ log.observation }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-gray-500 text-sm">Nenhum histórico disponível.</p>
+            {% endfor %}
+        </div>
+    </div>
+    
     {% if ticket.status == 'FECHADO' %}
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="font-medium text-gray-900 mb-4">Chamado fechado por: {{ ticket.approved_by.first_name }} {{ ticket.approved_by.last_name }} - Hoje 25/08 às 09:00</h3>
+            <h3 class="font-medium text-gray-900 mb-4">
+                Chamado fechado
+                {% if ticket.approved_by %}
+                    por: {{ ticket.approved_by.full_name }} - {{ ticket.closed_at|date:"d/m/Y H:i" }}
+                {% endif %}
+            </h3>
         </div>
     {% endif %}
 </div>
+
+<!-- Modal para Marcar como Resolvido -->
+<div id="resolveModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Marcar como Resolvido</h3>
+            <form method="post" action="{% url 'update_ticket_status' ticket.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="RESOLVIDO">
+                
+                <div class="mb-4">
+                    <label for="solution" class="block text-sm font-medium text-gray-700 mb-2">
+                        Solução aplicada: <span class="text-red-500">*</span>
+                    </label>
+                    <textarea 
+                        name="solution" 
+                        id="solution" 
+                        rows="4" 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Descreva a solução aplicada para resolver o chamado..."
+                    ></textarea>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="observation" class="block text-sm font-medium text-gray-700 mb-2">Observações adicionais:</label>
+                    <textarea 
+                        name="observation" 
+                        id="observation" 
+                        rows="2"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Observações opcionais..."
+                    ></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="hideResolveModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-success text-white rounded hover:bg-green-600 transition-colors">
+                        <i class="fas fa-check mr-1"></i>Resolver Chamado
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Reprovação -->
+<div id="rejectModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Reprovar Solução</h3>
+            <form method="post" action="{% url 'update_ticket_status' ticket.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="EM_ANDAMENTO">
+                
+                <div class="mb-4">
+                    <label for="reject_reason" class="block text-sm font-medium text-gray-700 mb-2">
+                        Motivo da reprovação: <span class="text-red-500">*</span>
+                    </label>
+                    <textarea 
+                        name="observation" 
+                        id="reject_reason" 
+                        rows="4" 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Explique por que a solução não foi satisfatória..."
+                    ></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="hideRejectModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-danger text-white rounded hover:bg-red-600 transition-colors">
+                        <i class="fas fa-times mr-1"></i>Reprovar Solução
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Atualizar Status -->
+<div id="statusModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Atualizar Status</h3>
+            <form method="post" action="{% url 'update_ticket_status' ticket.id %}">
+                {% csrf_token %}
+                
+                <div class="mb-4">
+                    <label for="new_status" class="block text-sm font-medium text-gray-700 mb-2">
+                        Novo Status: <span class="text-red-500">*</span>
+                    </label>
+                    <select name="status" id="new_status" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Selecione um status...</option>
+                        {% if ticket.status == 'ABERTO' %}
+                            <option value="EM_ANDAMENTO">Em Andamento</option>
+                        {% endif %}
+                        {% if ticket.status == 'EM_ANDAMENTO' %}
+                            <option value="ABERTO">Aberto</option>
+                        {% endif %}
+                        <option value="FECHADO">Fechar (Admin)</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="status_observation" class="block text-sm font-medium text-gray-700 mb-2">Observações:</label>
+                    <textarea 
+                        name="observation" 
+                        id="status_observation" 
+                        rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Observações sobre a mudança de status..."
+                    ></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="hideStatusModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors">
+                        <i class="fas fa-save mr-1"></i>Atualizar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Atribuir Usuário -->
+<div id="assignModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Atribuir Usuário</h3>
+            <form method="post" action="{% url 'add_comment' ticket.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="comment_type" value="ASSIGNMENT">
+                
+                <div class="mb-4">
+                    <label for="assign_to_user" class="block text-sm font-medium text-gray-700 mb-2">
+                        Atribuir para: <span class="text-red-500">*</span>
+                    </label>
+                    <select name="assigned_to" id="assign_to_user" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Selecione um usuário...</option>
+                        <!-- Debug: Total de usuários: {{ sector_users|length }} -->
+                        {% if sector_users %}
+                            {% for sector_user in sector_users %}
+                                <option value="{{ sector_user.id }}">{{ sector_user.full_name }} ({{ sector_user.sector.name }}) - {{ sector_user.email }}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="assign_comment" class="block text-sm font-medium text-gray-700 mb-2">
+                        Mensagem: <span class="text-red-500">*</span>
+                    </label>
+                    <textarea 
+                        name="comment" 
+                        id="assign_comment" 
+                        rows="3"
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Mensagem de atribuição..."
+                    ></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="hideAssignModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors">
+                        <i class="fas fa-user-plus mr-1"></i>Atribuir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAssignField() {
+    const commentType = document.getElementById('comment_type').value;
+    const assignField = document.getElementById('assignUserField');
+    
+    if (commentType === 'ASSIGNMENT') {
+        assignField.classList.remove('hidden');
+        document.getElementById('assigned_to').required = true;
+    } else {
+        assignField.classList.add('hidden');
+        document.getElementById('assigned_to').required = false;
+    }
+}
+
+function showResolveModal() {
+    document.getElementById('resolveModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function hideResolveModal() {
+    document.getElementById('resolveModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function showRejectModal() {
+    document.getElementById('rejectModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function hideRejectModal() {
+    document.getElementById('rejectModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function showStatusModal() {
+    console.log('Tentando abrir modal de status');
+    const modal = document.getElementById('statusModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        console.log('Modal de status aberto');
+    } else {
+        console.error('Modal statusModal não encontrado');
+    }
+}
+
+function hideStatusModal() {
+    document.getElementById('statusModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function showAssignModal() {
+    document.getElementById('assignModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function hideAssignModal() {
+    document.getElementById('assignModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function toggleAssignModal() {
+    const modal = document.getElementById('assignModal');
+    if (modal.classList.contains('hidden')) {
+        showAssignModal();
+    } else {
+        hideAssignModal();
+    }
+}
+
+// Close modals when clicking outside
+window.onclick = function(event) {
+    const resolveModal = document.getElementById('resolveModal');
+    const rejectModal = document.getElementById('rejectModal');
+    const statusModal = document.getElementById('statusModal');
+    const assignModal = document.getElementById('assignModal');
+    
+    if (event.target === resolveModal) {
+        hideResolveModal();
+    }
+    if (event.target === rejectModal) {
+        hideRejectModal();
+    }
+    if (event.target === statusModal) {
+        hideStatusModal();
+    }
+    if (event.target === assignModal) {
+        hideAssignModal();
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleAssignField();
+});
+</script>
 {% endblock %}

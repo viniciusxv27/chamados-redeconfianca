@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Usuários{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Gerenciar Usuários</h1>
+                    <p class="text-gray-600 mt-1">Gerencie todos os usuários do sistema</p>
+                </div>
+                <a href="{% url 'create_user' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    Novo Usuário
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-users text-blue-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ users.count }}</h3>
+                    <p class="text-gray-600 text-sm">Total de Usuários</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-user-check text-green-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ users|length }}</h3>
+                    <p class="text-gray-600 text-sm">Usuários Ativos</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-user-tie text-yellow-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ sectors.count }}</h3>
+                    <p class="text-gray-600 text-sm">Setores</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 rounded-lg">
+                    <i class="fas fa-crown text-purple-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        {% for user in users %}
+                            {% if user.hierarchy == 'SUPERADMIN' %}{{ forloop.counter }}{% endif %}
+                        {% endfor %}
+                    </h3>
+                    <p class="text-gray-600 text-sm">Administradores</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div class="flex flex-wrap items-center gap-4">
+            <div class="flex-1 min-w-64">
+                <input type="text" id="searchUsers" placeholder="Buscar por nome, email ou setor..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            <select id="filterSector" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">Todos os Setores</option>
+                {% for sector in sectors %}
+                    <option value="{{ sector.id }}">{{ sector.name }}</option>
+                {% endfor %}
+            </select>
+            <select id="filterHierarchy" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">Todas as Hierarquias</option>
+                <option value="PADRAO">Padrão</option>
+                <option value="SUPERVISOR">Supervisor</option>
+                <option value="ADMINISTRATIVO">Administrativo</option>
+                <option value="SUPERADMIN">Superadmin</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Usuário</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Email</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Setor</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Hierarquia</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Saldo C$</th>
+                        <th class="text-left py-3 px-6 font-semibold text-gray-900">Status</th>
+                        <th class="text-center py-3 px-6 font-semibold text-gray-900">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200" id="usersTableBody">
+                    {% for user_item in users %}
+                    <tr class="hover:bg-gray-50 transition-colors user-row" 
+                        data-sector="{{ user_item.sector.id|default:'' }}" 
+                        data-hierarchy="{{ user_item.hierarchy }}"
+                        data-search="{{ user_item.full_name|lower }} {{ user_item.email|lower }} {{ user_item.sector.name|default:''|lower }}">
+                        <td class="py-4 px-6">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center mr-3">
+                                    <i class="fas fa-user text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="font-semibold text-gray-900">{{ user_item.full_name }}</div>
+                                    <div class="text-sm text-gray-500">{{ user_item.phone|default:"Sem telefone" }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-6 text-gray-900">{{ user_item.email }}</td>
+                        <td class="py-4 px-6">
+                            {% if user_item.sector %}
+                                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                                    {{ user_item.sector.name }}
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
+                                    Sem setor
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6">
+                            {% if user_item.hierarchy == 'SUPERADMIN' %}
+                                <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-crown mr-1"></i>Superadmin
+                                </span>
+                            {% elif user_item.hierarchy == 'ADMINISTRATIVO' %}
+                                <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-user-shield mr-1"></i>Admin
+                                </span>
+                            {% elif user_item.hierarchy == 'SUPERVISOR' %}
+                                <span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-user-tie mr-1"></i>Supervisor
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-user mr-1"></i>Padrão
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6">
+                            <span class="font-semibold text-green-600">C$ {{ user_item.balance_cs }}</span>
+                        </td>
+                        <td class="py-4 px-6">
+                            {% if user_item.is_active %}
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-check-circle mr-1"></i>Ativo
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-times-circle mr-1"></i>Inativo
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <div class="flex items-center justify-center space-x-2">
+                                <a href="{% url 'edit_user' user_item.id %}" 
+                                   class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
+                                   title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{% url 'add_cs' user_item.id %}" 
+                                   class="bg-green-100 text-green-600 p-2 rounded-lg hover:bg-green-200 transition-colors"
+                                   title="Adicionar C$">
+                                    <i class="fas fa-coins"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-8 px-6 text-center text-gray-500">
+                            <i class="fas fa-users text-4xl mb-4 text-gray-300"></i>
+                            <p>Nenhum usuário encontrado</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchUsers');
+    const sectorFilter = document.getElementById('filterSector');
+    const hierarchyFilter = document.getElementById('filterHierarchy');
+    const userRows = document.querySelectorAll('.user-row');
+
+    function filterUsers() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedSector = sectorFilter.value;
+        const selectedHierarchy = hierarchyFilter.value;
+
+        userRows.forEach(row => {
+            const searchData = row.getAttribute('data-search');
+            const sectorData = row.getAttribute('data-sector');
+            const hierarchyData = row.getAttribute('data-hierarchy');
+
+            const matchesSearch = searchData.includes(searchTerm);
+            const matchesSector = !selectedSector || sectorData === selectedSector;
+            const matchesHierarchy = !selectedHierarchy || hierarchyData === selectedHierarchy;
+
+            if (matchesSearch && matchesSector && matchesHierarchy) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    searchInput.addEventListener('input', filterUsers);
+    sectorFilter.addEventListener('change', filterUsers);
+    hierarchyFilter.addEventListener('change', filterUsers);
+});
+</script>
+{% endblock %}

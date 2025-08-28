@@ -29,6 +29,18 @@ router.register(r'sectors', SectorViewSet)
 router.register(r'tickets', TicketViewSet)
 router.register(r'categories', CategoryViewSet)
 
+try:
+    from tickets.views import WebhookViewSet
+    router.register(r'webhooks', WebhookViewSet)
+except ImportError:
+    pass
+
+try:
+    from communications.views import CommunicationViewSet
+    router.register(r'communications', CommunicationViewSet)
+except ImportError:
+    pass
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('users.urls')),

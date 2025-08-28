@@ -19,7 +19,10 @@ class Communication(models.Model):
         verbose_name="Destinatários"
     )
     send_to_all = models.BooleanField(default=False, verbose_name="Enviar para Todos")
+    active_from = models.DateTimeField(null=True, blank=True, verbose_name="Ativo a partir de")
+    active_until = models.DateTimeField(null=True, blank=True, verbose_name="Ativo até")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Envio")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última Atualização")
     
     class Meta:
         verbose_name = "Comunicado"
@@ -28,6 +31,17 @@ class Communication(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.sender.full_name}"
+    
+    def is_active(self):
+        """Verifica se o comunicado está ativo no momento"""
+        from django.utils import timezone
+        now = timezone.now()
+        
+        if self.active_from and now < self.active_from:
+            return False
+        if self.active_until and now > self.active_until:
+            return False
+        return True
     
     def save(self, *args, **kwargs):
         is_new = self.pk is None
@@ -66,9 +80,17 @@ class Communication(models.Model):
 
 
 class CommunicationRead(models.Model):
+    STATUS_CHOICES = [
+        ('NAO_VISUALIZADO', 'Não Visualizado'),
+        ('ESTOU_CIENTE', 'Estou Ciente'),
+        ('ESTOU_COM_DUVIDA', 'Estou com Dúvida'),
+    ]
+    
     communication = models.ForeignKey(Communication, on_delete=models.CASCADE, verbose_name="Comunicado")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NAO_VISUALIZADO', verbose_name="Status")
     read_at = models.DateTimeField(auto_now_add=True, verbose_name="Lido em")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Atualizado em")
     
     class Meta:
         verbose_name = "Leitura de Comunicado"
@@ -77,4 +99,4 @@ class CommunicationRead(models.Model):
         ordering = ['-read_at']
     
     def __str__(self):
-        return f"{self.communication.title} - {self.user.full_name}"
+        return f"{self.communication.title} - {self.user.full_name} - {self.get_status_display()}"

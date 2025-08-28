@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir Comunicado{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-trash text-red-600 mr-3"></i>
+                        Excluir Comunicado
+                    </h1>
+                    <p class="text-gray-600 mt-1">Confirme a exclusão do comunicado</p>
+                </div>
+                <a href="{% url 'communication_detail' communication.id %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="p-6">
+                <!-- Warning -->
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                    <div class="flex items-start">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-xl mr-3 mt-1"></i>
+                        <div>
+                            <h3 class="text-lg font-semibold text-red-900 mb-2">Atenção!</h3>
+                            <p class="text-red-700">
+                                Esta ação não pode ser desfeita. O comunicado será permanentemente excluído do sistema, 
+                                incluindo todos os registros de leitura associados.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Communication Details -->
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Dados do Comunicado</h3>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <span class="text-sm font-medium text-gray-600">Título:</span>
+                            <p class="text-gray-900 font-medium">{{ communication.title }}</p>
+                        </div>
+                        
+                        <div>
+                            <span class="text-sm font-medium text-gray-600">Mensagem:</span>
+                            <div class="text-gray-900 mt-1 p-3 bg-white rounded border">
+                                {{ communication.message|linebreaks }}
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <span class="text-sm font-medium text-gray-600">Criado por:</span>
+                                <p class="text-gray-900">{{ communication.sender.full_name }}</p>
+                            </div>
+                            
+                            <div>
+                                <span class="text-sm font-medium text-gray-600">Data de criação:</span>
+                                <p class="text-gray-900">{{ communication.created_at|date:"d/m/Y H:i" }}</p>
+                            </div>
+                        </div>
+                        
+                        {% if communication.active_from or communication.active_until %}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {% if communication.active_from %}
+                            <div>
+                                <span class="text-sm font-medium text-gray-600">Ativo a partir de:</span>
+                                <p class="text-gray-900">{{ communication.active_from|date:"d/m/Y H:i" }}</p>
+                            </div>
+                            {% endif %}
+                            
+                            {% if communication.active_until %}
+                            <div>
+                                <span class="text-sm font-medium text-gray-600">Ativo até:</span>
+                                <p class="text-gray-900">{{ communication.active_until|date:"d/m/Y H:i" }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <div>
+                            <span class="text-sm font-medium text-gray-600">Destinatários:</span>
+                            <p class="text-gray-900">
+                                {% if communication.send_to_all %}
+                                    Todos os usuários
+                                {% else %}
+                                    {{ communication.recipients.count }} usuário{{ communication.recipients.count|pluralize }}
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Confirmation -->
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                        <div class="flex items-start">
+                            <i class="fas fa-info-circle text-yellow-600 text-lg mr-3 mt-1"></i>
+                            <div>
+                                <p class="text-yellow-800">
+                                    Para confirmar a exclusão, digite <strong>"EXCLUIR"</strong> no campo abaixo:
+                                </p>
+                                <input type="text" 
+                                       id="confirmation" 
+                                       class="mt-3 w-full px-3 py-2 border border-yellow-300 rounded focus:ring-2 focus:ring-red-500 focus:border-transparent" 
+                                       placeholder="Digite EXCLUIR para confirmar">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="flex items-center justify-end space-x-4">
+                        <a href="{% url 'communication_detail' communication.id %}" 
+                           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                id="deleteButton"
+                                disabled
+                                class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
+                            <i class="fas fa-trash mr-2"></i>
+                            Excluir Comunicado
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmationInput = document.getElementById('confirmation');
+    const deleteButton = document.getElementById('deleteButton');
+    
+    confirmationInput.addEventListener('input', function() {
+        if (this.value.trim().toUpperCase() === 'EXCLUIR') {
+            deleteButton.disabled = false;
+        } else {
+            deleteButton.disabled = true;
+        }
+    });
+    
+    // Prevenir submissão acidental
+    document.querySelector('form').addEventListener('submit', function(e) {
+        if (confirmationInput.value.trim().toUpperCase() !== 'EXCLUIR') {
+            e.preventDefault();
+            alert('Digite "EXCLUIR" para confirmar a exclusão.');
+            return false;
+        }
+        
+        if (!confirm('Tem certeza que deseja excluir este comunicado? Esta ação não pode ser desfeita.')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}
