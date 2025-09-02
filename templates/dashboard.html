@@ -66,8 +66,8 @@
                     <i class="fas fa-ticket-alt text-blue-600"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Chamados</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ ticket_stats.total }}</p>
+                    <p class="text-sm font-medium text-gray-600">Total Chamados</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ stats.total_tickets }}</p>
                 </div>
             </div>
         </div>
@@ -79,7 +79,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-600">Abertos</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ ticket_stats.abertos }}</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ stats.open_tickets }}</p>
                 </div>
             </div>
         </div>
@@ -90,36 +90,66 @@
                     <i class="fas fa-clock text-yellow-600"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Andamento</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ ticket_stats.em_andamento }}</p>
+                    <p class="text-sm font-medium text-gray-600">Em Andamento</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ stats.pending_tickets }}</p>
                 </div>
             </div>
         </div>
         
         <div class="bg-white rounded-lg shadow-sm p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-red-100">
-                    <i class="fas fa-exclamation-triangle text-red-600"></i>
+                <div class="p-3 rounded-full bg-green-100">
+                    <i class="fas fa-check text-green-600"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Em Atraso</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ ticket_stats.overdue }}</p>
+                    <p class="text-sm font-medium text-gray-600">Fechados</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ stats.closed_tickets }}</p>
                 </div>
             </div>
         </div>
         
         <div class="bg-white rounded-lg shadow-sm p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-primary/10">
-                    <i class="fas fa-coins text-primary"></i>
+                <div class="p-3 rounded-full bg-purple-100">
+                    <i class="fas fa-users text-purple-600"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Saldo C$</p>
-                    <p class="text-2xl font-semibold text-primary">{{ user_balance }}</p>
+                    <p class="text-sm font-medium text-gray-600">Usuários Ativos</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ stats.active_users }}</p>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Comunicados fixados na dashboard -->
+    {% if pinned_communications %}
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex items-center mb-3">
+            <i class="fas fa-thumbtack text-blue-600 mr-3"></i>
+            <h3 class="text-blue-800 font-semibold">Comunicados Fixados</h3>
+        </div>
+        <div class="space-y-3">
+            {% for comm in pinned_communications %}
+            <div class="bg-white border border-blue-200 rounded p-3">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h4 class="font-medium text-gray-900">{{ comm.title }}</h4>
+                        <p class="text-sm text-gray-600 mt-1">{{ comm.message|truncatechars:100 }}</p>
+                        <div class="flex items-center mt-2 text-xs text-gray-500">
+                            <span>Por {{ comm.sender.full_name }}</span>
+                            <span class="mx-2">•</span>
+                            <span>{{ comm.created_at|date:"d/m/Y H:i" }}</span>
+                        </div>
+                    </div>
+                    <a href="{% url 'communication_detail' comm.id %}" class="text-blue-600 hover:text-blue-800 text-sm ml-3">
+                        Ver completo
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
     
     <!-- Chamados em Atraso -->
     {% if overdue_tickets %}
@@ -160,6 +190,16 @@
                 {% for ticket in recent_tickets %}
                 <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div class="flex items-center space-x-4">
+                        <!-- Foto do usuário que criou o chamado -->
+                        <div class="flex-shrink-0">
+                            {% if ticket.created_by.profile_picture %}
+                                <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-10 h-10 rounded-full object-cover">
+                            {% else %}
+                                <div class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-medium text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
+                                </div>
+                            {% endif %}
+                        </div>
                         <div class="flex-shrink-0">
                             {% if ticket.status == 'ABERTO' %}
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">

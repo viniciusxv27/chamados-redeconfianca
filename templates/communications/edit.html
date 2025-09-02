@@ -27,7 +27,7 @@
     <div class="max-w-4xl mx-auto">
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <div class="p-6">
-                <form method="post" class="space-y-6">
+                <form method="post" enctype="multipart/form-data" class="space-y-6">
                     {% csrf_token %}
                     
                     <!-- Título -->
@@ -42,6 +42,56 @@
                                value="{{ communication.title }}"
                                placeholder="Digite o título do comunicado"
                                required>
+                    </div>
+
+                    <!-- Upload de Foto -->
+                    <div>
+                        <label for="photo" class="block text-sm font-semibold text-gray-900 mb-2">
+                            <i class="fas fa-camera text-primary mr-1"></i>
+                            Foto do Comunicado
+                        </label>
+                        
+                        <!-- Foto atual (se existir) -->
+                        {% if communication.image %}
+                        <div class="mb-4">
+                            <p class="text-sm text-gray-600 mb-2">Foto atual:</p>
+                            <div class="relative inline-block">
+                                <img src="{{ communication.image.url }}" alt="Foto atual" class="w-full max-w-md h-48 object-cover rounded-lg">
+                                <div class="absolute top-2 right-2">
+                                    <input type="checkbox" name="remove_photo" id="remove_photo" class="mr-1">
+                                    <label for="remove_photo" class="bg-red-500 text-white px-2 py-1 rounded text-xs">Remover foto</label>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Upload nova foto -->
+                        <div class="flex items-center justify-center w-full">
+                            <label for="photo" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-area">
+                                    <i class="fas fa-cloud-upload-alt text-gray-400 text-4xl mb-4"></i>
+                                    <p class="mb-2 text-sm text-gray-500">
+                                        <span class="font-semibold">
+                                            {% if communication.image %}Clique para alterar a foto{% else %}Clique para fazer upload{% endif %}
+                                        </span> ou arraste a imagem
+                                    </p>
+                                    <p class="text-xs text-gray-500">PNG, JPG ou JPEG (MAX. 5MB)</p>
+                                </div>
+                                <input id="photo" name="photo" type="file" class="hidden" accept="image/*" onchange="previewImage(this)">
+                            </label>
+                        </div>
+                        
+                        <!-- Preview da nova imagem -->
+                        <div id="photo-preview" class="hidden mt-4">
+                            <p class="text-sm text-gray-600 mb-2">Nova foto:</p>
+                            <div class="relative">
+                                <img id="preview-img" class="w-full max-w-md h-48 object-cover rounded-lg" src="" alt="Preview">
+                                <button type="button" onclick="removePhoto()" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">A foto será exibida como destaque no feed de comunicados.</p>
                     </div>
 
                     <!-- Mensagem -->
@@ -183,6 +233,71 @@ function toggleRecipients() {
     } else {
         recipientsSection.style.display = 'block';
     }
+}
+
+function previewImage(input) {
+    const preview = document.getElementById('photo-preview');
+    const previewImg = document.getElementById('preview-img');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.classList.remove('hidden');
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function removePhoto() {
+    const photoInput = document.getElementById('photo');
+    const preview = document.getElementById('photo-preview');
+    
+    photoInput.value = '';
+    preview.classList.add('hidden');
+}
+
+// Funções específicas para edição de foto
+function removeCurrentPhoto() {
+    if (confirm('Tem certeza que deseja remover esta foto?')) {
+        // Criar campo oculto para indicar remoção
+        const removeInput = document.createElement('input');
+        removeInput.type = 'hidden';
+        removeInput.name = 'remove_photo';
+        removeInput.value = 'true';
+        document.querySelector('form').appendChild(removeInput);
+        
+        // Esconder a foto atual
+        const currentPhotoContainer = document.getElementById('current-photo-container');
+        if (currentPhotoContainer) {
+            currentPhotoContainer.style.display = 'none';
+        }
+    }
+}
+
+function previewNewPhoto(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        const previewContainer = document.getElementById('new-photo-container');
+        const previewImg = document.getElementById('new-photo-preview');
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            previewContainer.style.display = 'block';
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function cancelNewPhoto() {
+    const photoInput = document.getElementById('photo-input');
+    const previewContainer = document.getElementById('new-photo-container');
+    
+    photoInput.value = '';
+    previewContainer.style.display = 'none';
 }
 
 // Executar na carga da página

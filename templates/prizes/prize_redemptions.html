@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+
+{% block title %}Resgates do Prêmio: {{ prize.name }} - Rede de Confiança{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        {% if prize.image %}
+                            <img src="{{ prize.image.url }}" alt="{{ prize.name }}" class="w-16 h-16 rounded-lg object-cover mr-4">
+                        {% else %}
+                            <div class="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mr-4">
+                                <i class="fas fa-gift text-gray-400 text-2xl"></i>
+                            </div>
+                        {% endif %}
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">{{ prize.name }}</h1>
+                            <p class="text-sm text-gray-600">Resgates realizados para este prêmio</p>
+                            <div class="flex items-center space-x-4 mt-2">
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                    C$ {{ prize.value_cs }}
+                                </span>
+                                <span class="px-3 py-1 {% if prize.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %} rounded-full text-sm font-medium">
+                                    {% if prize.is_active %}Ativo{% else %}Pausado{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <a href="{% url 'edit_prize' prize.id %}" 
+                           class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                            <i class="fas fa-edit mr-2"></i>
+                            Editar Prêmio
+                        </a>
+                        <a href="{% url 'manage_prizes' %}" 
+                           class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100">
+                        <i class="fas fa-list text-blue-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total de Resgates</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.total }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-yellow-100">
+                        <i class="fas fa-clock text-yellow-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Pendentes</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.pending }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100">
+                        <i class="fas fa-check text-green-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Entregues</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.delivered }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-red-100">
+                        <i class="fas fa-times text-red-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Cancelados</p>
+                        <p class="text-2xl font-semibold text-gray-900">{{ stats.canceled }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="px-6 py-4">
+                <form method="get" class="flex items-center space-x-4">
+                    <div>
+                        <select name="status" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="">Todos os status</option>
+                            <option value="PENDENTE" {% if current_status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                            <option value="APROVADO" {% if current_status == 'APROVADO' %}selected{% endif %}>Aprovado</option>
+                            <option value="ENTREGUE" {% if current_status == 'ENTREGUE' %}selected{% endif %}>Entregue</option>
+                            <option value="CANCELADO" {% if current_status == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                        <i class="fas fa-filter mr-2"></i>Filtrar
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Lista de Resgates -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900">Histórico de Resgates</h2>
+            </div>
+            
+            {% if redemptions %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Usuário
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Data do Resgate
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Status
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Aprovado por
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Ações
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for redemption in redemptions %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    {% if redemption.user.profile_picture %}
+                                        <img src="{{ redemption.user.profile_picture.url }}" alt="{{ redemption.user.full_name }}" class="w-10 h-10 rounded-full object-cover mr-3">
+                                    {% else %}
+                                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center mr-3">
+                                            <span class="text-white font-medium text-sm">{{ redemption.user.first_name.0 }}{{ redemption.user.last_name.0 }}</span>
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <div class="text-sm font-medium text-gray-900">{{ redemption.user.full_name }}</div>
+                                        <div class="text-sm text-gray-500">{{ redemption.user.email }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ redemption.redeemed_at|date:"d/m/Y H:i" }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if redemption.status == 'PENDENTE' %}
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                        Pendente
+                                    </span>
+                                {% elif redemption.status == 'APROVADO' %}
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                        Aprovado
+                                    </span>
+                                {% elif redemption.status == 'ENTREGUE' %}
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                        Entregue
+                                    </span>
+                                {% elif redemption.status == 'CANCELADO' %}
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                                        Cancelado
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {% if redemption.approved_by %}
+                                    {{ redemption.approved_by.full_name }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                {% if redemption.status == 'PENDENTE' %}
+                                    <button onclick="updateStatus({{ redemption.id }}, 'APROVADO')" 
+                                            class="text-blue-600 hover:text-blue-900">
+                                        <i class="fas fa-check mr-1"></i>Aprovar
+                                    </button>
+                                {% elif redemption.status == 'APROVADO' %}
+                                    <button onclick="updateStatus({{ redemption.id }}, 'ENTREGUE')" 
+                                            class="text-green-600 hover:text-green-900">
+                                        <i class="fas fa-truck mr-1"></i>Entregar
+                                    </button>
+                                {% endif %}
+                                {% if redemption.status != 'CANCELADO' and redemption.status != 'ENTREGUE' %}
+                                    <button onclick="updateStatus({{ redemption.id }}, 'CANCELADO')" 
+                                            class="text-red-600 hover:text-red-900">
+                                        <i class="fas fa-times mr-1"></i>Cancelar
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="px-6 py-12 text-center">
+                <i class="fas fa-gift text-gray-400 text-6xl mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Nenhum resgate encontrado</h3>
+                <p class="text-gray-600">Este prêmio ainda não foi resgatado{% if current_status %} ou nenhum resgate corresponde ao filtro aplicado{% endif %}.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function updateStatus(redemptionId, newStatus) {
+    const statusText = {
+        'APROVADO': 'aprovar',
+        'ENTREGUE': 'marcar como entregue',
+        'CANCELADO': 'cancelar'
+    };
+    
+    if (confirm(`Tem certeza que deseja ${statusText[newStatus]} este resgate?`)) {
+        fetch(`/prizes/redemptions/${redemptionId}/update-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                status: newStatus
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao atualizar status: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erro ao atualizar status');
+        });
+    }
+}
+</script>
+
+<!-- CSRF Token -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+{% endblock %}

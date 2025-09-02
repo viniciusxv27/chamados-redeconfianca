@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from users.views import UserViewSet, SectorViewSet
 from tickets.views import TicketViewSet, CategoryViewSet
+from communications.views import home_feed
 
 # Router para API REST
 router = DefaultRouter()
@@ -43,10 +44,13 @@ except ImportError:
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('users.urls')),
+    path('', home_feed, name='home'),  # Home feed como página inicial
+    path('users/', include('users.urls')),
     path('tickets/', include('tickets.urls')),
     path('communications/', include('communications.urls')),
     path('prizes/', include('prizes.urls')),
+    path('assets/', include('assets.urls')),
+    path('', include('core.urls')),  # Inclui marketplace, dashboard, training
     path('api/', include(router.urls)),
     path('api-auth/', include('rest_framework.urls')),
 ]

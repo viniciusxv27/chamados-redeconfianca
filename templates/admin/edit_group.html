@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Grupo{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-edit text-primary mr-3"></i>
+                        Editar Grupo
+                    </h1>
+                    <p class="text-gray-600 mt-1">{{ group.name }}</p>
+                </div>
+                <a href="{% url 'manage_groups' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="p-6">
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+                    
+                    <!-- Nome do Grupo -->
+                    <div>
+                        <label for="name" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Nome do Grupo <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                               id="name" 
+                               name="name" 
+                               value="{{ group.name }}"
+                               placeholder="Ex: Equipe de Vendas, Supervisores, etc."
+                               required>
+                    </div>
+
+                    <!-- Descrição -->
+                    <div>
+                        <label for="description" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Descrição
+                        </label>
+                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                  id="description" 
+                                  name="description" 
+                                  rows="3" 
+                                  placeholder="Descreva o propósito deste grupo (opcional)">{{ group.description }}</textarea>
+                    </div>
+
+                    <!-- Seleção de Usuários -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-900 mb-2">
+                            <i class="fas fa-users text-primary mr-1"></i>
+                            Membros do Grupo
+                        </label>
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-4">
+                                <p class="text-sm text-gray-600">Selecione os usuários que farão parte deste grupo:</p>
+                                <div class="flex space-x-2">
+                                    <button type="button" onclick="selectAll()" class="text-sm bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200">
+                                        Selecionar Todos
+                                    </button>
+                                    <button type="button" onclick="deselectAll()" class="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded hover:bg-gray-200">
+                                        Limpar Seleção
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="border border-gray-300 rounded-lg p-3 bg-white max-h-96 overflow-y-auto">
+                                {% for user in users %}
+                                <div class="flex items-center py-2 px-2 hover:bg-gray-50 rounded">
+                                    <input type="checkbox" 
+                                           name="users" 
+                                           value="{{ user.id }}" 
+                                           id="user_{{ user.id }}"
+                                           {% if user in group.users.all %}checked{% endif %}
+                                           class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                                    <label for="user_{{ user.id }}" class="ml-3 flex-1 cursor-pointer">
+                                        <div class="flex items-center">
+                                            {% if user.profile_picture %}
+                                                <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-8 h-8 rounded-full mr-3">
+                                            {% else %}
+                                                <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
+                                                    <span class="text-white text-xs font-medium">
+                                                        {{ user.first_name|first|upper }}{{ user.last_name|first|upper }}
+                                                    </span>
+                                                </div>
+                                            {% endif %}
+                                            <div>
+                                                <div class="text-sm font-medium text-gray-900">{{ user.full_name }}</div>
+                                                <div class="text-xs text-gray-500">{{ user.email }} • {{ user.sector.name|default:"Sem setor" }}</div>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="mt-3 text-sm text-gray-500">
+                                <span id="selected-count">{{ group.users.count }}</span> usuário(s) selecionado(s)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botões -->
+                    <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                        <a href="{% url 'manage_groups' %}" 
+                           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                            <i class="fas fa-save mr-2"></i>
+                            Salvar Alterações
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectAll() {
+    const checkboxes = document.querySelectorAll('input[name="users"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateSelectedCount();
+}
+
+function deselectAll() {
+    const checkboxes = document.querySelectorAll('input[name="users"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('input[name="users"]:checked');
+    document.getElementById('selected-count').textContent = checkboxes.length;
+}
+
+// Atualizar contador quando checkboxes mudarem
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[name="users"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedCount);
+    });
+    updateSelectedCount();
+});
+</script>
+{% endblock %}

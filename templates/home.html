@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home - Rede Confiança{% endblock %}
+
+{% block extra_head %}
+<!-- PWA Meta Tags -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Rede Confiança">
+<meta name="theme-color" content="#f97316">
+<meta name="msapplication-navbutton-color" content="#f97316">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<!-- Open Graph Meta Tags -->
+<meta property="og:title" content="Rede Confiança">
+<meta property="og:description" content="Sistema de Gestão de Chamados e Comunicações">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{% static 'images/logo.png' %}">
+
+<!-- Twitter Meta Tags -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Rede Confiança">
+<meta name="twitter:description" content="Sistema de Gestão de Chamados e Comunicações">
+
+<!-- Mobile Optimization -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Page Header -->
+    <div class="mb-6">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Bem-vindo, {{ user.first_name }}!</h1>
+        <p class="text-gray-600 mt-2">Fique por dentro dos últimos comunicados</p>
+    </div>
+    
+    <!-- User Info Card -->
+    <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6">
+        <div class="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 sm:w-16 sm:h-16 bg-primary rounded-full flex items-center justify-center">
+                    {% if user.profile_picture %}
+                        <img src="{{ user.profile_picture.url }}" alt="Foto de perfil" class="w-full h-full rounded-full object-cover">
+                    {% else %}
+                        <span class="text-white font-bold text-lg sm:text-xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900">{{ user.full_name }}</h2>
+                    <p class="text-gray-600 text-sm">{{ user.get_hierarchy_display }}{% if user.sector %} - {{ user.sector.name }}{% endif %}</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="bg-primary text-white px-4 py-2 rounded-full font-bold">
+                    C$ {{ user.balance_cs }}
+                </div>
+                <a href="{% url 'marketplace' %}" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                    <i class="fas fa-store mr-2"></i>
+                    Marketplace
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pinned Communications -->
+    {% if pinned_communications %}
+    <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <i class="fas fa-thumbtack text-red-500 mr-2"></i>
+            Comunicados Fixados
+        </h2>
+        <div class="space-y-4">
+            {% for comm in pinned_communications %}
+            <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4 sm:p-6">
+                <div class="flex items-start space-x-4">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-thumbtack text-white"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
+                            <h3 class="text-lg font-semibold text-gray-900">{{ comm.title }}</h3>
+                            <span class="text-xs text-red-600 font-medium">FIXADO</span>
+                        </div>
+                        {% if comm.image %}
+                        <div class="mb-4">
+                            <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full max-h-64 object-cover rounded-lg">
+                        </div>
+                        {% endif %}
+                        <p class="text-gray-700 mb-4">{{ comm.message|linebreaks }}</p>
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                            <div class="flex items-center space-x-4 text-sm text-gray-500">
+                                <span>
+                                    {% if comm.sender_group %}
+                                        {{ comm.get_sender_group_display }}
+                                    {% else %}
+                                        {{ comm.sender.full_name }}
+                                    {% endif %}
+                                </span>
+                                <span>{{ comm.created_at|date:"d/m/Y H:i" }}</span>
+                            </div>
+                            {% include 'communications/reaction_buttons.html' with communication=comm %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Communications Feed -->
+    <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <i class="fas fa-rss text-primary mr-2"></i>
+            Feed de Comunicados
+        </h2>
+        
+        {% if communications %}
+        <div class="space-y-6">
+            {% for comm in communications %}
+            <article class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                <!-- Post Header -->
+                <div class="p-4 sm:p-6 border-b border-gray-100">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                            {% if comm.sender_group %}
+                                <i class="fas fa-users text-white"></i>
+                            {% else %}
+                                <span class="text-white font-medium text-sm">{{ comm.sender.first_name.0 }}{{ comm.sender.last_name.0 }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-semibold text-gray-900">
+                                {% if comm.sender_group %}
+                                    {{ comm.get_sender_group_display }}
+                                {% else %}
+                                    {{ comm.sender.full_name }}
+                                {% endif %}
+                            </h3>
+                            <p class="text-sm text-gray-500">{{ comm.created_at|date:"d/m/Y \à\s H:i" }}</p>
+                        </div>
+                        {% if comm.is_pinned %}
+                        <div class="flex items-center">
+                            <i class="fas fa-thumbtack text-red-500"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Post Content -->
+                <div class="p-4 sm:p-6">
+                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3">{{ comm.title }}</h2>
+                    
+                    {% if comm.image %}
+                    <div class="mb-4">
+                        <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full max-h-96 object-cover rounded-lg">
+                    </div>
+                    {% endif %}
+                    
+                    <div class="prose prose-sm sm:prose max-w-none">
+                        {{ comm.message|linebreaks }}
+                    </div>
+                </div>
+
+                <!-- Post Actions -->
+                <div class="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-100">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            {% include 'communications/reaction_buttons.html' with communication=comm %}
+                        </div>
+                        <a href="{% url 'communication_detail' comm.id %}" class="text-primary hover:text-orange-600 text-sm font-medium">
+                            Ver mais <i class="fas fa-arrow-right ml-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        
+        <!-- Load More Button -->
+        {% if communications.has_next %}
+        <div class="text-center mt-8">
+            <a href="?page={{ communications.next_page_number }}" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center">
+                <i class="fas fa-plus mr-2"></i>
+                Carregar mais comunicados
+            </a>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="text-center py-12">
+            <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-bullhorn text-gray-400 text-3xl"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhum comunicado disponível</h3>
+            <p class="text-gray-500">Quando houver novos comunicados, eles aparecerão aqui.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <a href="{% url 'ticket_create' %}" class="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                <i class="fas fa-plus text-blue-600 text-2xl mb-2"></i>
+                <span class="text-sm font-medium text-blue-800">Novo Chamado</span>
+            </a>
+            <a href="{% url 'tickets_list' %}" class="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                <i class="fas fa-list text-green-600 text-2xl mb-2"></i>
+                <span class="text-sm font-medium text-green-800">Meus Chamados</span>
+            </a>
+            <a href="{% url 'communications_list' %}" class="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                <i class="fas fa-bullhorn text-purple-600 text-2xl mb-2"></i>
+                <span class="text-sm font-medium text-purple-800">Comunicados</span>
+            </a>
+            <a href="{% url 'marketplace' %}" class="flex flex-col items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
+                <i class="fas fa-store text-yellow-600 text-2xl mb-2"></i>
+                <span class="text-sm font-medium text-yellow-800">Marketplace</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- PWA Install Prompt -->
+<div id="pwa-install-prompt" class="hidden fixed bottom-4 left-4 right-4 bg-primary text-white p-4 rounded-lg shadow-lg z-50">
+    <div class="flex items-center justify-between">
+        <div class="flex-1">
+            <h4 class="font-semibold">Instalar App</h4>
+            <p class="text-sm opacity-90">Adicione o Rede Confiança à sua tela inicial para acesso rápido.</p>
+        </div>
+        <div class="flex items-center space-x-2 ml-4">
+            <button id="pwa-install-button" class="bg-white text-primary px-4 py-2 rounded font-medium text-sm">
+                Instalar
+            </button>
+            <button id="pwa-dismiss-button" class="text-white hover:text-gray-200">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// PWA Install Prompt
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('pwa-install-prompt').classList.remove('hidden');
+});
+
+document.getElementById('pwa-install-button').addEventListener('click', () => {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+                console.log('User accepted the install prompt');
+            }
+            deferredPrompt = null;
+            document.getElementById('pwa-install-prompt').classList.add('hidden');
+        });
+    }
+});
+
+document.getElementById('pwa-dismiss-button').addEventListener('click', () => {
+    document.getElementById('pwa-install-prompt').classList.add('hidden');
+});
+
+// Auto-refresh communications every 5 minutes
+setInterval(() => {
+    if (document.visibilityState === 'visible') {
+        location.reload();
+    }
+}, 5 * 60 * 1000);
+</script>
+{% endblock %}

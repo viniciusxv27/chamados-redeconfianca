@@ -604,6 +604,11 @@ def update_profile_view(request):
         user.last_name = request.POST.get('last_name', user.last_name)
         user.email = request.POST.get('email', user.email)
         user.phone = request.POST.get('phone', user.phone)
+        
+        # Upload de foto de perfil
+        if request.FILES.get('profile_picture'):
+            user.profile_picture = request.FILES['profile_picture']
+        
         user.save()
         
         messages.success(request, 'Perfil atualizado com sucesso!')
@@ -709,9 +714,24 @@ def manage_prizes_view(request):
         return redirect('dashboard')
     
     from prizes.models import Prize, Redemption
+    from django.db.models import Count, Sum, Q
     
-    prizes = Prize.objects.all()
-    recent_redemptions = Redemption.objects.all().order_by('-redeemed_at')[:10]
+    # Buscar prêmios com estatísticas de resgates
+    prizes = Prize.objects.annotate(
+        total_redemptions=Count('redemption'),
+        pending_redemptions=Count('redemption', filter=Q(redemption__status='PENDENTE')),
+        approved_redemptions=Count('redemption', filter=Q(redemption__status='APROVADO')),
+        delivered_redemptions=Count('redemption', filter=Q(redemption__status='ENTREGUE')),
+        total_cs_spent=Sum('redemption__prize__value_cs', filter=Q(redemption__status__in=['APROVADO', 'ENTREGUE']))
+    ).order_by('-created_at')
+    
+    # Resgates recentes (últimos 15 dias, todos os status)
+    from django.utils import timezone
+    from datetime import timedelta
+    fifteen_days_ago = timezone.now() - timedelta(days=15)
+    recent_redemptions = Redemption.objects.filter(
+        redeemed_at__gte=fifteen_days_ago
+    ).select_related('user', 'prize').order_by('-redeemed_at')[:10]
     
     # Calcular total real de C$ em circulação somando os saldos de todos os usuários
     total_cs_circulation = User.objects.aggregate(
@@ -723,8 +743,9 @@ def manage_prizes_view(request):
         'recent_redemptions': recent_redemptions,
         'total_prizes': prizes.count(),
         'active_prizes': prizes.filter(is_active=True).count(),
-        'pending_redemptions': recent_redemptions.filter(status='PENDENTE').count(),
+        'pending_redemptions': Redemption.objects.filter(status='PENDENTE').count(),
         'total_cs_circulation': total_cs_circulation,
+        'user': request.user,
     }
     return render(request, 'prizes/manage.html', context)
 
@@ -768,32 +789,142 @@ def edit_prize_view(request, prize_id):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('dashboard')
     
-    from prizes.models import Prize
+    from prizes.models import Prize, PrizeCategory, Redemption
     prize = get_object_or_404(Prize, id=prize_id)
     
     if request.method == 'POST':
         prize.name = request.POST.get('name', prize.name)
         prize.description = request.POST.get('description', prize.description)
-        prize.value_cs = request.POST.get('value_cs', prize.value_cs)
+        prize.value_cs = request.POST.get('cost', prize.value_cs)  # Corrigindo para 'cost'
         
+        # Processar categoria
+        category_id = request.POST.get('category')
+        if category_id:
+            prize.category_id = category_id
+        else:
+            prize.category = None
+        
+        # Processar remoção de imagem
+        if request.POST.get('remove_image'):
+            if prize.image:
+                prize.image.delete()
+                prize.image = None
+        
+        # Processar upload de nova imagem
         if request.FILES.get('image'):
+            if prize.image:
+                prize.image.delete()
             prize.image = request.FILES.get('image')
         
-        unlimited_stock = request.POST.get('unlimited_stock') == 'on'
-        prize.unlimited_stock = unlimited_stock
+        # Status ativo
+        prize.is_active = request.POST.get('is_active') == 'on'
         
-        if not unlimited_stock:
-            prize.stock = request.POST.get('stock', prize.stock)
+        # Estoque
+        stock = request.POST.get('stock')
+        if stock:
+            prize.stock = int(stock)
         
-        prize.save()
-        
-        messages.success(request, 'Prêmio atualizado com sucesso!')
-        return redirect('manage_prizes')
+        try:
+            prize.save()
+            
+            log_action(
+                request.user,
+                'PRIZE_UPDATE',
+                f'Prêmio atualizado: {prize.name}',
+                request
+            )
+            
+            messages.success(request, 'Prêmio atualizado com sucesso!')
+            return redirect('manage_prizes')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar prêmio: {str(e)}')
+    
+    # Buscar categorias e resgates
+    categories = PrizeCategory.objects.all().order_by('name')
+    redemptions = Redemption.objects.filter(prize=prize).order_by('-redeemed_at')
     
     context = {
         'prize': prize,
+        'categories': categories,
+        'redemptions': redemptions,
+        'user': request.user,
     }
     return render(request, 'prizes/edit.html', context)
+
+
+@login_required
+def toggle_prize_status_view(request, prize_id):
+    """Pausar/Despausar prêmio (admin only)"""
+    if not request.user.can_manage_users():
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método não permitido'})
+    
+    from prizes.models import Prize
+    prize = get_object_or_404(Prize, id=prize_id)
+    
+    try:
+        prize.is_active = not prize.is_active
+        prize.save()
+        
+        status_text = "ativado" if prize.is_active else "pausado"
+        
+        log_action(
+            request.user,
+            'PRIZE_STATUS_TOGGLE',
+            f'Prêmio {status_text}: {prize.name}',
+            request
+        )
+        
+        return JsonResponse({
+            'success': True, 
+            'is_active': prize.is_active,
+            'message': f'Prêmio {status_text} com sucesso!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def prize_redemptions_view(request, prize_id):
+    """Ver resgates de um prêmio específico (admin only)"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('dashboard')
+    
+    from prizes.models import Prize, Redemption
+    prize = get_object_or_404(Prize, id=prize_id)
+    
+    # Filtros
+    status_filter = request.GET.get('status', '')
+    
+    redemptions = Redemption.objects.filter(prize=prize).select_related('user')
+    
+    if status_filter:
+        redemptions = redemptions.filter(status=status_filter)
+    
+    redemptions = redemptions.order_by('-redeemed_at')
+    
+    # Estatísticas específicas do prêmio
+    stats = {
+        'total': redemptions.count(),
+        'pending': redemptions.filter(status='PENDENTE').count(),
+        'approved': redemptions.filter(status='APROVADO').count(),
+        'delivered': redemptions.filter(status='ENTREGUE').count(),
+        'canceled': redemptions.filter(status='CANCELADO').count(),
+    }
+    
+    context = {
+        'prize': prize,
+        'redemptions': redemptions,
+        'stats': stats,
+        'current_status': status_filter,
+        'user': request.user,
+    }
+    return render(request, 'prizes/prize_redemptions.html', context)
 
 
 @login_required
@@ -804,10 +935,310 @@ def manage_redemptions_view(request):
         return redirect('dashboard')
     
     from prizes.models import Redemption
+    from django.db.models import Q, Count
     
-    redemptions = Redemption.objects.all().order_by('-redeemed_at')
+    # Filtros
+    search = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+    
+    redemptions = Redemption.objects.select_related('user', 'prize', 'prize__category').all()
+    
+    if search:
+        redemptions = redemptions.filter(
+            Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) |
+            Q(user__email__icontains=search) |
+            Q(prize__name__icontains=search)
+        )
+    
+    if status_filter:
+        redemptions = redemptions.filter(status=status_filter)
+    
+    redemptions = redemptions.order_by('-redeemed_at')
+    
+    # Estatísticas
+    stats = {
+        'pending': Redemption.objects.filter(status='PENDENTE').count(),
+        'approved': Redemption.objects.filter(status='APROVADO').count(),
+        'delivered': Redemption.objects.filter(status='ENTREGUE').count(),
+        'canceled': Redemption.objects.filter(status='CANCELADO').count(),
+    }
     
     context = {
         'redemptions': redemptions,
+        'stats': stats,
+        'user': request.user,
     }
-    return render(request, 'prizes/redemptions.html', context)
+    return render(request, 'prizes/manage_redemptions.html', context)
+
+
+@login_required
+def manage_groups_view(request):
+    """Gerenciar grupos de comunicação"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('dashboard')
+    
+    from communications.models import CommunicationGroup
+    groups = CommunicationGroup.objects.all().order_by('name')
+    
+    context = {
+        'groups': groups,
+        'user': request.user,
+    }
+    return render(request, 'admin/groups.html', context)
+
+
+@login_required
+def create_group_view(request):
+    """Criar novo grupo de comunicação"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        user_ids = request.POST.getlist('users')
+        
+        try:
+            from communications.models import CommunicationGroup
+            group = CommunicationGroup.objects.create(
+                name=name,
+                description=description,
+                created_by=request.user
+            )
+            
+            if user_ids:
+                users = User.objects.filter(id__in=user_ids)
+                group.users.set(users)
+            
+            log_action(
+                request.user,
+                'GROUP_CREATE',
+                f'Grupo criado: {group.name}',
+                request
+            )
+            
+            messages.success(request, f'Grupo "{group.name}" criado com sucesso!')
+            return redirect('manage_groups')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar grupo: {str(e)}')
+    
+    users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    context = {
+        'users': users,
+        'user': request.user,
+    }
+    return render(request, 'admin/create_group.html', context)
+
+
+@login_required
+def edit_group_view(request, group_id):
+    """Editar grupo de comunicação"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    from communications.models import CommunicationGroup
+    group = get_object_or_404(CommunicationGroup, id=group_id)
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        user_ids = request.POST.getlist('users')
+        
+        try:
+            group.name = name
+            group.description = description
+            group.save()
+            
+            if user_ids:
+                users = User.objects.filter(id__in=user_ids)
+                group.users.set(users)
+            else:
+                group.users.clear()
+            
+            log_action(
+                request.user,
+                'GROUP_UPDATE',
+                f'Grupo atualizado: {group.name}',
+                request
+            )
+            
+            messages.success(request, f'Grupo "{group.name}" atualizado com sucesso!')
+            return redirect('manage_groups')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar grupo: {str(e)}')
+    
+    users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    context = {
+        'group': group,
+        'users': users,
+        'user': request.user,
+    }
+    return render(request, 'admin/edit_group.html', context)
+
+
+@login_required
+def delete_group_view(request, group_id):
+    """Deletar grupo de comunicação"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    from communications.models import CommunicationGroup
+    group = get_object_or_404(CommunicationGroup, id=group_id)
+    
+    if request.method == 'POST':
+        group_name = group.name
+        group.delete()
+        
+        log_action(
+            request.user,
+            'GROUP_DELETE',
+            f'Grupo deletado: {group_name}',
+            request
+        )
+        
+        messages.success(request, f'Grupo "{group_name}" deletado com sucesso!')
+        return redirect('manage_groups')
+    
+    context = {
+        'group': group,
+        'user': request.user,
+    }
+    return render(request, 'admin/delete_group.html', context)
+
+
+@login_required
+def manage_prize_categories_view(request):
+    """Gerenciar categorias de prêmios"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    from prizes.models import PrizeCategory
+    categories = PrizeCategory.objects.all().order_by('name')
+    
+    context = {
+        'categories': categories,
+        'user': request.user,
+    }
+    return render(request, 'admin/manage_prize_categories.html', context)
+
+
+@login_required
+def create_prize_category_view(request):
+    """Criar nova categoria de prêmio"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        icon = request.POST.get('icon', 'fas fa-gift')
+        color = request.POST.get('color', 'blue')
+        active = request.POST.get('active') == 'on'
+        
+        try:
+            from prizes.models import PrizeCategory
+            category = PrizeCategory.objects.create(
+                name=name,
+                description=description,
+                icon=icon,
+                color=color,
+                active=active
+            )
+            
+            log_action(
+                request.user,
+                'PRIZE_CATEGORY_CREATE',
+                f'Categoria de prêmio criada: {category.name}',
+                request
+            )
+            
+            messages.success(request, f'Categoria "{category.name}" criada com sucesso!')
+            return redirect('manage_prize_categories')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar categoria: {str(e)}')
+    
+    context = {
+        'user': request.user,
+    }
+    return render(request, 'admin/create_prize_category.html', context)
+
+
+@login_required
+def edit_prize_category_view(request, category_id):
+    """Editar categoria de prêmio"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    from prizes.models import PrizeCategory
+    category = get_object_or_404(PrizeCategory, id=category_id)
+    
+    if request.method == 'POST':
+        category.name = request.POST.get('name')
+        category.description = request.POST.get('description', '')
+        category.icon = request.POST.get('icon', 'fas fa-gift')
+        category.color = request.POST.get('color', 'blue')
+        category.active = request.POST.get('active') == 'on'
+        
+        try:
+            category.save()
+            
+            log_action(
+                request.user,
+                'PRIZE_CATEGORY_UPDATE',
+                f'Categoria de prêmio atualizada: {category.name}',
+                request
+            )
+            
+            messages.success(request, f'Categoria "{category.name}" atualizada com sucesso!')
+            return redirect('manage_prize_categories')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar categoria: {str(e)}')
+    
+    context = {
+        'category': category,
+        'user': request.user,
+    }
+    return render(request, 'admin/edit_prize_category.html', context)
+
+
+@login_required
+def delete_prize_category_view(request, category_id):
+    """Deletar categoria de prêmio"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    from prizes.models import PrizeCategory
+    category = get_object_or_404(PrizeCategory, id=category_id)
+    
+    if request.method == 'POST':
+        category_name = category.name
+        category.delete()
+        
+        log_action(
+            request.user,
+            'PRIZE_CATEGORY_DELETE',
+            f'Categoria de prêmio deletada: {category_name}',
+            request
+        )
+        
+        messages.success(request, f'Categoria "{category_name}" deletada com sucesso!')
+        return redirect('manage_prize_categories')
+    
+    context = {
+        'category': category,
+        'user': request.user,
+    }
+    return render(request, 'admin/delete_prize_category.html', context)

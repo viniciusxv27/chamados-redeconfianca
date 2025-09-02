@@ -28,8 +28,17 @@
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div class="flex items-center space-x-4">
-                    <div class="w-20 h-20 bg-primary rounded-full flex items-center justify-center">
-                        <span class="text-white font-bold text-2xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                    <div class="relative">
+                        {% if user.profile_picture %}
+                            <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-20 h-20 rounded-full object-cover">
+                        {% else %}
+                            <div class="w-20 h-20 bg-primary rounded-full flex items-center justify-center">
+                                <span class="text-white font-bold text-2xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                            </div>
+                        {% endif %}
+                        <button onclick="showPhotoModal()" class="absolute -bottom-1 -right-1 w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white text-xs hover:bg-orange-600 transition-colors">
+                            <i class="fas fa-camera"></i>
+                        </button>
                     </div>
                     <div>
                         <h2 class="text-xl font-semibold text-gray-900">{{ user.full_name }}</h2>
@@ -82,7 +91,7 @@
                 </div>
             </div>
             
-            <form method="post" action="{% url 'update_profile' %}" class="p-6">
+            <form method="post" action="{% url 'update_profile' %}" enctype="multipart/form-data" class="p-6">
                 {% csrf_token %}
                 <div class="space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -219,5 +228,77 @@ function cancelEdit() {
     // Reset form values
     location.reload();
 }
+
+function showPhotoModal() {
+    document.getElementById('photoModal').classList.remove('hidden');
+}
+
+function hidePhotoModal() {
+    document.getElementById('photoModal').classList.add('hidden');
+}
+
+function previewPhoto(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('photoPreview').src = e.target.result;
+            document.getElementById('photoPreviewContainer').classList.remove('hidden');
+        }
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function submitPhoto() {
+    const fileInput = document.getElementById('profilePhotoInput');
+    if (fileInput.files && fileInput.files[0]) {
+        const formData = new FormData();
+        formData.append('profile_picture', fileInput.files[0]);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        
+        fetch('{% url "update_profile" %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json().catch(() => ({ success: true })))
+        .then(data => {
+            location.reload();
+        })
+        .catch(error => {
+            alert('Erro ao enviar foto');
+        });
+    }
+}
+</script>
+
+<!-- Modal de Upload de Foto -->
+<div id="photoModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Alterar Foto de Perfil</h3>
+                <button onclick="hidePhotoModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <input type="file" id="profilePhotoInput" accept="image/*" onchange="previewPhoto(this)" class="w-full">
+            </div>
+            
+            <div id="photoPreviewContainer" class="mb-4 hidden">
+                <img id="photoPreview" class="w-24 h-24 rounded-full object-cover mx-auto">
+            </div>
+            
+            <div class="flex gap-3">
+                <button onclick="hidePhotoModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors">
+                    Cancelar
+                </button>
+                <button onclick="submitPhoto()" class="flex-1 bg-primary text-white py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors">
+                    Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 </script>
 {% endblock %}

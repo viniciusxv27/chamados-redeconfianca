@@ -1,0 +1,235 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-6">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:list' %}" class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-2"></i>
+                        Ativos
+                    </a>
+                </li>
+                {% if asset %}
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                        <a href="{% url 'assets:detail' asset.pk %}" class="text-sm font-medium text-gray-700 hover:text-indigo-600">
+                            {{ asset.patrimonio_numero }}
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                        <span class="text-sm font-medium text-gray-500">Editar</span>
+                    </div>
+                </li>
+                {% else %}
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                        <span class="text-sm font-medium text-gray-500">Novo Ativo</span>
+                    </div>
+                </li>
+                {% endif %}
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
+            <i class="fas fa-cube mr-3 text-indigo-600"></i>
+            {{ title }}
+        </h2>
+    </div>
+
+    <!-- Formulário -->
+    <div class="bg-white shadow-lg rounded-lg">
+        <form method="post" class="space-y-6 p-6">
+            {% csrf_token %}
+            
+            <!-- Informações Básicas -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-info-circle mr-2 text-indigo-600"></i>
+                    Informações Básicas
+                </h3>
+                
+                <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                    <!-- Número do Patrimônio -->
+                    <div>
+                        <label for="{{ form.patrimonio_numero.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.patrimonio_numero.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.patrimonio_numero }}
+                        {% if form.patrimonio_numero.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.patrimonio_numero.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Nome -->
+                    <div>
+                        <label for="{{ form.nome.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.nome.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.nome }}
+                        {% if form.nome.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.nome.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Localização -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-map-marker-alt mr-2 text-indigo-600"></i>
+                    Localização
+                </h3>
+                
+                <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3">
+                    <!-- Localizado -->
+                    <div>
+                        <label for="{{ form.localizado.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.localizado.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.localizado }}
+                        {% if form.localizado.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.localizado.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Setor -->
+                    <div>
+                        <label for="{{ form.setor.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.setor.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.setor }}
+                        {% if form.setor.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.setor.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- PDV -->
+                    <div>
+                        <label for="{{ form.pdv.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.pdv.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.pdv }}
+                        {% if form.pdv.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.pdv.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado e Observações -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-heartbeat mr-2 text-indigo-600"></i>
+                    Estado e Observações
+                </h3>
+                
+                <div class="mt-6 grid grid-cols-1 gap-y-6">
+                    <!-- Estado Físico -->
+                    <div>
+                        <label for="{{ form.estado_fisico.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.estado_fisico.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.estado_fisico }}
+                        {% if form.estado_fisico.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.estado_fisico.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Observações -->
+                    <div>
+                        <label for="{{ form.observacoes.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.observacoes.label }}
+                        </label>
+                        {{ form.observacoes }}
+                        {% if form.observacoes.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.observacoes.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex justify-between pt-6 border-t border-gray-200">
+                <a href="{% if asset %}{% url 'assets:detail' asset.pk %}{% else %}{% url 'assets:list' %}{% endif %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-times mr-2"></i>
+                    Cancelar
+                </a>
+                
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-save mr-2"></i>
+                    {% if asset %}Atualizar Ativo{% else %}Criar Ativo{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Validação em tempo real
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const patrimonio = document.getElementById('{{ form.patrimonio_numero.id_for_label }}');
+        
+        // Transformar número do patrimônio em maiúsculo
+        if (patrimonio) {
+            patrimonio.addEventListener('input', function() {
+                this.value = this.value.toUpperCase();
+            });
+        }
+        
+        // Validação do formulário
+        form.addEventListener('submit', function(e) {
+            let isValid = true;
+            const requiredFields = form.querySelectorAll('input[required], select[required]');
+            
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    isValid = false;
+                    field.classList.add('border-red-500');
+                } else {
+                    field.classList.remove('border-red-500');
+                }
+            });
+            
+            if (!isValid) {
+                e.preventDefault();
+                alert('Por favor, preencha todos os campos obrigatórios.');
+            }
+        });
+    });
+</script>
+{% endblock %}

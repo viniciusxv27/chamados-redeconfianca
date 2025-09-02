@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir Ativo - {{ asset.patrimonio_numero }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-6">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:list' %}" class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-2"></i>
+                        Ativos
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                        <a href="{% url 'assets:detail' asset.pk %}" class="text-sm font-medium text-gray-700 hover:text-indigo-600">
+                            {{ asset.patrimonio_numero }}
+                        </a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                        <span class="text-sm font-medium text-gray-500">Excluir</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
+            <i class="fas fa-exclamation-triangle mr-3 text-red-600"></i>
+            Excluir Ativo
+        </h2>
+    </div>
+
+    <!-- Confirmação -->
+    <div class="bg-white shadow-lg rounded-lg">
+        <div class="p-6">
+            <!-- Aviso -->
+            <div class="flex items-center mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-red-400 text-xl"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-800">
+                        Atenção! Esta ação não pode ser desfeita.
+                    </h3>
+                    <div class="mt-2 text-sm text-red-700">
+                        <p>
+                            Você está prestes a excluir permanentemente este ativo do sistema. 
+                            Todos os dados relacionados serão perdidos.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Informações do Ativo -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h4 class="text-lg font-medium text-gray-900 mb-4">Ativo a ser excluído:</h4>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Patrimônio</dt>
+                        <dd class="text-sm text-gray-900 font-semibold">{{ asset.patrimonio_numero }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Nome</dt>
+                        <dd class="text-sm text-gray-900">{{ asset.nome }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Localização</dt>
+                        <dd class="text-sm text-gray-900">{{ asset.localizado }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Setor</dt>
+                        <dd class="text-sm text-gray-900">{{ asset.setor }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">PDV</dt>
+                        <dd class="text-sm text-gray-900">{{ asset.pdv }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Estado Físico</dt>
+                        <dd class="text-sm text-gray-900">{{ asset.get_estado_fisico_display }}</dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- Formulário de Confirmação -->
+            <form method="post">
+                {% csrf_token %}
+                
+                <!-- Checkbox de Confirmação -->
+                <div class="mb-6">
+                    <div class="flex items-start">
+                        <div class="flex items-center h-5">
+                            <input id="confirm-delete" 
+                                   name="confirm-delete" 
+                                   type="checkbox" 
+                                   required
+                                   class="focus:ring-red-500 h-4 w-4 text-red-600 border-gray-300 rounded">
+                        </div>
+                        <div class="ml-3 text-sm">
+                            <label for="confirm-delete" class="font-medium text-gray-700">
+                                Confirmo que desejo excluir permanentemente este ativo
+                            </label>
+                            <p class="text-gray-500">
+                                Esta ação não pode ser desfeita e todos os dados relacionados serão perdidos.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="flex justify-between pt-6 border-t border-gray-200">
+                    <a href="{% url 'assets:detail' asset.pk %}" 
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Cancelar
+                    </a>
+                    
+                    <button type="submit" 
+                            id="delete-button"
+                            disabled
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fas fa-trash mr-2"></i>
+                        Excluir Ativo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkbox = document.getElementById('confirm-delete');
+        const deleteButton = document.getElementById('delete-button');
+        
+        checkbox.addEventListener('change', function() {
+            deleteButton.disabled = !this.checked;
+        });
+        
+        // Confirmação adicional ao clicar no botão
+        deleteButton.addEventListener('click', function(e) {
+            if (!confirm('Tem certeza absoluta que deseja excluir este ativo? Esta ação não pode ser desfeita.')) {
+                e.preventDefault();
+            }
+        });
+    });
+</script>
+{% endblock %}

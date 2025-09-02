@@ -1,0 +1,124 @@
+<!-- Reaction Buttons Component -->
+<div class="flex items-center space-x-3" data-communication-id="{{ communication.id }}">
+    <!-- Like Button -->
+    <button class="reaction-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm transition-all hover:bg-blue-50 {% if user in communication.liked_by.all %}bg-blue-100 text-blue-600{% else %}text-gray-600 hover:text-blue-600{% endif %}"
+            data-reaction="like" data-comm-id="{{ communication.id }}">
+        <i class="{% if user in communication.liked_by.all %}fas{% else %}far{% endif %} fa-thumbs-up"></i>
+        <span class="like-count">{{ communication.liked_by.count }}</span>
+    </button>
+
+    <!-- Love Button -->
+    <button class="reaction-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm transition-all hover:bg-red-50 {% if user in communication.loved_by.all %}bg-red-100 text-red-600{% else %}text-gray-600 hover:text-red-600{% endif %}"
+            data-reaction="love" data-comm-id="{{ communication.id }}">
+        <i class="{% if user in communication.loved_by.all %}fas{% else %}far{% endif %} fa-heart"></i>
+        <span class="love-count">{{ communication.loved_by.count }}</span>
+    </button>
+
+    <!-- Clap Button -->
+    <button class="reaction-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm transition-all hover:bg-yellow-50 {% if user in communication.clapped_by.all %}bg-yellow-100 text-yellow-600{% else %}text-gray-600 hover:text-yellow-600{% endif %}"
+            data-reaction="clap" data-comm-id="{{ communication.id }}">
+        <i class="fas fa-hands-clapping"></i>
+        <span class="clap-count">{{ communication.clapped_by.count }}</span>
+    </button>
+
+    <!-- Share Button -->
+    <button class="share-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm text-gray-600 hover:text-green-600 hover:bg-green-50 transition-all"
+            data-comm-id="{{ communication.id }}" data-title="{{ communication.title }}" data-url="{% url 'communication_detail' communication.id %}">
+        <i class="fas fa-share"></i>
+        <span class="hidden sm:inline">Compartilhar</span>
+    </button>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Reaction buttons functionality
+    document.querySelectorAll('.reaction-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const reaction = this.dataset.reaction;
+            const commId = this.dataset.commId;
+            
+            // Optimistic UI update
+            const wasActive = this.classList.contains('bg-blue-100') || 
+                            this.classList.contains('bg-red-100') || 
+                            this.classList.contains('bg-yellow-100');
+            
+            fetch(`/communications/${commId}/react/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                },
+                body: JSON.stringify({ reaction: reaction })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update button state
+                    this.classList.toggle('bg-blue-100', reaction === 'like' && data.added);
+                    this.classList.toggle('text-blue-600', reaction === 'like' && data.added);
+                    this.classList.toggle('bg-red-100', reaction === 'love' && data.added);
+                    this.classList.toggle('text-red-600', reaction === 'love' && data.added);
+                    this.classList.toggle('bg-yellow-100', reaction === 'clap' && data.added);
+                    this.classList.toggle('text-yellow-600', reaction === 'clap' && data.added);
+                    
+                    // Update icon
+                    const icon = this.querySelector('i');
+                    if (data.added) {
+                        icon.classList.remove('far');
+                        icon.classList.add('fas');
+                    } else {
+                        icon.classList.remove('fas');
+                        icon.classList.add('far');
+                    }
+                    
+                    // Update count
+                    const countSpan = this.querySelector(`.${reaction}-count`);
+                    countSpan.textContent = data.count;
+                    
+                    // Add visual feedback
+                    this.style.transform = 'scale(1.1)';
+                    setTimeout(() => {
+                        this.style.transform = 'scale(1)';
+                    }, 150);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Revert optimistic update on error
+                location.reload();
+            });
+        });
+    });
+
+    // Share functionality
+    document.querySelectorAll('.share-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const title = this.dataset.title;
+            const url = window.location.origin + this.dataset.url;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: title,
+                    text: `Confira este comunicado: ${title}`,
+                    url: url
+                }).catch(err => console.log('Erro ao compartilhar:', err));
+            } else {
+                // Fallback: copy to clipboard
+                navigator.clipboard.writeText(url).then(() => {
+                    // Show toast notification
+                    const toast = document.createElement('div');
+                    toast.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                    toast.textContent = 'Link copiado para a área de transferência!';
+                    document.body.appendChild(toast);
+                    
+                    setTimeout(() => {
+                        document.body.removeChild(toast);
+                    }, 3000);
+                }).catch(err => {
+                    console.error('Erro ao copiar:', err);
+                });
+            }
+        });
+    });
+});
+</script>

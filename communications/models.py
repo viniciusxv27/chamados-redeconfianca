@@ -3,14 +3,66 @@ from django.conf import settings
 import requests
 
 
+class CommunicationGroup(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Nome do Grupo")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='communication_groups',
+        verbose_name="Membros"
+    )
+    can_send = models.BooleanField(default=True, verbose_name="Pode Enviar Comunicados")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='created_groups',
+        verbose_name="Criado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Grupo de Comunicação"
+        verbose_name_plural = "Grupos de Comunicação"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
 class Communication(models.Model):
+    SENDER_GROUP_CHOICES = [
+        ('GERENTES', 'Gerentes'),
+        ('COORDENACAO', 'Coordenação'),
+        ('DIRETORIA', 'Diretoria'),
+        ('TODOS', 'Todos'),
+        ('ADM', 'Administração'),
+    ]
+    
     title = models.CharField(max_length=200, verbose_name="Título")
     message = models.TextField(verbose_name="Mensagem")
+    image = models.ImageField(upload_to='communications/', null=True, blank=True, verbose_name="Imagem")
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
         related_name='sent_communications',
         verbose_name="Remetente"
+    )
+    sender_group = models.CharField(
+        max_length=20, 
+        choices=SENDER_GROUP_CHOICES, 
+        null=True, 
+        blank=True,
+        verbose_name="Grupo Remetente"
+    )
+    custom_group = models.ForeignKey(
+        CommunicationGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Grupo Personalizado"
     )
     recipients = models.ManyToManyField(
         settings.AUTH_USER_MODEL, 
@@ -19,6 +71,29 @@ class Communication(models.Model):
         verbose_name="Destinatários"
     )
     send_to_all = models.BooleanField(default=False, verbose_name="Enviar para Todos")
+    is_pinned = models.BooleanField(default=False, verbose_name="Fixar na Dashboard")
+    is_popup = models.BooleanField(default=False, verbose_name="Exibir como Pop-up")
+    
+    # Reaction fields
+    liked_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='liked_communications',
+        verbose_name="Curtido por"
+    )
+    loved_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='loved_communications',
+        verbose_name="Amado por"
+    )
+    clapped_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='clapped_communications',
+        verbose_name="Aplaudido por"
+    )
+    
     active_from = models.DateTimeField(null=True, blank=True, verbose_name="Ativo a partir de")
     active_until = models.DateTimeField(null=True, blank=True, verbose_name="Ativo até")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Envio")
@@ -44,6 +119,10 @@ class Communication(models.Model):
         return True
     
     def save(self, *args, **kwargs):
+        # Se tem imagem, não pode ser pop-up
+        if self.image and self.is_popup:
+            self.is_popup = False
+            
         is_new = self.pk is None
         super().save(*args, **kwargs)
         
@@ -100,3 +179,28 @@ class CommunicationRead(models.Model):
     
     def __str__(self):
         return f"{self.communication.title} - {self.user.full_name} - {self.get_status_display()}"
+
+
+class CommunicationComment(models.Model):
+    communication = models.ForeignKey(
+        Communication, 
+        on_delete=models.CASCADE, 
+        related_name='comments',
+        verbose_name="Comunicado"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE,
+        verbose_name="Usuário"
+    )
+    content = models.TextField(verbose_name="Comentário")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Atualizado em")
+    
+    class Meta:
+        verbose_name = "Comentário"
+        verbose_name_plural = "Comentários"
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.user.full_name}: {self.content[:50]}..."

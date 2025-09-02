@@ -5,14 +5,91 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.db import models
 from django.db.models import Q
+from django.core.paginator import Paginator
+from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .models import Communication, CommunicationRead
+import json
+
+from .models import Communication, CommunicationRead, CommunicationComment, CommunicationGroup
 from .serializers import CommunicationSerializer
 from users.models import User, Sector
 from core.middleware import log_action
+
+
+@login_required
+def home_feed(request):
+    """View principal da home com feed de comunicados"""
+    # Comunicados fixados
+    pinned_communications = Communication.objects.filter(
+        is_pinned=True
+    ).filter(
+        Q(send_to_all=True) | Q(recipients=request.user)
+    ).distinct().order_by('-created_at')[:3]
+    
+    # Feed de comunicados (não fixados)
+    communications_list = Communication.objects.filter(
+        is_pinned=False
+    ).filter(
+        Q(send_to_all=True) | Q(recipients=request.user)
+    ).distinct().order_by('-created_at')
+    
+    # Paginação
+    paginator = Paginator(communications_list, 10)
+    page_number = request.GET.get('page')
+    communications = paginator.get_page(page_number)
+    
+    context = {
+        'pinned_communications': pinned_communications,
+        'communications': communications,
+    }
+    return render(request, 'home.html', context)
+
+
+@login_required
+@require_POST
+def communication_react(request, communication_id):
+    """Endpoint para reações nos comunicados"""
+    communication = get_object_or_404(Communication, id=communication_id)
+    
+    try:
+        data = json.loads(request.body)
+        reaction = data.get('reaction')
+        
+        if reaction not in ['like', 'love', 'clap']:
+            return JsonResponse({'success': False, 'error': 'Reação inválida'})
+        
+        # Mapear reação para campo do modelo
+        reaction_field_map = {
+            'like': 'liked_by',
+            'love': 'loved_by', 
+            'clap': 'clapped_by'
+        }
+        
+        reaction_field = getattr(communication, reaction_field_map[reaction])
+        
+        # Toggle da reação
+        if reaction_field.filter(id=request.user.id).exists():
+            reaction_field.remove(request.user)
+            added = False
+        else:
+            reaction_field.add(request.user)
+            added = True
+        
+        # Retornar nova contagem
+        count = reaction_field.count()
+        
+        return JsonResponse({
+            'success': True,
+            'added': added,
+            'count': count,
+            'reaction': reaction
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
 @login_required
@@ -144,6 +221,7 @@ def communication_detail_view(request, communication_id):
         'users_status': users_status,
         'is_sender': communication.sender == user or user.can_manage_users(),
         'status_counts': status_counts,
+        'comments': communication.comments.all().order_by('created_at'),
     }
     return render(request, 'communications/detail.html', context)
 
@@ -160,6 +238,8 @@ def create_communication_view(request):
         message = request.POST.get('message')
         send_to_all = request.POST.get('send_to_all') == 'on'
         recipient_ids = request.POST.getlist('recipients')
+        group_ids = request.POST.getlist('groups')  # Novos grupos
+        is_pinned = request.POST.get('is_pinned') == 'on'  # Pin no dashboard
         active_from = request.POST.get('active_from')
         active_until = request.POST.get('active_until')
         
@@ -169,14 +249,28 @@ def create_communication_view(request):
                 message=message,
                 sender=request.user,
                 send_to_all=send_to_all,
+                is_pinned=is_pinned,
                 active_from=active_from if active_from else None,
                 active_until=active_until if active_until else None
             )
             
+            # Processar upload de imagem
+            if 'photo' in request.FILES:
+                communication.image = request.FILES['photo']
+                communication.save()
+            
             # Adicionar destinatários específicos se não for para todos
-            if not send_to_all and recipient_ids:
-                recipients = User.objects.filter(id__in=recipient_ids)
-                communication.recipients.set(recipients)
+            if not send_to_all:
+                # Adicionar usuários individuais
+                if recipient_ids:
+                    recipients = User.objects.filter(id__in=recipient_ids)
+                    communication.recipients.add(*recipients)
+                
+                # Adicionar usuários dos grupos selecionados
+                if group_ids:
+                    groups = CommunicationGroup.objects.filter(id__in=group_ids)
+                    for group in groups:
+                        communication.recipients.add(*group.users.all())
             
             log_action(
                 request.user, 
@@ -193,6 +287,7 @@ def create_communication_view(request):
     
     context = {
         'users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
+        'groups': CommunicationGroup.objects.all().order_by('name'),
         'user': request.user,
     }
     return render(request, 'communications/create.html', context)
@@ -219,6 +314,19 @@ def edit_communication_view(request, communication_id):
         communication.active_until = active_until if active_until else None
         
         recipient_ids = request.POST.getlist('recipients')
+        
+        # Processar remoção de imagem
+        if request.POST.get('remove_photo'):
+            if communication.image:
+                communication.image.delete()
+                communication.image = None
+        
+        # Processar upload de nova imagem
+        if 'photo' in request.FILES:
+            # Remover imagem antiga se existir
+            if communication.image:
+                communication.image.delete()
+            communication.image = request.FILES['photo']
         
         try:
             communication.save()
@@ -374,3 +482,65 @@ class CommunicationViewSet(viewsets.ModelViewSet):
         ).distinct().count()
         
         return Response({'count': count})
+
+
+@login_required
+@require_POST
+def add_comment(request, communication_id):
+    """Adicionar comentário a um comunicado"""
+    communication = get_object_or_404(Communication, id=communication_id)
+    content = request.POST.get('content', '').strip()
+    
+    if not content:
+        return JsonResponse({'success': False, 'error': 'Comentário não pode estar vazio'})
+    
+    # Verificar se o usuário pode comentar
+    can_comment = (
+        communication.send_to_all or 
+        communication.recipients.filter(id=request.user.id).exists() or
+        communication.sender == request.user or
+        request.user.can_manage_users()
+    )
+    
+    if not can_comment:
+        return JsonResponse({'success': False, 'error': 'Sem permissão para comentar'})
+    
+    comment = CommunicationComment.objects.create(
+        communication=communication,
+        user=request.user,
+        content=content
+    )
+    
+    # Preparar avatar do usuário
+    if request.user.profile_picture:
+        user_avatar = f'<img src="{request.user.profile_picture.url}" alt="{request.user.full_name}" class="w-8 h-8 rounded-full">'
+    else:
+        initials = f"{request.user.first_name[0].upper()}{request.user.last_name[0].upper()}" if request.user.first_name and request.user.last_name else "U"
+        user_avatar = f'''<div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
+            <span class="text-white text-xs font-medium">{initials}</span>
+        </div>'''
+    
+    return JsonResponse({
+        'success': True,
+        'comment': {
+            'id': comment.id,
+            'content': comment.content.replace('\n', '<br>'),
+            'user_name': comment.user.full_name,
+            'user_avatar': user_avatar,
+            'created_at': comment.created_at.strftime('%d/%m/%Y %H:%M')
+        }
+    })
+
+
+@login_required
+@require_POST
+def delete_comment(request, comment_id):
+    """Deletar comentário"""
+    comment = get_object_or_404(CommunicationComment, id=comment_id)
+    
+    # Só o autor do comentário ou admin pode deletar
+    if comment.user != request.user and not request.user.can_manage_users():
+        return JsonResponse({'success': False, 'error': 'Sem permissão'})
+    
+    comment.delete()
+    return JsonResponse({'success': True})

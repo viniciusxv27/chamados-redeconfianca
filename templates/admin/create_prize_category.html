@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}Criar Categoria de Prêmio - Rede de Confiança{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-plus-circle text-primary text-2xl mr-3"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Criar Categoria de Prêmio</h1>
+                            <p class="text-sm text-gray-600">Adicione uma nova categoria para organizar seus prêmios</p>
+                        </div>
+                    </div>
+                    <a href="{% url 'manage_prize_categories' %}" 
+                       class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulário -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-6">
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+                    
+                    <!-- Nome -->
+                    <div>
+                        <label for="name" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Nome da Categoria <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                               id="name" 
+                               name="name" 
+                               placeholder="Digite o nome da categoria"
+                               required>
+                    </div>
+
+                    <!-- Descrição -->
+                    <div>
+                        <label for="description" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Descrição
+                        </label>
+                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                  id="description" 
+                                  name="description" 
+                                  rows="3" 
+                                  placeholder="Descreva a categoria (opcional)"></textarea>
+                    </div>
+
+                    <!-- Ícone -->
+                    <div>
+                        <label for="icon" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Ícone Font Awesome
+                        </label>
+                        <div class="flex items-center space-x-3">
+                            <select class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                    id="icon" 
+                                    name="icon"
+                                    onchange="updateIconPreview()">
+                                <option value="fas fa-gift">🎁 Presente (fas fa-gift)</option>
+                                <option value="fas fa-trophy">🏆 Troféu (fas fa-trophy)</option>
+                                <option value="fas fa-star">⭐ Estrela (fas fa-star)</option>
+                                <option value="fas fa-crown">👑 Coroa (fas fa-crown)</option>
+                                <option value="fas fa-medal">🥇 Medalha (fas fa-medal)</option>
+                                <option value="fas fa-gem">💎 Jóia (fas fa-gem)</option>
+                                <option value="fas fa-coins">🪙 Moedas (fas fa-coins)</option>
+                                <option value="fas fa-gamepad">🎮 Game (fas fa-gamepad)</option>
+                                <option value="fas fa-car">🚗 Carro (fas fa-car)</option>
+                                <option value="fas fa-plane">✈️ Viagem (fas fa-plane)</option>
+                                <option value="fas fa-utensils">🍴 Alimentação (fas fa-utensils)</option>
+                                <option value="fas fa-tshirt">👕 Roupas (fas fa-tshirt)</option>
+                                <option value="fas fa-laptop">💻 Eletrônicos (fas fa-laptop)</option>
+                                <option value="fas fa-home">🏠 Casa (fas fa-home)</option>
+                                <option value="fas fa-dumbbell">💪 Fitness (fas fa-dumbbell)</option>
+                            </select>
+                            <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <i id="iconPreview" class="fas fa-gift text-gray-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cor -->
+                    <div>
+                        <label for="color" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Cor do Tema
+                        </label>
+                        <div class="grid grid-cols-6 gap-3">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="blue" class="sr-only" checked>
+                                <div class="w-12 h-12 bg-blue-500 rounded-lg border-2 border-transparent radio-selected"></div>
+                                <span class="block text-center text-xs mt-1">Azul</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="green" class="sr-only">
+                                <div class="w-12 h-12 bg-green-500 rounded-lg border-2 border-transparent"></div>
+                                <span class="block text-center text-xs mt-1">Verde</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="purple" class="sr-only">
+                                <div class="w-12 h-12 bg-purple-500 rounded-lg border-2 border-transparent"></div>
+                                <span class="block text-center text-xs mt-1">Roxo</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="red" class="sr-only">
+                                <div class="w-12 h-12 bg-red-500 rounded-lg border-2 border-transparent"></div>
+                                <span class="block text-center text-xs mt-1">Vermelho</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="yellow" class="sr-only">
+                                <div class="w-12 h-12 bg-yellow-500 rounded-lg border-2 border-transparent"></div>
+                                <span class="block text-center text-xs mt-1">Amarelo</span>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="indigo" class="sr-only">
+                                <div class="w-12 h-12 bg-indigo-500 rounded-lg border-2 border-transparent"></div>
+                                <span class="block text-center text-xs mt-1">Índigo</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="flex items-center">
+                        <input type="checkbox" 
+                               id="active" 
+                               name="active" 
+                               checked
+                               class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                        <label for="active" class="ml-2 text-sm text-gray-900">Categoria ativa</label>
+                    </div>
+
+                    <!-- Botões -->
+                    <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                        <a href="{% url 'manage_prize_categories' %}" 
+                           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                            <i class="fas fa-save mr-2"></i>
+                            Criar Categoria
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.radio-selected {
+    border-color: #f97316 !important;
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+}
+</style>
+
+<script>
+function updateIconPreview() {
+    const iconSelect = document.getElementById('icon');
+    const iconPreview = document.getElementById('iconPreview');
+    iconPreview.className = iconSelect.value + ' text-gray-600 text-xl';
+}
+
+// Color selection
+document.querySelectorAll('input[name="color"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('input[name="color"] + div').forEach(div => {
+            div.classList.remove('radio-selected');
+        });
+        this.nextElementSibling.classList.add('radio-selected');
+    });
+});
+</script>
+{% endblock %}

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'tickets',
     'communications',
     'prizes',
+    'assets',
     'core',
 ]
 

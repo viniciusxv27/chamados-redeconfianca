@@ -65,8 +65,102 @@
             
             <!-- Message Content -->
             <div class="px-6 py-6">
+                {% if communication.photo %}
+                <div class="mb-6">
+                    <img src="{{ communication.photo.url }}" alt="Foto do comunicado" class="w-full max-h-96 object-cover rounded-lg shadow-sm">
+                </div>
+                {% endif %}
+                
                 <div class="prose max-w-none">
                     {{ communication.message|linebreaks }}
+                </div>
+                
+                <!-- Reactions Section -->
+                <div class="mt-6 pt-4 border-t border-gray-200">
+                    {% include 'communications/reaction_buttons.html' with communication=communication %}
+                </div>
+            </div>
+            
+            <!-- Comments Section -->
+            <div class="px-6 py-4 border-t border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <i class="fas fa-comments text-primary mr-2"></i>
+                    Comentários
+                    <span class="ml-2 text-sm font-normal text-gray-500" id="comment-count">
+                        ({{ communication.comments.count }})
+                    </span>
+                </h3>
+                
+                <!-- Add Comment Form -->
+                <form id="comment-form" class="mb-6">
+                    {% csrf_token %}
+                    <div class="flex space-x-3">
+                        <div class="flex-shrink-0">
+                            {% if user.profile_picture %}
+                                <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-8 h-8 rounded-full">
+                            {% else %}
+                                <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                                    <span class="text-white text-xs font-medium">
+                                        {{ user.first_name|first|upper }}{{ user.last_name|first|upper }}
+                                    </span>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1">
+                            <textarea 
+                                name="content" 
+                                id="comment-content"
+                                rows="3" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                                placeholder="Adicione um comentário..."
+                                required></textarea>
+                            <div class="mt-2 flex items-center justify-between">
+                                <p class="text-xs text-gray-500">Seja respeitoso e construtivo nos comentários.</p>
+                                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm">
+                                    <i class="fas fa-paper-plane mr-1"></i>
+                                    Comentar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- Comments List -->
+                <div id="comments-list" class="space-y-4">
+                    {% for comment in communication.comments.all %}
+                    <div class="flex space-x-3 comment-item" data-comment-id="{{ comment.id }}">
+                        <div class="flex-shrink-0">
+                            {% if comment.user.profile_picture %}
+                                <img src="{{ comment.user.profile_picture.url }}" alt="{{ comment.user.full_name }}" class="w-8 h-8 rounded-full">
+                            {% else %}
+                                <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white text-xs font-medium">
+                                        {{ comment.user.first_name|first|upper }}{{ comment.user.last_name|first|upper }}
+                                    </span>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 bg-gray-50 rounded-lg px-4 py-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <div class="flex items-center space-x-2">
+                                    <span class="font-medium text-gray-900">{{ comment.user.full_name }}</span>
+                                    <span class="text-xs text-gray-500">{{ comment.created_at|date:"d/m/Y H:i" }}</span>
+                                </div>
+                                {% if comment.user == user %}
+                                <button onclick="deleteComment({{ comment.id }})" class="text-red-500 hover:text-red-700 text-xs">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            <p class="text-gray-800 text-sm">{{ comment.content|linebreaks }}</p>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div id="no-comments" class="text-center py-8 text-gray-500">
+                        <i class="fas fa-comments text-3xl mb-2"></i>
+                        <p>Nenhum comentário ainda. Seja o primeiro a comentar!</p>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
             
@@ -182,4 +276,119 @@
         </div>
     </div>
 </div>
+
+<script>
+// Gerenciamento de comentários
+document.getElementById('comment-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const content = document.getElementById('comment-content').value.trim();
+    if (!content) return;
+    
+    const formData = new FormData();
+    formData.append('content', content);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch('{% url "add_comment" communication.id %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Limpar formulário
+            document.getElementById('comment-content').value = '';
+            
+            // Remover mensagem "nenhum comentário" se existir
+            const noComments = document.getElementById('no-comments');
+            if (noComments) {
+                noComments.remove();
+            }
+            
+            // Adicionar novo comentário
+            const commentsList = document.getElementById('comments-list');
+            const commentHTML = `
+                <div class="flex space-x-3 comment-item" data-comment-id="${data.comment.id}">
+                    <div class="flex-shrink-0">
+                        ${data.comment.user_avatar}
+                    </div>
+                    <div class="flex-1 bg-gray-50 rounded-lg px-4 py-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-medium text-gray-900">${data.comment.user_name}</span>
+                                <span class="text-xs text-gray-500">${data.comment.created_at}</span>
+                            </div>
+                            <button onclick="deleteComment(${data.comment.id})" class="text-red-500 hover:text-red-700 text-xs">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <p class="text-gray-800 text-sm">${data.comment.content}</p>
+                    </div>
+                </div>
+            `;
+            
+            commentsList.insertAdjacentHTML('beforeend', commentHTML);
+            
+            // Atualizar contador
+            const commentCount = document.getElementById('comment-count');
+            const currentCount = parseInt(commentCount.textContent.match(/\d+/)[0]);
+            commentCount.textContent = `(${currentCount + 1})`;
+            
+        } else {
+            alert('Erro ao adicionar comentário: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao adicionar comentário');
+    });
+});
+
+function deleteComment(commentId) {
+    if (!confirm('Tem certeza que deseja excluir este comentário?')) {
+        return;
+    }
+    
+    fetch(`{% url "delete_comment" 0 %}`.replace('0', commentId), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remover comentário
+            const commentItem = document.querySelector(`[data-comment-id="${commentId}"]`);
+            commentItem.remove();
+            
+            // Atualizar contador
+            const commentCount = document.getElementById('comment-count');
+            const currentCount = parseInt(commentCount.textContent.match(/\d+/)[0]);
+            commentCount.textContent = `(${currentCount - 1})`;
+            
+            // Mostrar mensagem se não há mais comentários
+            if (currentCount - 1 === 0) {
+                const commentsList = document.getElementById('comments-list');
+                commentsList.innerHTML = `
+                    <div id="no-comments" class="text-center py-8 text-gray-500">
+                        <i class="fas fa-comments text-3xl mb-2"></i>
+                        <p>Nenhum comentário ainda. Seja o primeiro a comentar!</p>
+                    </div>
+                `;
+            }
+        } else {
+            alert('Erro ao excluir comentário: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao excluir comentário');
+    });
+}
+</script>
 {% endblock %}

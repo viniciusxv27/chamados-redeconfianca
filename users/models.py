@@ -31,6 +31,7 @@ class User(AbstractUser):
     balance_cs = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo C$")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Avatar")
+    profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True, verbose_name="Foto de Perfil")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

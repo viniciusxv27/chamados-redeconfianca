@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Categorias de Prêmios - Rede de Confiança{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-tags text-primary text-2xl mr-3"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Categorias de Prêmios</h1>
+                            <p class="text-sm text-gray-600">Gerencie as categorias disponíveis para organizar os prêmios</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <a href="{% url 'create_prize_category' %}" 
+                           class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                            <i class="fas fa-plus mr-2"></i>
+                            Nova Categoria
+                        </a>
+                        <a href="{% url 'admin_panel' %}" 
+                           class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar ao Painel
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories Grid -->
+        {% if categories %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for category in categories %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-{{ category.color }}-100 rounded-lg flex items-center justify-center mr-4">
+                                <i class="{{ category.icon }} text-{{ category.color }}-600 text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900">{{ category.name }}</h3>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                           {% if category.active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                    {% if category.active %}Ativa{% else %}Inativa{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if category.description %}
+                    <p class="text-gray-600 text-sm mb-4">{{ category.description }}</p>
+                    {% endif %}
+                    
+                    <div class="flex items-center justify-between text-sm text-gray-500 mb-4">
+                        <span>Criada em {{ category.created_at|date:"d/m/Y" }}</span>
+                        <span>{{ category.prize_set.count }} prêmios</span>
+                    </div>
+                    
+                    <div class="flex items-center justify-end space-x-2">
+                        <a href="{% url 'edit_prize_category' category.id %}" 
+                           class="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50 transition-colors">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button onclick="deleteCategory({{ category.id }}, '{{ category.name }}')" 
+                                class="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 transition-colors">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-12 text-center">
+                <i class="fas fa-tags text-gray-400 text-6xl mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Nenhuma categoria encontrada</h3>
+                <p class="text-gray-600 mb-6">Crie sua primeira categoria de prêmios para começar a organizar seus prêmios.</p>
+                <a href="{% url 'create_prize_category' %}" 
+                   class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    Criar Primeira Categoria
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div class="flex items-center mb-4">
+            <i class="fas fa-exclamation-triangle text-red-500 text-2xl mr-3"></i>
+            <h3 class="text-lg font-semibold text-gray-900">Confirmar Exclusão</h3>
+        </div>
+        <p class="text-gray-600 mb-6">
+            Tem certeza que deseja excluir a categoria "<span id="categoryName"></span>"? 
+            Esta ação não pode ser desfeita.
+        </p>
+        <div class="flex items-center justify-end space-x-3">
+            <button onclick="closeDeleteModal()" 
+                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                Cancelar
+            </button>
+            <form id="deleteForm" method="post" class="inline">
+                {% csrf_token %}
+                <button type="submit" 
+                        class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                    Excluir
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function deleteCategory(categoryId, categoryName) {
+    document.getElementById('categoryName').textContent = categoryName;
+    document.getElementById('deleteForm').action = `/users/manage/prize-categories/${categoryId}/delete/`;
+    document.getElementById('deleteModal').classList.remove('hidden');
+    document.getElementById('deleteModal').classList.add('flex');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+    document.getElementById('deleteModal').classList.remove('flex');
+}
+
+// Fechar modal ao clicar fora
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeDeleteModal();
+    }
+});
+</script>
+{% endblock %}

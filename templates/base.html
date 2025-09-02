@@ -1,9 +1,28 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Rede Confiança - Portal{% endblock %}</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Rede Confiança">
+    <meta name="theme-color" content="#FF6B35">
+    <meta name="msapplication-navbutton-color" content="#FF6B35">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" href="{% static 'images/logo.png' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/logo.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/logo.png' %}">
+    
     <!-- Google Fonts - Montserrat -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,7 +55,8 @@
     {% if user.is_authenticated %}
         <!-- Sidebar Navigation -->
         <div class="flex">
-            <aside class="w-64 bg-black text-white min-h-screen fixed left-0 top-0 z-40 overflow-y-auto">
+            <aside class="w-64 bg-black text-white h-screen fixed left-0 top-0 z-40 overflow-y-auto pb-20"
+                   style="height: 100vh; padding-bottom: 4rem;">
                 <!-- Logo -->
                 <div class="p-4 border-b border-gray-800">
                     <div class="flex items-center justify-center">
@@ -47,9 +67,13 @@
                 <!-- User Info -->
                 <div class="p-3">
                     <div class="flex flex-col items-center">
-                        <div class="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-2">
-                            <span class="text-white font-bold text-lg">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
-                        </div>
+                        {% if user.profile_picture %}
+                            <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-16 h-16 rounded-full object-cover mb-2">
+                        {% else %}
+                            <div class="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-2">
+                                <span class="text-white font-bold text-lg">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                            </div>
+                        {% endif %}
                         <div class="bg-primary text-white px-2 py-1 rounded-full text-xs font-bold mb-2">
                             C$ {{ user.balance_cs }}
                         </div>
@@ -61,12 +85,19 @@
                 </div>
                 
                 <!-- Navigation Menu -->
-                <nav class="p-2">
+                <nav class="p-2 pb-8">
                     <ul class="space-y-1">
                         <li>
-                            <a href="{% url 'dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                            <a href="{% url 'home' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
                                 <i class="fas fa-home text-primary"></i>
                                 <span class="text-sm">Home</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-chart-line text-primary"></i>
+                                <span class="text-sm">Dashboard</span>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
@@ -77,6 +108,29 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        <li>
+                            <a href="{% url 'marketplace' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-store text-primary"></i>
+                                <span class="text-sm">Marketplace C$</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'training' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-graduation-cap text-primary"></i>
+                                <span class="text-sm">Treinamentos</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% if user.hierarchy == 'SUPERADMIN' or user.hierarchy == 'ADMINISTRADOR' %}
+                        <li>
+                            <a href="{% url 'anonymous_report' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-shield-alt text-primary"></i>
+                                <span class="text-sm">Denúncias</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
                                 <i class="fas fa-ticket-alt text-primary"></i>
@@ -140,8 +194,15 @@
                                 <li>
                                     <a href="{% url 'manage_cs' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
                                         <i class="fas fa-coins text-yellow-400"></i>
-                                        <span>Confianças C$</span>
+                                        <span>Dinheiro Vivo</span>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'assets:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                        <i class="fas fa-warehouse text-orange-400"></i>
+                                        <span>Ativos</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
                                 <li>
@@ -208,9 +269,13 @@
                             <!-- User Menu -->
                             <div class="relative">
                                 <button id="userMenuToggle" class="flex items-center space-x-2 text-gray-600 hover:text-primary focus:outline-none">
-                                    <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
-                                        <i class="fas fa-user text-white text-sm"></i>
-                                    </div>
+                                    {% if user.profile_picture %}
+                                        <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-8 h-8 rounded-full object-cover">
+                                    {% else %}
+                                        <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
+                                            <i class="fas fa-user text-white text-sm"></i>
+                                        </div>
+                                    {% endif %}
                                     <span>{{ user.first_name }}</span>
                                     <i class="fas fa-chevron-down text-xs"></i>
                                 </button>
@@ -286,6 +351,21 @@
             }
         });
     </script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    }, function(err) {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+    
     {% block extra_js %}{% endblock %}
 </body>
 </html>

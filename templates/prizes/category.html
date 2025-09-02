@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ category.name }} - Marketplace{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Breadcrumb -->
+    <nav class="mb-8">
+        <ol class="flex items-center space-x-2 text-sm text-gray-500">
+            <li>
+                <a href="{% url 'marketplace' %}" class="hover:text-blue-600">
+                    <i class="fas fa-store mr-1"></i>Marketplace
+                </a>
+            </li>
+            <li><i class="fas fa-chevron-right mx-2"></i></li>
+            <li class="text-gray-900 font-medium">{{ category.name }}</li>
+        </ol>
+    </nav>
+
+    <!-- Header da Categoria -->
+    <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-8 mb-8 text-white">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-4xl font-bold mb-2">{{ category.name }}</h1>
+                {% if category.description %}
+                <p class="text-blue-100 text-lg">{{ category.description }}</p>
+                {% endif %}
+                <div class="mt-4 flex items-center space-x-4">
+                    <span class="bg-white/20 px-3 py-1 rounded-full text-sm">
+                        <i class="fas fa-gift mr-2"></i>{{ prizes.paginator.count }} prêmios disponíveis
+                    </span>
+                    <span class="bg-white/20 px-3 py-1 rounded-full text-sm">
+                        <i class="fas fa-coins mr-2"></i>A partir de {{ min_price|floatformat:0 }} C$
+                    </span>
+                </div>
+            </div>
+            {% if category.icon %}
+            <div class="text-6xl opacity-20">
+                <i class="{{ category.icon }}"></i>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div class="flex flex-wrap items-center gap-4">
+            <div class="flex items-center">
+                <label class="text-sm font-medium text-gray-700 mr-2">Ordenar por:</label>
+                <select id="sortSelect" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="name">Nome</option>
+                    <option value="value_cs">Menor preço</option>
+                    <option value="-value_cs">Maior preço</option>
+                    <option value="-created_at">Mais recentes</option>
+                </select>
+            </div>
+            
+            <div class="flex items-center">
+                <label class="text-sm font-medium text-gray-700 mr-2">Preço máximo:</label>
+                <input type="range" id="priceRange" min="0" max="{{ max_price|floatformat:0 }}" value="{{ max_price|floatformat:0 }}" 
+                       class="mr-2">
+                <span id="priceValue" class="text-sm font-medium text-blue-600">{{ max_price|floatformat:0 }} C$</span>
+            </div>
+            
+            <div class="flex items-center ml-auto">
+                <button id="gridView" class="p-2 bg-blue-100 text-blue-600 rounded-lg mr-2">
+                    <i class="fas fa-th-large"></i>
+                </button>
+                <button id="listView" class="p-2 bg-gray-100 text-gray-600 rounded-lg">
+                    <i class="fas fa-list"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grid de Prêmios -->
+    <div id="prizesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {% for prize in prizes %}
+        <div class="prize-card bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300" 
+             data-price="{{ prize.value_cs }}">
+            <div class="relative">
+                {% if prize.image %}
+                <img src="{{ prize.image.url }}" alt="{{ prize.name }}" 
+                     class="w-full h-48 object-cover rounded-t-lg">
+                {% else %}
+                <div class="w-full h-48 bg-gray-200 rounded-t-lg flex items-center justify-center">
+                    <i class="fas fa-gift text-gray-400 text-4xl"></i>
+                </div>
+                {% endif %}
+                
+                {% if not prize.is_active %}
+                <div class="absolute inset-0 bg-black bg-opacity-50 rounded-t-lg flex items-center justify-center">
+                    <span class="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                        Indisponível
+                    </span>
+                </div>
+                {% elif prize.stock <= 0 %}
+                <div class="absolute inset-0 bg-black bg-opacity-50 rounded-t-lg flex items-center justify-center">
+                    <span class="bg-orange-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                        Esgotado
+                    </span>
+                </div>
+                {% endif %}
+                
+                {% if prize.stock > 0 and prize.stock <= 5 %}
+                <div class="absolute top-2 right-2">
+                    <span class="bg-yellow-600 text-white px-2 py-1 rounded-full text-xs font-bold">
+                        Últimas unidades
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="p-4">
+                <h3 class="font-semibold text-lg mb-2 line-clamp-2">{{ prize.name }}</h3>
+                <p class="text-gray-600 text-sm mb-3 line-clamp-2">{{ prize.description }}</p>
+                
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-2xl font-bold text-blue-600">
+                        <i class="fas fa-coins mr-1"></i>
+                        {{ prize.value_cs|floatformat:0 }} C$
+                    </div>
+                    {% if prize.stock > 0 %}
+                    <div class="text-sm text-gray-500">
+                        <i class="fas fa-box mr-1"></i>{{ prize.stock }} disponíveis
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="flex gap-2">
+                    <button onclick="viewPrize({{ prize.id }})" 
+                            class="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+                        <i class="fas fa-eye mr-1"></i>Ver
+                    </button>
+                    {% if prize.is_active and prize.stock > 0 %}
+                    <button onclick="redeemPrize({{ prize.id }})" 
+                            class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                        <i class="fas fa-shopping-cart mr-1"></i>Resgatar
+                    </button>
+                    {% else %}
+                    <button disabled 
+                            class="flex-1 bg-gray-300 text-gray-500 py-2 px-4 rounded-lg cursor-not-allowed text-sm">
+                        Indisponível
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full">
+            <div class="text-center py-12">
+                <div class="text-gray-400 mb-4">
+                    <i class="fas fa-search text-6xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-600 mb-2">Nenhum prêmio encontrado</h3>
+                <p class="text-gray-500 mb-4">Não há prêmios disponíveis nesta categoria no momento.</p>
+                <a href="{% url 'marketplace' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Voltar ao Marketplace
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Paginação -->
+    {% if prizes.has_other_pages %}
+    <div class="flex justify-center mt-8">
+        <nav class="flex space-x-2">
+            {% if prizes.has_previous %}
+                <a href="?page={{ prizes.previous_page_number }}" 
+                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            {% endif %}
+            
+            {% for page_num in prizes.paginator.page_range %}
+                {% if page_num == prizes.number %}
+                    <span class="px-3 py-2 bg-blue-600 text-white rounded-lg">{{ page_num }}</span>
+                {% else %}
+                    <a href="?page={{ page_num }}" 
+                       class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">{{ page_num }}</a>
+                {% endif %}
+            {% endfor %}
+            
+            {% if prizes.has_next %}
+                <a href="?page={{ prizes.next_page_number }}" 
+                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Visualização -->
+<div id="prizeModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg p-6 max-w-2xl w-full max-h-screen overflow-y-auto">
+            <div id="modalContent">
+                <!-- Conteúdo será carregado via JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Filtros e ordenação
+document.getElementById('sortSelect').addEventListener('change', function() {
+    // Implementar ordenação
+    console.log('Ordenar por:', this.value);
+});
+
+document.getElementById('priceRange').addEventListener('input', function() {
+    const value = this.value;
+    document.getElementById('priceValue').textContent = value + ' C$';
+    
+    // Filtrar por preço
+    const cards = document.querySelectorAll('.prize-card');
+    cards.forEach(card => {
+        const price = parseFloat(card.dataset.price);
+        if (price <= value) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+});
+
+// Visualizações
+document.getElementById('gridView').addEventListener('click', function() {
+    document.getElementById('prizesGrid').className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
+    this.classList.add('bg-blue-100', 'text-blue-600');
+    this.classList.remove('bg-gray-100', 'text-gray-600');
+    document.getElementById('listView').classList.add('bg-gray-100', 'text-gray-600');
+    document.getElementById('listView').classList.remove('bg-blue-100', 'text-blue-600');
+});
+
+document.getElementById('listView').addEventListener('click', function() {
+    document.getElementById('prizesGrid').className = 'grid grid-cols-1 gap-4';
+    this.classList.add('bg-blue-100', 'text-blue-600');
+    this.classList.remove('bg-gray-100', 'text-gray-600');
+    document.getElementById('gridView').classList.add('bg-gray-100', 'text-gray-600');
+    document.getElementById('gridView').classList.remove('bg-blue-100', 'text-blue-600');
+});
+
+function viewPrize(prizeId) {
+    // Implementar visualização detalhada
+    document.getElementById('prizeModal').classList.remove('hidden');
+    document.getElementById('modalContent').innerHTML = '<p>Carregando detalhes do prêmio...</p>';
+}
+
+function redeemPrize(prizeId) {
+    if (confirm('Confirma o resgate deste prêmio?')) {
+        // Implementar resgate
+        fetch(`/prizes/redeem/${prizeId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Prêmio resgatado com sucesso!');
+                location.reload();
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        });
+    }
+}
+
+// Fechar modal
+document.getElementById('prizeModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.classList.add('hidden');
+    }
+});
+</script>
+{% endblock %}

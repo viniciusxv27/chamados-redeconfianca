@@ -181,7 +181,7 @@
 <script>
 function openAddCSModal(userId, userName) {
     document.getElementById('modalTitle').textContent = `Adicionar C$ - ${userName}`;
-    document.getElementById('addCSForm').action = `/manage/cs/${userId}/add/`;
+    document.getElementById('addCSForm').action = `/users/manage/cs/${userId}/add/`;
     document.getElementById('addCSModal').classList.remove('hidden');
     document.getElementById('addCSModal').classList.add('flex');
 }

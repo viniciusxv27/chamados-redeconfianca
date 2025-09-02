@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Treinamentos - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header do Treinamento -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Centro de Treinamentos</h1>
+        <p class="text-gray-600 mt-2">Desenvolva suas habilidades e conhecimentos</p>
+    </div>
+
+    <!-- Em Desenvolvimento -->
+    <div class="text-center py-16">
+        <div class="w-32 h-32 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <i class="fas fa-graduation-cap text-blue-600 text-5xl"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">Em Desenvolvimento</h2>
+        <p class="text-gray-600 mb-8 max-w-md mx-auto">
+            Estamos preparando um ambiente completo de aprendizado com cursos, certificações e muito mais.
+        </p>
+        
+        <!-- Preview de Módulos -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-users text-blue-600 text-2xl"></i>
+                </div>
+                <h3 class="font-semibold text-gray-900 mb-2">Atendimento ao Cliente</h3>
+                <p class="text-gray-600 text-sm">Técnicas e melhores práticas para excelência no atendimento.</p>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-shield-alt text-green-600 text-2xl"></i>
+                </div>
+                <h3 class="font-semibold text-gray-900 mb-2">Segurança</h3>
+                <p class="text-gray-600 text-sm">Protocolos de segurança e prevenção de riscos.</p>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="w-16 h-16 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-chart-line text-purple-600 text-2xl"></i>
+                </div>
+                <h3 class="font-semibold text-gray-900 mb-2">Produtividade</h3>
+                <p class="text-gray-600 text-sm">Ferramentas e métodos para aumentar a eficiência.</p>
+            </div>
+        </div>
+        
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-md mx-auto">
+            <h3 class="font-semibold text-blue-900 mb-2">Conteúdo em preparação!</h3>
+            <p class="text-blue-800 text-sm">
+                Nossa equipe está desenvolvendo conteúdos de qualidade para o seu desenvolvimento profissional.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

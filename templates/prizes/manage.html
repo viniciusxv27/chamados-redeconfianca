@@ -120,10 +120,23 @@
                                 <a href="{% url 'edit_prize' prize.id %}" class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <button class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors" title="Excluir">
-                                    <i class="fas fa-trash"></i>
+                                <a href="{% url 'prize_redemptions' prize.id %}" class="bg-purple-100 text-purple-600 p-2 rounded-lg hover:bg-purple-200 transition-colors" title="Ver Resgates">
+                                    <i class="fas fa-list"></i>
+                                </a>
+                                <button onclick="togglePrizeStatus({{ prize.id }})" 
+                                        class="{% if prize.is_active %}bg-orange-100 text-orange-600{% else %}bg-green-100 text-green-600{% endif %} p-2 rounded-lg hover:{% if prize.is_active %}bg-orange-200{% else %}bg-green-200{% endif %} transition-colors" 
+                                        title="{% if prize.is_active %}Pausar{% else %}Ativar{% endif %}">
+                                    <i class="fas fa-{% if prize.is_active %}pause{% else %}play{% endif %}"></i>
                                 </button>
                             </div>
+                        </div>
+                        
+                        <!-- Status do prêmio -->
+                        <div class="mb-3">
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                       {% if prize.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {% if prize.is_active %}Ativo{% else %}Pausado{% endif %}
+                            </span>
                         </div>
                         
                         <p class="text-gray-600 text-sm mb-3">{{ prize.description|truncatechars:100 }}</p>
@@ -135,6 +148,22 @@
                                     C$ {{ prize.value_cs }}
                                 </span>
                             </div>
+                            
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-600">Resgates:</span>
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                                    {{ prize.total_redemptions|default:0 }} total
+                                </span>
+                            </div>
+                            
+                            {% if prize.pending_redemptions > 0 %}
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-600">Pendentes:</span>
+                                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                                    {{ prize.pending_redemptions }} aguardando
+                                </span>
+                            </div>
+                            {% endif %}
                             
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-600">Estoque:</span>
@@ -209,11 +238,28 @@
             {% if recent_redemptions %}
             <div class="space-y-4">
                 {% for redemption in recent_redemptions %}
-                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                     <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                            <span class="text-white font-medium text-sm">{{ redemption.user.first_name.0 }}{{ redemption.user.last_name.0 }}</span>
+                        <!-- Foto do usuário -->
+                        {% if redemption.user.profile_picture %}
+                            <img src="{{ redemption.user.profile_picture.url }}" alt="{{ redemption.user.full_name }}" class="w-10 h-10 rounded-full object-cover">
+                        {% else %}
+                            <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                                <span class="text-white font-medium text-sm">{{ redemption.user.first_name.0 }}{{ redemption.user.last_name.0 }}</span>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Imagem do prêmio (pequena) -->
+                        <div class="w-8 h-8">
+                            {% if redemption.prize.image %}
+                                <img src="{{ redemption.prize.image.url }}" alt="{{ redemption.prize.name }}" class="w-8 h-8 rounded object-cover">
+                            {% else %}
+                                <div class="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
+                                    <i class="fas fa-gift text-gray-400 text-xs"></i>
+                                </div>
+                            {% endif %}
                         </div>
+                        
                         <div>
                             <p class="text-sm font-medium text-gray-900">{{ redemption.user.full_name }}</p>
                             <p class="text-sm text-gray-500">{{ redemption.prize.name }} - C$ {{ redemption.prize.value_cs }}</p>
@@ -256,13 +302,62 @@
 
 <script>
 function togglePrizeStatus(prizeId) {
-    // Implementar toggle de status do prêmio
-    console.log('Toggle status for prize:', prizeId);
+    if (confirm('Tem certeza que deseja alterar o status deste prêmio?')) {
+        fetch(`/users/manage/prizes/${prizeId}/toggle-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao alterar status: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erro ao alterar status do prêmio');
+        });
+    }
 }
 
-function updateRedemptionStatus(redemptionId, status) {
-    // Implementar atualização de status do resgate
-    console.log('Update redemption status:', redemptionId, status);
+function updateRedemptionStatus(redemptionId, newStatus) {
+    const statusText = {
+        'APROVADO': 'aprovar',
+        'CANCELADO': 'cancelar'
+    };
+    
+    if (confirm(`Tem certeza que deseja ${statusText[newStatus]} este resgate?`)) {
+        fetch(`/prizes/redemptions/${redemptionId}/update-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                status: newStatus
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao atualizar status: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erro ao atualizar status');
+        });
+    }
 }
 </script>
+
+<!-- CSRF Token -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
 {% endblock %}

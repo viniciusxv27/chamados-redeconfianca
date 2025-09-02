@@ -75,9 +75,13 @@
                 <!-- Original Message -->
                 <div class="mb-6">
                     <div class="flex items-center space-x-3 mb-3">
-                        <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                            <i class="fas fa-user text-gray-600"></i>
-                        </div>
+                        {% if ticket.created_by.profile_picture %}
+                            <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-10 h-10 rounded-full object-cover">
+                        {% else %}
+                            <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                                <span class="text-white font-medium text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
+                            </div>
+                        {% endif %}
                         <div>
                             <p class="font-medium text-gray-900">{{ ticket.created_by.first_name }} {{ ticket.created_by.last_name }}</p>
                             <p class="text-sm text-gray-500">{{ ticket.created_at|date:"d/m/Y \à\s H:i" }}</p>

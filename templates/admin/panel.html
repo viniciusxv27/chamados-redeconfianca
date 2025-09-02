@@ -63,7 +63,7 @@
     </div>
     
     <!-- Quick Actions -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow-sm p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
                 <i class="fas fa-users text-blue-600 mr-2"></i>
@@ -98,6 +98,22 @@
         
         <div class="bg-white rounded-lg shadow-sm p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-user-friends text-purple-600 mr-2"></i>
+                Grupos
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">Gerenciar grupos de comunicação</p>
+            <div class="space-y-2">
+                <a href="{% url 'manage_groups' %}" class="block bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center text-sm">
+                    Gerenciar Grupos
+                </a>
+                <a href="{% url 'create_group' %}" class="block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-center text-sm">
+                    Criar Grupo
+                </a>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
                 <i class="fas fa-coins text-yellow-600 mr-2"></i>
                 Confianças C$
             </h3>
@@ -106,8 +122,14 @@
                 <a href="{% url 'manage_cs' %}" class="block bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-center text-sm">
                     Gerenciar C$
                 </a>
-                <a href="#" class="block bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center text-sm">
+                <a href="{% url 'manage_prizes' %}" class="block bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center text-sm">
                     Prêmios
+                </a>
+                <a href="{% url 'manage_prize_categories' %}" class="block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-center text-sm">
+                    Categorias de Prêmios
+                </a>
+                <a href="{% url 'manage_redemptions' %}" class="block bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-center text-sm">
+                    Resgates
                 </a>
             </div>
         </div>

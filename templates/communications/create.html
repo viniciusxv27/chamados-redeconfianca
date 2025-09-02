@@ -1,33 +1,41 @@
 {% extends 'base.html' %}
 
-{% block title %}Criar Comunicado{% endblock %}
+{% block title %}Criar Comunicado - Rede de Confiança{% endblock %}
+
+{% block extra_css %}
+<style>
+    .primary { background-color: #f97316; }
+    .primary:hover { background-color: #ea580c; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
-        <div class="px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
-                        <i class="fas fa-bullhorn text-primary mr-3"></i>
-                        Criar Comunicado
-                    </h1>
-                    <p class="text-gray-600 mt-1">Envie comunicações importantes para sua equipe</p>
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-plus-circle text-primary text-2xl mr-3"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Criar Novo Comunicado</h1>
+                            <p class="text-sm text-gray-600">Compartilhe informações importantes com sua equipe</p>
+                        </div>
+                    </div>
+                    <a href="{% url 'communications_list' %}" 
+                       class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
                 </div>
-                <a href="{% url 'communications_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
-                    <i class="fas fa-arrow-left mr-2"></i>
-                    Voltar
-                </a>
             </div>
         </div>
-    </div>
 
-    <!-- Form -->
-    <div class="max-w-4xl mx-auto">
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div class="p-6">
-                <form method="post" class="space-y-6">
+        <!-- Formulário -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-6">
+                <form method="post" enctype="multipart/form-data" class="space-y-6">
                     {% csrf_token %}
                     
                     <!-- Título -->
@@ -41,6 +49,40 @@
                                name="title" 
                                placeholder="Digite o título do comunicado"
                                required>
+                    </div>
+
+                    <!-- Upload de Foto -->
+                    <div>
+                        <label for="photo" class="block text-sm font-semibold text-gray-900 mb-2">
+                            <i class="fas fa-camera text-primary mr-1"></i>
+                            Foto do Comunicado
+                        </label>
+                        
+                        <!-- Upload nova foto -->
+                        <div class="flex items-center justify-center w-full">
+                            <label for="photo" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-area">
+                                    <i class="fas fa-cloud-upload-alt text-gray-400 text-4xl mb-4"></i>
+                                    <p class="mb-2 text-sm text-gray-500">
+                                        <span class="font-semibold">Clique para fazer upload</span> ou arraste a imagem
+                                    </p>
+                                    <p class="text-xs text-gray-500">PNG, JPG ou JPEG (MAX. 5MB)</p>
+                                </div>
+                                <input id="photo" name="photo" type="file" class="hidden" accept="image/*" onchange="previewImage(this)">
+                            </label>
+                        </div>
+                        
+                        <!-- Preview da nova imagem -->
+                        <div id="photo-preview" class="hidden mt-4">
+                            <p class="text-sm text-gray-600 mb-2">Nova foto:</p>
+                            <div class="relative">
+                                <img id="preview-img" class="w-full max-w-md h-48 object-cover rounded-lg" src="" alt="Preview">
+                                <button type="button" onclick="removePhoto()" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">A foto será exibida como destaque no feed de comunicados.</p>
                     </div>
 
                     <!-- Mensagem -->
@@ -119,21 +161,21 @@
                                     Destinatários Específicos
                                 </label>
                                 <div class="border border-gray-300 rounded-lg p-3 bg-white max-h-64 overflow-y-auto">
-                                    {% for u in users %}
+                                    {% for user in users %}
                                     <div class="flex items-center py-2 px-2 hover:bg-gray-50 rounded">
                                         <input type="checkbox" 
                                                name="recipients" 
-                                               value="{{ u.id }}" 
-                                               id="user_{{ u.id }}"
+                                               value="{{ user.id }}" 
+                                               id="user_{{ user.id }}"
                                                class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                                        <label for="user_{{ u.id }}" class="ml-3 flex-1 cursor-pointer">
+                                        <label for="user_{{ user.id }}" class="ml-3 flex-1 cursor-pointer">
                                             <div class="flex items-center">
                                                 <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
                                                     <i class="fas fa-user text-white text-xs"></i>
                                                 </div>
                                                 <div>
-                                                    <div class="text-sm font-medium text-gray-900">{{ u.full_name }}</div>
-                                                    <div class="text-xs text-gray-500">{{ u.email }} • {{ u.sector.name|default:"Sem setor" }}</div>
+                                                    <div class="text-sm font-medium text-gray-900">{{ user.full_name }}</div>
+                                                    <div class="text-xs text-gray-500">{{ user.email }} • {{ user.sector.name|default:"Sem setor" }}</div>
                                                 </div>
                                             </div>
                                         </label>
@@ -154,7 +196,7 @@
                         <button type="submit" 
                                 class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
                             <i class="fas fa-paper-plane mr-2"></i>
-                            Enviar Comunicado
+                            Criar Comunicado
                         </button>
                     </div>
                 </form>
@@ -178,6 +220,30 @@ function toggleRecipients() {
     } else {
         recipientsSection.style.display = 'block';
     }
+}
+
+function previewImage(input) {
+    const preview = document.getElementById('photo-preview');
+    const previewImg = document.getElementById('preview-img');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.classList.remove('hidden');
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function removePhoto() {
+    const photoInput = document.getElementById('photo');
+    const preview = document.getElementById('photo-preview');
+    
+    photoInput.value = '';
+    preview.classList.add('hidden');
 }
 
 // Executar na carga da página

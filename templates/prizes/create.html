@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Criar Prêmio - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">
+            <i class="fas fa-plus-circle mr-3 text-green-600"></i>
+            Criar Novo Prêmio
+        </h1>
+        <a href="{% url 'manage_prizes' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Voltar
+        </a>
+    </div>
+
+    <!-- Formulário -->
+    <div class="bg-white rounded-lg shadow-md p-8">
+        <form method="POST" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Informações básicas -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-gift mr-1"></i>
+                        Nome do Prêmio *
+                    </label>
+                    <input type="text" id="name" name="name" required 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           placeholder="Ex: Voucher de R$ 50">
+                </div>
+                
+                <div>
+                    <label for="category" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-tags mr-1"></i>
+                        Categoria
+                    </label>
+                    <select id="category" name="category" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="">Selecione uma categoria</option>
+                        {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Descrição -->
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-align-left mr-1"></i>
+                    Descrição *
+                </label>
+                <textarea id="description" name="description" rows="3" required
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Descreva o prêmio detalhadamente..."></textarea>
+            </div>
+
+            <!-- Valor e Prioridade -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="value_cs" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-coins mr-1"></i>
+                        Valor em C$ *
+                    </label>
+                    <input type="number" id="value_cs" name="value_cs" required min="1" step="1"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           placeholder="100">
+                </div>
+                
+                <div>
+                    <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-star mr-1"></i>
+                        Prioridade
+                    </label>
+                    <select id="priority" name="priority" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="NORMAL">Normal</option>
+                        <option value="HIGH">Destaque</option>
+                        <option value="URGENT">Limitado</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Estoque -->
+            <div class="space-y-4">
+                <div class="flex items-center">
+                    <input type="checkbox" id="unlimited_stock" name="unlimited_stock" 
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="unlimited_stock" class="ml-2 block text-sm text-gray-700">
+                        Estoque ilimitado
+                    </label>
+                </div>
+                
+                <div id="stock_input" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="stock" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-boxes mr-1"></i>
+                            Quantidade em Estoque
+                        </label>
+                        <input type="number" id="stock" name="stock" min="0" step="1" value="1"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Imagem -->
+            <div>
+                <label for="image" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-image mr-1"></i>
+                    Imagem do Prêmio
+                </label>
+                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-gray-400 transition-colors">
+                    <div class="space-y-1 text-center">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <div class="flex text-sm text-gray-600">
+                            <label for="image" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                <span>Selecionar arquivo</span>
+                                <input id="image" name="image" type="file" accept="image/*" class="sr-only" onchange="previewImage(this)">
+                            </label>
+                            <p class="pl-1">ou arraste e solte</p>
+                        </div>
+                        <p class="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
+                    </div>
+                </div>
+                <div id="image_preview" class="mt-4 hidden">
+                    <img id="preview_img" class="w-32 h-32 object-cover rounded-lg border border-gray-300">
+                </div>
+            </div>
+
+            <!-- Validade -->
+            <div>
+                <label for="valid_until" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-calendar mr-1"></i>
+                    Válido até (opcional)
+                </label>
+                <input type="date" id="valid_until" name="valid_until" 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <p class="mt-1 text-sm text-gray-500">Deixe em branco para prêmio sem data de expiração</p>
+            </div>
+
+            <!-- Termos e condições -->
+            <div>
+                <label for="terms" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-file-contract mr-1"></i>
+                    Termos e Condições (opcional)
+                </label>
+                <textarea id="terms" name="terms" rows="4"
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Ex: Válido apenas para uso presencial, não pode ser combinado com outras promoções..."></textarea>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex gap-4 pt-6">
+                <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold">
+                    <i class="fas fa-save mr-2"></i>
+                    Criar Prêmio
+                </button>
+                <a href="{% url 'manage_prizes' %}" class="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 transition-colors font-semibold">
+                    <i class="fas fa-times mr-2"></i>
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Toggle estoque ilimitado
+document.getElementById('unlimited_stock').addEventListener('change', function() {
+    const stockInput = document.getElementById('stock_input');
+    const stockField = document.getElementById('stock');
+    
+    if (this.checked) {
+        stockInput.style.display = 'none';
+        stockField.value = '0';
+        stockField.required = false;
+    } else {
+        stockInput.style.display = 'grid';
+        stockField.required = true;
+        stockField.value = '1';
+    }
+});
+
+// Preview da imagem
+function previewImage(input) {
+    const preview = document.getElementById('image_preview');
+    const previewImg = document.getElementById('preview_img');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.classList.remove('hidden');
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        preview.classList.add('hidden');
+    }
+}
+
+// Validação do formulário
+document.querySelector('form').addEventListener('submit', function(e) {
+    const name = document.getElementById('name').value.trim();
+    const description = document.getElementById('description').value.trim();
+    const valueCs = document.getElementById('value_cs').value;
+    const unlimitedStock = document.getElementById('unlimited_stock').checked;
+    const stock = document.getElementById('stock').value;
+    
+    if (!name || !description || !valueCs) {
+        e.preventDefault();
+        alert('Por favor, preencha todos os campos obrigatórios.');
+        return;
+    }
+    
+    if (valueCs <= 0) {
+        e.preventDefault();
+        alert('O valor em C$ deve ser maior que zero.');
+        return;
+    }
+    
+    if (!unlimitedStock && (!stock || stock < 0)) {
+        e.preventDefault();
+        alert('O estoque deve ser um número válido.');
+        return;
+    }
+});
+</script>
+{% endblock %}

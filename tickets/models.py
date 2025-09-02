@@ -93,6 +93,9 @@ class Ticket(models.Model):
         verbose_name="Usuário para Aprovação"
     )
     
+    # Denúncia anônima
+    is_anonymous = models.BooleanField(default=False, verbose_name="Denúncia Anônima")
+    
     class Meta:
         verbose_name = "Chamado"
         verbose_name_plural = "Chamados"
