@@ -23,62 +23,13 @@
         </div>
     </div>
 
-    <div class="max-w-4xl mx-auto space-y-6">
-        <!-- Notifications Settings -->
+        <div class="max-w-4xl mx-auto space-y-6">
+        <!-- Security Settings -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900">Notificações</h3>
-                <p class="text-sm text-gray-600 mt-1">Configure como deseja receber notificações</p>
+                <h3 class="text-lg font-semibold text-gray-900">Segurança</h3>
+                <p class="text-sm text-gray-600 mt-1">Configurações de segurança da conta</p>
             </div>
-            
-            <form method="post" action="{% url 'update_settings' %}" class="p-6">
-                {% csrf_token %}
-                <div class="space-y-6">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-900">Email de Novos Chamados</h4>
-                            <p class="text-sm text-gray-600">Receber email quando um novo chamado for criado</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="email_new_tickets" class="sr-only peer" {% if user.email_new_tickets %}checked{% endif %}>
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                    </div>
-                    
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-900">Email de Status de Chamados</h4>
-                            <p class="text-sm text-gray-600">Receber email quando status de chamado for alterado</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="email_ticket_updates" class="sr-only peer" {% if user.email_ticket_updates %}checked{% endif %}>
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                    </div>
-                    
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-900">Email de Comunicados</h4>
-                            <p class="text-sm text-gray-600">Receber email quando novos comunicados forem enviados</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="email_communications" class="sr-only peer" {% if user.email_communications %}checked{% endif %}>
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="pt-6 border-t border-gray-200 mt-6">
-                    <div class="flex justify-end">
-                        <button type="submit" 
-                                class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
-                            <i class="fas fa-save mr-2"></i>
-                            Salvar Configurações
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
 
         <!-- Display Settings -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">

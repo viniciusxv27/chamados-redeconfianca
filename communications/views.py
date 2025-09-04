@@ -238,8 +238,10 @@ def create_communication_view(request):
         message = request.POST.get('message')
         send_to_all = request.POST.get('send_to_all') == 'on'
         recipient_ids = request.POST.getlist('recipients')
-        group_ids = request.POST.getlist('groups')  # Novos grupos
-        is_pinned = request.POST.get('is_pinned') == 'on'  # Pin no dashboard
+        is_pinned = request.POST.get('is_pinned') == 'on'
+        is_popup = request.POST.get('is_popup') == 'on'
+        sender_group = request.POST.get('sender_group', '')
+        custom_group_id = request.POST.get('custom_group', '')
         active_from = request.POST.get('active_from')
         active_until = request.POST.get('active_until')
         
@@ -250,6 +252,9 @@ def create_communication_view(request):
                 sender=request.user,
                 send_to_all=send_to_all,
                 is_pinned=is_pinned,
+                is_popup=is_popup,
+                sender_group=sender_group if sender_group else None,
+                custom_group_id=custom_group_id if custom_group_id else None,
                 active_from=active_from if active_from else None,
                 active_until=active_until if active_until else None
             )
@@ -257,20 +262,21 @@ def create_communication_view(request):
             # Processar upload de imagem
             if 'photo' in request.FILES:
                 communication.image = request.FILES['photo']
+                # Se tem imagem, forçar is_popup para False
+                communication.is_popup = False
                 communication.save()
             
-            # Adicionar destinatários específicos se não for para todos
-            if not send_to_all:
+            # Adicionar destinatários baseado na lógica
+            if custom_group_id:
+                # Se foi selecionado um grupo personalizado, adicionar apenas os membros do grupo
+                custom_group = CommunicationGroup.objects.get(id=custom_group_id)
+                communication.recipients.add(*custom_group.members.all())
+                communication.send_to_all = False
+                communication.save()
+            elif not send_to_all and recipient_ids:
                 # Adicionar usuários individuais
-                if recipient_ids:
-                    recipients = User.objects.filter(id__in=recipient_ids)
-                    communication.recipients.add(*recipients)
-                
-                # Adicionar usuários dos grupos selecionados
-                if group_ids:
-                    groups = CommunicationGroup.objects.filter(id__in=group_ids)
-                    for group in groups:
-                        communication.recipients.add(*group.users.all())
+                recipients = User.objects.filter(id__in=recipient_ids)
+                communication.recipients.add(*recipients)
             
             log_action(
                 request.user, 
@@ -285,9 +291,23 @@ def create_communication_view(request):
         except Exception as e:
             messages.error(request, f'Erro ao criar comunicado: {str(e)}')
     
+    # Preparar grupos para o usuário
+    user_groups = []
+    if request.user.hierarchy in ['GERENTE', 'COORDENACAO', 'DIRETORIA', 'SUPERADMIN', 'ADMINISTRADOR']:
+        # Mostrar grupos baseado na hierarquia do usuário
+        hierarchy_groups = {
+            'GERENTE': [('GERENTES', 'Gerentes')],
+            'COORDENACAO': [('COORDENACAO', 'Coordenação'), ('GERENTES', 'Gerentes')],
+            'DIRETORIA': [('DIRETORIA', 'Diretoria'), ('COORDENACAO', 'Coordenação'), ('GERENTES', 'Gerentes')],
+            'SUPERADMIN': Communication.SENDER_GROUP_CHOICES,
+            'ADMINISTRADOR': Communication.SENDER_GROUP_CHOICES,
+        }
+        user_groups = hierarchy_groups.get(request.user.hierarchy, [])
+    
     context = {
         'users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
-        'groups': CommunicationGroup.objects.all().order_by('name'),
+        'communication_groups': CommunicationGroup.objects.filter(is_active=True).order_by('name'),
+        'user_groups': user_groups,
         'user': request.user,
     }
     return render(request, 'communications/create.html', context)

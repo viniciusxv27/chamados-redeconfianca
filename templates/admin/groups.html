@@ -50,7 +50,7 @@
                 </div>
                 <div class="ml-4">
                     <h3 class="text-lg font-semibold text-gray-900">
-                        {% for group in groups %}{{ group.users.count }}{% if not forloop.last %} + {% endif %}{% endfor %}
+                        {% for group in groups %}{{ group.members.count }}{% if not forloop.last %} + {% endif %}{% endfor %}
                     </h3>
                     <p class="text-gray-600 text-sm">Usuários em Grupos</p>
                 </div>
@@ -104,19 +104,19 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex items-center">
-                                <span class="text-sm font-medium text-gray-900">{{ group.users.count }}</span>
-                                <span class="text-sm text-gray-500 ml-1">usuário{{ group.users.count|pluralize }}</span>
+                                <span class="text-sm font-medium text-gray-900">{{ group.members.count }}</span>
+                                <span class="text-sm text-gray-500 ml-1">usuário{{ group.members.count|pluralize }}</span>
                             </div>
-                            {% if group.users.count > 0 %}
+                            {% if group.members.count > 0 %}
                             <div class="flex -space-x-1 mt-1">
-                                {% for user in group.users.all|slice:":5" %}
+                                {% for user in group.members.all|slice:":5" %}
                                 <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center text-xs font-medium text-gray-600" title="{{ user.full_name }}">
                                     {{ user.first_name|first }}{{ user.last_name|first }}
                                 </div>
                                 {% endfor %}
-                                {% if group.users.count > 5 %}
+                                {% if group.members.count > 5 %}
                                 <div class="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-500">
-                                    +{{ group.users.count|add:"-5" }}
+                                    +{{ group.members.count|add:"-5" }}
                                 </div>
                                 {% endif %}
                             </div>

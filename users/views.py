@@ -269,10 +269,15 @@ def manage_cs_view(request):
         total=Sum('balance_cs')
     )['total'] or Decimal('0')
     
+    # Calcular média por usuário
+    user_count = users.count()
+    average_per_user = total_circulation / user_count if user_count > 0 else Decimal('0')
+    
     context = {
         'users': users,
         'user': request.user,
         'total_circulation': total_circulation,
+        'average_per_user': average_per_user,
     }
     return render(request, 'admin/manage_cs.html', context)
 
@@ -1011,7 +1016,7 @@ def create_group_view(request):
             
             if user_ids:
                 users = User.objects.filter(id__in=user_ids)
-                group.users.set(users)
+                group.members.set(users)
             
             log_action(
                 request.user,
@@ -1056,9 +1061,9 @@ def edit_group_view(request, group_id):
             
             if user_ids:
                 users = User.objects.filter(id__in=user_ids)
-                group.users.set(users)
+                group.members.set(users)
             else:
-                group.users.clear()
+                group.members.clear()
             
             log_action(
                 request.user,

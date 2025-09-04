@@ -138,6 +138,66 @@
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Opções de Envio</h3>
                         
                         <div class="space-y-4">
+                            <!-- Fixar na Dashboard -->
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                                           type="checkbox" 
+                                           id="is_pinned" 
+                                           name="is_pinned">
+                                </div>
+                                <div class="ml-3">
+                                    <label for="is_pinned" class="text-sm font-medium text-gray-900">
+                                        Fixar na Dashboard
+                                    </label>
+                                    <p class="text-sm text-gray-500">O comunicado será destacado na página inicial</p>
+                                </div>
+                            </div>
+
+                            <!-- Exibir como Pop-up -->
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                                           type="checkbox" 
+                                           id="is_popup" 
+                                           name="is_popup">
+                                </div>
+                                <div class="ml-3">
+                                    <label for="is_popup" class="text-sm font-medium text-gray-900">
+                                        Exibir como Pop-up
+                                    </label>
+                                    <p class="text-sm text-gray-500">Será exibido automaticamente quando usuários acessarem o sistema</p>
+                                </div>
+                            </div>
+
+                            <!-- Grupo Remetente -->
+                            <div>
+                                <label for="sender_group" class="block text-sm font-semibold text-gray-900 mb-2">
+                                    Representar Grupo
+                                </label>
+                                <select name="sender_group" id="sender_group" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
+                                    <option value="">Enviar como {{ user.get_full_name }}</option>
+                                    {% for group in user_groups %}
+                                        <option value="{{ group.0 }}">{{ group.1 }}</option>
+                                    {% endfor %}
+                                </select>
+                                <p class="text-sm text-gray-500 mt-1">Selecione o grupo que você representa ao enviar este comunicado</p>
+                            </div>
+
+                            <!-- Grupo Personalizado -->
+                            <div>
+                                <label for="custom_group" class="block text-sm font-semibold text-gray-900 mb-2">
+                                    Enviar para Grupo Específico
+                                </label>
+                                <select name="custom_group" id="custom_group" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" onchange="toggleGroupRecipients()">
+                                    <option value="">Selecionar destinatários manualmente</option>
+                                    {% for group in communication_groups %}
+                                        <option value="{{ group.id }}">{{ group.name }} ({{ group.members.count }} membros)</option>
+                                    {% endfor %}
+                                </select>
+                                <p class="text-sm text-gray-500 mt-1">Ou escolha um grupo para enviar automaticamente para todos os membros</p>
+                            </div>
+
                             <!-- Enviar para todos -->
                             <div class="flex items-start">
                                 <div class="flex items-center h-5">
@@ -161,21 +221,25 @@
                                     Destinatários Específicos
                                 </label>
                                 <div class="border border-gray-300 rounded-lg p-3 bg-white max-h-64 overflow-y-auto">
-                                    {% for user in users %}
+                                    {% for user_option in users %}
                                     <div class="flex items-center py-2 px-2 hover:bg-gray-50 rounded">
                                         <input type="checkbox" 
                                                name="recipients" 
-                                               value="{{ user.id }}" 
-                                               id="user_{{ user.id }}"
+                                               value="{{ user_option.id }}" 
+                                               id="user_{{ user_option.id }}"
                                                class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                                        <label for="user_{{ user.id }}" class="ml-3 flex-1 cursor-pointer">
+                                        <label for="user_{{ user_option.id }}" class="ml-3 flex-1 cursor-pointer">
                                             <div class="flex items-center">
-                                                <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
-                                                    <i class="fas fa-user text-white text-xs"></i>
-                                                </div>
+                                                {% if user_option.profile_picture %}
+                                                    <img src="{{ user_option.profile_picture.url }}" alt="{{ user_option.get_full_name }}" class="w-8 h-8 rounded-full mr-3">
+                                                {% else %}
+                                                    <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
+                                                        <i class="fas fa-user text-white text-xs"></i>
+                                                    </div>
+                                                {% endif %}
                                                 <div>
-                                                    <div class="text-sm font-medium text-gray-900">{{ user.full_name }}</div>
-                                                    <div class="text-xs text-gray-500">{{ user.email }} • {{ user.sector.name|default:"Sem setor" }}</div>
+                                                    <div class="text-sm font-medium text-gray-900">{{ user_option.get_full_name }}</div>
+                                                    <div class="text-xs text-gray-500">{{ user_option.email }} • {{ user_option.sector.name|default:"Sem setor" }}</div>
                                                 </div>
                                             </div>
                                         </label>
@@ -210,8 +274,9 @@ function toggleRecipients() {
     const sendToAll = document.getElementById('send_to_all');
     const recipientsSection = document.getElementById('recipients-section');
     const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]');
+    const customGroup = document.getElementById('custom_group');
     
-    if (sendToAll.checked) {
+    if (sendToAll.checked || customGroup.value) {
         recipientsSection.style.display = 'none';
         recipientCheckboxes.forEach(checkbox => {
             checkbox.required = false;
@@ -222,9 +287,23 @@ function toggleRecipients() {
     }
 }
 
+function toggleGroupRecipients() {
+    const customGroup = document.getElementById('custom_group');
+    const sendToAll = document.getElementById('send_to_all');
+    const recipientsSection = document.getElementById('recipients-section');
+    
+    if (customGroup.value) {
+        sendToAll.checked = false;
+        recipientsSection.style.display = 'none';
+    } else {
+        recipientsSection.style.display = 'block';
+    }
+}
+
 function previewImage(input) {
     const preview = document.getElementById('photo-preview');
     const previewImg = document.getElementById('preview-img');
+    const popupCheckbox = document.getElementById('is_popup');
     
     if (input.files && input.files[0]) {
         const reader = new FileReader();
@@ -232,6 +311,9 @@ function previewImage(input) {
         reader.onload = function(e) {
             previewImg.src = e.target.result;
             preview.classList.remove('hidden');
+            // Desabilitar pop-up se tem imagem
+            popupCheckbox.disabled = true;
+            popupCheckbox.checked = false;
         }
         
         reader.readAsDataURL(input.files[0]);
@@ -241,9 +323,11 @@ function previewImage(input) {
 function removePhoto() {
     const photoInput = document.getElementById('photo');
     const preview = document.getElementById('photo-preview');
+    const popupCheckbox = document.getElementById('is_popup');
     
     photoInput.value = '';
     preview.classList.add('hidden');
+    popupCheckbox.disabled = false;
 }
 
 // Executar na carga da página
@@ -255,10 +339,11 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', function(e) {
         const sendToAll = document.getElementById('send_to_all');
         const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]:checked');
+        const customGroup = document.getElementById('custom_group');
         
-        if (!sendToAll.checked && recipientCheckboxes.length === 0) {
+        if (!sendToAll.checked && recipientCheckboxes.length === 0 && !customGroup.value) {
             e.preventDefault();
-            alert('Por favor, selecione "Enviar para todos" ou escolha destinatários específicos.');
+            alert('Por favor, selecione "Enviar para todos", escolha um grupo específico ou selecione destinatários.');
             return false;
         }
     });
