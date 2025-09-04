@@ -1,61 +1,198 @@
 # 🚀 Guia de Deploy para Produção
 
-## 📋 Checklist Pré-Deploy
+## 📋 Configuração PostgreSQL e EasyPanel via Nixpacks
 
-### ⚙️ Configurações
-- [ ] Configurar variáveis de ambiente de produção
-- [ ] Configurar banco MySQL em produção
-- [ ] Configurar servidor de email (SMTP)
-- [ ] Configurar webhooks do Discord
-- [ ] Gerar nova SECRET_KEY
-- [ ] Configurar ALLOWED_HOSTS
-- [ ] Configurar DEBUG=False
+### ⚙️ Configuração Atual
+- ✅ PostgreSQL configurado
+- ✅ Gunicorn para produção
+- ✅ WhiteNoise para arquivos estáticos
+- ✅ Configurações de segurança para HTTPS
+- ✅ Nixpacks configurado
+- ✅ Variáveis de ambiente organizadas
 
-### 🔒 Segurança
-- [ ] Configurar HTTPS
-- [ ] Configurar CSRF_COOKIE_SECURE=True
-- [ ] Configurar SESSION_COOKIE_SECURE=True
-- [ ] Configurar SECURE_SSL_REDIRECT=True
-- [ ] Backup do banco de dados
+## 🌐 Deploy no EasyPanel via Nixpacks
 
-### 📁 Arquivos Estáticos
-- [ ] Configurar STATIC_ROOT
-- [ ] Executar collectstatic
-- [ ] Configurar servidor web (Nginx/Apache)
-
-## 🌐 Variáveis de Ambiente para Produção
-
-```env
-# Django Settings
-SECRET_KEY=sua-chave-super-secreta-aqui
-DEBUG=False
-ALLOWED_HOSTS=seudominio.com,www.seudominio.com
-
-# Database (MySQL)
-DB_NAME=redeconfianca_production
-DB_USER=redeconfianca_user
-DB_PASSWORD=senha-super-segura
-DB_HOST=localhost
-DB_PORT=3306
-
-# Email (Produção)
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.empresa.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=sistema@redeconfianca.com
-EMAIL_HOST_PASSWORD=senha-email
-EMAIL_USE_TLS=True
-
-# Webhook (Produção)
-WEBHOOK_URL=https://discord.com/api/webhooks/seu-webhook-producao
-
-# Security Settings
-CSRF_COOKIE_SECURE=True
-SESSION_COOKIE_SECURE=True
-SECURE_SSL_REDIRECT=True
-SECURE_BROWSER_XSS_FILTER=True
-SECURE_CONTENT_TYPE_NOSNIFF=True
+### 1. Preparar o Repositório
+```bash
+# Confirmar todas as alterações
+git add .
+git commit -m "Configure PostgreSQL and Nixpacks deployment"
+git push origin main
 ```
+
+### 2. Configuração no EasyPanel
+
+#### Variáveis de Ambiente Necessárias:
+```env
+# Obrigatórias
+DATABASE_URL=postgresql://[gerado automaticamente pelo EasyPanel]
+SECRET_KEY=your-super-secure-secret-key-here
+DEBUG=False
+ALLOWED_HOSTS=seu-dominio.easypanel.app
+
+# Opcionais para produção segura
+SECURE_SSL_REDIRECT=True
+SECURE_HSTS_SECONDS=31536000
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+```
+
+#### Passos no EasyPanel:
+1. Crie um novo projeto
+2. Conecte ao repositório GitHub
+3. EasyPanel detectará automaticamente o `nixpacks.toml`
+4. Configure as variáveis de ambiente
+5. O PostgreSQL será provisionado automaticamente
+
+### 3. Arquivos de Configuração Criados
+
+#### `nixpacks.toml`
+```toml
+[phases.build]
+dependsOn = ["install"]
+cmds = [
+  "python manage.py collectstatic --noinput",
+  "python manage.py migrate --noinput"
+]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "gunicorn redeconfianca.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120"
+
+[variables]
+PORT = "8000"
+PYTHON_VERSION = "3.11"
+
+[providers]
+postgres = true
+```
+
+#### `Procfile` (backup)
+```
+web: gunicorn redeconfianca.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120
+release: python manage.py migrate --noinput && python manage.py collectstatic --noinput
+```
+
+### 4. Dependências Atualizadas (`requirements.txt`)
+```
+# Principais adições:
+psycopg2-binary==2.9.9    # PostgreSQL driver
+dj-database-url==2.1.0    # Database URL parsing
+gunicorn==21.2.0          # Production server
+whitenoise==6.6.0         # Static files handling
+```
+
+### 5. Desenvolvimento Local com PostgreSQL
+
+#### Instalar PostgreSQL localmente:
+```bash
+# macOS
+brew install postgresql
+brew services start postgresql
+
+# Ubuntu/Debian
+sudo apt install postgresql postgresql-contrib
+sudo systemctl start postgresql
+```
+
+#### Configurar banco local:
+```bash
+# Conectar ao PostgreSQL
+psql postgres
+
+# Criar banco e usuário
+CREATE DATABASE redeconfianca_db;
+CREATE USER redeconfianca_user WITH PASSWORD 'sua_senha';
+GRANT ALL PRIVILEGES ON DATABASE redeconfianca_db TO redeconfianca_user;
+\q
+```
+
+#### Variáveis de ambiente local (`.env`):
+```env
+DATABASE_URL=postgresql://redeconfianca_user:sua_senha@localhost:5432/redeconfianca_db
+DEBUG=True
+SECRET_KEY=seu-secret-key-desenvolvimento
+ALLOWED_HOSTS=localhost,127.0.0.1
+```
+
+### 6. Comandos para Desenvolvimento
+
+```bash
+# Instalar dependências atualizadas
+pip install -r requirements.txt
+
+# Aplicar migrações
+python manage.py migrate
+
+# Criar superusuário
+python manage.py createsuperuser
+
+# Executar localmente
+python manage.py runserver
+
+# Coletar arquivos estáticos
+python manage.py collectstatic
+```
+
+### 7. Pós-Deploy no EasyPanel
+
+Após o deploy bem-sucedido:
+
+1. **Verificar logs** no painel do EasyPanel
+2. **Executar comandos via console** (se disponível):
+   ```bash
+   python manage.py createsuperuser
+   ```
+3. **Testar funcionalidades** principais
+4. **Configurar domínio customizado** (se necessário)
+
+### 8. Monitoramento e Manutenção
+
+#### Logs importantes:
+- Deploy logs no EasyPanel
+- Application logs via Gunicorn
+- PostgreSQL connection logs
+
+#### Backup do banco:
+```bash
+# Via pg_dump (se tiver acesso)
+pg_dump DATABASE_URL > backup.sql
+```
+
+### 9. Troubleshooting Comum
+
+#### Erro de migração:
+- Verificar se DATABASE_URL está correta
+- Verificar conectividade com PostgreSQL
+
+#### Arquivos estáticos não carregando:
+- Verificar se `collectstatic` executou corretamente
+- Confirmar configuração do WhiteNoise
+
+#### Erro 500:
+- Verificar SECRET_KEY
+- Verificar ALLOWED_HOSTS
+- Revisar logs de aplicação
+
+---
+
+## 📋 Checklist de Deploy
+
+- [ ] ✅ PostgreSQL configurado
+- [ ] ✅ Nixpacks configurado
+- [ ] ✅ Gunicorn configurado
+- [ ] ✅ WhiteNoise configurado
+- [ ] ✅ Variáveis de ambiente definidas
+- [ ] ✅ Migrações funcionando
+- [ ] ✅ Arquivos estáticos coletados
+- [ ] 🔄 Deploy no EasyPanel
+- [ ] 🔄 Testes pós-deploy
+- [ ] 🔄 Configuração de domínio
+- [ ] 🔄 Monitoramento ativo
+
+*Guia atualizado para PostgreSQL + EasyPanel - v2.0*
 
 ## 🐧 Deploy com Ubuntu/Linux
 

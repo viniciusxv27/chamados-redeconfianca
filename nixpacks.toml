@@ -1,0 +1,21 @@
+# Nixpacks Configuration for Django App
+
+[phases.build]
+dependsOn = ["install"]
+cmds = [
+  "python manage.py collectstatic --noinput",
+  "python manage.py migrate --noinput"
+]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "gunicorn redeconfianca.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120"
+
+[variables]
+PORT = "8000"
+PYTHON_VERSION = "3.11"
+
+[providers]
+postgres = true
