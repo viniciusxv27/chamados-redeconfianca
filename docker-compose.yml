@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: redeconfianca_chamados
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d redeconfianca_chamados"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/redeconfianca_chamados
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-local-development-key-change-in-production
+    volumes:
+      - .:/app
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo '🔄 Aguardando banco de dados...' &&
+        python manage.py migrate --noinput &&
+        echo '📁 Coletando arquivos estáticos...' &&
+        python manage.py collectstatic --noinput --clear &&
+        echo '👑 Verificando superusuário...' &&
+        python manage.py shell -c 'from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser(\"admin\", \"admin@example.com\", \"admin123\") if not User.objects.filter(is_superuser=True).exists() else print(\"Superusuário já existe\")' &&
+        echo '🚀 Iniciando servidor de desenvolvimento...' &&
+        python manage.py runserver 0.0.0.0:8000
+      "
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx para servir arquivos estáticos (opcional - para produção)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - staticfiles:/var/www/static
+      - media:/var/www/media
+    depends_on:
+      - web
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  staticfiles:
+  media:

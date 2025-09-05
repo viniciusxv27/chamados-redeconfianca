@@ -172,9 +172,9 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # Login/Logout URLs
-LOGIN_URL = '/login/'
+LOGIN_URL = '/users/login/'
 LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/login/'
+LOGOUT_REDIRECT_URL = '/users/login/'
 
 # Configurações de segurança para produção
 if not DEBUG:
