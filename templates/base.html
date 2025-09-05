@@ -22,7 +22,7 @@
     <link rel="apple-touch-icon" href="{% static 'images/logo3.png' %}">
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/logo3.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/logo3.png' %}">
-    <link rel="shortcut icon" href="{% static 'images/logo3.png' %}">>
+    <link rel="shortcut icon" href="{% static 'images/logo3.png' %}">
     
     <!-- Google Fonts - Montserrat -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -55,9 +55,9 @@
 <body class="bg-gray-100 min-h-screen font-montserrat">
     {% if user.is_authenticated %}
         <!-- Mobile Menu Button -->
-        <button id="mobileMenuToggle" class="lg:hidden fixed top-4 left-4 z-50 bg-black text-white p-2 rounded-md">
+        {% comment %} <button id="mobileMenuToggle" class="lg:hidden fixed top-4 left-4 z-50 bg-black text-white p-2 rounded-md">
             <i class="fas fa-bars"></i>
-        </button>
+        </button> {% endcomment %}
 
         <!-- Mobile Overlay -->
         <div id="mobileOverlay" class="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30 hidden"></div>
