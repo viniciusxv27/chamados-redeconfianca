@@ -19,7 +19,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
-from users.views import UserViewSet, SectorViewSet
+from users.views import UserViewSet, SectorViewSet, login_view, logout_view
 from tickets.views import TicketViewSet, CategoryViewSet
 from communications.views import home_feed
 
@@ -45,6 +45,8 @@ except ImportError:
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', home_feed, name='home'),  # Home feed como página inicial
+    path('login/', login_view, name='login'),  # Login na raiz
+    path('logout/', logout_view, name='logout'),  # Logout na raiz
     path('users/', include('users.urls')),
     path('tickets/', include('tickets.urls')),
     path('communications/', include('communications.urls')),
