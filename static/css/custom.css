@@ -193,10 +193,13 @@ h6 { font-size: 1rem; font-weight: 500; }
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+    /* Mobile sidebar adjustments */
     .sidebar {
         transform: translateX(-100%);
         transition: transform 0.3s ease;
+        width: 280px !important;
+        max-width: 90vw;
     }
     
     .sidebar.open {
@@ -206,6 +209,90 @@ h6 { font-size: 1rem; font-weight: 500; }
     .main-content {
         margin-left: 0;
     }
+    
+    /* Header adjustments for mobile */
+    .mobile-header {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Smaller sidebar on very small screens */
+    .sidebar {
+        width: 260px !important;
+    }
+    
+    /* Adjust font sizes */
+    .sidebar .text-sm {
+        font-size: 0.8rem;
+    }
+    
+    .sidebar .text-xs {
+        font-size: 0.7rem;
+    }
+}
+
+/* Mobile overlay */
+@media (max-width: 1023px) {
+    #mobileOverlay {
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+    }
+}
+
+/* Enhanced mobile responsiveness */
+@media (max-width: 640px) {
+    /* Hide desktop navigation in mobile */
+    .desktop-nav {
+        display: none;
+    }
+    
+    /* Compact header */
+    .mobile-compact {
+        padding: 0.5rem 1rem;
+    }
+    
+    /* Smaller text in sidebar */
+    .sidebar {
+        font-size: 0.9rem;
+    }
+}
+
+/* Desktop optimizations */
+@media (min-width: 1024px) {
+    /* Ensure proper sidebar behavior on desktop */
+    #sidebar {
+        transform: translateX(0) !important;
+    }
+    
+    /* Main content margin */
+    #mainContent {
+        margin-left: 16rem; /* 256px / 16 = 16rem */
+    }
+}
+
+/* Smooth transitions */
+.sidebar-transition {
+    transition: all 0.3s ease-in-out;
+}
+
+/* Better scrollbar for sidebar */
+.sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 2px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
 }
 
 /* Accessibility improvements */
