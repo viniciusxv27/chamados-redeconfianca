@@ -28,7 +28,7 @@ COPY . .
 
 # Criar diretórios necessários e definir permissões
 RUN mkdir -p staticfiles media logs && \
-    chmod +x deploy.sh
+    chmod +x deploy_new.sh
 
 # Criar um arquivo placeholder para staticfiles
 RUN touch staticfiles/.keep
