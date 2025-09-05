@@ -169,7 +169,8 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://chamados.redeconfianca.com.br"
+    "https://chamados.redeconfianca.com.br",
+    "http://chamados.redeconfianca.com.br"
 ]
 
 # Login/Logout URLs
