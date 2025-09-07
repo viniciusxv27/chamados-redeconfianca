@@ -48,7 +48,7 @@
 
     <!-- Formulário -->
     <div class="bg-white shadow-lg rounded-lg">
-        <form method="post" class="space-y-6 p-6">
+        <form method="post" enctype="multipart/form-data" class="space-y-6 p-6">
             {% csrf_token %}
             
             <!-- Informações Básicas -->
@@ -178,6 +178,71 @@
                 </div>
             </div>
 
+            <!-- Foto do Ativo -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-camera mr-2 text-indigo-600"></i>
+                    Foto do Ativo
+                </h3>
+                
+                <div class="mt-6">
+                    <!-- Preview da foto atual (se existir) -->
+                    {% if asset.photo %}
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Foto Atual</label>
+                        <div class="flex items-start space-x-4">
+                            <img src="{{ asset.photo.url }}" alt="Foto do {{ asset.nome }}" 
+                                 class="w-32 h-32 object-cover rounded-lg border border-gray-300 shadow-sm">
+                            <div class="flex-1">
+                                <p class="text-sm text-gray-600 mb-2">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Foto atual do ativo. Selecione uma nova foto abaixo para substituir.
+                                </p>
+                                <div class="flex items-center space-x-2 text-xs text-gray-500">
+                                    <i class="fas fa-file mr-1"></i>
+                                    <span>{{ asset.photo.name|slice:":30" }}{% if asset.photo.name|length > 30 %}...{% endif %}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Campo de upload -->
+                    <div>
+                        <label for="{{ form.photo.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {% if asset.photo %}Nova Foto{% else %}{{ form.photo.label }}{% endif %}
+                        </label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-indigo-400 transition-colors">
+                            <div class="space-y-1 text-center">
+                                <div id="photo-preview" class="hidden mb-4">
+                                    <img id="preview-image" src="" alt="Preview" class="mx-auto h-32 w-32 object-cover rounded-lg">
+                                </div>
+                                <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                                <div class="flex text-sm text-gray-600">
+                                    <label for="{{ form.photo.id_for_label }}" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                                        <span>Selecionar arquivo</span>
+                                        {{ form.photo }}
+                                    </label>
+                                    <p class="pl-1">ou arraste e solte</p>
+                                </div>
+                                <p class="text-xs text-gray-500">PNG, JPG, GIF até 10MB</p>
+                                {% if asset.photo %}
+                                <div class="flex items-center justify-center space-x-2 mt-2">
+                                    <input type="checkbox" name="photo-clear" id="photo-clear" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                    <label for="photo-clear" class="text-sm text-gray-600">Remover foto atual</label>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if form.photo.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.photo.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <!-- Botões -->
             <div class="flex justify-between pt-6 border-t border-gray-200">
                 <a href="{% if asset %}{% url 'assets:detail' asset.pk %}{% else %}{% url 'assets:list' %}{% endif %}" 
@@ -199,16 +264,92 @@
 
 {% block extra_js %}
 <script>
-    // Validação em tempo real
+    // Validação em tempo real e preview de imagem
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.querySelector('form');
         const patrimonio = document.getElementById('{{ form.patrimonio_numero.id_for_label }}');
+        const photoInput = document.getElementById('{{ form.photo.id_for_label }}');
+        const previewContainer = document.getElementById('photo-preview');
+        const previewImage = document.getElementById('preview-image');
         
         // Transformar número do patrimônio em maiúsculo
         if (patrimonio) {
             patrimonio.addEventListener('input', function() {
                 this.value = this.value.toUpperCase();
             });
+        }
+        
+        // Preview da imagem selecionada
+        if (photoInput) {
+            photoInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Validar tipo de arquivo
+                    if (!file.type.match('image.*')) {
+                        alert('Por favor, selecione apenas arquivos de imagem.');
+                        this.value = '';
+                        return;
+                    }
+                    
+                    // Validar tamanho (10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                        alert('O arquivo deve ter no máximo 10MB.');
+                        this.value = '';
+                        return;
+                    }
+                    
+                    // Mostrar preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImage.src = e.target.result;
+                        previewContainer.classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    previewContainer.classList.add('hidden');
+                }
+            });
+        }
+        
+        // Drag and drop para upload de foto
+        const dropZone = document.querySelector('.border-dashed');
+        if (dropZone) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight(e) {
+                dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
+            }
+            
+            function unhighlight(e) {
+                dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
+            }
+            
+            dropZone.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0) {
+                    photoInput.files = files;
+                    photoInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
         }
         
         // Validação do formulário

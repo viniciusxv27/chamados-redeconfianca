@@ -12,7 +12,8 @@ class AssetForm(forms.ModelForm):
             'setor', 
             'pdv', 
             'estado_fisico', 
-            'observacoes'
+            'observacoes',
+            'photo'
         ]
         widgets = {
             'patrimonio_numero': forms.TextInput(attrs={
@@ -42,6 +43,10 @@ class AssetForm(forms.ModelForm):
                 'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500',
                 'rows': 4,
                 'placeholder': 'Observações adicionais sobre o ativo'
+            }),
+            'photo': forms.ClearableFileInput(attrs={
+                'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500',
+                'accept': 'image/*'
             }),
         }
 

@@ -150,6 +150,29 @@
                     </dd>
                 </div>
                 {% endif %}
+                {% if asset.photo %}
+                <div class="{% if asset.observacoes %}bg-white{% else %}bg-gray-50{% endif %} px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">
+                        <i class="fas fa-camera mr-2"></i>
+                        Foto do Ativo
+                    </dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <div class="group relative">
+                            <img src="{{ asset.photo.url }}" 
+                                 alt="Foto de {{ asset.nome }}" 
+                                 class="w-64 h-48 object-cover rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
+                                 onclick="openPhotoModal(this.src)">
+                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded-lg flex items-center justify-center">
+                                <i class="fas fa-search-plus text-white text-2xl opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Clique na imagem para ampliar
+                        </p>
+                    </dd>
+                </div>
+                {% endif %}
                 <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                     <dt class="text-sm font-medium text-gray-500">
                         <i class="fas fa-user mr-2"></i>
@@ -211,4 +234,41 @@
         </div>
     </div>
 </div>
+
+<!-- Modal para ampliar foto -->
+<div id="photoModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+    <div class="relative max-w-4xl max-h-full">
+        <button onclick="closePhotoModal()" class="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-70 transition-colors">
+            <i class="fas fa-times text-xl"></i>
+        </button>
+        <img id="modalImage" src="" alt="Foto ampliada" class="max-w-full max-h-full object-contain rounded-lg">
+    </div>
+</div>
+
+<script>
+function openPhotoModal(imageSrc) {
+    document.getElementById('modalImage').src = imageSrc;
+    document.getElementById('photoModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closePhotoModal() {
+    document.getElementById('photoModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+// Fechar modal ao clicar fora da imagem
+document.getElementById('photoModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closePhotoModal();
+    }
+});
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !document.getElementById('photoModal').classList.contains('hidden')) {
+        closePhotoModal();
+    }
+});
+</script>
 {% endblock %}

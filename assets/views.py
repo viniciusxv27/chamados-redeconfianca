@@ -70,7 +70,7 @@ def asset_detail(request, pk):
 def asset_create(request):
     """Cria um novo ativo"""
     if request.method == 'POST':
-        form = AssetForm(request.POST)
+        form = AssetForm(request.POST, request.FILES)
         if form.is_valid():
             asset = form.save(commit=False)
             asset.created_by = request.user
@@ -94,7 +94,7 @@ def asset_edit(request, pk):
     asset = get_object_or_404(Asset, pk=pk)
     
     if request.method == 'POST':
-        form = AssetForm(request.POST, instance=asset)
+        form = AssetForm(request.POST, request.FILES, instance=asset)
         if form.is_valid():
             form.save()
             messages.success(request, f'Ativo {asset.patrimonio_numero} atualizado com sucesso!')
