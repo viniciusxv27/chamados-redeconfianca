@@ -17,6 +17,21 @@ class SystemLog(models.Model):
         ('USER_CREATE', 'Criação de Usuário'),
         ('USER_UPDATE', 'Atualização de Usuário'),
         ('ADMIN_ACTION', 'Ação Administrativa'),
+        ('PRIZE_CATEGORY_CREATE', 'Criação de Categoria de Prêmio'),
+        ('PRIZE_CATEGORY_UPDATE', 'Atualização de Categoria de Prêmio'),
+        ('PRIZE_CATEGORY_DELETE', 'Exclusão de Categoria de Prêmio'),
+        ('SECTOR_CREATE', 'Criação de Setor'),
+        ('SECTOR_EDIT', 'Edição de Setor'),
+        ('SECTOR_DELETE', 'Exclusão de Setor'),
+        ('CATEGORY_CREATE', 'Criação de Categoria'),
+        ('CATEGORY_UPDATE', 'Atualização de Categoria'),
+        ('CATEGORY_DELETE', 'Exclusão de Categoria'),
+        ('WEBHOOK_CREATE', 'Criação de Webhook'),
+        ('WEBHOOK_UPDATE', 'Atualização de Webhook'),
+        ('WEBHOOK_DELETE', 'Exclusão de Webhook'),
+        ('REPORT_CREATE', 'Criação de Denúncia'),
+        ('REPORT_UPDATE', 'Atualização de Denúncia'),
+        ('REPORT_COMMENT', 'Comentário em Denúncia'),
     ]
     
     user = models.ForeignKey(
@@ -26,7 +41,7 @@ class SystemLog(models.Model):
         blank=True,
         verbose_name="Usuário"
     )
-    action_type = models.CharField(max_length=20, choices=ACTION_TYPES, verbose_name="Tipo de Ação")
+    action_type = models.CharField(max_length=50, choices=ACTION_TYPES, verbose_name="Tipo de Ação")
     description = models.TextField(verbose_name="Descrição")
     ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="Endereço IP")
     user_agent = models.TextField(blank=True, verbose_name="User Agent")
