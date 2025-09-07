@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from decimal import Decimal
+from core.utils import upload_user_profile_photo
 
 
 class Sector(models.Model):
@@ -32,7 +33,7 @@ class User(AbstractUser):
     balance_cs = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo C$")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Avatar")
-    profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True, verbose_name="Foto de Perfil")
+    profile_picture = models.ImageField(upload_to=upload_user_profile_photo, blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

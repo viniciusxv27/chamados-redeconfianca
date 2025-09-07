@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from decimal import Decimal
+from core.utils import upload_prize_image
 
 
 class PrizeCategory(models.Model):
@@ -33,7 +34,7 @@ class Prize(models.Model):
     description = models.TextField(verbose_name="Descrição")
     category = models.ForeignKey(PrizeCategory, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Categoria")
     value_cs = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor em C$")
-    image = models.ImageField(upload_to='prizes/', blank=True, null=True, verbose_name="Imagem")
+    image = models.ImageField(upload_to=upload_prize_image, blank=True, null=True, verbose_name="Imagem")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='NORMAL', verbose_name="Prioridade")
     stock = models.PositiveIntegerField(default=0, verbose_name="Estoque")

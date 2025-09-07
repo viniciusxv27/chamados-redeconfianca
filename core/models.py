@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from core.utils import upload_tutorial_pdf, upload_report_evidence
 
 User = settings.AUTH_USER_MODEL
 
@@ -60,7 +61,7 @@ class SystemLog(models.Model):
 class Tutorial(models.Model):
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(verbose_name="Descrição")
-    pdf_file = models.FileField(upload_to='tutorials/', verbose_name="Arquivo PDF")
+    pdf_file = models.FileField(upload_to=upload_tutorial_pdf, verbose_name="Arquivo PDF")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
@@ -115,7 +116,7 @@ class Report(models.Model):
     report_type = models.CharField(max_length=30, choices=REPORT_TYPES, verbose_name="Tipo de Denúncia")
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(verbose_name="Descrição")
-    evidence = models.FileField(upload_to='reports/evidence/', blank=True, null=True, verbose_name="Evidência")
+    evidence = models.FileField(upload_to=upload_report_evidence, blank=True, null=True, verbose_name="Evidência")
     
     # Metadados
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")

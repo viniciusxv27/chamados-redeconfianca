@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from core.utils import upload_asset_photo
 
 
 class Asset(models.Model):
@@ -23,7 +24,7 @@ class Asset(models.Model):
         verbose_name='Estado Físico'
     )
     observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
-    photo = models.ImageField(upload_to='assets/', blank=True, null=True, verbose_name='Foto do Asset')
+    photo = models.ImageField(upload_to=upload_asset_photo, blank=True, null=True, verbose_name='Foto do Asset')
     
     # Campos de auditoria
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
