@@ -10,7 +10,8 @@ class AssetAdmin(admin.ModelAdmin):
         'localizado', 
         'setor', 
         'pdv', 
-        'estado_fisico', 
+        'estado_fisico',
+        'has_photo',
         'created_by',
         'created_at'
     ]
@@ -36,7 +37,7 @@ class AssetAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Informações Básicas', {
-            'fields': ('patrimonio_numero', 'nome')
+            'fields': ('patrimonio_numero', 'nome', 'photo')
         }),
         ('Localização', {
             'fields': ('localizado', 'setor', 'pdv')
@@ -49,6 +50,12 @@ class AssetAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+    
+    def has_photo(self, obj):
+        """Indica se o asset tem foto"""
+        return bool(obj.photo)
+    has_photo.boolean = True
+    has_photo.short_description = 'Tem Foto'
     
     def save_model(self, request, obj, form, change):
         if not change:  # Se é um novo objeto

@@ -3,6 +3,7 @@
 {% block title %}{{ communication.title }}{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
@@ -17,16 +18,16 @@
                 </div>
                 <div class="flex items-center space-x-3">
                     {% if communication.sender == user or user.hierarchy == 'SUPERADMIN' %}
-                        <a href="{% url 'edit_communication' communication.id %}" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center">
+                        <a href="{% url 'communications:edit_communication' communication.id %}" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center">
                             <i class="fas fa-edit mr-2"></i>
                             Editar
                         </a>
-                        <a href="{% url 'delete_communication' communication.id %}" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center">
+                        <a href="{% url 'communications:delete_communication' communication.id %}" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center">
                             <i class="fas fa-trash mr-2"></i>
                             Excluir
                         </a>
                     {% endif %}
-                    <a href="{% url 'communications_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <a href="{% url 'communications:communications_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
                         <i class="fas fa-arrow-left mr-2"></i>
                         Voltar
                     </a>
@@ -78,6 +79,177 @@
                 <!-- Reactions Section -->
                 <div class="mt-6 pt-4 border-t border-gray-200">
                     {% include 'communications/reaction_buttons.html' with communication=communication %}
+                    
+                    <!-- Reactions Details -->
+                    {% if reactions_info.likes.count > 0 or reactions_info.loves.count > 0 or reactions_info.claps.count > 0 or reactions_info.views.count > 0 %}
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- Views -->
+                            {% if reactions_info.views.count > 0 %}
+                            <div class="bg-gray-50 rounded-lg p-3">
+                                <div class="flex items-center mb-2">
+                                    <i class="fas fa-eye text-gray-600 mr-2"></i>
+                                    <span class="font-medium text-sm">{{ reactions_info.views.count }} visualizações</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for user_reaction in reactions_info.views.users %}
+                                    <div class="flex items-center space-x-1" title="{{ user_reaction.full_name }}">
+                                        {% if user_reaction.profile_picture %}
+                                            <img src="{{ user_reaction.profile_picture.url }}" alt="{{ user_reaction.full_name }}" class="w-6 h-6 rounded-full">
+                                        {% else %}
+                                            <div class="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center">
+                                                <span class="text-white text-xs">{{ user_reaction.first_name.0 }}{{ user_reaction.last_name.0 }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% if reactions_info.views.count > 10 %}
+                                        <span class="text-xs text-gray-500">+{{ reactions_info.views.count|add:"-10" }} outros</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Likes -->
+                            {% if reactions_info.likes.count > 0 %}
+                            <div class="bg-blue-50 rounded-lg p-3">
+                                <div class="flex items-center mb-2">
+                                    <i class="fas fa-thumbs-up text-blue-600 mr-2"></i>
+                                    <span class="font-medium text-sm">{{ reactions_info.likes.count }} curtidas</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for user_reaction in reactions_info.likes.users %}
+                                    <div class="flex items-center space-x-1" title="{{ user_reaction.full_name }}">
+                                        {% if user_reaction.profile_picture %}
+                                            <img src="{{ user_reaction.profile_picture.url }}" alt="{{ user_reaction.full_name }}" class="w-6 h-6 rounded-full">
+                                        {% else %}
+                                            <div class="w-6 h-6 bg-blue-400 rounded-full flex items-center justify-center">
+                                                <span class="text-white text-xs">{{ user_reaction.first_name.0 }}{{ user_reaction.last_name.0 }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% if reactions_info.likes.count > 10 %}
+                                        <span class="text-xs text-gray-500">+{{ reactions_info.likes.count|add:"-10" }} outros</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Loves -->
+                            {% if reactions_info.loves.count > 0 %}
+                            <div class="bg-red-50 rounded-lg p-3">
+                                <div class="flex items-center mb-2">
+                                    <i class="fas fa-heart text-red-600 mr-2"></i>
+                                    <span class="font-medium text-sm">{{ reactions_info.loves.count }} corações</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for user_reaction in reactions_info.loves.users %}
+                                    <div class="flex items-center space-x-1" title="{{ user_reaction.full_name }}">
+                                        {% if user_reaction.profile_picture %}
+                                            <img src="{{ user_reaction.profile_picture.url }}" alt="{{ user_reaction.full_name }}" class="w-6 h-6 rounded-full">
+                                        {% else %}
+                                            <div class="w-6 h-6 bg-red-400 rounded-full flex items-center justify-center">
+                                                <span class="text-white text-xs">{{ user_reaction.first_name.0 }}{{ user_reaction.last_name.0 }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% if reactions_info.loves.count > 10 %}
+                                        <span class="text-xs text-gray-500">+{{ reactions_info.loves.count|add:"-10" }} outros</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Claps -->
+                            {% if reactions_info.claps.count > 0 %}
+                            <div class="bg-yellow-50 rounded-lg p-3">
+                                <div class="flex items-center mb-2">
+                                    <i class="fas fa-hands-clapping text-yellow-600 mr-2"></i>
+                                    <span class="font-medium text-sm">{{ reactions_info.claps.count }} aplausos</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for user_reaction in reactions_info.claps.users %}
+                                    <div class="flex items-center space-x-1" title="{{ user_reaction.full_name }}">
+                                        {% if user_reaction.profile_picture %}
+                                            <img src="{{ user_reaction.profile_picture.url }}" alt="{{ user_reaction.full_name }}" class="w-6 h-6 rounded-full">
+                                        {% else %}
+                                            <div class="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
+                                                <span class="text-white text-xs">{{ user_reaction.first_name.0 }}{{ user_reaction.last_name.0 }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% if reactions_info.claps.count > 10 %}
+                                        <span class="text-xs text-gray-500">+{{ reactions_info.claps.count|add:"-10" }} outros</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Status Information -->
+                    {% if status_info.ciente.count > 0 or status_info.duvida.count > 0 %}
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <h4 class="font-medium text-gray-900 mb-3">Status dos Usuários</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Usuários Cientes -->
+                            {% if status_info.ciente.count > 0 %}
+                            <div class="bg-green-50 rounded-lg p-3">
+                                <div class="flex items-center mb-2">
+                                    <i class="fas fa-eye text-green-600 mr-2"></i>
+                                    <span class="font-medium text-sm">{{ status_info.ciente.count }} estão cientes</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for user_status in status_info.ciente.users %}
+                                    <div class="flex items-center space-x-1" title="{{ user_status.full_name }}">
+                                        {% if user_status.profile_picture %}
+                                            <img src="{{ user_status.profile_picture.url }}" alt="{{ user_status.full_name }}" class="w-6 h-6 rounded-full">
+                                        {% else %}
+                                            <div class="w-6 h-6 bg-green-400 rounded-full flex items-center justify-center">
+                                                <span class="text-white text-xs">{{ user_status.first_name.0 }}{{ user_status.last_name.0 }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% if status_info.ciente.count > 10 %}
+                                        <span class="text-xs text-gray-500">+{{ status_info.ciente.count|add:"-10" }} outros</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Usuários com Dúvida -->
+                            {% if status_info.duvida.count > 0 %}
+                            <div class="bg-yellow-50 rounded-lg p-3">
+                                <div class="flex items-center mb-2">
+                                    <i class="fas fa-question text-yellow-600 mr-2"></i>
+                                    <span class="font-medium text-sm">{{ status_info.duvida.count }} têm dúvidas</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for user_status in status_info.duvida.users %}
+                                    <div class="flex items-center space-x-1" title="{{ user_status.full_name }}">
+                                        {% if user_status.profile_picture %}
+                                            <img src="{{ user_status.profile_picture.url }}" alt="{{ user_status.full_name }}" class="w-6 h-6 rounded-full">
+                                        {% else %}
+                                            <div class="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
+                                                <span class="text-white text-xs">{{ user_status.first_name.0 }}{{ user_status.last_name.0 }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% if status_info.duvida.count > 10 %}
+                                        <span class="text-xs text-gray-500">+{{ status_info.duvida.count|add:"-10" }} outros</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             
@@ -169,7 +341,7 @@
             <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Confirmação de Leitura</h3>
                 
-                <form method="post" action="{% url 'update_communication_status' communication.id %}" class="mb-4">
+                <form method="post" action="{% url 'communications:update_communication_status' communication.id %}" class="mb-4">
                     {% csrf_token %}
                     <div class="flex space-x-3">
                         <button type="submit" name="status" value="ESTOU_CIENTE" 
@@ -352,7 +524,7 @@ function deleteComment(commentId) {
         return;
     }
     
-    fetch(`{% url "delete_comment" 0 %}`.replace('0', commentId), {
+        fetch(`{% url "communications:delete_comment" 0 %}`.replace('0', commentId), {
         method: 'POST',
         headers: {
             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,

@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block title %}Nova Denúncia{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-flag text-red-500 mr-3"></i>
+                        Nova Denúncia
+                    </h1>
+                    <p class="text-gray-600 mt-1">Reporte comportamentos inadequados ou problemas</p>
+                </div>
+                <a href="{% url 'reports:reports_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <form method="post" enctype="multipart/form-data" class="p-6">
+                {% csrf_token %}
+                
+                <!-- Alert Box -->
+                <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                        <i class="fas fa-info-circle text-blue-500 mt-1 mr-3"></i>
+                        <div>
+                            <h3 class="text-sm font-semibold text-blue-800">Informações Importantes</h3>
+                            <p class="text-sm text-blue-700 mt-1">
+                                • Sua denúncia será tratada com confidencialidade<br>
+                                • Você pode optar por fazer uma denúncia anônima<br>
+                                • Denúncias falsas podem resultar em medidas disciplinares
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-6">
+                    <!-- Tipo de Denúncia -->
+                    <div>
+                        <label for="report_type" class="block text-sm font-medium text-gray-700 mb-2">
+                            Tipo de Denúncia *
+                        </label>
+                        <select id="report_type" name="report_type" required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="">Selecione o tipo...</option>
+                            {% for value, label in report_types %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Usuário Denunciado -->
+                    <div>
+                        <label for="reported_user" class="block text-sm font-medium text-gray-700 mb-2">
+                            Usuário Envolvido (opcional)
+                        </label>
+                        <select id="reported_user" name="reported_user"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="">Nenhum usuário específico</option>
+                            {% for user_item in users %}
+                            <option value="{{ user_item.id }}">{{ user_item.full_name }} - {{ user_item.email }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Deixe em branco se a denúncia não envolve um usuário específico</p>
+                    </div>
+
+                    <!-- Título -->
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                            Título *
+                        </label>
+                        <input type="text" id="title" name="title" required maxlength="200"
+                               placeholder="Resumo do problema..."
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+
+                    <!-- Descrição -->
+                    <div>
+                        <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                            Descrição Detalhada *
+                        </label>
+                        <textarea id="description" name="description" rows="6" required
+                                  placeholder="Descreva detalhadamente o que aconteceu, quando, onde e qualquer informação relevante..."
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+                    </div>
+
+                    <!-- Evidência -->
+                    <div>
+                        <label for="evidence" class="block text-sm font-medium text-gray-700 mb-2">
+                            Evidência (opcional)
+                        </label>
+                        <input type="file" id="evidence" name="evidence" 
+                               accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <p class="text-xs text-gray-500 mt-1">
+                            Anexe screenshots, documentos ou outros arquivos que comprovem sua denúncia
+                        </p>
+                    </div>
+
+                    <!-- Denúncia Anônima -->
+                    <div class="flex items-center">
+                        <input type="checkbox" id="is_anonymous" name="is_anonymous" 
+                               class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2">
+                        <label for="is_anonymous" class="ml-2 text-sm text-gray-700">
+                            Fazer denúncia anônima
+                        </label>
+                    </div>
+                    <p class="text-xs text-gray-500 -mt-4 ml-6">
+                        Em denúncias anônimas, sua identidade não será revelada ao investigar o caso
+                    </p>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="pt-6 border-t border-gray-200 mt-8">
+                    <div class="flex justify-end space-x-3">
+                        <a href="{% url 'reports:reports_list' %}" 
+                           class="px-6 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center">
+                            <i class="fas fa-flag mr-2"></i>
+                            Enviar Denúncia
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

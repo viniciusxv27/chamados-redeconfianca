@@ -23,8 +23,12 @@ urlpatterns = [
     path('manage/cs/<int:user_id>/add/', views.add_cs_view, name='add_cs'),
     path('manage/sectors/', views.manage_sectors_view, name='manage_sectors'),
     path('manage/sectors/create/', views.create_sector_view, name='create_sector'),
+    path('manage/sectors/<int:sector_id>/edit/', views.edit_sector_view, name='edit_sector'),
+    path('manage/sectors/<int:sector_id>/delete/', views.delete_sector_view, name='delete_sector'),
     path('manage/categories/', views.manage_categories_view, name='manage_categories'),
     path('manage/categories/create/', views.create_category_view, name='create_category'),
+    path('manage/categories/<int:category_id>/edit/', views.edit_category_view, name='edit_category'),
+    path('manage/categories/<int:category_id>/delete/', views.delete_category_view, name='delete_category'),
     path('manage/webhooks/', views.manage_webhooks_view, name='manage_webhooks'),
     path('manage/webhooks/create/', views.create_webhook_view, name='create_webhook'),
     path('manage/tutorials/', views.manage_tutorials_view, name='manage_tutorials'),
@@ -43,4 +47,9 @@ urlpatterns = [
     path('manage/prize-categories/create/', views.create_prize_category_view, name='create_prize_category'),
     path('manage/prize-categories/<int:category_id>/edit/', views.edit_prize_category_view, name='edit_prize_category'),
     path('manage/prize-categories/<int:category_id>/delete/', views.delete_prize_category_view, name='delete_prize_category'),
+    
+    # C$ Approval System
+    path('manage/cs-transactions/', views.pending_cs_transactions_view, name='pending_cs_transactions'),
+    path('manage/cs-transactions/<int:transaction_id>/approve/', views.approve_cs_transaction, name='approve_cs_transaction'),
+    path('manage/cs-transactions/<int:transaction_id>/reject/', views.reject_cs_transaction, name='reject_cs_transaction'),
 ]

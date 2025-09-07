@@ -57,10 +57,13 @@ class Prize(models.Model):
     def available(self):
         if not self.is_active:
             return False
-        if not self.unlimited_stock and self.redeemed_count >= self.stock:
-            return False
         if self.valid_until and self.valid_until < timezone.now().date():
             return False
+        if not self.unlimited_stock:
+            # Contar apenas resgates aprovados e entregues
+            approved_count = self.redemption_set.filter(status__in=['APROVADO', 'ENTREGUE']).count()
+            if approved_count >= self.stock:
+                return False
         return True
     
     @property
@@ -69,7 +72,9 @@ class Prize(models.Model):
             return 100
         if self.stock == 0:
             return 0
-        return max(0, ((self.stock - self.redeemed_count) / self.stock) * 100)
+        # Contar apenas resgates aprovados e entregues
+        approved_count = self.redemption_set.filter(status__in=['APROVADO', 'ENTREGUE']).count()
+        return max(0, ((self.stock - approved_count) / self.stock) * 100)
 
 
 class Redemption(models.Model):
@@ -82,10 +87,11 @@ class Redemption(models.Model):
     
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário")
     prize = models.ForeignKey(Prize, on_delete=models.CASCADE, verbose_name="Prêmio")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDENTE', verbose_name="Status")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE', verbose_name="Status")
     redeemed_at = models.DateTimeField(auto_now_add=True, verbose_name="Data do Resgate")
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Data da Aprovação")
     delivered_at = models.DateTimeField(null=True, blank=True, verbose_name="Data da Entrega")
+    delivery_notes = models.TextField(blank=True, verbose_name="Observações de Entrega")
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -113,10 +119,17 @@ class CSTransaction(models.Model):
         ('ADJUSTMENT', 'Ajuste'),
     ]
     
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente'),
+        ('APPROVED', 'Aprovado'),
+        ('REJECTED', 'Rejeitado'),
+    ]
+    
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário")
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor")
     transaction_type = models.CharField(max_length=15, choices=TRANSACTION_TYPES, verbose_name="Tipo")
     description = models.CharField(max_length=200, verbose_name="Descrição")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='APPROVED', verbose_name="Status")
     related_redemption = models.ForeignKey(
         Redemption, 
         on_delete=models.SET_NULL, 
@@ -130,6 +143,15 @@ class CSTransaction(models.Model):
         related_name='created_transactions',
         verbose_name="Criado por"
     )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_transactions',
+        verbose_name="Aprovado por"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Data de Aprovação")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data")
     
     class Meta:

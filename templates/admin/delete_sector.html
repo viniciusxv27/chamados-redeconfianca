@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Deletar Setor{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+        </div>
+        <h1 class="text-3xl font-bold text-gray-900">Deletar Setor</h1>
+        <p class="text-gray-600 mt-2">Esta ação não pode ser desfeita</p>
+    </div>
+
+    <!-- Warning Card -->
+    <div class="bg-white rounded-lg shadow-sm p-8">
+        <div class="text-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">
+                Tem certeza que deseja deletar o setor "{{ sector.name }}"?
+            </h2>
+            {% if sector.description %}
+                <p class="text-gray-600">{{ sector.description }}</p>
+            {% endif %}
+        </div>
+
+        {% if users_count > 0 %}
+        <!-- Block deletion if users exist -->
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-circle text-red-500 mt-1 mr-3"></i>
+                <div>
+                    <h3 class="font-semibold text-red-900">Não é possível deletar este setor</h3>
+                    <p class="text-red-700 mt-1">
+                        Existem <strong>{{ users_count }} usuário{{ users_count|pluralize }}</strong> vinculado{{ users_count|pluralize }} a este setor. 
+                        Para deletar o setor, primeiro mova todos os usuários para outros setores ou desative-os.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Allow deletion -->
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-yellow-600 mt-1 mr-3"></i>
+                <div>
+                    <p class="text-yellow-800">
+                        O setor será permanentemente removido do sistema. Esta ação não pode ser desfeita.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Actions -->
+        <div class="flex justify-center space-x-4">
+            <a href="{% url 'manage_sectors' %}" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Voltar
+            </a>
+            
+            {% if users_count == 0 %}
+            <form method="post" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors" onclick="return confirm('Tem CERTEZA que deseja deletar este setor? Esta ação não pode ser desfeita.')">
+                    <i class="fas fa-trash mr-2"></i>
+                    Sim, Deletar Setor
+                </button>
+            </form>
+            {% else %}
+            <a href="{% url 'manage_users' %}" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-users mr-2"></i>
+                Gerenciar Usuários
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

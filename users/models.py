@@ -26,7 +26,8 @@ class User(AbstractUser):
     ]
     
     email = models.EmailField(unique=True)
-    sector = models.ForeignKey(Sector, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Setor")
+    sectors = models.ManyToManyField(Sector, blank=True, verbose_name="Setores", related_name="users")
+    sector = models.ForeignKey(Sector, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Setor Principal", help_text="Setor principal para compatibilidade", related_name="primary_users")
     hierarchy = models.CharField(max_length=20, choices=HIERARCHY_CHOICES, default='PADRAO', verbose_name="Hierarquia")
     balance_cs = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo C$")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
@@ -51,8 +52,73 @@ class User(AbstractUser):
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip()
     
+    @property
+    def primary_sector(self):
+        """Retorna o setor principal ou o primeiro setor da lista"""
+        if self.sector:
+            return self.sector
+        return self.sectors.first()
+    
+    @property
+    def all_sectors(self):
+        """Retorna todos os setores do usuário"""
+        return self.sectors.all()
+    
+    @property
+    def sectors_display(self):
+        """Retorna uma string com todos os setores separados por vírgula"""
+        sectors = self.sectors.all()
+        if sectors:
+            return ", ".join([sector.name for sector in sectors])
+        return "Nenhum setor"
+    
+    def is_in_sector(self, sector):
+        """Verifica se o usuário pertence a um setor específico"""
+        return self.sectors.filter(id=sector.id).exists()
+    
+    def add_sector(self, sector):
+        """Adiciona um setor ao usuário"""
+        self.sectors.add(sector)
+        # Se não tem setor principal, define este como principal
+        if not self.sector:
+            self.sector = sector
+            self.save()
+    
+    def remove_sector(self, sector):
+        """Remove um setor do usuário"""
+        self.sectors.remove(sector)
+        # Se o setor removido era o principal, define outro como principal
+        if self.sector == sector:
+            self.sector = self.sectors.first()
+            self.save()
+    
     def can_manage_users(self):
         return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
+    
+    @property
+    def calculated_balance_cs(self):
+        """Calcula o saldo C$ baseado apenas em transações aprovadas"""
+        from prizes.models import CSTransaction
+        from django.db.models import Sum, Q
+        
+        # Somar créditos aprovados
+        credits = CSTransaction.objects.filter(
+            user=self,
+            transaction_type__in=['CREDIT', 'ADJUSTMENT'],
+            status='APPROVED',
+            amount__gt=0
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        # Somar débitos aprovados (valores negativos ou tipos DEBIT/REDEMPTION)
+        debits = CSTransaction.objects.filter(
+            user=self,
+            status='APPROVED'
+        ).filter(
+            Q(transaction_type__in=['DEBIT', 'REDEMPTION']) |
+            Q(amount__lt=0)
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        return abs(credits) - abs(debits)
 
     def can_manage_prizes(self):
         return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']

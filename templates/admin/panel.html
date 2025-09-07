@@ -44,7 +44,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-600">Chamados Abertos</p>
-                    <p class="text-2xl font-semibold text-gray-900">12</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ open_tickets_count|default:"0" }}</p>
                 </div>
             </div>
         </div>
@@ -56,7 +56,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-600">C$ em Circulação</p>
-                    <p class="text-2xl font-semibold text-primary">85.000</p>
+                    <p class="text-2xl font-semibold text-primary">{{ total_cs_circulation|floatformat:0|default:"0" }}</p>
                 </div>
             </div>
         </div>
@@ -122,6 +122,13 @@
                 <a href="{% url 'manage_cs' %}" class="block bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-center text-sm">
                     Gerenciar C$
                 </a>
+                <a href="{% url 'pending_cs_transactions' %}" class="block bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-center text-sm">
+                    <i class="fas fa-clock mr-1"></i>
+                    Aprovar C$ 
+                    {% if pending_transactions_count > 0 %}
+                        <span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full ml-1">{{ pending_transactions_count }}</span>
+                    {% endif %}
+                </a>
                 <a href="{% url 'manage_prizes' %}" class="block bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center text-sm">
                     Prêmios
                 </a>
@@ -141,7 +148,7 @@
             </h3>
             <p class="text-gray-600 mb-4 text-sm">Comunicados e webhooks</p>
             <div class="space-y-2">
-                <a href="{% url 'create_communication' %}" class="block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center text-sm">
+                <a href="{% url 'communications:create_communication' %}" class="block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center text-sm">
                     Criar Comunicado
                 </a>
                 <a href="{% url 'manage_webhooks' %}" class="block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-center text-sm">

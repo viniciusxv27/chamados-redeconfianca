@@ -4,8 +4,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Sum
+from django.db import transaction
 from decimal import Decimal
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -19,7 +21,7 @@ import json
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect('home')
     
     if request.method == 'POST':
         email = request.POST.get('email')
@@ -29,7 +31,7 @@ def login_view(request):
         if user is not None:
             login(request, user)
             log_action(user, 'USER_LOGIN', f'Login realizado: {email}', request)
-            return redirect('dashboard')
+            return redirect('home')
         else:
             messages.error(request, 'Email ou senha inválidos.')
     
@@ -111,10 +113,33 @@ def admin_panel_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('dashboard')
     
+    from prizes.models import CSTransaction
+    from tickets.models import Ticket
+    from django.db.models import Sum
+    
+    # Calcular C$ em circulação (soma de todos os saldos dos usuários)
+    total_cs_circulation = User.objects.aggregate(
+        total=Sum('balance_cs')
+    )['total'] or 0
+    
+    # Contar chamados abertos
+    open_tickets_count = Ticket.objects.filter(
+        status__in=['ABERTO', 'EM_ANDAMENTO']
+    ).count()
+    
+    # Contar transações C$ pendentes
+    pending_transactions_count = CSTransaction.objects.filter(
+        status='PENDING',
+        transaction_type='CREDIT'
+    ).count()
+    
     context = {
         'total_users': User.objects.count(),
         'total_sectors': Sector.objects.count(),
         'recent_users': User.objects.order_by('-created_at')[:5],
+        'pending_transactions_count': pending_transactions_count,
+        'total_cs_circulation': total_cs_circulation,
+        'open_tickets_count': open_tickets_count,
         'user': request.user,
     }
     return render(request, 'admin/panel.html', context)
@@ -213,6 +238,7 @@ def edit_user_view(request, user_id):
         first_name = request.POST.get('first_name')
         last_name = request.POST.get('last_name')
         sector_id = request.POST.get('sector')
+        sectors_ids = request.POST.getlist('sectors')  # Múltiplos setores
         hierarchy = request.POST.get('hierarchy')
         phone = request.POST.get('phone')
         is_active = request.POST.get('is_active') == 'on'
@@ -233,6 +259,16 @@ def edit_user_view(request, user_id):
                 user_to_edit.phone = phone
                 user_to_edit.is_active = is_active
                 user_to_edit.save()
+                
+                # Atualizar setores múltiplos
+                if sectors_ids:
+                    sectors = Sector.objects.filter(id__in=sectors_ids)
+                    user_to_edit.sectors.set(sectors)
+                    
+                    # Se não tem setor principal definido, definir o primeiro da lista
+                    if not user_to_edit.sector and sectors.exists():
+                        user_to_edit.sector = sectors.first()
+                        user_to_edit.save()
                 
                 log_action(
                     request.user, 
@@ -302,26 +338,28 @@ def add_cs_view(request, user_id):
                 return redirect('manage_cs')
             
             target_user.balance_cs += Decimal(str(amount))
-            target_user.save()
+            # Para créditos manuais, não adicionar diretamente ao saldo
+            # A transação fica pendente até aprovação
             
-            # Registrar transação
+            # Registrar transação como pendente de aprovação
             from prizes.models import CSTransaction
-            CSTransaction.objects.create(
+            transaction = CSTransaction.objects.create(
                 user=target_user,
                 amount=amount,
                 transaction_type='CREDIT',
                 description=description or f'Adição manual de C$',
+                status='PENDING',  # Transação fica pendente
                 created_by=request.user
             )
             
             log_action(
                 request.user, 
-                'CS_ADD', 
-                f'Adicionado C$ {amount} para {target_user.full_name}',
+                'CS_ADD_REQUEST', 
+                f'Solicitado C$ {amount} para {target_user.full_name} (Aguardando aprovação)',
                 request
             )
             
-            messages.success(request, f'C$ {amount} adicionado para {target_user.full_name}!')
+            messages.success(request, f'Solicitação de C$ {amount} para {target_user.full_name} enviada para aprovação!')
             
         except ValueError:
             messages.error(request, 'Valor inválido.')
@@ -383,6 +421,88 @@ def create_sector_view(request):
         'user': request.user,
     }
     return render(request, 'admin/create_sector.html', context)
+
+
+@login_required
+def edit_sector_view(request, sector_id):
+    """Editar setor"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    sector = get_object_or_404(Sector, id=sector_id)
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        
+        try:
+            if Sector.objects.filter(name=name).exclude(id=sector_id).exists():
+                messages.error(request, 'Setor com este nome já existe.')
+            else:
+                old_name = sector.name
+                sector.name = name
+                sector.description = description
+                sector.save()
+                
+                log_action(
+                    request.user, 
+                    'SECTOR_EDIT', 
+                    f'Setor editado: {old_name} → {sector.name}',
+                    request
+                )
+                
+                messages.success(request, f'Setor {sector.name} atualizado com sucesso!')
+                return redirect('manage_sectors')
+                
+        except Exception as e:
+            messages.error(request, f'Erro ao editar setor: {str(e)}')
+    
+    context = {
+        'sector': sector,
+        'user': request.user,
+    }
+    return render(request, 'admin/edit_sector.html', context)
+
+
+@login_required
+def delete_sector_view(request, sector_id):
+    """Deletar setor"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    sector = get_object_or_404(Sector, id=sector_id)
+    
+    if request.method == 'POST':
+        # Verificar se há usuários usando este setor
+        users_count = User.objects.filter(sector=sector).count()
+        if users_count > 0:
+            messages.error(request, f'Não é possível deletar o setor "{sector.name}" pois há {users_count} usuários vinculados a ele.')
+            return redirect('manage_sectors')
+        
+        sector_name = sector.name
+        sector.delete()
+        
+        log_action(
+            request.user,
+            'SECTOR_DELETE',
+            f'Setor deletado: {sector_name}',
+            request
+        )
+        
+        messages.success(request, f'Setor "{sector_name}" deletado com sucesso!')
+        return redirect('manage_sectors')
+    
+    # Contar usuários vinculados
+    users_count = User.objects.filter(sector=sector).count()
+    
+    context = {
+        'sector': sector,
+        'users_count': users_count,
+        'user': request.user,
+    }
+    return render(request, 'admin/delete_sector.html', context)
 
 
 @login_required
@@ -451,6 +571,96 @@ def create_category_view(request):
     return render(request, 'admin/create_category.html', context)
 
 
+@login_required
+def edit_category_view(request, category_id):
+    """Editar categoria"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    from tickets.models import Category
+    category = get_object_or_404(Category, id=category_id)
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        sector_id = request.POST.get('sector')
+        default_description = request.POST.get('default_description', '')
+        webhook_url = request.POST.get('webhook_url', '')
+        requires_approval = request.POST.get('requires_approval') == 'on'
+        is_active = request.POST.get('is_active') == 'on'
+        
+        try:
+            sector = get_object_or_404(Sector, id=sector_id)
+            
+            # Verificar se já existe uma categoria com o mesmo nome no setor (excluindo a atual)
+            if Category.objects.filter(name=name, sector=sector).exclude(id=category_id).exists():
+                messages.error(request, 'Categoria com este nome já existe neste setor.')
+            else:
+                category.name = name
+                category.sector = sector
+                category.default_description = default_description
+                category.webhook_url = webhook_url
+                category.requires_approval = requires_approval
+                category.is_active = is_active
+                category.save()
+                
+                log_action(
+                    request.user, 
+                    'CATEGORY_UPDATE', 
+                    f'Categoria atualizada: {category.name} - {category.sector.name}',
+                    request
+                )
+                
+                messages.success(request, f'Categoria {category.name} atualizada com sucesso!')
+                return redirect('manage_categories')
+                
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar categoria: {str(e)}')
+    
+    context = {
+        'category': category,
+        'sectors': Sector.objects.all(),
+        'user': request.user,
+    }
+    return render(request, 'admin/edit_category.html', context)
+
+
+@login_required
+def delete_category_view(request, category_id):
+    """Deletar categoria"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    from tickets.models import Category
+    category = get_object_or_404(Category, id=category_id)
+    
+    if request.method == 'POST':
+        # Verificar se há chamados associados a esta categoria
+        if category.ticket_set.exists():
+            messages.error(request, 'Não é possível excluir esta categoria pois existem chamados associados a ela.')
+            return redirect('manage_categories')
+        
+        category_name = category.name
+        category.delete()
+        
+        log_action(
+            request.user, 
+            'CATEGORY_DELETE', 
+            f'Categoria excluída: {category_name}',
+            request
+        )
+        
+        messages.success(request, f'Categoria {category_name} excluída com sucesso!')
+        return redirect('manage_categories')
+    
+    context = {
+        'category': category,
+        'user': request.user,
+    }
+    return render(request, 'admin/delete_category.html', context)
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -498,26 +708,43 @@ class UserViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
+            # Para débitos e ajustes, ainda aplicamos diretamente
+            # Para créditos, deixamos pendente de aprovação
+            transaction_status = 'APPROVED'  # Padrão para débitos e ajustes
+            
+            if operation == 'add':
+                # Créditos ficam pendentes de aprovação - reverter a mudança no saldo
+                user.balance_cs -= amount  # Desfaz a adição
+                transaction_status = 'PENDING'
+            
             user.save()
             
             # Registrar transação
             from prizes.models import CSTransaction
-            CSTransaction.objects.create(
+            transaction = CSTransaction.objects.create(
                 user=user,
-                amount=amount,
+                amount=amount if operation == 'add' else amount,
                 transaction_type='CREDIT' if operation == 'add' else 'DEBIT',
                 description=description or f'Ajuste manual - {operation}',
+                status=transaction_status,
                 created_by=target_user
             )
             
+            if operation == 'add':
+                message = f'Solicitação de C$ {amount} para {user.full_name} enviada para aprovação'
+                action = 'CS_ADD_REQUEST'
+            else:
+                message = f'C$ {amount} removido de {user.full_name}'
+                action = 'CS_DEBIT'
+            
             log_action(
                 target_user, 
-                'CS_CHANGE', 
-                f'Alteração de C$ para {user.full_name}: {operation} C$ {amount}',
+                action, 
+                message,
                 request
             )
             
-            return Response({'message': 'Saldo atualizado com sucesso'})
+            return Response({'message': 'Operação realizada com sucesso' if operation != 'add' else 'Solicitação enviada para aprovação'})
             
         except ValueError:
             return Response(
@@ -1247,3 +1474,101 @@ def delete_prize_category_view(request, category_id):
         'user': request.user,
     }
     return render(request, 'admin/delete_prize_category.html', context)
+
+
+@login_required
+def pending_cs_transactions_view(request):
+    """Visualizar transações C$ pendentes de aprovação"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Acesso negado.')
+        return redirect('dashboard')
+    
+    from prizes.models import CSTransaction
+    from django.db.models import Sum
+    
+    pending_transactions = CSTransaction.objects.filter(
+        status='PENDING',
+        transaction_type='CREDIT'
+    ).select_related('user', 'created_by').order_by('-created_at')
+    
+    # Calcular total pendente
+    total_pending = pending_transactions.aggregate(
+        total=Sum('amount')
+    )['total'] or 0
+    
+    context = {
+        'pending_transactions': pending_transactions,
+        'total_pending_amount': total_pending,
+        'user': request.user,
+    }
+    return render(request, 'admin/pending_cs_transactions.html', context)
+
+
+@login_required 
+@require_POST
+def approve_cs_transaction(request, transaction_id):
+    """Aprovar uma transação C$ pendente"""
+    if not request.user.can_manage_users():
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    from prizes.models import CSTransaction
+    from django.utils import timezone
+    
+    try:
+        with transaction.atomic():
+            cs_transaction = get_object_or_404(CSTransaction, id=transaction_id, status='PENDING')
+            
+            # Aprovar a transação
+            cs_transaction.status = 'APPROVED'
+            cs_transaction.approved_by = request.user
+            cs_transaction.approved_at = timezone.now()
+            cs_transaction.save()
+            
+            # Adicionar o valor ao saldo do usuário
+            user = cs_transaction.user
+            user.balance_cs += cs_transaction.amount
+            user.save()
+            
+            log_action(
+                request.user,
+                'CS_APPROVE',
+                f'Transação C$ aprovada: +C$ {cs_transaction.amount} para {user.full_name}',
+                request
+            )
+            
+            return JsonResponse({'message': f'Transação aprovada! C$ {cs_transaction.amount} adicionado ao saldo de {user.full_name}.'})
+            
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao aprovar transação: {str(e)}'}, status=500)
+
+
+@login_required
+@require_POST  
+def reject_cs_transaction(request, transaction_id):
+    """Rejeitar uma transação C$ pendente"""
+    if not request.user.can_manage_users():
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    from prizes.models import CSTransaction
+    from django.utils import timezone
+    
+    try:
+        cs_transaction = get_object_or_404(CSTransaction, id=transaction_id, status='PENDING')
+        
+        # Rejeitar a transação
+        cs_transaction.status = 'REJECTED'
+        cs_transaction.approved_by = request.user
+        cs_transaction.approved_at = timezone.now()
+        cs_transaction.save()
+        
+        log_action(
+            request.user,
+            'CS_REJECT',
+            f'Transação C$ rejeitada: C$ {cs_transaction.amount} para {cs_transaction.user.full_name}',
+            request
+        )
+        
+        return JsonResponse({'message': f'Transação rejeitada.'})
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao rejeitar transação: {str(e)}'}, status=500)

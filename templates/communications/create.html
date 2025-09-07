@@ -23,7 +23,7 @@
                             <p class="text-sm text-gray-600">Compartilhe informações importantes com sua equipe</p>
                         </div>
                     </div>
-                    <a href="{% url 'communications_list' %}" 
+                    <a href="{% url 'communications:communications_list' %}" 
                        class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
                         <i class="fas fa-arrow-left mr-2"></i>
                         Voltar
@@ -253,7 +253,7 @@
 
                     <!-- Botões -->
                     <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-                        <a href="{% url 'communications_list' %}" 
+                        <a href="{% url 'communications:communications_list' %}" 
                            class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
                             Cancelar
                         </a>

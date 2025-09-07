@@ -99,8 +99,9 @@
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
                         
+                    <div class="space-y-6">
                         <div>
-                            <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                            <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor Principal</label>
                             <select id="sector" 
                                     name="sector"
                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
@@ -109,6 +110,58 @@
                                 <option value="{{ sector.id }}" {% if user_to_edit.sector_id == sector.id %}selected{% endif %}>{{ sector.name }}</option>
                                 {% endfor %}
                             </select>
+                        </div>
+                        
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <label class="block text-sm font-medium text-gray-700">Todos os Setores</label>
+                                <div class="flex space-x-2">
+                                    <button type="button" id="selectAllSectors" class="text-xs text-primary hover:text-orange-600 font-medium">
+                                        <i class="fas fa-check-double mr-1"></i>Selecionar Todos
+                                    </button>
+                                    <button type="button" id="clearAllSectors" class="text-xs text-gray-500 hover:text-gray-700 font-medium">
+                                        <i class="fas fa-times mr-1"></i>Limpar Todos
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                {% for sector in sectors %}
+                                <div class="relative">
+                                    <input type="checkbox" 
+                                           id="sector_{{ sector.id }}" 
+                                           name="sectors" 
+                                           value="{{ sector.id }}"
+                                           {% if sector in user_to_edit.sectors.all %}checked{% endif %}
+                                           class="hidden sector-checkbox">
+                                    <label for="sector_{{ sector.id }}" 
+                                           class="sector-card flex items-center w-full p-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 hover:border-primary hover:shadow-sm transition-all duration-200 transform hover:scale-102">
+                                        <div class="flex items-center flex-1 min-w-0">
+                                            <div class="sector-icon w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3 flex-shrink-0 transition-colors">
+                                                <i class="fas fa-building text-gray-400 transition-colors text-sm"></i>
+                                            </div>
+                                            <span class="font-medium truncate pr-2">{{ sector.name }}</span>
+                                        </div>
+                                        <div class="flex items-center flex-shrink-0">
+                                            <div class="sector-check w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center transition-all">
+                                                <i class="fas fa-check text-xs text-transparent transition-colors"></i>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                {% empty %}
+                                <div class="col-span-full text-center py-8 text-gray-500">
+                                    <i class="fas fa-building-slash text-3xl mb-3 text-gray-300"></i>
+                                    <p class="font-medium">Nenhum setor cadastrado</p>
+                                    <p class="text-xs">Cadastre setores para poder associá-los aos usuários</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+                                <span>Clique nos cards para selecionar/desselecionar</span>
+                                <span id="selectedCount" class="font-medium">
+                                    {{ user_to_edit.sectors.count }} selecionado{{ user_to_edit.sectors.count|pluralize }}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -159,4 +212,135 @@
         </div>
     </div>
 </div>
+
+<style>
+.sector-card {
+    min-height: 56px;
+}
+
+.sector-card:hover {
+    transform: scale(1.02) !important;
+}
+
+.sector-card.selected {
+    background-color: #f97316 !important;
+    color: white !important;
+    border-color: #f97316 !important;
+    box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.1), 0 2px 4px -1px rgba(249, 115, 22, 0.06) !important;
+    transform: scale(1.02) !important;
+}
+
+.sector-card.selected .sector-icon {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.sector-card.selected .sector-icon i {
+    color: white !important;
+}
+
+.sector-card.selected .sector-check {
+    border-color: white !important;
+    background-color: white !important;
+}
+
+.sector-card.selected .sector-check i {
+    color: #f97316 !important;
+}
+
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sectorCheckboxes = document.querySelectorAll('input[name="sectors"]');
+    const primarySectorSelect = document.getElementById('sector');
+    const selectedCountElement = document.getElementById('selectedCount');
+    const selectAllBtn = document.getElementById('selectAllSectors');
+    const clearAllBtn = document.getElementById('clearAllSectors');
+    
+    function updateCardStates() {
+        sectorCheckboxes.forEach(checkbox => {
+            const card = checkbox.nextElementSibling; // o label
+            if (checkbox.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+    }
+    
+    function updateSelectedCount() {
+        const checkedCount = document.querySelectorAll('input[name="sectors"]:checked').length;
+        selectedCountElement.textContent = `${checkedCount} selecionado${checkedCount !== 1 ? 's' : ''}`;
+    }
+    
+    function updatePrimarySectorOptions() {
+        const checkedSectors = Array.from(document.querySelectorAll('input[name="sectors"]:checked'));
+        const primarySectorValue = primarySectorSelect.value;
+        
+        // Limpar e recriar options do setor principal
+        Array.from(primarySectorSelect.options).forEach((option, index) => {
+            if (index === 0) return; // Manter a primeira opção "Selecione um setor..."
+            option.remove();
+        });
+        
+        // Adicionar apenas os setores selecionados
+        checkedSectors.forEach(checkbox => {
+            const sectorId = checkbox.value;
+            const sectorName = checkbox.closest('div').querySelector('span').textContent;
+            const option = new Option(sectorName, sectorId);
+            
+            if (sectorId === primarySectorValue) {
+                option.selected = true;
+            }
+            
+            primarySectorSelect.add(option);
+        });
+        
+        // Se o setor principal não está mais nos selecionados, limpar
+        if (primarySectorValue && !checkedSectors.some(cb => cb.value === primarySectorValue)) {
+            primarySectorSelect.value = '';
+        }
+    }
+    
+    // Event listeners para checkboxes
+    sectorCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateCardStates();
+            updateSelectedCount();
+            updatePrimarySectorOptions();
+        });
+    });
+    
+    // Botão Selecionar Todos
+    selectAllBtn.addEventListener('click', function() {
+        sectorCheckboxes.forEach(checkbox => {
+            checkbox.checked = true;
+        });
+        updateCardStates();
+        updateSelectedCount();
+        updatePrimarySectorOptions();
+    });
+    
+    // Botão Limpar Todos  
+    clearAllBtn.addEventListener('click', function() {
+        sectorCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        primarySectorSelect.value = '';
+        updateCardStates();
+        updateSelectedCount();
+        updatePrimarySectorOptions();
+    });
+    
+    // Inicializar estados
+    updateCardStates();
+    updateSelectedCount();
+    updatePrimarySectorOptions();
+});
+</script>
 {% endblock %}

@@ -2,7 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import models
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -49,7 +50,8 @@ def home_feed(request):
 
 
 @login_required
-@require_POST
+@require_http_methods(["POST"])
+@ensure_csrf_cookie
 def communication_react(request, communication_id):
     """Endpoint para reações nos comunicados"""
     communication = get_object_or_404(Communication, id=communication_id)
@@ -57,6 +59,8 @@ def communication_react(request, communication_id):
     try:
         data = json.loads(request.body)
         reaction = data.get('reaction')
+        
+        print(f"DEBUG: User {request.user.id} reacting '{reaction}' to communication {communication_id}")
         
         if reaction not in ['like', 'love', 'clap']:
             return JsonResponse({'success': False, 'error': 'Reação inválida'})
@@ -81,6 +85,8 @@ def communication_react(request, communication_id):
         # Retornar nova contagem
         count = reaction_field.count()
         
+        print(f"DEBUG: Reaction {reaction} {'added' if added else 'removed'}, new count: {count}")
+        
         return JsonResponse({
             'success': True,
             'added': added,
@@ -89,6 +95,7 @@ def communication_react(request, communication_id):
         })
         
     except Exception as e:
+        print(f"DEBUG: Error in communication_react: {str(e)}")
         return JsonResponse({'success': False, 'error': str(e)})
 
 
@@ -96,7 +103,9 @@ def communication_react(request, communication_id):
 def communication_list(request):
     """Lista todos os comunicados do usuário"""
     if request.user.hierarchy == 'SUPERADMIN':
-        communications = Communication.objects.all().order_by('-created_at')
+        communications = Communication.objects.all().select_related('sender').prefetch_related(
+            'viewed_by', 'liked_by', 'loved_by', 'clapped_by', 'comments'
+        ).order_by('-created_at')
     else:
         # Para outros usuários, mostrar apenas comunicados gerais e destinados a ele que estão ativos
         from django.utils import timezone
@@ -108,6 +117,8 @@ def communication_list(request):
             Q(active_from__isnull=True) | Q(active_from__lte=now)
         ).filter(
             Q(active_until__isnull=True) | Q(active_until__gte=now)
+        ).select_related('sender').prefetch_related(
+            'viewed_by', 'liked_by', 'loved_by', 'clapped_by', 'comments'
         ).distinct().order_by('-created_at')
     
     # Verificar quais comunicados foram lidos
@@ -115,8 +126,14 @@ def communication_list(request):
         user=request.user
     ).values_list('communication_id', flat=True)
     
-    # Obter status de cada comunicado
+    # Obter status de cada comunicado e calcular contadores
     communication_statuses = {}
+    status_counts = {
+        'NAO_VISUALIZADO': 0,
+        'ESTOU_CIENTE': 0,
+        'ESTOU_COM_DUVIDA': 0
+    }
+    
     for comm in communications:
         try:
             read_obj = CommunicationRead.objects.get(user=request.user, communication=comm)
@@ -124,105 +141,96 @@ def communication_list(request):
                 'status': read_obj.status,
                 'status_display': read_obj.get_status_display()
             }
+            status_counts[read_obj.status] += 1
         except CommunicationRead.DoesNotExist:
             communication_statuses[comm.id] = {
                 'status': 'NAO_VISUALIZADO',
                 'status_display': 'Não Visualizado'
             }
+            status_counts['NAO_VISUALIZADO'] += 1
     
     return render(request, 'communications/list.html', {
         'communications': communications,
         'read_communications': read_communications,
         'communication_statuses': communication_statuses,
+        'status_counts': status_counts,
     })
 
 
 @login_required
 def communication_detail_view(request, communication_id):
-    """Detalhe do comunicado"""
-    communication = get_object_or_404(Communication, id=communication_id)
-    user = request.user
+    """View to display a single communication with details"""
+    communication = get_object_or_404(Communication, pk=communication_id)
     
-    # Verificar se o usuário pode ver este comunicado
-    can_view = (
-        communication.send_to_all or 
-        communication.recipients.filter(id=user.id).exists() or
-        communication.sender == user or
-        user.can_manage_users()
-    )
-    
-    if not can_view:
-        messages.error(request, 'Você não tem permissão para visualizar este comunicado.')
-        return redirect('communications_list')
-    
-    # Marcar como lido (apenas se não existe e não é o criador)
-    if communication.sender != user:
-        comm_read, created = CommunicationRead.objects.get_or_create(
-            communication=communication,
-            user=user
+    # Mark as read for current user
+    if request.user.is_authenticated:
+        CommunicationRead.objects.get_or_create(
+            communication=communication, 
+            user=request.user,
+            defaults={'read_at': timezone.now()}
         )
-    else:
-        # Para o criador, não criar registro automático
-        try:
-            comm_read = CommunicationRead.objects.get(
-                communication=communication,
-                user=user
-            )
-        except CommunicationRead.DoesNotExist:
-            comm_read = None
     
-    # Se o usuário é o criador do comunicado, mostrar status de todos os usuários
-    users_status = []
-    if communication.sender == user or user.can_manage_users():
-        # Obter todos os usuários que deveriam ver este comunicado
-        if communication.send_to_all:
-            target_users = User.objects.filter(is_active=True).exclude(id=communication.sender.id)
-        else:
-            target_users = communication.recipients.all()
-        
-        # Obter status de cada usuário
-        for target_user in target_users:
-            try:
-                read_obj = CommunicationRead.objects.get(
-                    communication=communication,
-                    user=target_user
-                )
-                status_info = {
-                    'user': target_user,
-                    'status': read_obj.status,
-                    'status_display': read_obj.get_status_display(),
-                    'read_at': read_obj.read_at,
-                }
-            except CommunicationRead.DoesNotExist:
-                status_info = {
-                    'user': target_user,
-                    'status': 'NAO_VISUALIZADO',
-                    'status_display': 'Não Visualizado',
-                    'read_at': None,
-                }
-            users_status.append(status_info)
-        
-        # Ordenar por status (primeiro quem não visualizou, depois dúvidas, depois ciente)
-        status_priority = {'NAO_VISUALIZADO': 0, 'ESTOU_COM_DUVIDA': 1, 'ESTOU_CIENTE': 2}
-        users_status.sort(key=lambda x: status_priority.get(x['status'], 999))
-        
-        # Calcular estatísticas
-        status_counts = {
-            'not_viewed': len([s for s in users_status if s['status'] == 'NAO_VISUALIZADO']),
-            'with_doubt': len([s for s in users_status if s['status'] == 'ESTOU_COM_DUVIDA']),
-            'aware': len([s for s in users_status if s['status'] == 'ESTOU_CIENTE']),
+    # Get user's status for this communication
+    communication_status = {'status': 'NAO_VISUALIZADO', 'status_display': 'Não visualizado'}
+    if request.user.is_authenticated:
+        try:
+            read_obj = CommunicationRead.objects.get(user=request.user, communication=communication)
+            communication_status = {
+                'status': read_obj.status,
+                'status_display': read_obj.get_status_display()
+            }
+        except CommunicationRead.DoesNotExist:
+            pass
+    
+    # Get all reactions info with user details
+    reactions_info = {
+        'likes': {
+            'count': communication.liked_by.count(),
+            'users': communication.liked_by.select_related().all()[:10]
+        },
+        'loves': {
+            'count': communication.loved_by.count(),
+            'users': communication.loved_by.select_related().all()[:10]
+        },
+        'claps': {
+            'count': communication.clapped_by.count(),
+            'users': communication.clapped_by.select_related().all()[:10]
+        },
+        'views': {
+            'count': communication.viewed_by.count(),
+            'users': communication.viewed_by.select_related().all()[:10]
         }
-    else:
-        status_counts = {}
+    }
+    
+    # Get status information
+    from django.db.models import Q
+    status_reads = CommunicationRead.objects.filter(communication=communication).select_related('user')
+    
+    ciente_users = [read.user for read in status_reads if read.status == 'ESTOU_CIENTE']
+    duvida_users = [read.user for read in status_reads if read.status == 'ESTOU_COM_DUVIDA']
+    
+    status_info = {
+        'ciente': {
+            'count': len(ciente_users),
+            'users': ciente_users[:10]
+        },
+        'duvida': {
+            'count': len(duvida_users),
+            'users': duvida_users[:10]
+        }
+    }
+    
+    # Get comments for this communication
+    comments = communication.comments.select_related('user').order_by('created_at')
     
     context = {
         'communication': communication,
-        'user': user,
-        'users_status': users_status,
-        'is_sender': communication.sender == user or user.can_manage_users(),
-        'status_counts': status_counts,
-        'comments': communication.comments.all().order_by('created_at'),
+        'communication_status': communication_status,
+        'reactions_info': reactions_info,
+        'status_info': status_info,
+        'comments': comments
     }
+    
     return render(request, 'communications/detail.html', context)
 
 
@@ -286,7 +294,7 @@ def create_communication_view(request):
             )
             
             messages.success(request, f'Comunicado "{communication.title}" criado com sucesso!')
-            return redirect('communications_list')
+            return redirect('communications:communications_list')
             
         except Exception as e:
             messages.error(request, f'Erro ao criar comunicado: {str(e)}')
@@ -321,7 +329,7 @@ def edit_communication_view(request, communication_id):
     # Verificar permissões (apenas o criador ou superadmin)
     if communication.sender != request.user and not request.user.hierarchy == 'SUPERADMIN':
         messages.error(request, 'Você não tem permissão para editar este comunicado.')
-        return redirect('communications_list')
+        return redirect('communications:communications_list')
     
     if request.method == 'POST':
         communication.title = request.POST.get('title')
@@ -366,7 +374,7 @@ def edit_communication_view(request, communication_id):
             )
             
             messages.success(request, f'Comunicado "{communication.title}" editado com sucesso!')
-            return redirect('communication_detail', communication_id=communication.id)
+            return redirect('communications:communication_detail', communication_id=communication.id)
             
         except Exception as e:
             messages.error(request, f'Erro ao editar comunicado: {str(e)}')
@@ -387,7 +395,7 @@ def delete_communication_view(request, communication_id):
     # Verificar permissões (apenas o criador ou superadmin)
     if communication.sender != request.user and not request.user.hierarchy == 'SUPERADMIN':
         messages.error(request, 'Você não tem permissão para excluir este comunicado.')
-        return redirect('communications_list')
+        return redirect('communications:communications_list')
     
     if request.method == 'POST':
         title = communication.title
@@ -401,7 +409,7 @@ def delete_communication_view(request, communication_id):
         )
         
         messages.success(request, f'Comunicado "{title}" excluído com sucesso!')
-        return redirect('communications_list')
+        return redirect('communications:communications_list')
     
     return render(request, 'communications/delete.html', {
         'communication': communication,
@@ -443,27 +451,61 @@ def get_unread_communications(request):
     })
 
 
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_http_methods
+
+
 @login_required
+@require_http_methods(["POST"])
+@ensure_csrf_cookie
 def update_communication_status(request, communication_id):
     """Atualizar status de confirmação do comunicado"""
     if request.method == 'POST':
         communication = get_object_or_404(Communication, id=communication_id)
         user = request.user
-        status = request.POST.get('status')
+        
+        print(f"DEBUG: Headers: {dict(request.headers)}")
+        print(f"DEBUG: Updating status for communication {communication_id} by user {user.id}")
+        
+        # Check if it's an AJAX request
+        if request.content_type == 'application/json':
+            import json
+            data = json.loads(request.body)
+            status = data.get('status')
+            print(f"DEBUG: AJAX request with status: {status}")
+        else:
+            status = request.POST.get('status')
+            print(f"DEBUG: Form request with status: {status}")
         
         if status in ['ESTOU_CIENTE', 'ESTOU_COM_DUVIDA']:
             comm_read, created = CommunicationRead.objects.get_or_create(
                 communication=communication,
-                user=user
+                user=user,
+                defaults={'read_at': timezone.now()}
             )
             comm_read.status = status
             comm_read.save()
             
+            print(f"DEBUG: Status updated successfully to {status}")
+            
+            # If it's an AJAX request, return JSON
+            if request.content_type == 'application/json':
+                return JsonResponse({
+                    'success': True, 
+                    'status': status,
+                    'status_display': comm_read.get_status_display()
+                })
+            
             messages.success(request, f'Status atualizado: {comm_read.get_status_display()}')
         else:
+            print(f"DEBUG: Invalid status: {status}")
+            # If it's an AJAX request, return JSON error
+            if request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': 'Status inválido.'})
+            
             messages.error(request, 'Status inválido.')
     
-    return redirect('communication_detail', communication_id=communication_id)
+    return redirect('communications:communication_detail', communication_id=communication_id)
 
 
 class CommunicationViewSet(viewsets.ModelViewSet):

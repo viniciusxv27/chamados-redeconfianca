@@ -93,6 +93,12 @@ class Communication(models.Model):
         related_name='clapped_communications',
         verbose_name="Aplaudido por"
     )
+    viewed_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='viewed_communications',
+        verbose_name="Visualizado por"
+    )
     
     active_from = models.DateTimeField(null=True, blank=True, verbose_name="Ativo a partir de")
     active_until = models.DateTimeField(null=True, blank=True, verbose_name="Ativo até")

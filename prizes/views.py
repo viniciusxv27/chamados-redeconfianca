@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.utils import timezone
 from decimal import Decimal
+from datetime import timedelta
 
 from .models import Prize, PrizeCategory, Redemption, CSTransaction
 from users.models import User
@@ -79,14 +80,11 @@ def redeem_prize(request, prize_id):
                 transaction_type='REDEMPTION',
                 description=f'Resgate: {prize.name}',
                 related_redemption=redemption,
+                status='APPROVED',  # Resgates são aprovados automaticamente
                 created_by=request.user
             )
             
-            # Atualizar contador do prêmio
-            prize.redeemed_count += 1
-            prize.save()
-            
-            messages.success(request, f'Prêmio "{prize.name}" resgatado com sucesso!')
+            messages.success(request, f'Prêmio "{prize.name}" resgatado com sucesso! Aguardando aprovação.')
             return JsonResponse({'success': True})
             
     except Exception as e:
@@ -103,9 +101,16 @@ def manage_prizes(request):
     prizes = Prize.objects.all().order_by('-created_at')
     categories = PrizeCategory.objects.all()
     
+    # Buscar resgates recentes (últimos 15 dias)
+    fifteen_days_ago = timezone.now() - timedelta(days=15)
+    recent_redemptions = Redemption.objects.filter(
+        redeemed_at__gte=fifteen_days_ago
+    ).select_related('user', 'prize').order_by('-redeemed_at')[:10]
+    
     context = {
         'prizes': prizes,
         'categories': categories,
+        'recent_redemptions': recent_redemptions,
     }
     return render(request, 'prizes/manage.html', context)
 
@@ -191,6 +196,13 @@ def manage_redemptions(request):
     status_filter = request.GET.get('status', 'PENDENTE')
     redemptions = Redemption.objects.filter(status=status_filter).order_by('-redeemed_at')
     
+    # Buscar resgates recentes (últimos 15 dias)
+    from datetime import timedelta
+    fifteen_days_ago = timezone.now() - timedelta(days=15)
+    recent_redemptions = Redemption.objects.filter(
+        redeemed_at__gte=fifteen_days_ago
+    ).select_related('user', 'prize').order_by('-redeemed_at')[:10]
+    
     paginator = Paginator(redemptions, 20)
     page_number = request.GET.get('page')
     redemptions_page = paginator.get_page(page_number)
@@ -199,6 +211,7 @@ def manage_redemptions(request):
         'redemptions': redemptions_page,
         'current_status': status_filter,
         'status_choices': Redemption.STATUS_CHOICES,
+        'recent_redemptions': recent_redemptions,
     }
     return render(request, 'prizes/manage_redemptions.html', context)
 
@@ -219,35 +232,63 @@ def update_redemption_status(request, redemption_id):
         import json
         data = json.loads(request.body)
         new_status = data.get('status')
+        delivery_notes = data.get('delivery_notes', '')
     else:
         new_status = request.POST.get('status')
+        delivery_notes = request.POST.get('delivery_notes', '')
     
     if new_status not in dict(Redemption.STATUS_CHOICES):
         return JsonResponse({'success': False, 'error': 'Status inválido'})
     
     try:
+        old_status = redemption.status
         redemption.status = new_status
         redemption.approved_by = request.user
         
         if new_status == 'APROVADO':
             redemption.approved_at = timezone.now()
+            if delivery_notes:
+                redemption.delivery_notes = delivery_notes
         elif new_status == 'ENTREGUE':
             redemption.delivered_at = timezone.now()
+            if delivery_notes:
+                redemption.delivery_notes = delivery_notes
+        elif new_status == 'CANCELADO':
+            if delivery_notes:
+                redemption.notes = delivery_notes
         
         redemption.save()
+        
+        # Gerenciar estoque baseado no status
+        if new_status == 'CANCELADO' and old_status != 'CANCELADO':
+            # Se cancelado, devolver o C$ para o usuário
+            redemption.user.balance_cs += redemption.prize.value_cs
+            redemption.user.save()
+            
+            # Registrar transação de devolução
+            CSTransaction.objects.create(
+                user=redemption.user,
+                amount=redemption.prize.value_cs,
+                transaction_type='CREDIT',
+                description=f'Devolução por cancelamento: {redemption.prize.name}',
+                related_redemption=redemption,
+                status='APPROVED',  # Devoluções são aprovadas automaticamente
+                created_by=request.user
+            )
         
         # Log da ação
         from core.middleware import log_action
         log_action(
             request.user,
             'REDEMPTION_STATUS_UPDATE',
-            f'Status do resgate #{redemption.id} alterado para {new_status}',
+            f'Status do resgate #{redemption.id} alterado de {old_status} para {new_status}',
             request
         )
         
         return JsonResponse({'success': True})
         
     except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
         return JsonResponse({'success': False, 'error': str(e)})
         
     except Exception as e:

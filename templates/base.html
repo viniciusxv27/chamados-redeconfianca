@@ -111,7 +111,7 @@
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'communications_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Comunicados">
+                            <a href="{% url 'communications:communications_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Comunicados">
                                 <i class="fas fa-bullhorn text-primary flex-shrink-0"></i>
                                 <span class="text-sm">Comunicados</span>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
@@ -131,15 +131,6 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% if user.hierarchy == 'SUPERADMIN' or user.hierarchy == 'ADMINISTRADOR' %}
-                        <li>
-                            <a href="{% url 'anonymous_report' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Denúncias">
-                                <i class="fas fa-shield-alt text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Denúncias</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
                         <li>
                             <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Chamados">
                                 <i class="fas fa-ticket-alt text-primary flex-shrink-0"></i>
@@ -222,12 +213,21 @@
                                     </a>
                                 </li>
                                 <li>
-                                    <a href="{% url 'create_communication' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Criar Comunicado">
+                                    <a href="{% url 'communications:create_communication' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Criar Comunicado">
                                         <i class="fas fa-bullhorn text-red-400 flex-shrink-0"></i>
                                         <span>Criar Comunicado</span>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% if user.hierarchy == 'SUPERADMIN' %}
+                                <li>
+                                    <a href="{% url 'manage_reports' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Denúncias">
+                                        <i class="fas fa-shield-alt text-red-500 flex-shrink-0"></i>
+                                        <span>Denúncias</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-500 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
                             </ul>
                         </li>
                         {% endif %}
@@ -245,6 +245,13 @@
                                         <i class="fas fa-question-circle text-cyan-400 flex-shrink-0"></i>
                                         <span>Ajuda</span>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'anonymous_report' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Fazer Denúncia Anônima">
+                                        <i class="fas fa-shield-alt text-red-400 flex-shrink-0"></i>
+                                        <span>Denuncia</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
                             </ul>
@@ -267,7 +274,7 @@
                             {% block header_nav %}
                             <nav class="hidden lg:flex space-x-6">
                                 <a href="{% url 'dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if request.resolver_match.url_name == 'dashboard' %}text-primary border-b-2 border-primary{% endif %}">Home</a>
-                                <a href="{% url 'communications_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'communications' in request.path %}text-primary border-b-2 border-primary{% endif %}">Comunicados</a>
+                                <a href="{% url 'communications:communications_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'communications' in request.path %}text-primary border-b-2 border-primary{% endif %}">Comunicados</a>
                                 <a href="{% url 'tickets_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'tickets' in request.path %}text-primary border-b-2 border-primary{% endif %}">Chamados</a>
                             </nav>
                             {% endblock %}

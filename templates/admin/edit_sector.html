@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Setor{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Editar Setor</h1>
+            <p class="text-gray-600 mt-2">Modificar informações do setor</p>
+        </div>
+        <div class="flex space-x-3">
+            <a href="{% url 'manage_sectors' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Form Card -->
+    <div class="bg-white rounded-lg shadow-sm p-8">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 gap-6">
+                <div>
+                    <label for="name" class="block text-sm font-semibold text-gray-700 mb-2">Nome do Setor *</label>
+                    <input 
+                        type="text" 
+                        name="name" 
+                        id="name" 
+                        value="{{ sector.name }}"
+                        required 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                        placeholder="Ex: Tecnologia da Informação"
+                    >
+                </div>
+                
+                <div>
+                    <label for="description" class="block text-sm font-semibold text-gray-700 mb-2">Descrição</label>
+                    <textarea 
+                        name="description" 
+                        id="description" 
+                        rows="4"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                        placeholder="Descrição do setor (opcional)"
+                    >{{ sector.description }}</textarea>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex justify-end space-x-4 pt-6">
+                <a href="{% url 'manage_sectors' %}" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </a>
+                <button type="submit" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-save mr-2"></i>
+                    Salvar Alterações
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Users in this sector -->
+    {% if sector.user_set.all %}
+    <div class="bg-blue-50 rounded-lg p-6 mt-8">
+        <h3 class="text-lg font-semibold text-blue-900 mb-4">
+            <i class="fas fa-users mr-2"></i>
+            Usuários neste setor ({{ sector.user_set.count }})
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for user in sector.user_set.all %}
+            <div class="bg-white rounded-lg p-4 border border-blue-200">
+                <div class="flex items-center space-x-3">
+                    {% if user.profile_picture %}
+                        <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-10 h-10 rounded-full object-cover">
+                    {% else %}
+                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                            <span class="text-white font-medium text-sm">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                        </div>
+                    {% endif %}
+                    <div>
+                        <p class="font-medium text-gray-900">{{ user.full_name }}</p>
+                        <p class="text-sm text-gray-600">{{ user.get_hierarchy_display }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
