@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+
+{% block title %}Denúncia #{{ report.id }} - Superadmin{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <a href="{% url 'reports:manage_reports' %}" class="text-gray-400 hover:text-gray-600 mr-4">
+                        <i class="fas fa-arrow-left text-xl"></i>
+                    </a>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">
+                            Denúncia #{{ report.id }}
+                        </h1>
+                        <p class="text-gray-600 mt-1">{{ report.title }}</p>
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="window.print()" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center">
+                        <i class="fas fa-print mr-2"></i>
+                        Imprimir
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Conteúdo Principal -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Detalhes da Denúncia -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                        <h2 class="text-lg font-semibold text-gray-900">Detalhes da Denúncia</h2>
+                    </div>
+                    <div class="p-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-sm font-medium text-gray-500">Título</label>
+                                <p class="text-gray-900 mt-1">{{ report.title }}</p>
+                            </div>
+                            
+                            <div>
+                                <label class="text-sm font-medium text-gray-500">Descrição</label>
+                                <div class="text-gray-900 mt-1 whitespace-pre-wrap">{{ report.description }}</div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-500">Categoria</label>
+                                    <p class="text-gray-900 mt-1">{{ report.category.name }}</p>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-gray-500">Setor</label>
+                                    <p class="text-gray-900 mt-1">{{ report.sector.name }}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-500">Data de Criação</label>
+                                    <p class="text-gray-900 mt-1">{{ report.created_at|date:"d/m/Y H:i" }}</p>
+                                </div>
+                                <div>
+                                    <label class="text-sm font-medium text-gray-500">Última Atualização</label>
+                                    <p class="text-gray-900 mt-1">{{ report.updated_at|date:"d/m/Y H:i" }}</p>
+                                </div>
+                            </div>
+                            
+                            {% if report.attachment %}
+                            <div>
+                                <label class="text-sm font-medium text-gray-500">Anexo</label>
+                                <div class="mt-1">
+                                    <a href="{{ report.attachment.url }}" target="_blank" 
+                                       class="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50">
+                                        <i class="fas fa-paperclip mr-2"></i>
+                                        Ver anexo
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Histórico de Comentários -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                        <h2 class="text-lg font-semibold text-gray-900">Histórico</h2>
+                    </div>
+                    <div class="p-6">
+                        <div class="space-y-6">
+                            {% for comment in comments %}
+                            <div class="flex space-x-3">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2">
+                                        <h4 class="text-sm font-medium text-gray-900">{{ comment.user.full_name }}</h4>
+                                        <span class="text-sm text-gray-500">{{ comment.created_at|date:"d/m/Y H:i" }}</span>
+                                        {% if comment.is_internal %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                <i class="fas fa-lock mr-1"></i>Interno
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                    <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{{ comment.content }}</p>
+                                </div>
+                            </div>
+                            {% empty %}
+                            <div class="text-center text-gray-500 py-6">
+                                <i class="fas fa-comments text-3xl mb-2 text-gray-300"></i>
+                                <p>Nenhum comentário ainda</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Adicionar Comentário -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                        <h2 class="text-lg font-semibold text-gray-900">Adicionar Comentário</h2>
+                    </div>
+                    <div class="p-6">
+                        <form method="post" action="{% url 'reports:add_report_comment' report.id %}" id="commentForm">
+                            {% csrf_token %}
+                            <div class="space-y-4">
+                                <div>
+                                    <label for="content" class="block text-sm font-medium text-gray-700">Comentário</label>
+                                    <textarea name="content" id="content" rows="4" required
+                                              class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"
+                                              placeholder="Digite seu comentário..."></textarea>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center">
+                                        <input type="checkbox" name="is_internal" id="is_internal" 
+                                               class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded">
+                                        <label for="is_internal" class="ml-2 block text-sm text-gray-900">
+                                            Comentário interno (visível apenas para administradores)
+                                        </label>
+                                    </div>
+                                    <button type="submit" class="bg-primary text-white px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                                        <i class="fas fa-plus mr-2"></i>Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="space-y-6">
+                <!-- Status e Controles -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Controles</h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <form method="post" action="{% url 'reports:update_report_status' report.id %}" id="statusForm">
+                            {% csrf_token %}
+                            <div class="space-y-4">
+                                <div>
+                                    <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                                    <select name="status" id="status" 
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                                            onchange="updateStatusColor(this)">
+                                        {% for status_key, status_label in status_choices %}
+                                        <option value="{{ status_key }}" {% if report.status == status_key %}selected{% endif %}>{{ status_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">Prioridade</label>
+                                    <select name="priority" id="priority" 
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                                            onchange="updatePriorityColor(this)">
+                                        {% for priority_key, priority_label in priority_choices %}
+                                        <option value="{{ priority_key }}" {% if report.priority == priority_key %}selected{% endif %}>{{ priority_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label for="assigned_to" class="block text-sm font-medium text-gray-700 mb-2">Atribuir para</label>
+                                    <select name="assigned_to" id="assigned_to" 
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Não atribuído</option>
+                                        {% for user in users %}
+                                        <option value="{{ user.id }}" {% if report.assigned_to == user %}selected{% endif %}>{{ user.full_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <button type="submit" class="w-full bg-primary text-white px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                                    <i class="fas fa-save mr-2"></i>Salvar Alterações
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Informações Adicionais -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Informações</h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-500">Status atual:</span>
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full
+                                {% if report.status == 'ABERTO' %}bg-yellow-100 text-yellow-800
+                                {% elif report.status == 'EM_ANDAMENTO' %}bg-blue-100 text-blue-800
+                                {% elif report.status == 'RESOLVIDO' %}bg-green-100 text-green-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}" id="currentStatus">
+                                {{ report.get_status_display }}
+                            </span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-500">Prioridade:</span>
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full
+                                {% if report.priority == 'CRITICA' %}bg-red-100 text-red-800
+                                {% elif report.priority == 'ALTA' %}bg-orange-100 text-orange-800
+                                {% elif report.priority == 'MEDIA' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-green-100 text-green-800{% endif %}" id="currentPriority">
+                                {{ report.get_priority_display }}
+                            </span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-500">Atribuído para:</span>
+                            <span class="text-sm text-gray-900" id="currentAssignee">
+                                {% if report.assigned_to %}
+                                    {{ report.assigned_to.full_name }}
+                                {% else %}
+                                    Não atribuído
+                                {% endif %}
+                            </span>
+                        </div>
+                        
+                        <div class="border-t pt-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-user-secret text-gray-400 mr-2"></i>
+                                <span class="text-sm text-gray-500">Denúncia anônima</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateStatusColor(select) {
+    const statusSpan = document.getElementById('currentStatus');
+    const value = select.value;
+    const text = select.options[select.selectedIndex].text;
+    
+    // Remove todas as classes de cor
+    statusSpan.className = statusSpan.className.replace(/bg-\w+-100 text-\w+-800/g, '');
+    
+    // Adiciona a nova classe baseada no status
+    if (value === 'ABERTO') {
+        statusSpan.className += ' bg-yellow-100 text-yellow-800';
+    } else if (value === 'EM_ANDAMENTO') {
+        statusSpan.className += ' bg-blue-100 text-blue-800';
+    } else if (value === 'RESOLVIDO') {
+        statusSpan.className += ' bg-green-100 text-green-800';
+    } else {
+        statusSpan.className += ' bg-gray-100 text-gray-800';
+    }
+    
+    statusSpan.textContent = text;
+}
+
+function updatePriorityColor(select) {
+    const prioritySpan = document.getElementById('currentPriority');
+    const value = select.value;
+    const text = select.options[select.selectedIndex].text;
+    
+    // Remove todas as classes de cor
+    prioritySpan.className = prioritySpan.className.replace(/bg-\w+-100 text-\w+-800/g, '');
+    
+    // Adiciona a nova classe baseada na prioridade
+    if (value === 'CRITICA') {
+        prioritySpan.className += ' bg-red-100 text-red-800';
+    } else if (value === 'ALTA') {
+        prioritySpan.className += ' bg-orange-100 text-orange-800';
+    } else if (value === 'MEDIA') {
+        prioritySpan.className += ' bg-yellow-100 text-yellow-800';
+    } else {
+        prioritySpan.className += ' bg-green-100 text-green-800';
+    }
+    
+    prioritySpan.textContent = text;
+}
+
+// Atualizar assignee em tempo real
+document.getElementById('assigned_to').addEventListener('change', function() {
+    const assigneeSpan = document.getElementById('currentAssignee');
+    const value = this.value;
+    const text = this.options[this.selectedIndex].text;
+    
+    assigneeSpan.textContent = value ? text : 'Não atribuído';
+});
+</script>
+{% endblock %}
