@@ -178,8 +178,19 @@ CSRF_TRUSTED_ORIGINS = [
     "https://chamados.redeconfianca.com.br",
     "http://chamados.redeconfianca.com.br",
     "http://localhost:8000",
-    "http://127.0.0.1:8000"
+    "http://localhost:8001", 
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001"
 ]
+
+# Configurações adicionais para uploads e formulários
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
+
+# Configurações de sessão
+SESSION_COOKIE_AGE = 86400  # 24 horas
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
 # Login/Logout URLs
 LOGIN_URL = '/login/'
