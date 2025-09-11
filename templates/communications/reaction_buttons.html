@@ -21,20 +21,6 @@
         <span class="like-count">{{ communication.liked_by.count }}</span>
     </button>
 
-    <!-- Love Button -->
-    <button class="reaction-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm transition-all hover:bg-red-50 {% if user in communication.loved_by.all %}bg-red-100 text-red-600{% else %}text-gray-600 hover:text-red-600{% endif %}"
-            data-reaction="love" data-comm-id="{{ communication.id }}">
-        <i class="{% if user in communication.loved_by.all %}fas{% else %}far{% endif %} fa-heart"></i>
-        <span class="love-count">{{ communication.loved_by.count }}</span>
-    </button>
-
-    <!-- Clap Button -->
-    <button class="reaction-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm transition-all hover:bg-yellow-50 {% if user in communication.clapped_by.all %}bg-yellow-100 text-yellow-600{% else %}text-gray-600 hover:text-yellow-600{% endif %}"
-            data-reaction="clap" data-comm-id="{{ communication.id }}">
-        <i class="fas fa-hands-clapping"></i>
-        <span class="clap-count">{{ communication.clapped_by.count }}</span>
-    </button>
-
     <!-- Share Button -->
     <button class="share-btn flex items-center space-x-1 px-3 py-1 rounded-full text-sm text-gray-600 hover:text-green-600 hover:bg-green-50 transition-all"
             data-comm-id="{{ communication.id }}" data-title="{{ communication.title }}" data-url="{% url 'communications:communication_detail' communication.id %}">
@@ -86,13 +72,9 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Update button state
+                    // Update button state (only for like)
                     this.classList.toggle('bg-blue-100', reaction === 'like' && data.added);
                     this.classList.toggle('text-blue-600', reaction === 'like' && data.added);
-                    this.classList.toggle('bg-red-100', reaction === 'love' && data.added);
-                    this.classList.toggle('text-red-600', reaction === 'love' && data.added);
-                    this.classList.toggle('bg-yellow-100', reaction === 'clap' && data.added);
-                    this.classList.toggle('text-yellow-600', reaction === 'clap' && data.added);
                     
                     // Update icon
                     const icon = this.querySelector('i');

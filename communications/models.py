@@ -35,11 +35,6 @@ class CommunicationGroup(models.Model):
 
 class Communication(models.Model):
     SENDER_GROUP_CHOICES = [
-        ('GERENTES', 'Gerentes'),
-        ('COORDENACAO', 'Coordenação'),
-        ('DIRETORIA', 'Diretoria'),
-        ('TODOS', 'Todos'),
-        ('ADM', 'Administração'),
     ]
     
     title = models.CharField(max_length=200, verbose_name="Título")
@@ -81,18 +76,6 @@ class Communication(models.Model):
         blank=True,
         related_name='liked_communications',
         verbose_name="Curtido por"
-    )
-    loved_by = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name='loved_communications',
-        verbose_name="Amado por"
-    )
-    clapped_by = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name='clapped_communications',
-        verbose_name="Aplaudido por"
     )
     viewed_by = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

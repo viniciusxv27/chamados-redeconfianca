@@ -3,10 +3,15 @@
 {% block title %}Criar Comunicado - Rede de Confiança{% endblock %}
 
 {% block extra_css %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
 <style>
     .primary { background-color: #f97316; }
     .primary:hover { background-color: #ea580c; }
 </style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -51,7 +56,7 @@
                                required>
                     </div>
 
-                    <!-- Upload de Foto -->
+                    <!-- Upload de Foto com Editor de Crop Melhorado -->
                     <div>
                         <label for="photo" class="block text-sm font-semibold text-gray-900 mb-2">
                             <i class="fas fa-camera text-primary mr-1"></i>
@@ -60,7 +65,7 @@
                         
                         <!-- Upload nova foto -->
                         <div class="flex items-center justify-center w-full">
-                            <label for="photo" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                            <label for="photo" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100" id="upload-area-label">
                                 <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-area">
                                     <i class="fas fa-cloud-upload-alt text-gray-400 text-4xl mb-4"></i>
                                     <p class="mb-2 text-sm text-gray-500">
@@ -72,17 +77,36 @@
                             </label>
                         </div>
                         
-                        <!-- Preview da nova imagem -->
+                        <!-- Preview da nova imagem com crop -->
                         <div id="photo-preview" class="hidden mt-4">
-                            <p class="text-sm text-gray-600 mb-2">Nova foto:</p>
-                            <div class="relative">
-                                <img id="preview-img" class="w-full max-w-md h-48 object-cover rounded-lg" src="" alt="Preview">
-                                <button type="button" onclick="removePhoto()" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors">
-                                    <i class="fas fa-times"></i>
-                                </button>
+                            <p class="text-sm text-gray-600 mb-2">Ajustar posição da imagem:</p>
+                            <div class="bg-gray-100 rounded-lg p-4">
+                                <div id="crop-container" class="relative bg-white rounded overflow-hidden" style="max-width: 100%; height: 400px;">
+                                    <img id="preview-img" src="" alt="Preview" class="max-w-full max-h-full" style="display: block;">
+                                </div>
+                                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                    <div class="flex flex-wrap items-center gap-3">
+                                        <button type="button" onclick="cropImage()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm">
+                                            <i class="fas fa-crop mr-2"></i>
+                                            Aplicar Corte
+                                        </button>
+                                        <button type="button" onclick="resetCrop()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm">
+                                            <i class="fas fa-undo mr-2"></i>
+                                            Resetar
+                                        </button>
+                                    </div>
+                                    <button type="button" onclick="removePhoto()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm">
+                                        <i class="fas fa-times mr-2"></i>
+                                        Remover Foto
+                                    </button>
+                                </div>
                             </div>
+                            <!-- Canvas oculto para processar o crop -->
+                            <canvas id="crop-canvas" style="display: none;"></canvas>
+                            <!-- Input hidden para enviar a imagem processada -->
+                            <input type="hidden" id="cropped-image-data" name="cropped_image_data">
                         </div>
-                        <p class="text-sm text-gray-500 mt-1">A foto será exibida como destaque no feed de comunicados.</p>
+                        <p class="text-sm text-gray-500 mt-1">A foto será exibida como destaque no feed de comunicados. Use a ferramenta de corte para ajustar a posição.</p>
                     </div>
 
                     <!-- Mensagem -->
@@ -170,7 +194,7 @@
                                 </div>
                             </div>
 
-                            <!-- Grupo Remetente -->
+                            <!-- Grupo Remetente - Mostrar apenas grupos do usuário -->
                             <div>
                                 <label for="sender_group" class="block text-sm font-semibold text-gray-900 mb-2">
                                     Representar Grupo
@@ -180,22 +204,28 @@
                                     {% for group in user_groups %}
                                         <option value="{{ group.0 }}">{{ group.1 }}</option>
                                     {% endfor %}
+                                    <!-- Grupos personalizados em que o usuário é membro -->
+                                    {% for group in user.communication_groups.all %}
+                                        <option value="custom_{{ group.id }}">{{ group.name }} (Grupo Personalizado)</option>
+                                    {% endfor %}
                                 </select>
                                 <p class="text-sm text-gray-500 mt-1">Selecione o grupo que você representa ao enviar este comunicado</p>
                             </div>
 
-                            <!-- Grupo Personalizado -->
+                            <!-- Destinatários - Grupos + Usuários -->
                             <div>
                                 <label for="custom_group" class="block text-sm font-semibold text-gray-900 mb-2">
-                                    Enviar para Grupo Específico
+                                    Destinatários Específicos
                                 </label>
                                 <select name="custom_group" id="custom_group" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" onchange="toggleGroupRecipients()">
-                                    <option value="">Selecionar destinatários manualmente</option>
-                                    {% for group in communication_groups %}
-                                        <option value="{{ group.id }}">{{ group.name }} ({{ group.members.count }} membros)</option>
-                                    {% endfor %}
+                                    <option value="">Selecionar destinatários individuais</option>
+                                    <optgroup label="Grupos de Comunicação">
+                                        {% for group in communication_groups %}
+                                            <option value="{{ group.id }}">{{ group.name }} ({{ group.members.count }} membros)</option>
+                                        {% endfor %}
+                                    </optgroup>
                                 </select>
-                                <p class="text-sm text-gray-500 mt-1">Ou escolha um grupo para enviar automaticamente para todos os membros</p>
+                                <p class="text-sm text-gray-500 mt-1">Escolha um grupo para enviar automaticamente para todos os membros, ou selecione usuários individualmente abaixo</p>
                             </div>
 
                             <!-- Enviar para todos -->
@@ -220,33 +250,69 @@
                                 <label for="recipients" class="block text-sm font-semibold text-gray-900 mb-2">
                                     Destinatários Específicos
                                 </label>
-                                <div class="border border-gray-300 rounded-lg p-3 bg-white max-h-64 overflow-y-auto">
-                                    {% for user_option in users %}
-                                    <div class="flex items-center py-2 px-2 hover:bg-gray-50 rounded">
-                                        <input type="checkbox" 
-                                               name="recipients" 
-                                               value="{{ user_option.id }}" 
-                                               id="user_{{ user_option.id }}"
-                                               class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                                        <label for="user_{{ user_option.id }}" class="ml-3 flex-1 cursor-pointer">
-                                            <div class="flex items-center">
-                                                {% if user_option.profile_picture %}
-                                                    <img src="{{ user_option.profile_picture.url }}" alt="{{ user_option.get_full_name }}" class="w-8 h-8 rounded-full mr-3">
-                                                {% else %}
-                                                    <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
-                                                        <i class="fas fa-user text-white text-xs"></i>
+                                
+                                <!-- Grupos de Comunicação -->
+                                {% if communication_groups %}
+                                <div class="mb-4">
+                                    <h4 class="text-sm font-medium text-gray-700 mb-2">Grupos de Comunicação</h4>
+                                    <div class="border border-gray-200 rounded-lg p-3 bg-gray-50 max-h-48 overflow-y-auto">
+                                        {% for group in communication_groups %}
+                                        <div class="flex items-center py-2 px-2 hover:bg-white rounded">
+                                            <input type="checkbox" 
+                                                   name="communication_groups" 
+                                                   value="{{ group.id }}" 
+                                                   id="group_{{ group.id }}"
+                                                   class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                                   onchange="toggleGroupRecipients()">
+                                            <label for="group_{{ group.id }}" class="ml-3 flex-1 cursor-pointer">
+                                                <div class="flex items-center">
+                                                    <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                                                        <i class="fas fa-users text-white text-xs"></i>
                                                     </div>
-                                                {% endif %}
-                                                <div>
-                                                    <div class="text-sm font-medium text-gray-900">{{ user_option.get_full_name }}</div>
-                                                    <div class="text-xs text-gray-500">{{ user_option.email }} • {{ user_option.sector.name|default:"Sem setor" }}</div>
+                                                    <div>
+                                                        <div class="text-sm font-medium text-gray-900">{{ group.name }}</div>
+                                                        <div class="text-xs text-gray-500">{{ group.description|default:"Sem descrição" }} • {{ group.members.count }} membro{{ group.members.count|pluralize }}</div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </label>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
                                     </div>
-                                    {% endfor %}
+                                    <p class="text-sm text-gray-500 mt-1">Selecione um ou mais grupos para enviar o comunicado para todos os seus membros</p>
                                 </div>
-                                <p class="text-sm text-gray-500 mt-1">Selecione os usuários que devem receber este comunicado</p>
+                                {% endif %}
+                                
+                                <!-- Usuários Individuais -->
+                                <div id="individual-users-section">
+                                    <h4 class="text-sm font-medium text-gray-700 mb-2">Usuários Individuais</h4>
+                                    <div class="border border-gray-300 rounded-lg p-3 bg-white max-h-64 overflow-y-auto">
+                                        {% for user_option in users %}
+                                        <div class="flex items-center py-2 px-2 hover:bg-gray-50 rounded">
+                                            <input type="checkbox" 
+                                                   name="recipients" 
+                                                   value="{{ user_option.id }}" 
+                                                   id="user_{{ user_option.id }}"
+                                                   class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                                            <label for="user_{{ user_option.id }}" class="ml-3 flex-1 cursor-pointer">
+                                                <div class="flex items-center">
+                                                    {% if user_option.profile_picture %}
+                                                        <img src="{{ user_option.profile_picture.url }}" alt="{{ user_option.get_full_name }}" class="w-8 h-8 rounded-full mr-3">
+                                                    {% else %}
+                                                        <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center mr-3">
+                                                            <i class="fas fa-user text-white text-xs"></i>
+                                                        </div>
+                                                    {% endif %}
+                                                    <div>
+                                                        <div class="text-sm font-medium text-gray-900">{{ user_option.get_full_name }}</div>
+                                                        <div class="text-xs text-gray-500">{{ user_option.email }} • {{ user_option.sector.name|default:"Sem setor" }}</div>
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <p class="text-sm text-gray-500 mt-1">Selecione os usuários específicos que devem receber este comunicado</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -270,16 +336,22 @@
 </div>
 
 <script>
+let cropper = null;
+let originalImageData = null;
+
 function toggleRecipients() {
     const sendToAll = document.getElementById('send_to_all');
     const recipientsSection = document.getElementById('recipients-section');
     const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]');
-    const customGroup = document.getElementById('custom_group');
+    const groupCheckboxes = document.querySelectorAll('input[name="communication_groups"]');
     
-    if (sendToAll.checked || customGroup.value) {
+    if (sendToAll.checked) {
         recipientsSection.style.display = 'none';
         recipientCheckboxes.forEach(checkbox => {
             checkbox.required = false;
+            checkbox.checked = false;
+        });
+        groupCheckboxes.forEach(checkbox => {
             checkbox.checked = false;
         });
     } else {
@@ -288,15 +360,42 @@ function toggleRecipients() {
 }
 
 function toggleGroupRecipients() {
-    const customGroup = document.getElementById('custom_group');
+    const groupCheckboxes = document.querySelectorAll('input[name="communication_groups"]');
     const sendToAll = document.getElementById('send_to_all');
-    const recipientsSection = document.getElementById('recipients-section');
+    const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]');
+    const individualSection = document.getElementById('individual-users-section');
     
-    if (customGroup.value) {
+    // Verificar se algum grupo foi selecionado
+    const selectedGroups = Array.from(groupCheckboxes).filter(checkbox => checkbox.checked);
+    
+    if (selectedGroups.length > 0) {
+        // Se grupos selecionados, desmarcar "enviar para todos" e desabilitar usuários individuais
         sendToAll.checked = false;
-        recipientsSection.style.display = 'none';
+        recipientCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+            checkbox.disabled = true;
+        });
+        individualSection.style.opacity = '0.5';
+        
+        // Adicionar texto informativo
+        const infoText = individualSection.querySelector('.group-info') || document.createElement('p');
+        if (!individualSection.querySelector('.group-info')) {
+            infoText.className = 'group-info text-xs text-blue-600 mt-2 font-medium';
+            infoText.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Usuários individuais desabilitados (grupos selecionados)';
+            individualSection.appendChild(infoText);
+        }
     } else {
-        recipientsSection.style.display = 'block';
+        // Se nenhum grupo selecionado, reabilitar usuários individuais
+        recipientCheckboxes.forEach(checkbox => {
+            checkbox.disabled = false;
+        });
+        individualSection.style.opacity = '1';
+        
+        // Remover texto informativo
+        const infoText = individualSection.querySelector('.group-info');
+        if (infoText) {
+            infoText.remove();
+        }
     }
 }
 
@@ -304,19 +403,140 @@ function previewImage(input) {
     const preview = document.getElementById('photo-preview');
     const previewImg = document.getElementById('preview-img');
     const popupCheckbox = document.getElementById('is_popup');
+    const uploadAreaLabel = document.getElementById('upload-area-label');
     
     if (input.files && input.files[0]) {
+        const file = input.files[0];
+        
+        // Validar tamanho do arquivo (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Arquivo muito grande. Máximo 5MB.');
+            return;
+        }
+        
         const reader = new FileReader();
         
         reader.onload = function(e) {
+            originalImageData = e.target.result;
             previewImg.src = e.target.result;
             preview.classList.remove('hidden');
+            uploadAreaLabel.classList.add('hidden');
+            
             // Desabilitar pop-up se tem imagem
             popupCheckbox.disabled = true;
             popupCheckbox.checked = false;
+            
+            // Destruir cropper anterior se existir
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+            
+            // Aguardar a imagem carregar para inicializar o cropper
+            previewImg.onload = function() {
+                // Inicializar novo cropper
+                cropper = new Cropper(previewImg, {
+                    aspectRatio: 16 / 9, // Proporção para feed
+                    viewMode: 1,
+                    autoCropArea: 0.8,
+                    responsive: true,
+                    restore: false,
+                    guides: true,
+                    center: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                    ready: function () {
+                        console.log('Cropper ready');
+                    }
+                });
+            };
         }
         
-        reader.readAsDataURL(input.files[0]);
+        reader.readAsDataURL(file);
+    }
+}
+
+function cropImage() {
+    if (!cropper) {
+        alert('Nenhuma imagem para cortar');
+        return;
+    }
+    
+    const canvas = cropper.getCroppedCanvas({
+        width: 800,
+        height: 450,
+        minWidth: 400,
+        minHeight: 225,
+        maxWidth: 1200,
+        maxHeight: 675,
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high'
+    });
+    
+    if (!canvas) {
+        alert('Erro ao processar o corte da imagem');
+        return;
+    }
+    
+    // Converter para blob
+    canvas.toBlob(function(blob) {
+        if (!blob) {
+            alert('Erro ao gerar imagem cortada');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function() {
+            // Salvar dados da imagem cortada
+            document.getElementById('cropped-image-data').value = reader.result;
+            
+            // Destruir cropper após corte
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+            
+            // Atualizar preview com imagem cortada (sem cropper)
+            const previewImg = document.getElementById('preview-img');
+            previewImg.src = reader.result;
+            previewImg.style.maxWidth = '100%';
+            previewImg.style.height = 'auto';
+            
+            alert('Imagem cortada com sucesso!');
+        };
+        reader.readAsDataURL(blob);
+    }, 'image/jpeg', 0.9);
+}
+
+function resetCrop() {
+    if (originalImageData) {
+        const previewImg = document.getElementById('preview-img');
+        previewImg.src = originalImageData;
+        
+        if (cropper) {
+            cropper.destroy();
+        }
+        
+        // Aguardar a imagem carregar para reinicializar o cropper
+        previewImg.onload = function() {
+            cropper = new Cropper(previewImg, {
+                aspectRatio: 16 / 9,
+                viewMode: 1,
+                autoCropArea: 0.8,
+                responsive: true,
+                restore: false,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false
+            });
+        };
+        
+        document.getElementById('cropped-image-data').value = '';
     }
 }
 
@@ -324,10 +544,19 @@ function removePhoto() {
     const photoInput = document.getElementById('photo');
     const preview = document.getElementById('photo-preview');
     const popupCheckbox = document.getElementById('is_popup');
+    const uploadAreaLabel = document.getElementById('upload-area-label');
+    
+    if (cropper) {
+        cropper.destroy();
+        cropper = null;
+    }
     
     photoInput.value = '';
     preview.classList.add('hidden');
+    uploadAreaLabel.classList.remove('hidden');
     popupCheckbox.disabled = false;
+    document.getElementById('cropped-image-data').value = '';
+    originalImageData = null;
 }
 
 // Executar na carga da página
@@ -339,12 +568,26 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', function(e) {
         const sendToAll = document.getElementById('send_to_all');
         const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]:checked');
-        const customGroup = document.getElementById('custom_group');
+        const groupCheckboxes = document.querySelectorAll('input[name="communication_groups"]:checked');
         
-        if (!sendToAll.checked && recipientCheckboxes.length === 0 && !customGroup.value) {
+        if (!sendToAll.checked && recipientCheckboxes.length === 0 && groupCheckboxes.length === 0) {
             e.preventDefault();
-            alert('Por favor, selecione "Enviar para todos", escolha um grupo específico ou selecione destinatários.');
+            alert('Por favor, selecione "Enviar para todos", escolha um ou mais grupos ou selecione destinatários individuais.');
             return false;
+        }
+        
+        // Se há imagem cortada, substituir o arquivo original
+        const croppedImageData = document.getElementById('cropped-image-data').value;
+        if (croppedImageData) {
+            // Criar um novo arquivo blob da imagem cortada
+            fetch(croppedImageData)
+                .then(res => res.blob())
+                .then(blob => {
+                    const file = new File([blob], 'comunicado_image.jpg', { type: 'image/jpeg' });
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    document.getElementById('photo').files = dataTransfer.files;
+                });
         }
     });
 });

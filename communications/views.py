@@ -62,14 +62,12 @@ def communication_react(request, communication_id):
         
         print(f"DEBUG: User {request.user.id} reacting '{reaction}' to communication {communication_id}")
         
-        if reaction not in ['like', 'love', 'clap']:
+        if reaction not in ['like']:
             return JsonResponse({'success': False, 'error': 'Reação inválida'})
         
         # Mapear reação para campo do modelo
         reaction_field_map = {
-            'like': 'liked_by',
-            'love': 'loved_by', 
-            'clap': 'clapped_by'
+            'like': 'liked_by'
         }
         
         reaction_field = getattr(communication, reaction_field_map[reaction])
@@ -104,7 +102,7 @@ def communication_list(request):
     """Lista todos os comunicados do usuário"""
     if request.user.hierarchy == 'SUPERADMIN':
         communications = Communication.objects.all().select_related('sender').prefetch_related(
-            'viewed_by', 'liked_by', 'loved_by', 'clapped_by', 'comments'
+            'viewed_by', 'liked_by', 'comments'
         ).order_by('-created_at')
     else:
         # Para outros usuários, mostrar apenas comunicados gerais e destinados a ele que estão ativos
@@ -118,7 +116,7 @@ def communication_list(request):
         ).filter(
             Q(active_until__isnull=True) | Q(active_until__gte=now)
         ).select_related('sender').prefetch_related(
-            'viewed_by', 'liked_by', 'loved_by', 'clapped_by', 'comments'
+            'viewed_by', 'liked_by', 'comments'
         ).distinct().order_by('-created_at')
     
     # Verificar quais comunicados foram lidos
@@ -188,14 +186,6 @@ def communication_detail_view(request, communication_id):
             'count': communication.liked_by.count(),
             'users': communication.liked_by.select_related().all()[:10]
         },
-        'loves': {
-            'count': communication.loved_by.count(),
-            'users': communication.loved_by.select_related().all()[:10]
-        },
-        'claps': {
-            'count': communication.clapped_by.count(),
-            'users': communication.clapped_by.select_related().all()[:10]
-        },
         'views': {
             'count': communication.viewed_by.count(),
             'users': communication.viewed_by.select_related().all()[:10]
@@ -246,10 +236,11 @@ def create_communication_view(request):
         message = request.POST.get('message')
         send_to_all = request.POST.get('send_to_all') == 'on'
         recipient_ids = request.POST.getlist('recipients')
+        communication_group_ids = request.POST.getlist('communication_groups')  # Múltiplos grupos
         is_pinned = request.POST.get('is_pinned') == 'on'
         is_popup = request.POST.get('is_popup') == 'on'
         sender_group = request.POST.get('sender_group', '')
-        custom_group_id = request.POST.get('custom_group', '')
+        custom_group_id = request.POST.get('custom_group', '')  # Manter para compatibilidade
         active_from = request.POST.get('active_from')
         active_until = request.POST.get('active_until')
         
@@ -275,8 +266,29 @@ def create_communication_view(request):
                 communication.save()
             
             # Adicionar destinatários baseado na lógica
-            if custom_group_id:
-                # Se foi selecionado um grupo personalizado, adicionar apenas os membros do grupo
+            all_recipients = set()
+            
+            # Processar múltiplos grupos de comunicação
+            if communication_group_ids:
+                for group_id in communication_group_ids:
+                    try:
+                        group = CommunicationGroup.objects.get(id=group_id)
+                        group_members = group.members.all()
+                        all_recipients.update(group_members)
+                        print(f"DEBUG: Adicionando {group_members.count()} membros do grupo '{group.name}'")
+                    except CommunicationGroup.DoesNotExist:
+                        print(f"DEBUG: Grupo {group_id} não encontrado")
+                        continue
+                
+                # Adicionar todos os destinatários únicos dos grupos
+                if all_recipients:
+                    communication.recipients.add(*all_recipients)
+                    communication.send_to_all = False
+                    communication.save()
+                    print(f"DEBUG: Total de destinatários únicos adicionados: {len(all_recipients)}")
+            
+            elif custom_group_id:
+                # Se foi selecionado um grupo personalizado (compatibilidade), adicionar apenas os membros do grupo
                 custom_group = CommunicationGroup.objects.get(id=custom_group_id)
                 communication.recipients.add(*custom_group.members.all())
                 communication.send_to_all = False
@@ -299,7 +311,7 @@ def create_communication_view(request):
         except Exception as e:
             messages.error(request, f'Erro ao criar comunicado: {str(e)}')
     
-    # Preparar grupos para o usuário
+    # Preparar grupos para o usuário (apenas grupos em que ele é membro)
     user_groups = []
     if request.user.hierarchy in ['GERENTE', 'COORDENACAO', 'DIRETORIA', 'SUPERADMIN', 'ADMINISTRADOR']:
         # Mostrar grupos baseado na hierarquia do usuário

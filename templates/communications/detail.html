@@ -81,9 +81,9 @@
                     {% include 'communications/reaction_buttons.html' with communication=communication %}
                     
                     <!-- Reactions Details -->
-                    {% if reactions_info.likes.count > 0 or reactions_info.loves.count > 0 or reactions_info.claps.count > 0 or reactions_info.views.count > 0 %}
+                    {% if reactions_info.likes.count > 0 or reactions_info.views.count > 0 %}
                     <div class="mt-4 pt-4 border-t border-gray-100">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <!-- Views -->
                             {% if reactions_info.views.count > 0 %}
                             <div class="bg-gray-50 rounded-lg p-3">
@@ -131,58 +131,6 @@
                                     {% endfor %}
                                     {% if reactions_info.likes.count > 10 %}
                                         <span class="text-xs text-gray-500">+{{ reactions_info.likes.count|add:"-10" }} outros</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            {% endif %}
-                            
-                            <!-- Loves -->
-                            {% if reactions_info.loves.count > 0 %}
-                            <div class="bg-red-50 rounded-lg p-3">
-                                <div class="flex items-center mb-2">
-                                    <i class="fas fa-heart text-red-600 mr-2"></i>
-                                    <span class="font-medium text-sm">{{ reactions_info.loves.count }} corações</span>
-                                </div>
-                                <div class="flex flex-wrap gap-1">
-                                    {% for user_reaction in reactions_info.loves.users %}
-                                    <div class="flex items-center space-x-1" title="{{ user_reaction.full_name }}">
-                                        {% if user_reaction.profile_picture %}
-                                            <img src="{{ user_reaction.profile_picture.url }}" alt="{{ user_reaction.full_name }}" class="w-6 h-6 rounded-full">
-                                        {% else %}
-                                            <div class="w-6 h-6 bg-red-400 rounded-full flex items-center justify-center">
-                                                <span class="text-white text-xs">{{ user_reaction.first_name.0 }}{{ user_reaction.last_name.0 }}</span>
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                    {% endfor %}
-                                    {% if reactions_info.loves.count > 10 %}
-                                        <span class="text-xs text-gray-500">+{{ reactions_info.loves.count|add:"-10" }} outros</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            {% endif %}
-                            
-                            <!-- Claps -->
-                            {% if reactions_info.claps.count > 0 %}
-                            <div class="bg-yellow-50 rounded-lg p-3">
-                                <div class="flex items-center mb-2">
-                                    <i class="fas fa-hands-clapping text-yellow-600 mr-2"></i>
-                                    <span class="font-medium text-sm">{{ reactions_info.claps.count }} aplausos</span>
-                                </div>
-                                <div class="flex flex-wrap gap-1">
-                                    {% for user_reaction in reactions_info.claps.users %}
-                                    <div class="flex items-center space-x-1" title="{{ user_reaction.full_name }}">
-                                        {% if user_reaction.profile_picture %}
-                                            <img src="{{ user_reaction.profile_picture.url }}" alt="{{ user_reaction.full_name }}" class="w-6 h-6 rounded-full">
-                                        {% else %}
-                                            <div class="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-                                                <span class="text-white text-xs">{{ user_reaction.first_name.0 }}{{ user_reaction.last_name.0 }}</span>
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                    {% endfor %}
-                                    {% if reactions_info.claps.count > 10 %}
-                                        <span class="text-xs text-gray-500">+{{ reactions_info.claps.count|add:"-10" }} outros</span>
                                     {% endif %}
                                 </div>
                             </div>

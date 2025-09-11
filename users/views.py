@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -13,6 +13,9 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 from .models import User, Sector
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
@@ -153,12 +156,207 @@ def manage_users_view(request):
         return redirect('dashboard')
     
     users = User.objects.all().select_related('sector')
+    
+    # Contar administradores corretamente
+    admin_count = users.filter(hierarchy__in=['SUPERADMIN', 'ADMINISTRATIVO']).count()
+    
     context = {
         'users': users,
         'sectors': Sector.objects.all(),
         'user': request.user,
+        'admin_count': admin_count,
     }
     return render(request, 'admin/users.html', context)
+
+
+@login_required
+def export_users_excel(request):
+    """Exportar dados de usuários em Excel"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    # Criar workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Usuários"
+    
+    # Definir cabeçalhos
+    headers = [
+        'Username', 'Email', 'Primeiro Nome', 'Último Nome', 'Telefone', 
+        'Setor ID', 'Setor Nome', 'Hierarquia', 'Saldo C$', 'Ativo', 
+        'Data Criação', 'Último Login'
+    ]
+    
+    # Estilizar cabeçalhos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+    
+    # Buscar dados dos usuários
+    users = User.objects.all().select_related('sector').order_by('first_name', 'last_name')
+    
+    # Preencher dados
+    for row, user in enumerate(users, 2):
+        ws.cell(row=row, column=1, value=user.username)
+        ws.cell(row=row, column=2, value=user.email)
+        ws.cell(row=row, column=3, value=user.first_name)
+        ws.cell(row=row, column=4, value=user.last_name)
+        ws.cell(row=row, column=5, value=user.phone or "")
+        ws.cell(row=row, column=6, value=user.sector.id if user.sector else "")
+        ws.cell(row=row, column=7, value=user.sector.name if user.sector else "")
+        ws.cell(row=row, column=8, value=user.hierarchy)
+        ws.cell(row=row, column=9, value=float(user.balance_cs))
+        ws.cell(row=row, column=10, value="Sim" if user.is_active else "Não")
+        ws.cell(row=row, column=11, value=user.date_joined.strftime("%Y-%m-%d %H:%M:%S"))
+        ws.cell(row=row, column=12, value=user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else "")
+    
+    # Ajustar largura das colunas
+    for col in range(1, len(headers) + 1):
+        column_letter = get_column_letter(col)
+        max_length = 0
+        for row in ws[column_letter]:
+            try:
+                if len(str(row.value)) > max_length:
+                    max_length = len(str(row.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Preparar response
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="usuarios_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    
+    # Salvar workbook na response
+    wb.save(response)
+    
+    # Log da ação
+    log_action(
+        request.user,
+        'USER_EXPORT',
+        f'Exportação de dados de usuários realizada',
+        request
+    )
+    
+    return response
+
+
+@login_required
+def import_users_excel(request):
+    """Importar usuários de Excel"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('manage_users')
+    
+    if request.method == 'POST':
+        if 'excel_file' not in request.FILES:
+            messages.error(request, 'Nenhum arquivo foi enviado.')
+            return redirect('manage_users')
+        
+        excel_file = request.FILES['excel_file']
+        
+        try:
+            # Ler o arquivo Excel
+            wb = openpyxl.load_workbook(excel_file)
+            ws = wb.active
+            
+            created_count = 0
+            updated_count = 0
+            error_count = 0
+            errors = []
+            
+            # Processar cada linha (pular cabeçalho)
+            for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+                try:
+                    username, email, first_name, last_name, phone, sector_id, sector_name, hierarchy, balance_cs, is_active, date_created, last_login = row
+                    
+                    if not email:  # Email é obrigatório
+                        continue
+                    
+                    # Buscar setor
+                    sector = None
+                    if sector_id:
+                        try:
+                            sector = Sector.objects.get(id=int(sector_id))
+                        except Sector.DoesNotExist:
+                            pass
+                    
+                    # Verificar se usuário já existe
+                    user, created = User.objects.get_or_create(
+                        email=email,
+                        defaults={
+                            'username': username or email,
+                            'first_name': first_name or '',
+                            'last_name': last_name or '',
+                            'phone': phone or '',
+                            'sector': sector,
+                            'hierarchy': hierarchy or 'PADRAO',
+                            'balance_cs': Decimal(str(balance_cs)) if balance_cs else Decimal('0'),
+                            'is_active': str(is_active).lower() in ['sim', 'true', '1'] if is_active else True,
+                        }
+                    )
+                    
+                    if created:
+                        # Definir senha padrão para novos usuários
+                        user.set_password('123456')  # Senha padrão
+                        user.save()
+                        created_count += 1
+                    else:
+                        # Atualizar usuário existente
+                        user.username = username or user.username
+                        user.first_name = first_name or user.first_name
+                        user.last_name = last_name or user.last_name
+                        user.phone = phone or user.phone
+                        if sector:
+                            user.sector = sector
+                        if hierarchy:
+                            user.hierarchy = hierarchy
+                        if balance_cs is not None:
+                            user.balance_cs = Decimal(str(balance_cs))
+                        if is_active is not None:
+                            user.is_active = str(is_active).lower() in ['sim', 'true', '1']
+                        user.save()
+                        updated_count += 1
+                        
+                except Exception as e:
+                    error_count += 1
+                    errors.append(f'Linha {row_num}: {str(e)}')
+                    continue
+            
+            # Mensagem de resultado
+            if created_count > 0 or updated_count > 0:
+                message = f'Importação concluída! {created_count} usuários criados, {updated_count} usuários atualizados.'
+                if error_count > 0:
+                    message += f' {error_count} erros encontrados.'
+                messages.success(request, message)
+            else:
+                messages.warning(request, 'Nenhum usuário foi importado.')
+            
+            if errors:
+                for error in errors[:5]:  # Mostrar apenas os primeiros 5 erros
+                    messages.error(request, error)
+            
+            # Log da ação
+            log_action(
+                request.user,
+                'USER_IMPORT',
+                f'Importação de usuários: {created_count} criados, {updated_count} atualizados, {error_count} erros',
+                request
+            )
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao processar arquivo: {str(e)}')
+    
+    return redirect('manage_users')
 
 
 @login_required
@@ -316,6 +514,84 @@ def manage_cs_view(request):
         'average_per_user': average_per_user,
     }
     return render(request, 'admin/manage_cs.html', context)
+
+
+@login_required
+def export_cs_excel(request):
+    """Exportar dados de Confianças em Excel"""
+    if not request.user.can_manage_cs():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    # Criar workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Confianças C$"
+    
+    # Definir cabeçalhos
+    headers = ['Nome', 'Email', 'Setor', 'Saldo C$']
+    
+    # Estilizar cabeçalhos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+    
+    # Buscar dados dos usuários
+    users = User.objects.all().select_related('sector').order_by('first_name', 'last_name')
+    
+    # Preencher dados
+    for row, user in enumerate(users, 2):
+        ws.cell(row=row, column=1, value=user.full_name)
+        ws.cell(row=row, column=2, value=user.email)
+        ws.cell(row=row, column=3, value=user.sector.name if user.sector else "Sem setor")
+        ws.cell(row=row, column=4, value=float(user.balance_cs))
+    
+    # Ajustar largura das colunas
+    for col in range(1, len(headers) + 1):
+        column_letter = get_column_letter(col)
+        max_length = 0
+        for row in ws[column_letter]:
+            try:
+                if len(str(row.value)) > max_length:
+                    max_length = len(str(row.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Adicionar linha de totais
+    total_row = len(users) + 2
+    ws.cell(row=total_row, column=1, value="TOTAL:")
+    ws.cell(row=total_row, column=1).font = Font(bold=True)
+    
+    total_cs = sum(float(user.balance_cs) for user in users)
+    ws.cell(row=total_row, column=4, value=total_cs)
+    ws.cell(row=total_row, column=4).font = Font(bold=True)
+    
+    # Preparar response
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="confiancas_cs_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    
+    # Salvar workbook na response
+    wb.save(response)
+    
+    # Log da ação
+    log_action(
+        request.user,
+        'CS_EXPORT',
+        f'Exportação de dados de Confianças C$ realizada',
+        request
+    )
+    
+    return response
 
 
 @login_required 
