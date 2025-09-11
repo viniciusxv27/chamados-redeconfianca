@@ -118,6 +118,9 @@ class Communication(models.Model):
         
         if is_new:
             self.trigger_notification()
+            self.trigger_webhooks('COMMUNICATION_CREATED')
+        else:
+            self.trigger_webhooks('COMMUNICATION_UPDATED')
     
     def trigger_notification(self):
         """Dispara notificação via webhook para WhatsApp"""
@@ -146,6 +149,44 @@ class Communication(models.Model):
         except Exception as e:
             # Log do erro (implementar logging posteriormente)
             pass
+    
+    def trigger_webhooks(self, event_type):
+        """Dispara webhooks configurados para eventos de comunicado"""
+        try:
+            # Importar aqui para evitar dependência circular
+            from tickets.models import Webhook
+            from core.middleware import log_action
+            
+            webhooks = Webhook.objects.filter(
+                event=event_type,
+                is_active=True
+            )
+            
+            log_action(
+                user=self.sender,
+                action_type='WEBHOOK_TRIGGER',
+                description=f'Disparando {webhooks.count()} webhook(s) para evento {event_type} - Comunicado: {self.title}'
+            )
+            
+            for webhook in webhooks:
+                webhook.trigger(self, user=self.sender)
+                
+        except Exception as e:
+            # Log do erro
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro ao disparar webhooks para comunicado {self.id}: {e}')
+            
+            # Log também no sistema
+            try:
+                from core.middleware import log_action
+                log_action(
+                    user=self.sender,
+                    action_type='WEBHOOK_ERROR',
+                    description=f'Erro ao disparar webhook para comunicado {self.title}: {str(e)}'
+                )
+            except:
+                pass
 
 
 class CommunicationRead(models.Model):

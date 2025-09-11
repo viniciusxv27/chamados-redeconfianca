@@ -1,7 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from users.models import Sector
+from users.models import Sector, User
 import requests
 
 
@@ -40,6 +40,7 @@ class Ticket(models.Model):
         ('AGUARDANDO_APROVACAO', 'Aguardando Aprovação do Usuário'),
         ('FECHADO', 'Fechado'),
         ('REABERTO', 'Reaberto'),
+        ('REJEITADO', 'Rejeitado'),
     ]
     
     id = models.AutoField(primary_key=True)
@@ -131,6 +132,10 @@ class Ticket(models.Model):
             self.trigger_webhooks('TICKET_CREATED')
             if self.category.webhook_url:
                 self.trigger_webhook()
+            
+            # Verificar se é ordem de compra e iniciar fluxo de aprovação
+            if self.category.name.lower() == 'ordem de compra':
+                self._start_purchase_approval_flow()
         elif old_status != self.status:
             if self.status == 'RESOLVIDO':
                 self.trigger_webhooks('TICKET_RESOLVED')
@@ -275,6 +280,48 @@ class Ticket(models.Model):
         users.extend([assignment.user for assignment in additional_users])
         
         return users
+    
+    def _start_purchase_approval_flow(self):
+        """Inicia o fluxo de aprovação para ordem de compra"""
+        # Extrair valor do título ou descrição (assumindo formato "Valor: R$ XXX")
+        import re
+        
+        # Tentar extrair valor do título ou descrição
+        text_to_search = f"{self.title} {self.description}"
+        value_match = re.search(r'R?\$?\s*(\d+(?:[.,]\d{2})?)', text_to_search)
+        
+        if not value_match:
+            # Se não encontrar valor, assumir valor padrão para teste
+            amount = 50.00
+        else:
+            amount_str = value_match.group(1).replace(',', '.')
+            amount = float(amount_str)
+        
+        # Buscar primeiro aprovador ativo
+        first_approver = PurchaseOrderApprover.objects.filter(
+            approval_order=1,
+            is_active=True
+        ).first()
+        
+        if first_approver and amount <= first_approver.max_amount:
+            # Criar primeira aprovação
+            approval = PurchaseOrderApproval.objects.create(
+                ticket=self,
+                approver=first_approver.user,
+                amount=amount,
+                approval_step=1
+            )
+            
+            # Disparar webhook de solicitação
+            approval._trigger_approval_request_webhook()
+        else:
+            # Se valor exceder o máximo do primeiro aprovador, criar comentário
+            TicketComment.objects.create(
+                ticket=self,
+                user=self.created_by,
+                comment=f"Ordem de compra criada com valor R$ {amount:.2f}. Aguardando aprovação.",
+                comment_type='COMMENT'
+            )
 
 
 class TicketLog(models.Model):
@@ -373,11 +420,16 @@ class Webhook(models.Model):
         ('TICKET_CLOSED', 'Chamado Fechado'),
         ('CATEGORY_CREATED', 'Categoria Criada'),
         ('USER_CREATED', 'Usuário Criado'),
+        ('APPROVAL_REQUEST', 'Solicitação de Aprovação'),
+        ('APPROVED', 'Aprovado'),
+        ('REJECTED', 'Rejeitado'),
+        ('COMMUNICATION_CREATED', 'Comunicado Criado'),
+        ('COMMUNICATION_UPDATED', 'Comunicado Atualizado'),
     ]
     
     name = models.CharField(max_length=100, verbose_name="Nome")
     url = models.URLField(verbose_name="URL do Webhook")
-    event = models.CharField(max_length=20, choices=EVENT_CHOICES, verbose_name="Evento")
+    event = models.CharField(max_length=25, choices=EVENT_CHOICES, verbose_name="Evento")
     category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Categoria (filtro)")
     sector = models.ForeignKey(Sector, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Setor (filtro)")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
@@ -392,6 +444,15 @@ class Webhook(models.Model):
     def __str__(self):
         return f"{self.name} - {self.get_event_display()}"
     
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if not self.event:
+            raise ValidationError({'event': 'O campo event é obrigatório.'})
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
     def trigger(self, instance, user=None):
         """Dispara o webhook com os dados da instância"""
         try:
@@ -405,6 +466,21 @@ class Webhook(models.Model):
                 return
             
             payload = self._build_payload(instance, user)
+            headers = {'Content-Type': 'application/json'}
+            if self.headers:
+                headers.update(self.headers)
+            
+            requests.post(self.url, json=payload, headers=headers, timeout=10)
+        except Exception as e:
+            # Log do erro (implementar logging posteriormente)
+            pass
+    
+    def _send_webhook(self, payload):
+        """Envia webhook com payload customizado"""
+        try:
+            if not self.is_active:
+                return
+            
             headers = {'Content-Type': 'application/json'}
             if self.headers:
                 headers.update(self.headers)
@@ -439,6 +515,22 @@ class Webhook(models.Model):
                 'due_date': instance.due_date.isoformat() if instance.due_date else None,
                 'is_overdue': instance.is_overdue
             }
+        elif self.event.startswith('COMMUNICATION_'):
+            payload['communication'] = {
+                'id': instance.id,
+                'title': instance.title,
+                'message': instance.message,
+                'sender': instance.sender.full_name,
+                'sender_email': instance.sender.email,
+                'send_to_all': instance.send_to_all,
+                'is_pinned': instance.is_pinned,
+                'is_popup': instance.is_popup,
+                'created_at': instance.created_at.isoformat(),
+                'active_from': instance.active_from.isoformat() if instance.active_from else None,
+                'active_until': instance.active_until.isoformat() if instance.active_until else None,
+                'recipients_count': instance.recipients.count() if not instance.send_to_all else None,
+                'has_image': bool(instance.image)
+            }
         
         if user:
             payload['user'] = {
@@ -448,3 +540,154 @@ class Webhook(models.Model):
             }
         
         return payload
+
+
+class PurchaseOrderApprover(models.Model):
+    """Configuração de aprovadores para ordem de compra"""
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='purchase_approval_config',
+        verbose_name="Usuário"
+    )
+    max_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Valor Máximo de Aprovação"
+    )
+    approval_order = models.PositiveIntegerField(
+        verbose_name="Ordem de Aprovação",
+        help_text="1 = Primeiro aprovador, 2 = Segundo aprovador, etc."
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    
+    class Meta:
+        verbose_name = "Aprovador de Ordem de Compra"
+        verbose_name_plural = "Aprovadores de Ordem de Compra"
+        ordering = ['approval_order']
+        unique_together = ['approval_order']  # Cada ordem deve ser única
+    
+    def __str__(self):
+        return f"{self.user.full_name} - Ordem {self.approval_order} - Até R$ {self.max_amount}"
+
+
+class PurchaseOrderApproval(models.Model):
+    """Log de aprovações de ordem de compra"""
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente'),
+        ('APPROVED', 'Aprovado'),
+        ('REJECTED', 'Rejeitado'),
+    ]
+    
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='purchase_approvals')
+    approver = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name="Aprovador"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor")
+    
+    # Comentários e timestamps
+    comment = models.TextField(blank=True, verbose_name="Comentário")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Solicitado em")
+    decided_at = models.DateTimeField(null=True, blank=True, verbose_name="Decidido em")
+    
+    # Ordem de aprovação no fluxo
+    approval_step = models.PositiveIntegerField(verbose_name="Etapa de Aprovação")
+    
+    class Meta:
+        verbose_name = "Aprovação de Ordem de Compra"
+        verbose_name_plural = "Aprovações de Ordem de Compra"
+        ordering = ['-created_at']
+        unique_together = ['ticket', 'approver', 'approval_step']
+    
+    def __str__(self):
+        return f"Aprovação {self.ticket.id} - {self.approver.full_name} - {self.status}"
+    
+    def approve(self, comment=''):
+        """Aprova a ordem de compra"""
+        from django.utils import timezone
+        self.status = 'APPROVED'
+        self.comment = comment
+        self.decided_at = timezone.now()
+        self.save()
+        
+        # Verificar se precisa seguir para o próximo aprovador
+        self._process_next_approval()
+    
+    def reject(self, comment=''):
+        """Rejeita a ordem de compra"""
+        from django.utils import timezone
+        self.status = 'REJECTED'
+        self.comment = comment
+        self.decided_at = timezone.now()
+        self.save()
+        
+        # Disparar webhook de rejeição
+        self._trigger_rejection_webhook()
+    
+    def _process_next_approval(self):
+        """Processa a próxima aprovação no fluxo"""
+        # Buscar próximo aprovador
+        next_approver = PurchaseOrderApprover.objects.filter(
+            approval_order=self.approval_step + 1,
+            is_active=True
+        ).first()
+        
+        if next_approver and self.amount <= next_approver.max_amount:
+            # Criar próxima aprovação
+            next_approval = PurchaseOrderApproval.objects.create(
+                ticket=self.ticket,
+                approver=next_approver.user,
+                amount=self.amount,
+                approval_step=next_approver.approval_order
+            )
+            
+            # Disparar webhook de solicitação
+            next_approval._trigger_approval_request_webhook()
+        else:
+            # Todos aprovaram - disparar webhook final
+            self._trigger_final_approval_webhook()
+    
+    def _trigger_approval_request_webhook(self):
+        """Dispara webhook de solicitação de aprovação"""
+        webhooks = Webhook.objects.filter(event='APPROVAL_REQUEST', is_active=True)
+        
+        for webhook in webhooks:
+            payload = {
+                'event': 'approval_request',
+                'user': self.approver.full_name,
+                'order_id': str(self.ticket.id),
+                'amount': float(self.amount),
+                'callback_url': f"/api/purchase-orders/{self.ticket.id}/approve/{self.id}/"
+            }
+            webhook._send_webhook(payload)
+    
+    def _trigger_final_approval_webhook(self):
+        """Dispara webhook de aprovação final"""
+        webhooks = Webhook.objects.filter(event='APPROVED', is_active=True)
+        
+        for webhook in webhooks:
+            payload = {
+                'event': 'approved',
+                'user': 'Sistema',
+                'order_id': str(self.ticket.id),
+                'amount': float(self.amount)
+            }
+            webhook._send_webhook(payload)
+    
+    def _trigger_rejection_webhook(self):
+        """Dispara webhook de rejeição"""
+        webhooks = Webhook.objects.filter(event='REJECTED', is_active=True)
+        
+        for webhook in webhooks:
+            payload = {
+                'event': 'rejected',
+                'user': self.approver.full_name,
+                'order_id': str(self.ticket.id),
+                'amount': float(self.amount)
+            }
+            webhook._send_webhook(payload)

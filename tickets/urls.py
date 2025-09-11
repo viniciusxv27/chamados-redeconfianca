@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import purchase_views
 
 urlpatterns = [
     path('', views.tickets_list_view, name='tickets_list'),
@@ -14,4 +15,22 @@ urlpatterns = [
     # Admin URLs
     path('admin/webhooks/', views.manage_webhooks_view, name='manage_webhooks'),
     path('admin/webhooks/create/', views.create_webhook_view, name='create_webhook'),
+    path('admin/webhooks/<int:webhook_id>/edit/', views.edit_webhook_view, name='edit_webhook'),
+    path('admin/webhooks/<int:webhook_id>/delete/', views.delete_webhook_view, name='delete_webhook'),
+    
+    # Purchase Order Admin URLs
+    path('admin/purchase-approvers/', purchase_views.manage_purchase_approvers_view, name='manage_purchase_approvers'),
+    path('admin/purchase-approvers/create/', purchase_views.create_purchase_approver_view, name='create_purchase_approver'),
+    path('admin/purchase-approvers/<int:approver_id>/update/', purchase_views.update_purchase_approver_view, name='update_purchase_approver'),
+    path('admin/purchase-approvers/<int:approver_id>/delete/', purchase_views.delete_purchase_approver_view, name='delete_purchase_approver'),
+    path('admin/purchase-approvals/history/', purchase_views.purchase_approvals_history_view, name='purchase_approvals_history'),
+    path('admin/purchase-approvals/pending/', purchase_views.pending_approvals_view, name='pending_approvals_view'),
+    
+    # Purchase Order API
+    path('api/purchase-orders/<int:ticket_id>/approve/<int:approval_id>/', views.approve_purchase_order, name='approve_purchase_order'),
+    path('api/purchase-orders/<int:ticket_id>/reject/<int:approval_id>/', views.reject_purchase_order, name='reject_purchase_order'),
+    path('api/purchase-orders/pending/', views.pending_approvals, name='pending_approvals'),
+    
+    # User Tickets API
+    path('api/users/<int:user_id>/tickets/', views.user_tickets_api, name='user_tickets_api'),
 ]

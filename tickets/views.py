@@ -537,8 +537,13 @@ def manage_webhooks_view(request):
         return redirect('dashboard')
     
     webhooks = Webhook.objects.all().select_related('category', 'sector')
+    active_webhooks_count = webhooks.filter(is_active=True).count()
+    inactive_webhooks_count = webhooks.filter(is_active=False).count()
+    
     context = {
         'webhooks': webhooks,
+        'active_webhooks_count': active_webhooks_count,
+        'inactive_webhooks_count': inactive_webhooks_count,
         'user': request.user,
     }
     return render(request, 'admin/webhooks.html', context)
@@ -554,32 +559,61 @@ def create_webhook_view(request):
     if request.method == 'POST':
         name = request.POST.get('name')
         url = request.POST.get('url')
-        event = request.POST.get('event')
+        events = request.POST.getlist('events')  # Pegar lista de eventos selecionados
         category_id = request.POST.get('category')
         sector_id = request.POST.get('sector')
         is_active = request.POST.get('is_active') == 'on'
+        headers = request.POST.get('headers', '{}')
         
         try:
+            # Validar se pelo menos um evento foi selecionado
+            if not events:
+                messages.error(request, 'Por favor, selecione pelo menos um evento.')
+                context = {
+                    'event_choices': Webhook.EVENT_CHOICES,
+                    'categories': Category.objects.all(),
+                    'sectors': Sector.objects.all(),
+                    'user': request.user,
+                }
+                return render(request, 'admin/create_webhook.html', context)
+            
+            # Validar e parsear headers JSON
+            import json
+            try:
+                headers_dict = json.loads(headers) if headers.strip() else {}
+            except json.JSONDecodeError:
+                headers_dict = {}
+            
             category = get_object_or_404(Category, id=category_id) if category_id else None
             sector = get_object_or_404(Sector, id=sector_id) if sector_id else None
             
-            webhook = Webhook.objects.create(
-                name=name,
-                url=url,
-                event=event,
-                category=category,
-                sector=sector,
-                is_active=is_active
-            )
+            # Criar um webhook para cada evento selecionado
+            created_webhooks = []
+            for event in events:
+                webhook_name = f"{name} - {dict(Webhook.EVENT_CHOICES)[event]}"
+                
+                webhook = Webhook.objects.create(
+                    name=webhook_name,
+                    url=url,
+                    event=event,
+                    category=category,
+                    sector=sector,
+                    is_active=is_active,
+                    headers=headers_dict
+                )
+                created_webhooks.append(webhook)
             
             log_action(
                 request.user, 
                 'WEBHOOK_CREATE', 
-                f'Webhook criado: {webhook.name}',
+                f'Webhooks criados: {len(created_webhooks)} webhook(s) para {name}',
                 request
             )
             
-            messages.success(request, f'Webhook "{webhook.name}" criado com sucesso!')
+            if len(created_webhooks) == 1:
+                messages.success(request, f'Webhook "{created_webhooks[0].name}" criado com sucesso!')
+            else:
+                messages.success(request, f'{len(created_webhooks)} webhooks criados com sucesso para "{name}"!')
             return redirect('manage_webhooks')
             
         except Exception as e:
@@ -592,6 +626,90 @@ def create_webhook_view(request):
         'user': request.user,
     }
     return render(request, 'admin/create_webhook.html', context)
+
+
+@login_required
+def edit_webhook_view(request, webhook_id):
+    """Editar webhook existente"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    webhook = get_object_or_404(Webhook, id=webhook_id)
+    
+    if request.method == 'POST':
+        webhook.name = request.POST.get('name')
+        webhook.url = request.POST.get('url')
+        webhook.event = request.POST.get('event')
+        
+        category_id = request.POST.get('category')
+        sector_id = request.POST.get('sector')
+        
+        webhook.category = get_object_or_404(Category, id=category_id) if category_id else None
+        webhook.sector = get_object_or_404(Sector, id=sector_id) if sector_id else None
+        webhook.is_active = request.POST.get('is_active') == 'on'
+        
+        headers = request.POST.get('headers', '{}')
+        try:
+            import json
+            webhook.headers = json.loads(headers) if headers.strip() else {}
+        except json.JSONDecodeError:
+            webhook.headers = {}
+        
+        try:
+            webhook.save()
+            
+            log_action(
+                request.user,
+                'WEBHOOK_UPDATE',
+                f'Webhook atualizado: {webhook.name}',
+                request
+            )
+            
+            messages.success(request, f'Webhook "{webhook.name}" atualizado com sucesso!')
+            return redirect('manage_webhooks')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar webhook: {str(e)}')
+    
+    context = {
+        'webhook': webhook,
+        'event_choices': Webhook.EVENT_CHOICES,
+        'categories': Category.objects.all(),
+        'sectors': Sector.objects.all(),
+        'user': request.user,
+    }
+    return render(request, 'admin/edit_webhook.html', context)
+
+
+@login_required
+def delete_webhook_view(request, webhook_id):
+    """Excluir webhook"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    webhook = get_object_or_404(Webhook, id=webhook_id)
+    
+    if request.method == 'POST':
+        webhook_name = webhook.name
+        webhook.delete()
+        
+        log_action(
+            request.user,
+            'WEBHOOK_DELETE',
+            f'Webhook excluído: {webhook_name}',
+            request
+        )
+        
+        messages.success(request, f'Webhook "{webhook_name}" excluído com sucesso!')
+        return redirect('manage_webhooks')
+    
+    context = {
+        'webhook': webhook,
+        'user': request.user,
+    }
+    return render(request, 'admin/delete_webhook.html', context)
 
 
 class WebhookViewSet(viewsets.ModelViewSet):
@@ -679,3 +797,194 @@ def ticket_create_fixed_view(request):
         'users': users,
     }
     return render(request, 'tickets/create.html', context)
+
+
+# ========================
+# PURCHASE ORDER API VIEWS
+# ========================
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .models import PurchaseOrderApproval, TicketComment
+import json
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def approve_purchase_order(request, ticket_id, approval_id):
+    """API para aprovar uma ordem de compra"""
+    try:
+        approval = PurchaseOrderApproval.objects.get(
+            id=approval_id,
+            ticket_id=ticket_id,
+            approver=request.user,
+            status='PENDING'
+        )
+        
+        comment = request.data.get('comment', '')
+        approval.approve(comment)
+        
+        # Adicionar comentário no ticket
+        TicketComment.objects.create(
+            ticket=approval.ticket,
+            user=request.user,
+            comment=f"Ordem de compra aprovada (R$ {approval.amount:.2f}). {comment}".strip(),
+            comment_type='COMMENT'
+        )
+        
+        return Response({
+            'message': 'Ordem de compra aprovada com sucesso',
+            'status': 'approved',
+            'next_step': approval.approval_step + 1 if approval.approval_step < 3 else 'completed'
+        })
+        
+    except PurchaseOrderApproval.DoesNotExist:
+        return Response({
+            'error': 'Aprovação não encontrada ou você não tem permissão para aprová-la'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': f'Erro ao processar aprovação: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reject_purchase_order(request, ticket_id, approval_id):
+    """API para rejeitar uma ordem de compra"""
+    try:
+        approval = PurchaseOrderApproval.objects.get(
+            id=approval_id,
+            ticket_id=ticket_id,
+            approver=request.user,
+            status='PENDING'
+        )
+        
+        comment = request.data.get('comment', 'Ordem rejeitada')
+        approval.reject(comment)
+        
+        # Adicionar comentário no ticket
+        TicketComment.objects.create(
+            ticket=approval.ticket,
+            user=request.user,
+            comment=f"Ordem de compra rejeitada (R$ {approval.amount:.2f}). Motivo: {comment}",
+            comment_type='COMMENT'
+        )
+        
+        # Atualizar status do ticket
+        approval.ticket.status = 'REJEITADO'
+        approval.ticket.save()
+        
+        return Response({
+            'message': 'Ordem de compra rejeitada',
+            'status': 'rejected',
+            'reason': comment
+        })
+        
+    except PurchaseOrderApproval.DoesNotExist:
+        return Response({
+            'error': 'Aprovação não encontrada ou você não tem permissão para rejeitá-la'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': f'Erro ao processar rejeição: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pending_approvals(request):
+    """API para listar aprovações pendentes do usuário"""
+    try:
+        approvals = PurchaseOrderApproval.objects.filter(
+            approver=request.user,
+            status='PENDING'
+        ).select_related('ticket', 'ticket__category', 'ticket__created_by')
+        
+        approvals_data = []
+        for approval in approvals:
+            approvals_data.append({
+                'id': approval.id,
+                'ticket_id': approval.ticket.id,
+                'ticket_title': approval.ticket.title,
+                'amount': float(approval.amount),
+                'created_at': approval.created_at.isoformat(),
+                'approval_step': approval.approval_step,
+                'created_by': approval.ticket.created_by.full_name,
+                'category': approval.ticket.category.name,
+            })
+        
+        return Response({
+            'approvals': approvals_data,
+            'count': len(approvals_data)
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'Erro ao carregar aprovações: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def user_tickets_api(request, user_id):
+    """
+    API REST para buscar chamados de um usuário específico
+    URL: /api/users/{user_id}/tickets/
+    Retorna quantidade e títulos dos chamados do usuário
+    """
+    try:
+        # Buscar o usuário
+        user = get_object_or_404(User, id=user_id)
+        
+        # Buscar todos os tickets do usuário
+        tickets = Ticket.objects.filter(created_by=user).select_related('category', 'sector')
+        
+        # Preparar dados para resposta
+        tickets_data = []
+        for ticket in tickets:
+            tickets_data.append({
+                'id': ticket.id,
+                'title': ticket.title,
+                'status': ticket.status,
+                'category': ticket.category.name if ticket.category else None,
+                'sector': ticket.sector.name if ticket.sector else None,
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat(),
+            })
+        
+        # Contar por status
+        status_counts = {
+            'total': tickets.count(),
+            'open': tickets.filter(status='OPEN').count(),
+            'in_progress': tickets.filter(status='IN_PROGRESS').count(),
+            'closed': tickets.filter(status='CLOSED').count(),
+            'cancelled': tickets.filter(status='CANCELLED').count(),
+        }
+        
+        return JsonResponse({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'full_name': user.full_name,
+                'email': user.email,
+            },
+            'tickets': {
+                'count': status_counts['total'],
+                'status_breakdown': status_counts,
+                'data': tickets_data
+            },
+            'success': True
+        })
+        
+    except User.DoesNotExist:
+        return JsonResponse({
+            'error': 'Usuário não encontrado',
+            'success': False
+        }, status=404)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Erro interno do servidor: {str(e)}',
+            'success': False
+        }, status=500)

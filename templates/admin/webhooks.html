@@ -49,11 +49,7 @@
                     <i class="fas fa-check-circle text-green-600 text-xl"></i>
                 </div>
                 <div class="ml-4">
-                    <h3 class="text-lg font-semibold text-gray-900">
-                        {% for webhook in webhooks %}
-                            {% if webhook.is_active %}{{ forloop.counter }}{% endif %}
-                        {% endfor %}
-                    </h3>
+                    <h3 class="text-lg font-semibold text-gray-900">{{ active_webhooks_count }}</h3>
                     <p class="text-gray-600 text-sm">Ativos</p>
                 </div>
             </div>
@@ -65,11 +61,7 @@
                     <i class="fas fa-pause-circle text-yellow-600 text-xl"></i>
                 </div>
                 <div class="ml-4">
-                    <h3 class="text-lg font-semibold text-gray-900">
-                        {% for webhook in webhooks %}
-                            {% if not webhook.is_active %}{{ forloop.counter }}{% endif %}
-                        {% endfor %}
-                    </h3>
+                    <h3 class="text-lg font-semibold text-gray-900">{{ inactive_webhooks_count }}</h3>
                     <p class="text-gray-600 text-sm">Inativos</p>
                 </div>
             </div>
@@ -116,13 +108,15 @@
                             </div>
                         </td>
                         <td class="py-4 px-6">
-                            <div class="flex flex-wrap gap-1">
-                                {% for event in webhook.events %}
-                                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                        {{ event }}
-                                    </span>
-                                {% endfor %}
-                            </div>
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                {{ webhook.get_event_display }}
+                            </span>
+                            {% if webhook.category %}
+                                <div class="text-xs text-gray-500 mt-1">Categoria: {{ webhook.category.name }}</div>
+                            {% endif %}
+                            {% if webhook.sector %}
+                                <div class="text-xs text-gray-500 mt-1">Setor: {{ webhook.sector.name }}</div>
+                            {% endif %}
                         </td>
                         <td class="py-4 px-6">
                             <div class="max-w-xs">
@@ -147,15 +141,16 @@
                                         title="Testar Webhook">
                                     <i class="fas fa-play"></i>
                                 </button>
-                                <button class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
-                                        title="Editar">
+                                <a href="{% url 'edit_webhook' webhook.id %}" 
+                                   class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
+                                   title="Editar">
                                     <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors"
-                                        title="Excluir"
-                                        onclick="deleteWebhook({{ webhook.id }}, '{{ webhook.name }}')">
+                                </a>
+                                <a href="{% url 'delete_webhook' webhook.id %}" 
+                                   class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors"
+                                   title="Excluir">
                                     <i class="fas fa-trash"></i>
-                                </button>
+                                </a>
                             </div>
                         </td>
                     </tr>

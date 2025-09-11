@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }} - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Gestão de Aprovadores</h1>
+                <p class="text-gray-600 mt-2">Configure usuários e valores máximos para aprovação de ordens de compra</p>
+            </div>
+            
+            <div>
+                <button onclick="openCreateModal()" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors inline-flex items-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    Adicionar Aprovador
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Approvers -->
+    <div class="bg-white rounded-lg shadow-sm mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Aprovadores Configurados</h2>
+            <p class="text-sm text-gray-600">Sequência de aprovação para ordens de compra</p>
+        </div>
+        
+        <div class="p-6">
+            {% if approvers %}
+            <div class="space-y-4">
+                {% for approver in approvers %}
+                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg {% if not approver.is_active %}bg-gray-50 opacity-60{% endif %}">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold">
+                                {{ approver.approval_order }}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 class="font-medium text-gray-900">
+                                {{ approver.user.full_name }}
+                                {% if not approver.is_active %}
+                                    <span class="text-sm text-red-500 ml-2">(Inativo)</span>
+                                {% endif %}
+                            </h3>
+                            <p class="text-sm text-gray-600">{{ approver.user.email }}</p>
+                            <p class="text-sm text-gray-500">
+                                <i class="fas fa-dollar-sign mr-1"></i>
+                                Até R$ {{ approver.max_amount|floatformat:2 }}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openEditModal({{ approver.id }}, '{{ approver.user.full_name }}', {{ approver.max_amount }}, {{ approver.approval_order }}, {{ approver.is_active|yesno:'true,false' }})" 
+                                class="text-blue-600 hover:text-blue-800">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        
+                        <button onclick="deleteApprover({{ approver.id }}, '{{ approver.user.full_name }}')" 
+                                class="text-red-600 hover:text-red-800">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Flow Visualization -->
+            <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h3 class="font-medium text-gray-900 mb-3">Fluxo de Aprovação</h3>
+                <div class="flex items-center space-x-2 text-sm">
+                    {% for approver in approvers %}
+                        {% if approver.is_active %}
+                        <div class="bg-white px-3 py-2 rounded border">
+                            <div class="font-medium">{{ approver.user.first_name }}</div>
+                            <div class="text-gray-500">R$ {{ approver.max_amount|floatformat:0 }}</div>
+                        </div>
+                        
+                        {% if not forloop.last %}
+                        <i class="fas fa-arrow-right text-gray-400"></i>
+                        {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-users text-4xl text-gray-300 mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhum aprovador configurado</h3>
+                <p class="text-gray-500 mb-4">Adicione aprovadores para habilitar o sistema de ordens de compra</p>
+                <button onclick="openCreateModal()" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors">
+                    Adicionar Primeiro Aprovador
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Ações Rápidas</h2>
+        </div>
+        
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <a href="{% url 'purchase_approvals_history' %}" class="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <i class="fas fa-history text-2xl text-blue-500 mb-2"></i>
+                    <h3 class="font-medium text-gray-900">Histórico de Aprovações</h3>
+                    <p class="text-sm text-gray-600">Ver todas as aprovações processadas</p>
+                </a>
+                
+                <a href="{% url 'pending_approvals_view' %}" class="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <i class="fas fa-clock text-2xl text-yellow-500 mb-2"></i>
+                    <h3 class="font-medium text-gray-900">Aprovações Pendentes</h3>
+                    <p class="text-sm text-gray-600">Ver aprovações aguardando decisão</p>
+                </a>
+                
+                <a href="{% url 'manage_webhooks' %}" class="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <i class="fas fa-webhook text-2xl text-green-500 mb-2"></i>
+                    <h3 class="font-medium text-gray-900">Webhooks</h3>
+                    <p class="text-sm text-gray-600">Configurar integrações externas</p>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Modal -->
+<div id="createModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Adicionar Aprovador</h3>
+            </div>
+            
+            <form id="createForm" class="p-6 space-y-4">
+                {% csrf_token %}
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                    <select name="user_id" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Selecione um usuário</option>
+                        {% for user in available_users %}
+                            <option value="{{ user.id }}">{{ user.full_name }} - {{ user.email }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Valor Máximo (R$)</label>
+                    <input type="number" name="max_amount" step="0.01" min="0.01" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                           placeholder="100.00">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ordem de Aprovação</label>
+                    <input type="number" name="approval_order" min="1" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                           placeholder="1">
+                </div>
+                
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
+                        Adicionar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Editar Aprovador</h3>
+            </div>
+            
+            <form id="editForm" class="p-6 space-y-4">
+                {% csrf_token %}
+                <input type="hidden" id="edit_approver_id" name="approver_id">
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                    <input type="text" id="edit_user_name" readonly 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 cursor-not-allowed">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Valor Máximo (R$)</label>
+                    <input type="number" id="edit_max_amount" name="max_amount" step="0.01" min="0.01" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ordem de Aprovação</label>
+                    <input type="number" id="edit_approval_order" name="approval_order" min="1" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="flex items-center">
+                        <input type="checkbox" id="edit_is_active" name="is_active" class="mr-2">
+                        <span class="text-sm font-medium text-gray-700">Ativo</span>
+                    </label>
+                </div>
+                
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
+                        Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Create Modal Functions
+function openCreateModal() {
+    document.getElementById('createModal').classList.remove('hidden');
+}
+
+function closeCreateModal() {
+    document.getElementById('createModal').classList.add('hidden');
+    document.getElementById('createForm').reset();
+}
+
+// Edit Modal Functions
+function openEditModal(id, name, maxAmount, order, isActive) {
+    document.getElementById('edit_approver_id').value = id;
+    document.getElementById('edit_user_name').value = name;
+    document.getElementById('edit_max_amount').value = maxAmount;
+    document.getElementById('edit_approval_order').value = order;
+    document.getElementById('edit_is_active').checked = isActive === 'true';
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+}
+
+// Form Submissions
+document.getElementById('createForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('{% url "create_purchase_approver" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Erro ao criar aprovador');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erro interno. Tente novamente.');
+    });
+});
+
+document.getElementById('editForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const approverId = formData.get('approver_id');
+    
+    // Add is_active checkbox value
+    formData.set('is_active', document.getElementById('edit_is_active').checked ? 'true' : 'false');
+    
+    fetch(`/tickets/admin/purchase-approvers/${approverId}/update/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Erro ao atualizar aprovador');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erro interno. Tente novamente.');
+    });
+});
+
+// Delete Function
+function deleteApprover(id, name) {
+    if (confirm(`Tem certeza que deseja remover o aprovador "${name}"?\n\nEsta ação não pode ser desfeita.`)) {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`/tickets/admin/purchase-approvers/${id}/delete/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || 'Erro ao remover aprovador');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erro interno. Tente novamente.');
+        });
+    }
+}
+
+// Close modals when clicking outside
+document.getElementById('createModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeCreateModal();
+    }
+});
+
+document.getElementById('editModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeEditModal();
+    }
+});
+</script>
+{% endblock %}
