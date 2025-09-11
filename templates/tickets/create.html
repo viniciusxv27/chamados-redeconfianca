@@ -78,7 +78,7 @@
                         id="category" 
                         required
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        onchange="updateDefaultDescription()"
+                        onchange="updateCategoryDefaults()"
                     >
                         <option value="">Selecione a categoria</option>
                     </select>
@@ -109,10 +109,11 @@
                         value="24"
                         min="1"
                         max="720"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        readonly
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
                         placeholder="24"
                     >
-                    <div class="text-xs text-gray-500 mt-1">Tempo limite para resolução do chamado</div>
+                    <div class="text-xs text-gray-500 mt-1">Tempo definido automaticamente pela categoria selecionada</div>
                 </div>
             </div>
             
@@ -245,6 +246,7 @@ function loadCategories() {
                     option.value = category.id;
                     option.textContent = category.name;
                     option.dataset.defaultDescription = category.default_description;
+                    option.dataset.defaultSolutionTime = category.default_solution_time_hours;
                     categorySelect.appendChild(option);
                 });
             })
@@ -254,16 +256,26 @@ function loadCategories() {
             });
     } else {
         categorySelect.innerHTML = '<option value="">Selecione a categoria</option>';
+        // Resetar o tempo de solução para o padrão quando não há categoria
+        document.getElementById('solution_time_hours').value = "24";
     }
 }
 
-function updateDefaultDescription() {
+function updateCategoryDefaults() {
     const categorySelect = document.getElementById('category');
     const descriptionTextarea = document.getElementById('description');
+    const solutionTimeInput = document.getElementById('solution_time_hours');
     const selectedOption = categorySelect.options[categorySelect.selectedIndex];
     
     if (selectedOption && selectedOption.dataset.defaultDescription) {
         descriptionTextarea.value = selectedOption.dataset.defaultDescription;
+    }
+    
+    if (selectedOption && selectedOption.dataset.defaultSolutionTime) {
+        solutionTimeInput.value = selectedOption.dataset.defaultSolutionTime;
+    } else {
+        // Valor padrão caso não haja categoria selecionada
+        solutionTimeInput.value = "24";
     }
 }
 

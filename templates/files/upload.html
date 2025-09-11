@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Enviar Arquivo - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <div class="flex items-center space-x-4">
+            <a href="{% url 'files_list' %}" class="text-gray-600 hover:text-primary">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Enviar Arquivo</h1>
+                <p class="text-gray-600 mt-2">Compartilhe um novo arquivo com outros usuários</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Form -->
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Title -->
+            <div>
+                <label for="title" class="block text-sm font-medium text-gray-700 mb-2">Título *</label>
+                <input type="text" name="title" id="title" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                       placeholder="Nome do arquivo para identificação">
+            </div>
+            
+            <!-- Description -->
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                <textarea name="description" id="description" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                          placeholder="Descrição opcional do arquivo"></textarea>
+            </div>
+            
+            <!-- File Upload -->
+            <div>
+                <label for="file" class="block text-sm font-medium text-gray-700 mb-2">Arquivo *</label>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                    <input type="file" name="file" id="file" required class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.zip,.rar">
+                    <div id="file-upload-area" class="cursor-pointer">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-lg font-medium text-gray-600 mb-2">Clique para selecionar um arquivo</p>
+                        <p class="text-sm text-gray-500">ou arraste e solte aqui</p>
+                        <p class="text-xs text-gray-400 mt-2">
+                            Formatos aceitos: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, PNG, GIF, ZIP, RAR<br>
+                            Tamanho máximo: 10MB
+                        </p>
+                    </div>
+                    <div id="file-info" class="hidden">
+                        <i class="fas fa-file text-4xl text-green-500 mb-4"></i>
+                        <p id="file-name" class="text-lg font-medium text-gray-600"></p>
+                        <p id="file-size" class="text-sm text-gray-500"></p>
+                        <button type="button" id="remove-file" class="text-red-500 text-sm mt-2 hover:text-red-700">
+                            <i class="fas fa-times mr-1"></i>Remover arquivo
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Category -->
+            <div>
+                <label for="category" class="block text-sm font-medium text-gray-700 mb-2">Categoria *</label>
+                <select name="category" id="category" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">Selecione uma categoria</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}">{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Visibility -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Visibilidade *</label>
+                <div class="space-y-3">
+                    <label class="flex items-center">
+                        <input type="radio" name="visibility" value="ALL" class="mr-2" onchange="toggleTargetFields()">
+                        <span class="text-sm text-gray-700">Todos os usuários</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="visibility" value="SECTOR" class="mr-2" onchange="toggleTargetFields()">
+                        <span class="text-sm text-gray-700">Usuários de um setor específico</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="visibility" value="USER" class="mr-2" onchange="toggleTargetFields()">
+                        <span class="text-sm text-gray-700">Usuário específico</span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Target Sector -->
+            <div id="target-sector-field" class="hidden">
+                <label for="target_sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                <select name="target_sector" id="target_sector"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">Selecione um setor</option>
+                    {% for sector in sectors %}
+                        <option value="{{ sector.id }}">{{ sector.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Target User -->
+            <div id="target-user-field" class="hidden">
+                <label for="target_user" class="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
+                <select name="target_user" id="target_user"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">Selecione um usuário</option>
+                    {% for user_option in users %}
+                        <option value="{{ user_option.id }}">{{ user_option.full_name }} - {{ user_option.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Submit Buttons -->
+            <div class="flex justify-end space-x-4">
+                <a href="{% url 'files_list' %}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors">
+                    Cancelar
+                </a>
+                <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-dark transition-colors">
+                    <i class="fas fa-upload mr-2"></i>Enviar Arquivo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('file');
+    const fileUploadArea = document.getElementById('file-upload-area');
+    const fileInfo = document.getElementById('file-info');
+    const fileName = document.getElementById('file-name');
+    const fileSize = document.getElementById('file-size');
+    const removeFileBtn = document.getElementById('remove-file');
+    
+    // File upload handling
+    fileUploadArea.addEventListener('click', () => fileInput.click());
+    
+    fileInput.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file) {
+            showFileInfo(file);
+        }
+    });
+    
+    removeFileBtn.addEventListener('click', function() {
+        fileInput.value = '';
+        hideFileInfo();
+    });
+    
+    // Drag and drop
+    fileUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('border-primary');
+    });
+    
+    fileUploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('border-primary');
+    });
+    
+    fileUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('border-primary');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            showFileInfo(files[0]);
+        }
+    });
+    
+    function showFileInfo(file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileUploadArea.classList.add('hidden');
+        fileInfo.classList.remove('hidden');
+    }
+    
+    function hideFileInfo() {
+        fileUploadArea.classList.remove('hidden');
+        fileInfo.classList.add('hidden');
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+});
+
+function toggleTargetFields() {
+    const visibility = document.querySelector('input[name="visibility"]:checked').value;
+    const sectorField = document.getElementById('target-sector-field');
+    const userField = document.getElementById('target-user-field');
+    
+    sectorField.classList.add('hidden');
+    userField.classList.add('hidden');
+    
+    if (visibility === 'SECTOR') {
+        sectorField.classList.remove('hidden');
+    } else if (visibility === 'USER') {
+        userField.classList.remove('hidden');
+    }
+}
+</script>
+{% endblock %}

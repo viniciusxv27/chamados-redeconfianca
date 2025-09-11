@@ -11,6 +11,7 @@ class Category(models.Model):
     webhook_url = models.URLField(blank=True, verbose_name="URL do Webhook")
     requires_approval = models.BooleanField(default=False, verbose_name="Requer Aprovação")
     default_description = models.TextField(blank=True, verbose_name="Descrição Padrão")
+    default_solution_time_hours = models.IntegerField(default=24, verbose_name="Tempo Padrão para Solução (horas)")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -113,10 +114,15 @@ class Ticket(models.Model):
             old_instance = Ticket.objects.get(pk=self.pk)
             old_status = old_instance.status
         
-        # Calcular data limite baseada no tempo para solução
-        if is_new and self.solution_time_hours:
-            from datetime import timedelta
-            self.due_date = timezone.now() + timedelta(hours=self.solution_time_hours)
+        # Se é um novo ticket, usar o tempo padrão da categoria
+        if is_new:
+            if hasattr(self, 'category') and self.category and self.category.default_solution_time_hours:
+                self.solution_time_hours = self.category.default_solution_time_hours
+            
+            # Calcular data limite baseada no tempo para solução
+            if self.solution_time_hours:
+                from datetime import timedelta
+                self.due_date = timezone.now() + timedelta(hours=self.solution_time_hours)
         
         super().save(*args, **kwargs)
         

@@ -349,7 +349,7 @@ def get_categories_by_sector(request):
     sector_id = request.GET.get('sector_id')
     if sector_id:
         categories = Category.objects.filter(sector_id=sector_id, is_active=True)
-        data = [{'id': cat.id, 'name': cat.name, 'default_description': cat.default_description} for cat in categories]
+        data = [{'id': cat.id, 'name': cat.name, 'default_description': cat.default_description, 'default_solution_time_hours': cat.default_solution_time_hours} for cat in categories]
         return JsonResponse({'categories': data})
     return JsonResponse({'categories': []})
 from django.utils import timezone
@@ -437,7 +437,7 @@ def get_categories_by_sector(request):
     sector_id = request.GET.get('sector_id')
     if sector_id:
         categories = Category.objects.filter(sector_id=sector_id, is_active=True)
-        data = [{'id': cat.id, 'name': cat.name, 'default_description': cat.default_description} for cat in categories]
+        data = [{'id': cat.id, 'name': cat.name, 'default_description': cat.default_description, 'default_solution_time_hours': cat.default_solution_time_hours} for cat in categories]
         return JsonResponse({'categories': data})
     return JsonResponse({'categories': []})
 

@@ -118,6 +118,13 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{% url 'files_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
+                                <i class="fas fa-folder text-primary flex-shrink-0"></i>
+                                <span class="text-sm">Arquivos</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{% url 'marketplace' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Marketplace C$">
                                 <i class="fas fa-store text-primary flex-shrink-0"></i>
                                 <span class="text-sm">Mercadinho</span>
@@ -282,6 +289,27 @@
                         </div>
                         
                         <div class="flex items-center space-x-2 lg:space-x-4">
+                            <!-- Notifications -->
+                            <div class="relative">
+                                <button id="notificationToggle" class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors">
+                                    <i class="fas fa-bell text-lg"></i>
+                                    <span id="notificationBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
+                                </button>
+                                
+                                <!-- Notifications Dropdown -->
+                                <div id="notificationDropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
+                                    <div class="p-4 border-b border-gray-200">
+                                        <h3 class="font-semibold text-gray-800">Notificações</h3>
+                                    </div>
+                                    <div id="notificationsList" class="max-h-96 overflow-y-auto">
+                                        <!-- Notifications will be loaded here -->
+                                    </div>
+                                    <div class="p-3 border-t border-gray-200">
+                                        <a href="#" class="text-sm text-primary hover:text-primary-dark">Ver todas as notificações</a>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <!-- Search -->
                             <div class="relative hidden lg:block">
                                 <input type="text" placeholder="Pesquisar..." class="bg-gray-100 rounded-full px-4 py-2 w-48 xl:w-64 focus:outline-none focus:ring-2 focus:ring-primary">
@@ -471,6 +499,141 @@
 
             // Initialize on page load
             initializeSidebar();
+            
+            // Notification functionality
+            const notificationToggle = document.getElementById('notificationToggle');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+            const notificationBadge = document.getElementById('notificationBadge');
+            const notificationsList = document.getElementById('notificationsList');
+            
+            if (notificationToggle && notificationDropdown) {
+                notificationToggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    notificationDropdown.classList.toggle('hidden');
+                    if (!notificationDropdown.classList.contains('hidden')) {
+                        loadNotifications();
+                    }
+                });
+                
+                // Close dropdown when clicking outside
+                document.addEventListener('click', function(e) {
+                    if (!notificationToggle.contains(e.target) && !notificationDropdown.contains(e.target)) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                });
+            }
+            
+            // Load notifications function
+            function loadNotifications() {
+                fetch('/api/notifications/')
+                    .then(response => response.json())
+                    .then(data => {
+                        displayNotifications(data.notifications);
+                        updateNotificationBadge(data.unread_count);
+                    })
+                    .catch(error => {
+                        console.error('Error loading notifications:', error);
+                        notificationsList.innerHTML = '<div class="p-4 text-gray-500 text-center">Erro ao carregar notificações</div>';
+                    });
+            }
+            
+            // Display notifications
+            function displayNotifications(notifications) {
+                if (notifications.length === 0) {
+                    notificationsList.innerHTML = '<div class="p-4 text-gray-500 text-center">Nenhuma notificação</div>';
+                    return;
+                }
+                
+                const notificationsHTML = notifications.map(notification => `
+                    <div class="p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-blue-50' : ''}" data-id="${notification.id}">
+                        <div class="flex items-start space-x-3">
+                            <div class="flex-shrink-0">
+                                ${getNotificationIcon(notification.notification_type)}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">
+                                    ${notification.title}
+                                </p>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    ${notification.message}
+                                </p>
+                                <p class="text-xs text-gray-400 mt-1">
+                                    ${formatDate(notification.created_at)}
+                                </p>
+                            </div>
+                            ${!notification.is_read ? '<div class="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>' : ''}
+                        </div>
+                    </div>
+                `).join('');
+                
+                notificationsList.innerHTML = notificationsHTML;
+                
+                // Add click handlers to mark as read
+                notificationsList.querySelectorAll('[data-id]').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const notificationId = this.getAttribute('data-id');
+                        markAsRead(notificationId);
+                    });
+                });
+            }
+            
+            // Update notification badge
+            function updateNotificationBadge(count) {
+                if (count > 0) {
+                    notificationBadge.textContent = count > 99 ? '99+' : count;
+                    notificationBadge.classList.remove('hidden');
+                } else {
+                    notificationBadge.classList.add('hidden');
+                }
+            }
+            
+            // Mark notification as read
+            function markAsRead(notificationId) {
+                fetch(`/api/notifications/${notificationId}/mark-read/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadNotifications(); // Reload to update UI
+                    }
+                });
+            }
+            
+            // Get notification icon based on type
+            function getNotificationIcon(type) {
+                const icons = {
+                    'FILE': '<i class="fas fa-file text-blue-500"></i>',
+                    'TICKET': '<i class="fas fa-ticket-alt text-yellow-500"></i>',
+                    'TRAINING': '<i class="fas fa-graduation-cap text-green-500"></i>',
+                    'COMMUNICATION': '<i class="fas fa-bullhorn text-orange-500"></i>',
+                    'TICKET_UPDATE': '<i class="fas fa-sync text-blue-500"></i>',
+                    'SYSTEM': '<i class="fas fa-cog text-gray-500"></i>'
+                };
+                return icons[type] || '<i class="fas fa-bell text-gray-500"></i>';
+            }
+            
+            // Format date
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                const now = new Date();
+                const diffInMinutes = Math.floor((now - date) / (1000 * 60));
+                
+                if (diffInMinutes < 1) return 'Agora';
+                if (diffInMinutes < 60) return `${diffInMinutes}m atrás`;
+                if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h atrás`;
+                return date.toLocaleDateString('pt-BR');
+            }
+            
+            // Load notifications count on page load
+            fetch('/api/notifications/count/')
+                .then(response => response.json())
+                .then(data => updateNotificationBadge(data.count))
+                .catch(error => console.error('Error loading notification count:', error));
         });
     </script>
     

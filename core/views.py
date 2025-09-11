@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from tickets.models import Ticket, Category
+from .models import Notification
 from .middleware import log_action
 import json
 
@@ -278,3 +279,59 @@ def report_detail(request, report_id):
         'status_choices': Ticket.STATUS_CHOICES,
     }
     return render(request, 'core/report_detail.html', context)
+
+
+# ========================
+# NOTIFICATIONS API VIEWS
+# ========================
+
+@login_required
+def notifications_api_view(request):
+    """API para listar notificações do usuário"""
+    notifications = request.user.notifications.all()[:10]  # Últimas 10
+    
+    notifications_data = []
+    for notification in notifications:
+        notifications_data.append({
+            'id': notification.id,
+            'title': notification.title,
+            'message': notification.message,
+            'notification_type': notification.notification_type,
+            'is_read': notification.is_read,
+            'created_at': notification.created_at.isoformat(),
+            'related_url': notification.related_url,
+        })
+    
+    unread_count = request.user.notifications.filter(is_read=False).count()
+    
+    return JsonResponse({
+        'notifications': notifications_data,
+        'unread_count': unread_count
+    })
+
+
+@login_required
+def notifications_count_api_view(request):
+    """API para contar notificações não lidas"""
+    count = request.user.notifications.filter(is_read=False).count()
+    return JsonResponse({'count': count})
+
+
+@login_required
+@require_POST
+def notification_mark_read_api_view(request, notification_id):
+    """API para marcar notificação como lida"""
+    try:
+        notification = request.user.notifications.get(id=notification_id)
+        notification.mark_as_read()
+        return JsonResponse({'success': True})
+    except Notification.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Notificação não encontrada'})
+
+
+@login_required
+@require_POST
+def notifications_mark_all_read_api_view(request):
+    """API para marcar todas as notificações como lidas"""
+    request.user.notifications.filter(is_read=False).update(is_read=True)
+    return JsonResponse({'success': True})

@@ -53,6 +53,7 @@ urlpatterns = [
     path('communications/', include('communications.urls')),
     path('prizes/', include('prizes.urls')),
     path('assets/', include('assets.urls')),
+    path('files/', include('files.urls')),
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training
     path('api/', include(router.urls)),

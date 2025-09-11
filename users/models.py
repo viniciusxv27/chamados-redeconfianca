@@ -21,8 +21,9 @@ class Sector(models.Model):
 class User(AbstractUser):
     HIERARCHY_CHOICES = [
         ('PADRAO', 'Padrão'),
-        ('SUPERVISOR', 'Supervisor'),
         ('ADMINISTRATIVO', 'Administrativo'),
+        ('SUPERVISOR', 'Supervisor'),
+        ('ADMIN', 'Administração'),
         ('SUPERADMIN', 'Superadmin'),
     ]
     
@@ -94,7 +95,7 @@ class User(AbstractUser):
             self.save()
     
     def can_manage_users(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN']
     
     @property
     def calculated_balance_cs(self):
@@ -122,13 +123,40 @@ class User(AbstractUser):
         return abs(credits) - abs(debits)
 
     def can_manage_prizes(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
 
     def can_manage_cs(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR']
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
     
     def can_view_all_tickets(self):
-        return self.hierarchy in ['ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO']
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN']
     
     def can_view_sector_tickets(self):
-        return self.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERADMIN']
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+    
+    def can_create_communications(self):
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+    
+    def can_edit_sector_categories(self):
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+    
+    def can_upload_files(self):
+        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+    
+    def can_access_management_panel(self):
+        return self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+    
+    def can_access_admin_panel(self):
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN']
+    
+    def can_view_reports(self):
+        return self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+    
+    def can_manage_webhooks(self):
+        return self.hierarchy in ['SUPERADMIN']
+    
+    def can_delete_users(self):
+        return self.hierarchy in ['SUPERADMIN']
+    
+    def can_delete_tickets(self):
+        return self.hierarchy in ['SUPERADMIN']

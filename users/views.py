@@ -811,9 +811,18 @@ def create_category_view(request):
         default_description = request.POST.get('default_description', '')
         webhook_url = request.POST.get('webhook_url', '')
         requires_approval = request.POST.get('requires_approval') == 'on'
+        default_solution_time_hours = request.POST.get('default_solution_time_hours', 24)
         
         try:
             sector = get_object_or_404(Sector, id=sector_id)
+            
+            # Validar tempo de solução
+            try:
+                default_solution_time_hours = int(default_solution_time_hours)
+                if default_solution_time_hours <= 0:
+                    default_solution_time_hours = 24
+            except (ValueError, TypeError):
+                default_solution_time_hours = 24
             
             from tickets.models import Category
             if Category.objects.filter(name=name, sector=sector).exists():
@@ -824,7 +833,8 @@ def create_category_view(request):
                     sector=sector,
                     default_description=default_description,
                     webhook_url=webhook_url,
-                    requires_approval=requires_approval
+                    requires_approval=requires_approval,
+                    default_solution_time_hours=default_solution_time_hours
                 )
                 
                 log_action(
@@ -864,9 +874,18 @@ def edit_category_view(request, category_id):
         webhook_url = request.POST.get('webhook_url', '')
         requires_approval = request.POST.get('requires_approval') == 'on'
         is_active = request.POST.get('is_active') == 'on'
+        default_solution_time_hours = request.POST.get('default_solution_time_hours', 24)
         
         try:
             sector = get_object_or_404(Sector, id=sector_id)
+            
+            # Validar tempo de solução
+            try:
+                default_solution_time_hours = int(default_solution_time_hours)
+                if default_solution_time_hours <= 0:
+                    default_solution_time_hours = 24
+            except (ValueError, TypeError):
+                default_solution_time_hours = 24
             
             # Verificar se já existe uma categoria com o mesmo nome no setor (excluindo a atual)
             if Category.objects.filter(name=name, sector=sector).exclude(id=category_id).exists():
@@ -878,6 +897,7 @@ def edit_category_view(request, category_id):
                 category.webhook_url = webhook_url
                 category.requires_approval = requires_approval
                 category.is_active = is_active
+                category.default_solution_time_hours = default_solution_time_hours
                 category.save()
                 
                 log_action(

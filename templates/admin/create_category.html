@@ -64,6 +64,20 @@
                 </div>
 
                 <div class="mt-6 space-y-2">
+                    <label for="default_solution_time_hours" class="block text-sm font-medium text-gray-700">Tempo Padrão para Solução (horas) *</label>
+                    <input type="number" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                           id="default_solution_time_hours" 
+                           name="default_solution_time_hours" 
+                           value="24"
+                           min="1"
+                           max="720"
+                           required
+                           placeholder="24">
+                    <p class="text-sm text-gray-500">Tempo padrão que será definido automaticamente para chamados desta categoria (1 a 720 horas)</p>
+                </div>
+
+                <div class="mt-6 space-y-2">
                     <label for="webhook_url" class="block text-sm font-medium text-gray-700">URL do Webhook</label>
                     <input type="url" 
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
