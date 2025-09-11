@@ -7,6 +7,146 @@
 <style>
     .primary { background-color: #f97316; }
     .primary:hover { background-color: #ea580c; }
+    
+    /* Estilos específicos para o cropper - melhorados para Safari/macOS */
+    #crop-container {
+        position: relative;
+        width: 100%;
+        background: #f9fafb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    #crop-img {
+        max-width: 100%;
+        max-height: 100%;
+        display: block !important;
+    }
+    
+    /* Melhorias para Safari e dispositivos Apple */
+    .cropper-container {
+        direction: ltr !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        position: relative !important;
+        -ms-touch-action: none !important;
+        touch-action: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+    }
+    
+    .cropper-container img {
+        display: block !important;
+        height: 100% !important;
+        image-orientation: 0deg !important;
+        max-height: none !important;
+        max-width: none !important;
+        min-height: 0 !important;
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+    
+    .cropper-wrap-box,
+    .cropper-canvas,
+    .cropper-drag-box,
+    .cropper-crop-box,
+    .cropper-modal {
+        bottom: 0 !important;
+        left: 0 !important;
+        position: absolute !important;
+        right: 0 !important;
+        top: 0 !important;
+    }
+    
+    .cropper-drag-box {
+        background-color: inherit !important;
+        opacity: 0 !important;
+    }
+    
+    .cropper-modal {
+        background-color: #000 !important;
+        opacity: 0.5 !important;
+    }
+    
+    .cropper-view-box {
+        display: block !important;
+        height: 100% !important;
+        outline: 1px solid #39f !important;
+        outline-color: rgba(51, 153, 255, 0.75) !important;
+        overflow: hidden !important;
+        width: 100% !important;
+    }
+    
+    .cropper-dashed {
+        border: 0 dashed #eee !important;
+        display: block !important;
+        opacity: 0.5 !important;
+        position: absolute !important;
+    }
+    
+    .cropper-dashed.dashed-h {
+        border-bottom-width: 1px !important;
+        border-top-width: 1px !important;
+        height: calc(100% / 3) !important;
+        left: 0 !important;
+        top: calc(100% / 3) !important;
+        width: 100% !important;
+    }
+    
+    .cropper-dashed.dashed-v {
+        border-left-width: 1px !important;
+        border-right-width: 1px !important;
+        height: 100% !important;
+        left: calc(100% / 3) !important;
+        top: 0 !important;
+        width: calc(100% / 3) !important;
+    }
+    
+    .cropper-center {
+        display: block !important;
+        height: 0 !important;
+        left: 50% !important;
+        opacity: 0.75 !important;
+        position: absolute !important;
+        top: 50% !important;
+        width: 0 !important;
+    }
+    
+    .cropper-face,
+    .cropper-line,
+    .cropper-point {
+        display: block !important;
+        height: 100% !important;
+        opacity: 0.1 !important;
+        position: absolute !important;
+        width: 100% !important;
+    }
+    
+    .cropper-face {
+        background-color: #fff !important;
+        left: 0 !important;
+        top: 0 !important;
+    }
+    
+    .cropper-line {
+        background-color: #39f !important;
+    }
+    
+    .cropper-point {
+        background-color: #39f !important;
+        height: 5px !important;
+        opacity: 0.75 !important;
+        width: 5px !important;
+    }
+    
+    /* Melhores controles para trackpad do Mac */
+    .cropper-container {
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+    }
 </style>
 {% endblock %}
 
@@ -77,32 +217,26 @@
                             </label>
                         </div>
                         
-                        <!-- Preview da nova imagem com crop -->
+                        <!-- Preview da nova imagem -->
                         <div id="photo-preview" class="hidden mt-4">
-                            <p class="text-sm text-gray-600 mb-2">Ajustar posição da imagem:</p>
                             <div class="bg-gray-100 rounded-lg p-4">
-                                <div id="crop-container" class="relative bg-white rounded overflow-hidden" style="max-width: 100%; height: 400px;">
-                                    <img id="preview-img" src="" alt="Preview" class="max-w-full max-h-full" style="display: block;">
-                                </div>
-                                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-                                    <div class="flex flex-wrap items-center gap-3">
-                                        <button type="button" onclick="cropImage()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm">
-                                            <i class="fas fa-crop mr-2"></i>
-                                            Aplicar Corte
+                                <div class="flex items-center justify-between mb-3">
+                                    <p class="text-sm text-gray-600">Imagem selecionada:</p>
+                                    <div class="flex gap-2">
+                                        <button type="button" onclick="openCropModal()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600 transition-colors">
+                                            <i class="fas fa-crop mr-1"></i>
+                                            Recortar
                                         </button>
-                                        <button type="button" onclick="resetCrop()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm">
-                                            <i class="fas fa-undo mr-2"></i>
-                                            Resetar
+                                        <button type="button" onclick="removePhoto()" class="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600 transition-colors">
+                                            <i class="fas fa-trash mr-1"></i>
+                                            Remover
                                         </button>
                                     </div>
-                                    <button type="button" onclick="removePhoto()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm">
-                                        <i class="fas fa-times mr-2"></i>
-                                        Remover Foto
-                                    </button>
+                                </div>
+                                <div class="bg-white rounded border">
+                                    <img id="preview-img" src="" alt="Preview" class="w-full h-48 object-cover rounded">
                                 </div>
                             </div>
-                            <!-- Canvas oculto para processar o crop -->
-                            <canvas id="crop-canvas" style="display: none;"></canvas>
                             <!-- Input hidden para enviar a imagem processada -->
                             <input type="hidden" id="cropped-image-data" name="cropped_image_data">
                         </div>
@@ -197,16 +331,16 @@
                             <!-- Grupo Remetente - Mostrar apenas grupos do usuário -->
                             <div>
                                 <label for="sender_group" class="block text-sm font-semibold text-gray-900 mb-2">
-                                    Representar Grupo
+                                    Enviar como
                                 </label>
                                 <select name="sender_group" id="sender_group" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
-                                    <option value="">Enviar como {{ user.get_full_name }}</option>
+                                    <option value="">{{ user.get_full_name }}</option>
                                     {% for group in user_groups %}
                                         <option value="{{ group.0 }}">{{ group.1 }}</option>
                                     {% endfor %}
                                     <!-- Grupos personalizados em que o usuário é membro -->
                                     {% for group in user.communication_groups.all %}
-                                        <option value="custom_{{ group.id }}">{{ group.name }} (Grupo Personalizado)</option>
+                                        <option value="custom_{{ group.id }}">{{ group.name }}</option>
                                     {% endfor %}
                                 </select>
                                 <p class="text-sm text-gray-500 mt-1">Selecione o grupo que você representa ao enviar este comunicado</p>
@@ -335,6 +469,77 @@
     </div>
 </div>
 
+<!-- Modal de Crop da Imagem -->
+<div id="cropModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <!-- Header do Modal -->
+        <div class="flex items-center justify-between p-6 border-b border-gray-200">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900">Recortar Imagem</h3>
+                <p class="text-sm text-gray-600">Ajuste a área de recorte arrastando e redimensionando</p>
+            </div>
+            <button onclick="closeCropModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <!-- Área de Crop -->
+        <div class="p-6">
+            <div id="crop-container" class="bg-gray-100 rounded-lg border-2 border-dashed border-gray-300" style="height: 500px; overflow: hidden; position: relative;">
+                <img id="crop-img" src="" alt="Crop Image" style="display: none; max-width: 100%; max-height: 100%; object-fit: contain;">
+            </div>
+            
+            <!-- Controles adicionais para dispositivos touch -->
+            <div class="mt-4 flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                <div class="flex items-center space-x-4">
+                    <button type="button" onclick="zoomIn()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button type="button" onclick="zoomOut()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                </div>
+                <div class="text-sm text-gray-600">
+                    <i class="fas fa-mouse-pointer mr-1"></i>
+                    Use o mouse ou toque para ajustar
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instruções -->
+        <div class="px-6 pb-4">
+            <div class="bg-blue-50 rounded-lg p-4">
+                <h4 class="text-sm font-medium text-blue-900 mb-2">
+                    <i class="fas fa-info-circle mr-2"></i>Como usar:
+                </h4>
+                <ul class="text-sm text-blue-800 space-y-1">
+                    <li>• <strong>Arrastar:</strong> Mova a área de recorte</li>
+                    <li>• <strong>Redimensionar:</strong> Puxe as bordas para ajustar o tamanho</li>
+                    <li>• <strong>Zoom:</strong> Use a roda do mouse ou pinch para ampliar/reduzir</li>
+                    <li>• <strong>Proporção:</strong> Mantém automaticamente a proporção 16:9 ideal para feeds</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Botões do Modal -->
+        <div class="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+            <button onclick="resetCropInModal()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                <i class="fas fa-undo mr-2"></i>
+                Resetar
+            </button>
+            <div class="flex gap-3">
+                <button onclick="closeCropModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                    Cancelar
+                </button>
+                <button onclick="applyCrop()" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-check mr-2"></i>
+                    Aplicar Recorte
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let cropper = null;
 let originalImageData = null;
@@ -418,26 +623,70 @@ function previewImage(input) {
         
         reader.onload = function(e) {
             originalImageData = e.target.result;
+            
+            // Mostrar preview simples
             previewImg.src = e.target.result;
             preview.classList.remove('hidden');
             uploadAreaLabel.classList.add('hidden');
             
             // Desabilitar pop-up se tem imagem
-            popupCheckbox.disabled = true;
-            popupCheckbox.checked = false;
-            
-            // Destruir cropper anterior se existir
-            if (cropper) {
-                cropper.destroy();
-                cropper = null;
+            if (popupCheckbox) {
+                popupCheckbox.disabled = true;
+                popupCheckbox.checked = false;
             }
             
-            // Aguardar a imagem carregar para inicializar o cropper
-            previewImg.onload = function() {
-                // Inicializar novo cropper
-                cropper = new Cropper(previewImg, {
-                    aspectRatio: 16 / 9, // Proporção para feed
+            // Limpar dados de crop anterior
+            document.getElementById('cropped-image-data').value = '';
+        }
+        
+        reader.readAsDataURL(file);
+    }
+}
+
+function openCropModal() {
+    if (!originalImageData) {
+        alert('Nenhuma imagem selecionada');
+        return;
+    }
+    
+    const modal = document.getElementById('cropModal');
+    const cropImg = document.getElementById('crop-img');
+    
+    // Mostrar modal
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    // Limpar cropper anterior
+    if (cropper) {
+        cropper.destroy();
+        cropper = null;
+    }
+    
+    // Configurar imagem
+    cropImg.src = originalImageData;
+    cropImg.style.display = 'block';
+    
+    // Aguardar carregamento da imagem
+    cropImg.onload = function() {
+        console.log('Imagem carregada no modal');
+        
+        // Aguardar um pouco mais para garantir renderização
+        setTimeout(() => {
+            try {
+                // Verificar se Cropper está disponível
+                if (typeof Cropper === 'undefined') {
+                    console.error('Cropper.js não carregado');
+                    alert('Erro: Biblioteca de recorte não carregada. Recarregue a página.');
+                    return;
+                }
+                
+                console.log('Inicializando Cropper...');
+                
+                // Configurações otimizadas para Safari/macOS
+                cropper = new Cropper(cropImg, {
+                    aspectRatio: 16 / 9,
                     viewMode: 1,
+                    dragMode: 'move',
                     autoCropArea: 0.8,
                     responsive: true,
                     restore: false,
@@ -447,97 +696,191 @@ function previewImage(input) {
                     cropBoxMovable: true,
                     cropBoxResizable: true,
                     toggleDragModeOnDblclick: false,
-                    ready: function () {
-                        console.log('Cropper ready');
+                    
+                    // Configurações específicas para melhor compatibilidade
+                    scalable: true,
+                    zoomable: true,
+                    zoomOnTouch: true,
+                    zoomOnWheel: true,
+                    wheelZoomRatio: 0.1,
+                    minCanvasWidth: 0,
+                    minCanvasHeight: 0,
+                    minCropBoxWidth: 100,
+                    minCropBoxHeight: 56,
+                    
+                    // Callbacks para debug
+                    ready: function() {
+                        console.log('✅ Cropper inicializado com sucesso');
+                        
+                        // Forçar atualização inicial
+                        setTimeout(() => {
+                            this.cropper.crop();
+                        }, 100);
+                    },
+                    
+                    cropstart: function(e) {
+                        console.log('Crop start:', e.detail.action);
+                    },
+                    
+                    cropmove: function(e) {
+                        // console.log('Crop move:', e.detail.action);
+                    },
+                    
+                    cropend: function(e) {
+                        console.log('Crop end:', e.detail.action);
+                    },
+                    
+                    crop: function(e) {
+                        // console.log('Crop data:', e.detail);
+                    },
+                    
+                    error: function(error) {
+                        console.error('❌ Erro no Cropper:', error);
                     }
                 });
-            };
-        }
-        
-        reader.readAsDataURL(file);
+                
+            } catch (error) {
+                console.error('❌ Erro ao inicializar Cropper:', error);
+                alert('Erro ao inicializar o editor de imagem: ' + error.message);
+            }
+        }, 300);
+    };
+    
+    // Fallback se a imagem já estiver carregada
+    if (cropImg.complete) {
+        cropImg.onload();
     }
 }
 
-function cropImage() {
+// Funções de zoom para controles manuais
+function zoomIn() {
+    if (cropper) {
+        cropper.zoom(0.1);
+    }
+}
+
+function zoomOut() {
+    if (cropper) {
+        cropper.zoom(-0.1);
+    }
+}
+
+function closeCropModal() {
+    const modal = document.getElementById('cropModal');
+    modal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    
+    if (cropper) {
+        cropper.destroy();
+        cropper = null;
+    }
+}
+
+function resetCropInModal() {
+    if (cropper && originalImageData) {
+        cropper.reset();
+    }
+}
+
+function applyCrop() {
+    console.log('🔄 Aplicando crop...');
+    
     if (!cropper) {
-        alert('Nenhuma imagem para cortar');
+        console.error('❌ Cropper não está inicializado');
+        alert('Erro: Editor de recorte não está ativo. Tente fechar e abrir o modal novamente.');
         return;
     }
     
-    const canvas = cropper.getCroppedCanvas({
-        width: 800,
-        height: 450,
-        minWidth: 400,
-        minHeight: 225,
-        maxWidth: 1200,
-        maxHeight: 675,
-        imageSmoothingEnabled: true,
-        imageSmoothingQuality: 'high'
-    });
-    
-    if (!canvas) {
-        alert('Erro ao processar o corte da imagem');
-        return;
-    }
-    
-    // Converter para blob
-    canvas.toBlob(function(blob) {
-        if (!blob) {
-            alert('Erro ao gerar imagem cortada');
+    try {
+        // Obter dados do crop
+        const cropData = cropper.getData();
+        console.log('📊 Dados do crop:', cropData);
+        
+        // Gerar canvas com a imagem cortada
+        const canvas = cropper.getCroppedCanvas({
+            width: 800,
+            height: 450,
+            minWidth: 400,
+            minHeight: 225,
+            maxWidth: 1200,
+            maxHeight: 675,
+            fillColor: '#fff',
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high'
+        });
+        
+        if (!canvas) {
+            console.error('❌ Erro ao gerar canvas');
+            alert('Erro ao processar o recorte da imagem. Tente com uma imagem menor.');
             return;
         }
         
-        const reader = new FileReader();
-        reader.onload = function() {
-            // Salvar dados da imagem cortada
-            document.getElementById('cropped-image-data').value = reader.result;
-            
-            // Destruir cropper após corte
-            if (cropper) {
-                cropper.destroy();
-                cropper = null;
+        console.log('✅ Canvas gerado:', canvas.width, 'x', canvas.height);
+        
+        // Converter para blob com melhor compatibilidade
+        canvas.toBlob(function(blob) {
+            if (!blob) {
+                console.error('❌ Erro ao gerar blob');
+                alert('Erro ao gerar imagem recortada');
+                return;
             }
             
-            // Atualizar preview com imagem cortada (sem cropper)
-            const previewImg = document.getElementById('preview-img');
-            previewImg.src = reader.result;
-            previewImg.style.maxWidth = '100%';
-            previewImg.style.height = 'auto';
+            console.log('✅ Blob gerado:', blob.size, 'bytes');
             
-            alert('Imagem cortada com sucesso!');
-        };
-        reader.readAsDataURL(blob);
-    }, 'image/jpeg', 0.9);
+            const reader = new FileReader();
+            reader.onload = function() {
+                console.log('✅ Data URL gerado');
+                
+                // Salvar dados da imagem cortada
+                document.getElementById('cropped-image-data').value = reader.result;
+                
+                // Atualizar preview principal
+                const previewImg = document.getElementById('preview-img');
+                previewImg.src = reader.result;
+                
+                // Fechar modal
+                closeCropModal();
+                
+                // Mostrar feedback de sucesso
+                showSuccessNotification('Recorte aplicado com sucesso!');
+            };
+            
+            reader.onerror = function() {
+                console.error('❌ Erro ao ler blob');
+                alert('Erro ao processar imagem recortada');
+            };
+            
+            reader.readAsDataURL(blob);
+            
+        }, 'image/jpeg', 0.9);
+        
+    } catch (error) {
+        console.error('❌ Erro geral no applyCrop:', error);
+        alert('Erro ao aplicar recorte: ' + error.message);
+    }
 }
 
-function resetCrop() {
-    if (originalImageData) {
-        const previewImg = document.getElementById('preview-img');
-        previewImg.src = originalImageData;
-        
-        if (cropper) {
-            cropper.destroy();
-        }
-        
-        // Aguardar a imagem carregar para reinicializar o cropper
-        previewImg.onload = function() {
-            cropper = new Cropper(previewImg, {
-                aspectRatio: 16 / 9,
-                viewMode: 1,
-                autoCropArea: 0.8,
-                responsive: true,
-                restore: false,
-                guides: true,
-                center: true,
-                highlight: false,
-                cropBoxMovable: true,
-                cropBoxResizable: true,
-                toggleDragModeOnDblclick: false
-            });
-        };
-        
-        document.getElementById('cropped-image-data').value = '';
-    }
+function showSuccessNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center animate-pulse';
+    notification.innerHTML = `<i class="fas fa-check-circle mr-2"></i>${message}`;
+    document.body.appendChild(notification);
+    
+    // Animar entrada
+    setTimeout(() => {
+        notification.classList.remove('animate-pulse');
+        notification.style.transform = 'translateY(0)';
+    }, 100);
+    
+    // Remover após 4 segundos
+    setTimeout(() => {
+        notification.style.transform = 'translateY(-100%)';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 300);
+    }, 4000);
 }
 
 function removePhoto() {
@@ -554,14 +897,39 @@ function removePhoto() {
     photoInput.value = '';
     preview.classList.add('hidden');
     uploadAreaLabel.classList.remove('hidden');
-    popupCheckbox.disabled = false;
+    
+    if (popupCheckbox) {
+        popupCheckbox.disabled = false;
+    }
+    
     document.getElementById('cropped-image-data').value = '';
     originalImageData = null;
 }
 
 // Executar na carga da página
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔧 DOM carregado');
+    
+    // Verificar se Cropper.js carregou
+    if (typeof Cropper !== 'undefined') {
+        console.log('✅ Cropper.js carregado com sucesso');
+    } else {
+        console.error('❌ Cropper.js não foi carregado');
+    }
+    
     toggleRecipients();
+    
+    // Fechar modal com ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !document.getElementById('cropModal').classList.contains('hidden')) {
+            closeCropModal();
+        }
+    });
+    
+    // Debug: Verificar user agent (Safari, Chrome, etc)
+    console.log('🔍 User Agent:', navigator.userAgent);
+    console.log('🔍 É Safari?', /^((?!chrome|android).)*safari/i.test(navigator.userAgent));
+    console.log('🔍 É macOS?', /Mac/i.test(navigator.userAgent));
     
     // Validação do formulário
     const form = document.querySelector('form');
