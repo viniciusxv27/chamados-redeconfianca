@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir Treinamento{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div class="max-w-md w-full">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="p-6">
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-trash text-red-600 text-2xl"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold text-gray-900 mb-2">Confirmar Exclusão</h2>
+                    <p class="text-gray-600">Esta ação não pode ser desfeita.</p>
+                </div>
+
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                    <h3 class="font-medium text-red-800 mb-2">Treinamento a ser excluído:</h3>
+                    <p class="text-sm text-red-700 font-medium">{{ training.title }}</p>
+                    <div class="text-xs text-red-600 mt-2 space-y-1">
+                        <div>Instrutor: {{ training.uploaded_by.full_name }}</div>
+                        <div>Visualizações: {{ training.views_count }}</div>
+                        <div>Criado em: {{ training.created_at|date:"d/m/Y H:i" }}</div>
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <div class="flex">
+                        <i class="fas fa-exclamation-triangle text-yellow-600 mt-1 mr-2"></i>
+                        <div>
+                            <h4 class="text-sm font-medium text-yellow-800">Atenção</h4>
+                            <p class="text-xs text-yellow-700 mt-1">
+                                O arquivo de vídeo e todos os dados relacionados serão removidos permanentemente.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <form method="post" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="flex space-x-3">
+                        <a href="{% url 'trainings_manage' %}" 
+                           class="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-center hover:bg-gray-200 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors">
+                            <i class="fas fa-trash mr-2"></i>
+                            Excluir
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

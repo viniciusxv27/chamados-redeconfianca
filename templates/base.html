@@ -132,11 +132,40 @@
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'training' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Treinamentos">
-                                <i class="fas fa-graduation-cap text-primary flex-shrink-0"></i>
+                            <a href="{% url 'trainings_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Treinamentos">
+                                <i class="fas fa-play-circle text-primary flex-shrink-0"></i>
                                 <span class="text-sm">Treinamentos</span>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
+                        </li>
+                        
+                        <!-- Sub Menu Treinamentos -->
+                        <li class="ml-4">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'trainings_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Ver Treinamentos">
+                                        <i class="fas fa-list text-purple-400 flex-shrink-0"></i>
+                                        <span>Ver Todos</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user.can_manage_users %}
+                                    <li>
+                                        <a href="{% url 'training_upload' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo Treinamento">
+                                            <i class="fas fa-upload text-green-400 flex-shrink-0"></i>
+                                            <span>Novo</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="{% url 'trainings_manage' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar">
+                                            <i class="fas fa-cog text-yellow-400 flex-shrink-0"></i>
+                                            <span>Gerenciar</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
                         </li>
                         <li>
                             <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Chamados">

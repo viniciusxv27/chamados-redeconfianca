@@ -1,0 +1,292 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Treinamentos{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-cog text-primary mr-3"></i>
+                        Gerenciar Treinamentos
+                    </h1>
+                    <p class="text-gray-600 mt-1">Administre vídeos e conteúdos de treinamento</p>
+                </div>
+                <div class="flex space-x-3">
+                    <a href="{% url 'training_upload' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                        <i class="fas fa-upload mr-2"></i>
+                        Novo Treinamento
+                    </a>
+                    <a href="{% url 'trainings_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="max-w-7xl mx-auto px-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-blue-100 rounded-lg">
+                        <i class="fas fa-play-circle text-blue-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-2xl font-bold text-gray-900">{{ stats.total }}</h3>
+                        <p class="text-gray-600 text-sm">Total</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-green-100 rounded-lg">
+                        <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-2xl font-bold text-gray-900">{{ stats.active }}</h3>
+                        <p class="text-gray-600 text-sm">Ativos</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-red-100 rounded-lg">
+                        <i class="fas fa-pause-circle text-red-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-2xl font-bold text-gray-900">{{ stats.inactive }}</h3>
+                        <p class="text-gray-600 text-sm">Inativos</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-purple-100 rounded-lg">
+                        <i class="fas fa-eye text-purple-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-2xl font-bold text-gray-900">{{ stats.total_views }}</h3>
+                        <p class="text-gray-600 text-sm">Visualizações</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters and Search -->
+    <div class="max-w-7xl mx-auto px-6 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <form method="get" class="flex flex-wrap items-center gap-4">
+                <div class="flex-1 min-w-64">
+                    <input type="text" 
+                           name="search" 
+                           value="{{ search }}" 
+                           placeholder="Buscar por título..."
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                <div>
+                    <select name="status" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Todos os status</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Apenas ativos</option>
+                        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Apenas inativos</option>
+                    </select>
+                </div>
+                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+                {% if search or status_filter != 'all' %}
+                    <a href="{% url 'trainings_manage' %}" class="text-gray-600 hover:text-gray-800">
+                        <i class="fas fa-times mr-1"></i>Limpar
+                    </a>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Trainings Table -->
+    <div class="max-w-7xl mx-auto px-6">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            {% if page_obj %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th class="text-left py-3 px-6 font-semibold text-gray-900">Treinamento</th>
+                                <th class="text-left py-3 px-6 font-semibold text-gray-900">Instrutor</th>
+                                <th class="text-left py-3 px-6 font-semibold text-gray-900">Status</th>
+                                <th class="text-left py-3 px-6 font-semibold text-gray-900">Visualizações</th>
+                                <th class="text-left py-3 px-6 font-semibold text-gray-900">Data</th>
+                                <th class="text-center py-3 px-6 font-semibold text-gray-900">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for training in page_obj %}
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="py-4 px-6">
+                                    <div class="flex items-center">
+                                        <div class="flex-shrink-0 w-16 h-12 bg-gray-100 rounded overflow-hidden">
+                                            {% if training.thumbnail %}
+                                                <img src="{{ training.thumbnail.url }}" alt="{{ training.title }}" class="w-full h-full object-cover">
+                                            {% else %}
+                                                <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+                                                    <i class="fas fa-play text-gray-400"></i>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="ml-4">
+                                            <div class="font-semibold text-gray-900">{{ training.title }}</div>
+                                            <div class="text-sm text-gray-500">
+                                                {% if training.duration_seconds %}
+                                                    {{ training.get_duration_display }}
+                                                {% endif %}
+                                                {% if training.file_size %}
+                                                    • {{ training.get_file_size_display }}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6">
+                                    <div class="font-medium text-gray-900">{{ training.uploaded_by.full_name }}</div>
+                                    <div class="text-sm text-gray-500">{{ training.uploaded_by.sector.name|default:"Administrador" }}</div>
+                                </td>
+                                <td class="py-4 px-6">
+                                    {% if training.is_active %}
+                                        <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                            <i class="fas fa-check-circle mr-1"></i>Ativo
+                                        </span>
+                                    {% else %}
+                                        <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                                            <i class="fas fa-pause-circle mr-1"></i>Inativo
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-4 px-6">
+                                    <div class="font-medium text-gray-900">{{ training.views_count }}</div>
+                                </td>
+                                <td class="py-4 px-6">
+                                    <div class="text-sm text-gray-900">{{ training.created_at|date:"d/m/Y" }}</div>
+                                    <div class="text-xs text-gray-500">{{ training.created_at|date:"H:i" }}</div>
+                                </td>
+                                <td class="py-4 px-6">
+                                    <div class="flex items-center justify-center space-x-2">
+                                        <a href="{% url 'training_detail' training.pk %}" 
+                                           class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors"
+                                           title="Visualizar">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <button onclick="toggleStatus({{ training.pk }}, {{ training.is_active|yesno:'true,false' }})" 
+                                                class="bg-yellow-100 text-yellow-600 p-2 rounded-lg hover:bg-yellow-200 transition-colors"
+                                                title="{% if training.is_active %}Desativar{% else %}Ativar{% endif %}">
+                                            {% if training.is_active %}
+                                                <i class="fas fa-pause"></i>
+                                            {% else %}
+                                                <i class="fas fa-play"></i>
+                                            {% endif %}
+                                        </button>
+                                        <a href="{% url 'training_delete' training.pk %}" 
+                                           class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors"
+                                           title="Excluir">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if page_obj.has_other_pages %}
+                    <div class="px-6 py-4 border-t border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm text-gray-600">
+                                Mostrando {{ page_obj.start_index }} a {{ page_obj.end_index }} de {{ page_obj.paginator.count }} treinamentos
+                            </div>
+                            <nav class="flex items-center space-x-2">
+                                {% if page_obj.has_previous %}
+                                    <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}" 
+                                       class="px-3 py-2 text-gray-500 hover:text-gray-700">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </a>
+                                {% endif %}
+                                
+                                {% for num in page_obj.paginator.page_range %}
+                                    {% if page_obj.number == num %}
+                                        <span class="px-3 py-2 bg-primary text-white rounded">{{ num }}</span>
+                                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                        <a href="?page={{ num }}{% if search %}&search={{ search }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}" 
+                                           class="px-3 py-2 text-gray-500 hover:text-gray-700">{{ num }}</a>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if page_obj.has_next %}
+                                    <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}" 
+                                       class="px-3 py-2 text-gray-500 hover:text-gray-700">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                {% endif %}
+                            </nav>
+                        </div>
+                    </div>
+                {% endif %}
+            {% else %}
+                <!-- Empty State -->
+                <div class="py-12 px-6 text-center">
+                    <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-play-circle text-gray-400 text-4xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Nenhum treinamento encontrado</h3>
+                    <p class="text-gray-600 mb-6">
+                        {% if search %}
+                            Tente buscar com termos diferentes.
+                        {% else %}
+                            Comece criando seu primeiro treinamento.
+                        {% endif %}
+                    </p>
+                    <a href="{% url 'training_upload' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center">
+                        <i class="fas fa-upload mr-2"></i>
+                        Novo Treinamento
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleStatus(trainingId, currentStatus) {
+    const action = currentStatus ? 'desativar' : 'ativar';
+    
+    if (confirm(`Tem certeza que deseja ${action} este treinamento?`)) {
+        fetch(`/trainings/${trainingId}/toggle-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || 'Erro ao alterar status');
+            }
+        })
+        .catch(error => {
+            alert('Erro na requisição: ' + error.message);
+        });
+    }
+}
+</script>
+{% endblock %}

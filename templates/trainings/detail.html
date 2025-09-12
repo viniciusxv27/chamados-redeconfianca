@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ training.title }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-play-circle text-primary mr-3"></i>
+                        {{ training.title }}
+                    </h1>
+                    <div class="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+                        <div class="flex items-center">
+                            <i class="fas fa-user mr-1"></i>
+                            {{ training.uploaded_by.full_name }}
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar mr-1"></i>
+                            {{ training.created_at|date:"d/m/Y" }}
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-eye mr-1"></i>
+                            {{ training.views_count }} visualizações
+                        </div>
+                        {% if training.duration_seconds %}
+                            <div class="flex items-center">
+                                <i class="fas fa-clock mr-1"></i>
+                                {{ training.get_duration_display }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex space-x-3">
+                    {% if can_manage %}
+                        <a href="{% url 'trainings_manage' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                            <i class="fas fa-cog mr-2"></i>
+                            Gerenciar
+                        </a>
+                    {% endif %}
+                    <a href="{% url 'trainings_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Video Player -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <!-- Video -->
+                    <div class="aspect-video bg-black relative">
+                        <video id="videoPlayer" 
+                               class="w-full h-full" 
+                               controls 
+                               preload="metadata"
+                               poster="{% if training.thumbnail %}{{ training.thumbnail.url }}{% endif %}">
+                            <source src="{{ training.video_file.url }}" type="video/mp4">
+                            Seu navegador não suporta o elemento de vídeo.
+                        </video>
+                        
+                        <!-- Loading Overlay -->
+                        <div id="loadingOverlay" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                            <div class="text-white text-center">
+                                <i class="fas fa-spinner fa-spin text-3xl mb-2"></i>
+                                <p>Carregando vídeo...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Video Info -->
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-semibold text-gray-900">{{ training.title }}</h2>
+                            {% if training_view.completed %}
+                                <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                                    <i class="fas fa-check-circle mr-1"></i>
+                                    Concluído
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        {% if training.duration_seconds and training_view.duration_watched %}
+                            <div class="mb-4">
+                                <div class="flex items-center justify-between text-sm text-gray-600 mb-1">
+                                    <span>Progresso</span>
+                                    <span>{{ training_view.duration_watched }}s / {{ training.duration_seconds }}s</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-primary h-2 rounded-full" 
+                                         style="width: {{ training_view.duration_watched|div:training.duration_seconds|mul:100 }}%"></div>
+                                </div>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="prose max-w-none">
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">Sobre este treinamento</h3>
+                            <p class="text-gray-700 whitespace-pre-line">{{ training.description }}</p>
+                        </div>
+                        
+                        <!-- File Info -->
+                        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                            <h4 class="font-medium text-gray-900 mb-2">Informações do arquivo</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                {% if training.file_size %}
+                                    <div>
+                                        <span class="text-gray-600">Tamanho:</span>
+                                        <span class="font-medium">{{ training.get_file_size_display }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if training.duration_seconds %}
+                                    <div>
+                                        <span class="text-gray-600">Duração:</span>
+                                        <span class="font-medium">{{ training.get_duration_display }}</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sidebar -->
+            <div class="space-y-6">
+                <!-- Author Info -->
+                <div class="bg-white rounded-xl shadow-sm p-6">
+                    <h3 class="font-semibold text-gray-900 mb-4">Instrutor</h3>
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-medium text-lg">
+                            {{ training.uploaded_by.full_name|first|upper }}
+                        </div>
+                        <div class="ml-4">
+                            <p class="font-medium text-gray-900">{{ training.uploaded_by.full_name }}</p>
+                            <p class="text-sm text-gray-600">{{ training.uploaded_by.sector.name|default:"Administrador" }}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statistics -->
+                <div class="bg-white rounded-xl shadow-sm p-6">
+                    <h3 class="font-semibold text-gray-900 mb-4">Estatísticas</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-eye text-gray-400 mr-2"></i>
+                                <span class="text-sm text-gray-600">Visualizações</span>
+                            </div>
+                            <span class="font-medium">{{ training.views_count }}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-calendar text-gray-400 mr-2"></i>
+                                <span class="text-sm text-gray-600">Publicado em</span>
+                            </div>
+                            <span class="font-medium">{{ training.created_at|date:"d/m/Y" }}</span>
+                        </div>
+                        {% if training.updated_at != training.created_at %}
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <i class="fas fa-edit text-gray-400 mr-2"></i>
+                                    <span class="text-sm text-gray-600">Atualizado em</span>
+                                </div>
+                                <span class="font-medium">{{ training.updated_at|date:"d/m/Y" }}</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- My Progress -->
+                <div class="bg-white rounded-xl shadow-sm p-6">
+                    <h3 class="font-semibold text-gray-900 mb-4">Meu Progresso</h3>
+                    {% if user_progress %}
+                        <div class="text-sm text-gray-600">
+                            <p>Você já assistiu <strong>{{ user_progress.count }}</strong> treinamento{{ user_progress.count|pluralize }}.</p>
+                            {% if training_view.viewed_at %}
+                                <p class="mt-2">Primeira visualização: {{ training_view.viewed_at|date:"d/m/Y H:i" }}</p>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-600">Este é seu primeiro treinamento!</p>
+                    {% endif %}
+                </div>
+                
+                <!-- Actions -->
+                {% if can_manage %}
+                    <div class="bg-white rounded-xl shadow-sm p-6">
+                        <h3 class="font-semibold text-gray-900 mb-4">Ações do Administrador</h3>
+                        <div class="space-y-2">
+                            <button onclick="toggleTrainingStatus({{ training.pk }})" 
+                                    class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                                    id="toggleStatusBtn">
+                                {% if training.is_active %}
+                                    <i class="fas fa-pause mr-2"></i>Desativar
+                                {% else %}
+                                    <i class="fas fa-play mr-2"></i>Ativar
+                                {% endif %}
+                            </button>
+                            <a href="{% url 'training_delete' training.pk %}" 
+                               class="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded">
+                                <i class="fas fa-trash mr-2"></i>Excluir
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const video = document.getElementById('videoPlayer');
+const loadingOverlay = document.getElementById('loadingOverlay');
+
+// Hide loading overlay when video loads
+video.addEventListener('loadeddata', function() {
+    loadingOverlay.style.display = 'none';
+});
+
+// Track video progress
+let lastUpdateTime = 0;
+video.addEventListener('timeupdate', function() {
+    const currentTime = Math.floor(video.currentTime);
+    
+    // Update progress every 5 seconds
+    if (currentTime - lastUpdateTime >= 5) {
+        lastUpdateTime = currentTime;
+        updateProgress(currentTime, false);
+    }
+});
+
+// Track video completion
+video.addEventListener('ended', function() {
+    updateProgress(Math.floor(video.duration), true);
+});
+
+function updateProgress(duration, completed) {
+    fetch('{% url "update_training_progress" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `training_id={{ training.pk }}&duration_watched=${duration}&completed=${completed}`
+    });
+}
+
+{% if can_manage %}
+function toggleTrainingStatus(trainingId) {
+    fetch(`/trainings/${trainingId}/toggle-status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Erro ao alterar status');
+        }
+    });
+}
+{% endif %}
+</script>
+{% endblock %}

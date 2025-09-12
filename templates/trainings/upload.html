@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+
+{% block title %}Novo Treinamento{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-upload text-primary mr-3"></i>
+                        Novo Treinamento
+                    </h1>
+                    <p class="text-gray-600 mt-1">Envie vídeos educativos para compartilhar conhecimento</p>
+                </div>
+                <div class="flex space-x-3">
+                    <a href="{% url 'trainings_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-6">
+        <form method="post" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm overflow-hidden" id="uploadForm">
+            {% csrf_token %}
+            
+            <!-- Upload Guidelines -->
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4 m-6">
+                <div class="flex">
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-800">Diretrizes para Upload</h3>
+                        <div class="mt-2 text-sm text-blue-700">
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Tamanho máximo: 500MB por arquivo</li>
+                                <li>Formatos aceitos: {{ accepted_formats|join:", "|upper }}</li>
+                                <li>Recomendado: Resolução mínima de 720p para melhor qualidade</li>
+                                <li>Duração ideal: Entre 5-30 minutos para melhor engajamento</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <!-- Título -->
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                        Título do Treinamento *
+                    </label>
+                    <input type="text" 
+                           id="title" 
+                           name="title" 
+                           required
+                           maxlength="200"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                           placeholder="Ex: Como usar o sistema de chamados">
+                    <p class="text-xs text-gray-500 mt-1">Escolha um título claro e descritivo</p>
+                </div>
+
+                <!-- Descrição -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Descrição *
+                    </label>
+                    <textarea id="description" 
+                              name="description" 
+                              required
+                              rows="4"
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                              placeholder="Descreva o conteúdo do treinamento, o que será aprendido e público-alvo..."></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Explique detalhadamente o conteúdo e objetivos do treinamento</p>
+                </div>
+
+                <!-- Upload de Vídeo -->
+                <div>
+                    <label for="video_file" class="block text-sm font-medium text-gray-700 mb-2">
+                        Arquivo de Vídeo *
+                    </label>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary transition-colors" id="dropZone">
+                        <div class="text-center">
+                            <i class="fas fa-video text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-lg font-medium text-gray-900 mb-2">Arraste e solte o arquivo aqui</p>
+                            <p class="text-sm text-gray-600 mb-4">ou clique para selecionar</p>
+                            <input type="file" 
+                                   id="video_file" 
+                                   name="video_file" 
+                                   required
+                                   accept=".mp4,.avi,.mov,.wmv,.flv,.webm,.mkv"
+                                   class="hidden">
+                            <button type="button" 
+                                    onclick="document.getElementById('video_file').click()" 
+                                    class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                                <i class="fas fa-folder-open mr-2"></i>
+                                Selecionar Arquivo
+                            </button>
+                        </div>
+                        
+                        <!-- File Info Display -->
+                        <div id="fileInfo" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <i class="fas fa-video text-primary mr-2"></i>
+                                    <span id="fileName" class="font-medium"></span>
+                                </div>
+                                <button type="button" onclick="clearFile()" class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <p id="fileSize" class="text-sm text-gray-600 mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thumbnail (Opcional) -->
+                <div>
+                    <label for="thumbnail" class="block text-sm font-medium text-gray-700 mb-2">
+                        Miniatura (Opcional)
+                    </label>
+                    <input type="file" 
+                           id="thumbnail" 
+                           name="thumbnail" 
+                           accept="image/*"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <p class="text-xs text-gray-500 mt-1">Imagem de capa para o vídeo (JPG, PNG). Se não fornecida, será gerada automaticamente.</p>
+                </div>
+
+                <!-- Duração -->
+                <div>
+                    <label for="duration_seconds" class="block text-sm font-medium text-gray-700 mb-2">
+                        Duração (opcional)
+                    </label>
+                    <div class="flex space-x-2">
+                        <input type="number" 
+                               id="minutes" 
+                               placeholder="Min"
+                               min="0"
+                               class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <span class="flex items-center">:</span>
+                        <input type="number" 
+                               id="seconds" 
+                               placeholder="Seg"
+                               min="0"
+                               max="59"
+                               class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <input type="hidden" id="duration_seconds" name="duration_seconds">
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Duração do vídeo em minutos e segundos</p>
+                </div>
+            </div>
+
+            <!-- Upload Progress -->
+            <div id="uploadProgress" class="hidden px-6 py-4 bg-blue-50">
+                <div class="flex items-center">
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between text-sm mb-1">
+                            <span class="font-medium text-blue-900">Enviando treinamento...</span>
+                            <span id="progressPercent" class="text-blue-600">0%</span>
+                        </div>
+                        <div class="w-full bg-blue-200 rounded-full h-2">
+                            <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <i class="fas fa-spinner fa-spin text-blue-600 ml-4"></i>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div class="text-sm text-gray-600">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Todos os campos marcados com * são obrigatórios
+                    </div>
+                    <div class="flex space-x-3">
+                        <a href="{% url 'trainings_list' %}" class="px-4 py-2 text-gray-700 hover:text-gray-900">Cancelar</a>
+                        <button type="submit" 
+                                class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                id="submitBtn">
+                            <i class="fas fa-upload mr-2"></i>
+                            Enviar Treinamento
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// File upload handling
+const videoInput = document.getElementById('video_file');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+const dropZone = document.getElementById('dropZone');
+const submitBtn = document.getElementById('submitBtn');
+
+videoInput.addEventListener('change', handleFile);
+
+// Drag and drop
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('border-primary', 'bg-blue-50');
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('border-primary', 'bg-blue-50');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-primary', 'bg-blue-50');
+    
+    if (e.dataTransfer.files.length > 0) {
+        videoInput.files = e.dataTransfer.files;
+        handleFile();
+    }
+});
+
+function handleFile() {
+    const file = videoInput.files[0];
+    if (file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileInfo.classList.remove('hidden');
+        
+        // Validate file size
+        const maxSize = {{ max_file_size }};
+        if (file.size > maxSize) {
+            alert('Arquivo muito grande! Tamanho máximo: ' + formatFileSize(maxSize));
+            clearFile();
+            return;
+        }
+    }
+}
+
+function clearFile() {
+    videoInput.value = '';
+    fileInfo.classList.add('hidden');
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Duration calculation
+document.getElementById('minutes').addEventListener('input', calculateDuration);
+document.getElementById('seconds').addEventListener('input', calculateDuration);
+
+function calculateDuration() {
+    const minutes = parseInt(document.getElementById('minutes').value) || 0;
+    const seconds = parseInt(document.getElementById('seconds').value) || 0;
+    const totalSeconds = (minutes * 60) + seconds;
+    document.getElementById('duration_seconds').value = totalSeconds > 0 ? totalSeconds : '';
+}
+
+// Form submission with progress
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const progressDiv = document.getElementById('uploadProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    
+    // Show progress
+    progressDiv.classList.remove('hidden');
+    submitBtn.disabled = true;
+    
+    // Simulate upload progress (in real implementation, use XMLHttpRequest with progress events)
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress > 95) progress = 95;
+        
+        progressBar.style.width = progress + '%';
+        progressPercent.textContent = Math.round(progress) + '%';
+    }, 200);
+    
+    // Submit form
+    fetch(this.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    }).then(response => {
+        clearInterval(interval);
+        progressBar.style.width = '100%';
+        progressPercent.textContent = '100%';
+        
+        setTimeout(() => {
+            if (response.ok) {
+                window.location.href = response.url || '{% url "trainings_list" %}';
+            } else {
+                alert('Erro no upload. Tente novamente.');
+                progressDiv.classList.add('hidden');
+                submitBtn.disabled = false;
+            }
+        }, 500);
+    }).catch(error => {
+        clearInterval(interval);
+        alert('Erro no upload: ' + error.message);
+        progressDiv.classList.add('hidden');
+        submitBtn.disabled = false;
+    });
+});
+</script>
+{% endblock %}
