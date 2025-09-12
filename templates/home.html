@@ -86,7 +86,7 @@
                         </div>
                         {% if comm.image %}
                         <div class="mb-4">
-                            <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full max-h-64 object-cover rounded-lg">
+                            <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full h-auto max-w-full object-contain rounded-lg bg-gray-50">
                         </div>
                         {% endif %}
                         <p class="text-gray-700 mb-4">{{ comm.message|linebreaks }}</p>
@@ -156,7 +156,7 @@
                     
                     {% if comm.image %}
                     <div class="mb-4">
-                        <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full max-h-96 object-cover rounded-lg">
+                        <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full h-auto max-w-full object-contain rounded-lg bg-gray-50">
                     </div>
                     {% endif %}
                     
