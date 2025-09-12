@@ -313,14 +313,16 @@ def create_communication_view(request):
     
     # Preparar grupos para o usuário (apenas grupos em que ele é membro)
     user_groups = []
-    if request.user.hierarchy in ['GERENTE', 'COORDENACAO', 'DIRETORIA', 'SUPERADMIN', 'ADMINISTRADOR']:
+    if request.user.hierarchy in ['GERENTE', 'COORDENACAO', 'DIRETORIA', 'SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']:
         # Mostrar grupos baseado na hierarquia do usuário
         hierarchy_groups = {
             'GERENTE': [('GERENTES', 'Gerentes')],
             'COORDENACAO': [('COORDENACAO', 'Coordenação'), ('GERENTES', 'Gerentes')],
             'DIRETORIA': [('DIRETORIA', 'Diretoria'), ('COORDENACAO', 'Coordenação'), ('GERENTES', 'Gerentes')],
+            'SUPERVISOR': [('SUPERVISORES', 'Supervisores')],
+            'ADMINISTRATIVO': [('ADMINISTRATIVO', 'Administrativo')],
             'SUPERADMIN': Communication.SENDER_GROUP_CHOICES,
-            'ADMINISTRADOR': Communication.SENDER_GROUP_CHOICES,
+            'ADMIN': Communication.SENDER_GROUP_CHOICES,
         }
         user_groups = hierarchy_groups.get(request.user.hierarchy, [])
     

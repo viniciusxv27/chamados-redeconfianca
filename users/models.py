@@ -103,7 +103,7 @@ class User(AbstractUser):
             self.save()
     
     def can_manage_users(self):
-        return self.hierarchy in ['ADMIN', 'SUPERADMIN']
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']
     
     @property
     def calculated_balance_cs(self):

@@ -196,7 +196,7 @@
                         </li>
                         
                         <!-- Menu específico para níveis superiores -->
-                        {% if user.hierarchy != 'PADRAO' %}
+                        {% if user.can_manage_users %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
                             <div class="px-2 py-1">
                                 <span class="text-xs text-gray-400 font-medium">GESTÃO</span>

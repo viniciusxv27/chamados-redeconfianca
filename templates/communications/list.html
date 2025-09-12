@@ -17,7 +17,7 @@
                     </h1>
                     <p class="text-gray-600 mt-1">Acompanhe todas as comunicações importantes</p>
                 </div>
-                {% if user.hierarchy != 'PADRAO' %}
+                {% if user.can_manage_users %}
                 <a href="{% url 'communications:create_communication' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
                     <i class="fas fa-plus mr-2"></i>
                     Novo Comunicado
