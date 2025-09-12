@@ -137,6 +137,24 @@ class Training(models.Model):
         else:
             size_gb = size_mb / 1024
             return f"{size_gb:.1f} GB"
+    
+    def get_video_url(self):
+        """Retorna a URL do vídeo de forma segura"""
+        try:
+            if self.video_file:
+                return self.video_file.url
+        except Exception:
+            pass
+        return None
+    
+    def get_thumbnail_url(self):
+        """Retorna a URL da thumbnail de forma segura"""
+        try:
+            if self.thumbnail:
+                return self.thumbnail.url
+        except Exception:
+            pass
+        return None
 
 
 class TrainingView(models.Model):

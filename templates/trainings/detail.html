@@ -57,14 +57,26 @@
                 <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                     <!-- Video -->
                     <div class="aspect-video bg-black relative">
+                        {% with video_url=training.get_video_url thumbnail_url=training.get_thumbnail_url %}
+                        {% if video_url %}
                         <video id="videoPlayer" 
                                class="w-full h-full" 
                                controls 
                                preload="metadata"
-                               poster="{% if training.thumbnail %}{{ training.thumbnail.url }}{% endif %}">
-                            <source src="{{ training.video_file.url }}" type="video/mp4">
+                               {% if thumbnail_url %}poster="{{ thumbnail_url }}"{% endif %}>
+                            <source src="{{ video_url }}" type="video/mp4">
                             Seu navegador não suporta o elemento de vídeo.
                         </video>
+                        {% else %}
+                        <div class="w-full h-full flex items-center justify-center text-white">
+                            <div class="text-center">
+                                <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                                <p>Arquivo de vídeo não encontrado</p>
+                                <p class="text-sm mt-2">Verifique se o arquivo foi enviado corretamente</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endwith %}
                         
                         <!-- Loading Overlay -->
                         <div id="loadingOverlay" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">

@@ -790,9 +790,26 @@ def manage_categories_view(request):
     
     from tickets.models import Category
     categories = Category.objects.all().select_related('sector')
+    
+    # Filtro por setor
+    sector_filter = request.GET.get('sector', '')
+    if sector_filter:
+        try:
+            sector_id = int(sector_filter)
+            categories = categories.filter(sector_id=sector_id)
+        except (ValueError, TypeError):
+            pass
+    
+    # Busca por nome
+    search = request.GET.get('search', '')
+    if search:
+        categories = categories.filter(name__icontains=search)
+    
     context = {
         'categories': categories,
         'sectors': Sector.objects.all(),
+        'sector_filter': sector_filter,
+        'search': search,
         'user': request.user,
     }
     return render(request, 'admin/categories.html', context)
