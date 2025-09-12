@@ -3,6 +3,13 @@ from django.conf import settings
 import requests
 from core.utils import upload_communication_attachment
 
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
 
 class CommunicationGroup(models.Model):
     name = models.CharField(max_length=100, verbose_name="Nome do Grupo")
@@ -39,7 +46,7 @@ class Communication(models.Model):
     
     title = models.CharField(max_length=200, verbose_name="Título")
     message = models.TextField(verbose_name="Mensagem")
-    image = models.ImageField(upload_to=upload_communication_attachment, null=True, blank=True, verbose_name="Imagem")
+    image = models.ImageField(upload_to=upload_communication_attachment, storage=get_media_storage(), null=True, blank=True, verbose_name="Imagem")
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 

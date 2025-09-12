@@ -85,7 +85,7 @@
             <!-- Foto do comunicado (se existir) -->
             {% if communication.image %}
             <div class="relative">
-                <img src="{{ communication.image.url }}" alt="{{ communication.title }}" class="w-full h-64 object-cover">
+                <img src="{{ communication.image.url }}" alt="{{ communication.title }}" class="w-full h-auto max-h-64 object-contain bg-gray-100">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
                 <div class="absolute bottom-4 left-4 right-4">
                     <div class="flex items-center mb-2">

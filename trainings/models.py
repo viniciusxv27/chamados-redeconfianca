@@ -2,9 +2,17 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
 from django.urls import reverse
+from django.conf import settings
 import os
 
 User = get_user_model()
+
+def get_training_storage():
+    """Return training storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import TrainingStorage
+        return TrainingStorage
+    return None
 
 def training_video_path(instance, filename):
     """Função para definir o path de upload dos vídeos de treinamento"""
@@ -30,6 +38,7 @@ class Training(models.Model):
     
     video_file = models.FileField(
         upload_to=training_video_path,
+        storage=get_training_storage(),
         validators=[
             FileExtensionValidator(
                 allowed_extensions=['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv']
@@ -41,6 +50,7 @@ class Training(models.Model):
     
     thumbnail = models.ImageField(
         upload_to='trainings/thumbnails/',
+        storage=get_training_storage(),
         blank=True,
         null=True,
         verbose_name="Miniatura",

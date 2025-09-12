@@ -66,9 +66,9 @@
             
             <!-- Message Content -->
             <div class="px-6 py-6">
-                {% if communication.photo %}
+                {% if communication.image %}
                 <div class="mb-6">
-                    <img src="{{ communication.photo.url }}" alt="Foto do comunicado" class="w-full max-h-96 object-cover rounded-lg shadow-sm">
+                    <img src="{{ communication.image.url }}" alt="Imagem do comunicado" class="w-full max-w-full h-auto rounded-lg shadow-sm">
                 </div>
                 {% endif %}
                 

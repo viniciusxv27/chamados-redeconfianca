@@ -100,6 +100,7 @@
                 <option value="PADRAO">Padrão</option>
                 <option value="SUPERVISOR">Supervisor</option>
                 <option value="ADMINISTRATIVO">Administrativo</option>
+                <option value="ADMIN">Administração</option>
                 <option value="SUPERADMIN">Superadmin</option>
             </select>
         </div>
@@ -156,11 +157,15 @@
                                 </span>
                             {% elif user_item.hierarchy == 'ADMINISTRATIVO' %}
                                 <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                                    <i class="fas fa-user-shield mr-1"></i>Admin
+                                    <i class="fas fa-user-tie mr-1"></i>Administrativo
                                 </span>
                             {% elif user_item.hierarchy == 'SUPERVISOR' %}
                                 <span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
                                     <i class="fas fa-user-tie mr-1"></i>Supervisor
+                                </span>
+                            {% elif user_item.hierarchy == 'ADMIN' %}
+                                <span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-user-shield mr-1"></i>Administração
                                 </span>
                             {% else %}
                                 <span class="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">

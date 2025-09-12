@@ -1,9 +1,17 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from users.models import User, Sector
 import os
 
 User = get_user_model()
+
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
 
 
 def upload_file_path(instance, filename):
@@ -36,7 +44,7 @@ class SharedFile(models.Model):
     
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(blank=True, verbose_name="Descrição")
-    file = models.FileField(upload_to=upload_file_path, verbose_name="Arquivo")
+    file = models.FileField(upload_to=upload_file_path, storage=get_media_storage(), verbose_name="Arquivo")
     category = models.ForeignKey(FileCategory, on_delete=models.CASCADE, verbose_name="Categoria")
     
     # Controle de visibilidade

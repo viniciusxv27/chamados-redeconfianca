@@ -1,7 +1,15 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.conf import settings
 from decimal import Decimal
 from core.utils import upload_user_profile_photo
+
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
 
 
 class Sector(models.Model):
@@ -33,8 +41,8 @@ class User(AbstractUser):
     hierarchy = models.CharField(max_length=20, choices=HIERARCHY_CHOICES, default='PADRAO', verbose_name="Hierarquia")
     balance_cs = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo C$")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
-    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name="Avatar")
-    profile_picture = models.ImageField(upload_to=upload_user_profile_photo, blank=True, null=True)
+    avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
+    profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
