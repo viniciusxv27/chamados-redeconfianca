@@ -22,6 +22,14 @@ def training_video_path(instance, filename):
     
     return f'trainings/videos/{instance.id or "temp"}/{safe_name}{ext}'
 
+def training_thumbnail_path(instance, filename):
+    """Função para definir o path de upload das thumbnails de treinamento"""
+    # Remove caracteres especiais do nome do arquivo
+    name, ext = os.path.splitext(filename)
+    safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    
+    return f'trainings/thumbnails/{instance.id or "temp"}/{safe_name}{ext}'
+
 class Training(models.Model):
     """Modelo para treinamentos com upload de vídeos"""
     
@@ -49,7 +57,7 @@ class Training(models.Model):
     )
     
     thumbnail = models.ImageField(
-        upload_to='trainings/thumbnails/',
+        upload_to=training_thumbnail_path,
         storage=get_training_storage(),
         blank=True,
         null=True,
