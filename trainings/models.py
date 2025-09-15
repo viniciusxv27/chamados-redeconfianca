@@ -19,23 +19,23 @@ def get_training_storage():
 
 def training_video_path(instance, filename):
     """Função para definir o path de upload dos vídeos de treinamento"""
-    # Remove caracteres especiais do nome do arquivo
-    name, ext = os.path.splitext(filename)
-    safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    # Gera nome aleatório para evitar problemas com caracteres especiais
+    ext = os.path.splitext(filename)[1].lower()
+    random_name = str(uuid.uuid4()).replace('-', '')
     
     # Usa UUID temporário se instance ainda não tem ID
     identifier = instance.id if instance.id else str(uuid.uuid4())[:8]
-    return f'trainings/videos/{identifier}/{safe_name}{ext}'
+    return f'trainings/videos/{identifier}/{random_name}{ext}'
 
 def training_thumbnail_path(instance, filename):
     """Função para definir o path de upload das thumbnails de treinamento"""
-    # Remove caracteres especiais do nome do arquivo
-    name, ext = os.path.splitext(filename)
-    safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    # Gera nome aleatório para evitar problemas com caracteres especiais
+    ext = os.path.splitext(filename)[1].lower()
+    random_name = str(uuid.uuid4()).replace('-', '')
     
     # Usa UUID temporário se instance ainda não tem ID
     identifier = instance.id if instance.id else str(uuid.uuid4())[:8]
-    return f'trainings/thumbnails/{identifier}/{safe_name}{ext}'
+    return f'trainings/thumbnails/{identifier}/{random_name}{ext}'
 
 class Training(models.Model):
     """Modelo para treinamentos com upload de vídeos"""
