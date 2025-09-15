@@ -3,7 +3,10 @@ from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
 from django.urls import reverse
 from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 import os
+import uuid
 
 User = get_user_model()
 
@@ -20,7 +23,9 @@ def training_video_path(instance, filename):
     name, ext = os.path.splitext(filename)
     safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
     
-    return f'trainings/videos/{instance.id or "temp"}/{safe_name}{ext}'
+    # Usa UUID temporário se instance ainda não tem ID
+    identifier = instance.id if instance.id else str(uuid.uuid4())[:8]
+    return f'trainings/videos/{identifier}/{safe_name}{ext}'
 
 def training_thumbnail_path(instance, filename):
     """Função para definir o path de upload das thumbnails de treinamento"""
@@ -28,7 +33,9 @@ def training_thumbnail_path(instance, filename):
     name, ext = os.path.splitext(filename)
     safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
     
-    return f'trainings/thumbnails/{instance.id or "temp"}/{safe_name}{ext}'
+    # Usa UUID temporário se instance ainda não tem ID
+    identifier = instance.id if instance.id else str(uuid.uuid4())[:8]
+    return f'trainings/thumbnails/{identifier}/{safe_name}{ext}'
 
 class Training(models.Model):
     """Modelo para treinamentos com upload de vídeos"""
@@ -163,6 +170,73 @@ class Training(models.Model):
         except Exception:
             pass
         return None
+
+
+@receiver(post_save, sender=Training)
+def move_training_files_after_save(sender, instance, created, **kwargs):
+    """
+    Move arquivos para o path correto após salvar com ID definido
+    """
+    if created and instance.id:
+        # Verifica se precisa mover arquivos do path temporário
+        updated = False
+        
+        # Verificar e mover vídeo
+        if instance.video_file:
+            current_path = instance.video_file.name
+            if '/temp/' in current_path or not f'/{instance.id}/' in current_path:
+                # Gerar novo path correto
+                filename = os.path.basename(current_path)
+                name, ext = os.path.splitext(filename)
+                safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                new_path = f'trainings/videos/{instance.id}/{safe_name}{ext}'
+                
+                # Mover arquivo no storage
+                storage = instance.video_file.storage
+                if storage.exists(current_path):
+                    try:
+                        # Copiar conteúdo para novo path
+                        with storage.open(current_path, 'rb') as old_file:
+                            storage.save(new_path, old_file)
+                        # Remover arquivo antigo
+                        storage.delete(current_path)
+                        # Atualizar campo
+                        instance.video_file.name = new_path
+                        updated = True
+                    except Exception as e:
+                        print(f"Erro ao mover vídeo: {e}")
+        
+        # Verificar e mover thumbnail
+        if instance.thumbnail:
+            current_path = instance.thumbnail.name
+            if '/temp/' in current_path or not f'/{instance.id}/' in current_path:
+                # Gerar novo path correto
+                filename = os.path.basename(current_path)
+                name, ext = os.path.splitext(filename)
+                safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                new_path = f'trainings/thumbnails/{instance.id}/{safe_name}{ext}'
+                
+                # Mover arquivo no storage
+                storage = instance.thumbnail.storage
+                if storage.exists(current_path):
+                    try:
+                        # Copiar conteúdo para novo path
+                        with storage.open(current_path, 'rb') as old_file:
+                            storage.save(new_path, old_file)
+                        # Remover arquivo antigo
+                        storage.delete(current_path)
+                        # Atualizar campo
+                        instance.thumbnail.name = new_path
+                        updated = True
+                    except Exception as e:
+                        print(f"Erro ao mover thumbnail: {e}")
+        
+        # Salvar alterações se necessário (sem trigger do signal novamente)
+        if updated:
+            Training.objects.filter(pk=instance.pk).update(
+                video_file=instance.video_file.name,
+                thumbnail=instance.thumbnail.name if instance.thumbnail else None
+            )
 
 
 class TrainingView(models.Model):

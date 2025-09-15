@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
+{% load training_filters %}
 
-{% block title %}{{ training.title }}{% endblock %}
+{% block title %}{{ training.title }} - Treinamentos{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50">
@@ -108,7 +109,7 @@
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-2">
                                     <div class="bg-primary h-2 rounded-full" 
-                                         style="width: {{ training_view.duration_watched|div:training.duration_seconds|mul:100 }}%"></div>
+                                         style="width: {{ training_view.duration_watched|percentage_progress:training.duration_seconds|floatformat:1 }}%"></div>
                                 </div>
                             </div>
                         {% endif %}
