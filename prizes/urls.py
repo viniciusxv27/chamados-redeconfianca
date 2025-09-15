@@ -16,4 +16,5 @@ urlpatterns = [
     path('create/', views.create_prize, name='create_prize'),
     path('redemptions/', views.manage_redemptions, name='manage_redemptions'),
     path('redemptions/<int:redemption_id>/update-status/', views.update_redemption_status, name='update_redemption_status'),
+    path('redemptions/<int:redemption_id>/cancel/', views.cancel_redemption, name='cancel_redemption'),
 ]

@@ -4,6 +4,7 @@
 {% block title %}Histórico de Resgates - Rede Confiança{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
@@ -223,9 +224,40 @@ function closeModal() {
 }
 
 function cancelRedemption(redemptionId) {
-    if (confirm('Tem certeza que deseja cancelar este resgate?')) {
-        // Implementar cancelamento
-        alert('Funcionalidade de cancelamento em desenvolvimento');
+    if (confirm('Tem certeza que deseja cancelar este resgate? O C$ será devolvido ao seu saldo.')) {
+        // Verificar se o token CSRF existe
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (!csrfToken) {
+            alert('Erro: Token CSRF não encontrado. Recarregue a página e tente novamente.');
+            return;
+        }
+        
+        console.log('Cancelando resgate ID:', redemptionId);
+        
+        fetch(`/prizes/redemptions/${redemptionId}/cancel/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken.value,
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => {
+            console.log('Resposta recebida:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados recebidos:', data);
+            if (data.success) {
+                alert(data.message || 'Resgate cancelado com sucesso!');
+                location.reload();
+            } else {
+                alert('Erro ao cancelar resgate: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro na requisição:', error);
+            alert('Erro ao cancelar resgate: ' + error.message);
+        });
     }
 }
 

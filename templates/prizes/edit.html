@@ -280,7 +280,7 @@ function removePreview() {
 
 function cancelRedemption(redemptionId) {
     if (confirm('Tem certeza que deseja cancelar este resgate? O C$ será devolvido ao usuário.')) {
-        fetch(`/prizes/redemption/${redemptionId}/cancel/`, {
+        fetch(`/prizes/redemptions/${redemptionId}/cancel/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -290,6 +290,7 @@ function cancelRedemption(redemptionId) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                alert(data.message || 'Resgate cancelado com sucesso!');
                 location.reload();
             } else {
                 alert('Erro ao cancelar resgate: ' + data.error);

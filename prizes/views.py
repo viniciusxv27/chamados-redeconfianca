@@ -289,7 +289,64 @@ def update_redemption_status(request, redemption_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
-        return JsonResponse({'success': False, 'error': str(e)})
-        
+
+
+@login_required
+@require_POST
+def cancel_redemption(request, redemption_id):
+    """Cancelar resgate - Admin ou próprio usuário"""
+    redemption = get_object_or_404(Redemption, id=redemption_id)
+    
+    # Verificar permissão: admin ou próprio usuário
+    if not (request.user.can_manage_users() or redemption.user == request.user):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    # Só pode cancelar se estiver pendente ou aprovado
+    if redemption.status not in ['PENDENTE', 'APROVADO']:
+        return JsonResponse({'success': False, 'error': 'Este resgate não pode ser cancelado'})
+    
+    try:
+        with transaction.atomic():
+            old_status = redemption.status
+            redemption.status = 'CANCELADO'
+            redemption.approved_by = request.user
+            
+            # Adicionar nota sobre quem cancelou
+            if request.user == redemption.user:
+                redemption.notes = f'Cancelado pelo próprio usuário em {timezone.now().strftime("%d/%m/%Y %H:%M")}'
+            else:
+                redemption.notes = f'Cancelado por {request.user.get_full_name()} em {timezone.now().strftime("%d/%m/%Y %H:%M")}'
+            
+            redemption.save()
+            
+            # Devolver o C$ para o usuário
+            redemption.user.balance_cs += redemption.prize.value_cs
+            redemption.user.save()
+            
+            # Registrar transação de devolução
+            CSTransaction.objects.create(
+                user=redemption.user,
+                amount=redemption.prize.value_cs,
+                transaction_type='REFUND',
+                description=f'Devolução por cancelamento: {redemption.prize.name}',
+                related_redemption=redemption,
+                status='APPROVED',
+                created_by=request.user
+            )
+            
+            # Log da ação
+            from core.middleware import log_action
+            log_action(
+                request.user,
+                'REDEMPTION_CANCELLED',
+                f'Resgate #{redemption.id} ({redemption.prize.name}) cancelado',
+                request
+            )
+            
+            return JsonResponse({
+                'success': True, 
+                'message': f'Resgate cancelado com sucesso! C${redemption.prize.value_cs} foi devolvido.'
+            })
+            
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})

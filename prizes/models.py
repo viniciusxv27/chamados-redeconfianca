@@ -124,6 +124,7 @@ class CSTransaction(models.Model):
         ('CREDIT', 'Crédito'),
         ('DEBIT', 'Débito'),
         ('REDEMPTION', 'Resgate'),
+        ('REFUND', 'Reembolso'),
         ('ADJUSTMENT', 'Ajuste'),
     ]
     
