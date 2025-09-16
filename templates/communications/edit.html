@@ -166,6 +166,40 @@
                                     <p class="text-sm text-gray-500">O comunicado será enviado para todos os usuários ativos do sistema</p>
                                 </div>
                             </div>
+                            
+                            <!-- Fixar no Dashboard -->
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                                           type="checkbox" 
+                                           id="is_pinned" 
+                                           name="is_pinned" 
+                                           {% if communication.is_pinned %}checked{% endif %}>
+                                </div>
+                                <div class="ml-3">
+                                    <label for="is_pinned" class="text-sm font-medium text-gray-900">
+                                        Fixar no Dashboard
+                                    </label>
+                                    <p class="text-sm text-gray-500">O comunicado aparecerá como destaque no dashboard para todos os usuários</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Exibir como Pop-up -->
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                                           type="checkbox" 
+                                           id="is_popup" 
+                                           name="is_popup" 
+                                           {% if communication.is_popup %}checked{% endif %}>
+                                </div>
+                                <div class="ml-3">
+                                    <label for="is_popup" class="text-sm font-medium text-gray-900">
+                                        Exibir como Pop-up
+                                    </label>
+                                    <p class="text-sm text-gray-500">O comunicado será exibido como pop-up ao fazer login (não disponível para comunicados com imagem)</p>
+                                </div>
+                            </div>
 
                             <!-- Destinatários específicos -->
                             <div id="recipients-section">

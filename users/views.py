@@ -66,6 +66,14 @@ def dashboard_view(request):
     else:
         user_tickets = Ticket.objects.filter(created_by=user)
     
+    # Chamados recentes sempre do setor (exceto para superadmin)
+    if user.hierarchy == 'SUPERADMIN':
+        sector_recent_tickets = Ticket.objects.all()
+    else:
+        # Para todos os outros (incluindo admin, supervisor, administrativo e padrão),
+        # mostrar apenas chamados do setor do usuário
+        sector_recent_tickets = Ticket.objects.filter(sector=user.sector) if user.sector else Ticket.objects.filter(created_by=user)
+    
     ticket_stats = {
         'total': user_tickets.count(),
         'abertos': user_tickets.filter(status='ABERTO').count(),
@@ -89,8 +97,8 @@ def dashboard_view(request):
         communicationread__user=user
     ).distinct()[:5]
     
-    # Tickets recentes
-    recent_tickets = user_tickets.order_by('-created_at')[:5]
+    # Tickets recentes (sempre do setor, exceto superadmin)
+    recent_tickets = sector_recent_tickets.order_by('-created_at')[:5]
     
     # Tickets em atraso que o usuário pode ver
     overdue_tickets = user_tickets.filter(
@@ -375,6 +383,7 @@ def create_user_view(request):
         sector_id = request.POST.get('sector')
         hierarchy = request.POST.get('hierarchy')
         phone = request.POST.get('phone')
+        disc_profile = request.POST.get('disc_profile')
         
         try:
             # Verificar se email já existe
@@ -397,7 +406,8 @@ def create_user_view(request):
                 last_name=last_name,
                 sector=sector,
                 hierarchy=hierarchy,
-                phone=phone
+                phone=phone,
+                disc_profile=disc_profile
             )
             
             log_action(
@@ -439,6 +449,7 @@ def edit_user_view(request, user_id):
         sectors_ids = request.POST.getlist('sectors')  # Múltiplos setores
         hierarchy = request.POST.get('hierarchy')
         phone = request.POST.get('phone')
+        disc_profile = request.POST.get('disc_profile')
         is_active = request.POST.get('is_active') == 'on'
         
         try:
@@ -455,6 +466,7 @@ def edit_user_view(request, user_id):
                 user_to_edit.sector = sector
                 user_to_edit.hierarchy = hierarchy
                 user_to_edit.phone = phone
+                user_to_edit.disc_profile = disc_profile
                 user_to_edit.is_active = is_active
                 user_to_edit.save()
                 
@@ -1134,8 +1146,17 @@ def create_webhook_view(request):
 @login_required
 def profile_view(request):
     """Visualizar perfil do usuário"""
+    from tickets.models import Ticket
+    
+    # Contar chamados abertos do usuário
+    user_tickets_count = Ticket.objects.filter(
+        created_by=request.user,
+        status__in=['OPEN', 'IN_PROGRESS', 'PENDING']
+    ).count()
+    
     context = {
         'user': request.user,
+        'user_tickets_count': user_tickets_count,
     }
     return render(request, 'users/profile.html', context)
 
@@ -1149,6 +1170,7 @@ def update_profile_view(request):
         user.last_name = request.POST.get('last_name', user.last_name)
         user.email = request.POST.get('email', user.email)
         user.phone = request.POST.get('phone', user.phone)
+        user.disc_profile = request.POST.get('disc_profile', user.disc_profile)
         
         # Upload de foto de perfil
         if request.FILES.get('profile_picture'):

@@ -174,7 +174,11 @@
                             {% endif %}
                         </td>
                         <td class="py-4 px-6">
-                            <span class="font-semibold text-green-600">C$ {{ user_item.balance_cs }}</span>
+                            {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
+                                <span class="font-semibold text-green-600">C$ {{ user_item.balance_cs }}</span>
+                            {% else %}
+                                <span class="text-gray-400 text-sm">-</span>
+                            {% endif %}
                         </td>
                         <td class="py-4 px-6">
                             {% if user_item.is_active %}

@@ -104,9 +104,15 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                                C$ {{ u.balance_cs }}
-                            </span>
+                            {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                    C$ {{ u.balance_cs }}
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-sm font-medium">
+                                    -
+                                </span>
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <button type="button" 

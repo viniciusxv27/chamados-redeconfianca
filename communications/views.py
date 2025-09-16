@@ -349,6 +349,8 @@ def edit_communication_view(request, communication_id):
         communication.title = request.POST.get('title')
         communication.message = request.POST.get('message')
         communication.send_to_all = request.POST.get('send_to_all') == 'on'
+        communication.is_pinned = request.POST.get('is_pinned') == 'on'
+        communication.is_popup = request.POST.get('is_popup') == 'on'
         
         active_from = request.POST.get('active_from')
         active_until = request.POST.get('active_until')

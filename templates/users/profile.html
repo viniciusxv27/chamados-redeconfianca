@@ -52,6 +52,7 @@
             
             <div class="p-6">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
                     <div class="text-center">
                         <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
                             <i class="fas fa-coins text-green-600 text-xl"></i>
@@ -59,6 +60,7 @@
                         <p class="text-sm text-gray-600">Saldo C$</p>
                         <p class="text-2xl font-bold text-gray-900">{{ user.balance_cs }}</p>
                     </div>
+                    {% endif %}
                     
                     <div class="text-center">
                         <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
@@ -140,6 +142,22 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
+                            <label for="disc_profile" class="block text-sm font-medium text-gray-700 mb-2">Perfil DISC</label>
+                            <input type="text" 
+                                   id="disc_profile" 
+                                   name="disc_profile" 
+                                   value="{{ user.disc_profile }}"
+                                   maxlength="5"
+                                   placeholder="ex: DISC"
+                                   disabled
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                            <p class="text-xs text-gray-500 mt-1">Perfil comportamental DISC (até 5 letras)</p>
+                        </div>
+                        <div></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
                             <div class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
                                 {{ user.sector.name|default:"Não informado" }}
@@ -196,7 +214,7 @@
 
 <script>
 function toggleEdit() {
-    const inputs = document.querySelectorAll('#first_name, #last_name, #email, #phone');
+    const inputs = document.querySelectorAll('#first_name, #last_name, #email, #phone, #disc_profile');
     const buttons = document.getElementById('edit-buttons');
     
     inputs.forEach(input => {
@@ -214,7 +232,7 @@ function toggleEdit() {
 }
 
 function cancelEdit() {
-    const inputs = document.querySelectorAll('#first_name, #last_name, #email, #phone');
+    const inputs = document.querySelectorAll('#first_name, #last_name, #email, #phone, #disc_profile');
     const buttons = document.getElementById('edit-buttons');
     
     inputs.forEach(input => {

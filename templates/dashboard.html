@@ -27,10 +27,12 @@
                 <div>
                     <h2 class="text-xl font-semibold text-gray-900">{{ user.full_name }}</h2>
                     <p class="text-gray-600">{{ user.get_hierarchy_display }}{% if user.sector %} - {{ user.sector.name }}{% endif %}</p>
+                    {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
                     <p class="text-sm text-gray-500">
                         <i class="fas fa-coins text-primary mr-1"></i>
                         Saldo: <span class="font-semibold text-primary">C$ {{ user.balance_cs }}</span>
                     </p>
+                    {% endif %}
                 </div>
             </div>
             <div class="flex space-x-3">

@@ -98,6 +98,21 @@
                                    placeholder="(11) 99999-9999"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="disc_profile" class="block text-sm font-medium text-gray-700 mb-2">Perfil DISC</label>
+                            <input type="text" 
+                                   id="disc_profile" 
+                                   name="disc_profile" 
+                                   value="{{ user_to_edit.disc_profile }}"
+                                   maxlength="5"
+                                   placeholder="ex: DISC"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Perfil comportamental DISC (até 5 letras)</p>
+                        </div>
+                        <div></div>
                         
                     <div class="space-y-6">
                         <div>

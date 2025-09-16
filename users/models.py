@@ -41,6 +41,7 @@ class User(AbstractUser):
     hierarchy = models.CharField(max_length=20, choices=HIERARCHY_CHOICES, default='PADRAO', verbose_name="Hierarquia")
     balance_cs = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo C$")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Telefone")
+    disc_profile = models.CharField(max_length=5, blank=True, verbose_name="Perfil DISC", help_text="Perfil comportamental DISC (até 5 letras)")
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
