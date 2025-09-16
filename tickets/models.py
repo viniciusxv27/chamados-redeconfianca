@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from users.models import Sector, User
+from core.utils import upload_ticket_attachment
 import requests
 
 
@@ -691,3 +692,78 @@ class PurchaseOrderApproval(models.Model):
                 'amount': float(self.amount)
             }
             webhook._send_webhook(payload)
+
+
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
+
+class TicketAttachment(models.Model):
+    """Modelo para anexos de tickets"""
+    
+    ticket = models.ForeignKey(
+        Ticket, 
+        on_delete=models.CASCADE, 
+        related_name='attachments',
+        verbose_name="Chamado"
+    )
+    file = models.FileField(
+        upload_to=upload_ticket_attachment, 
+        storage=get_media_storage(),
+        verbose_name="Arquivo"
+    )
+    original_filename = models.CharField(
+        max_length=255, 
+        verbose_name="Nome Original do Arquivo"
+    )
+    file_size = models.PositiveIntegerField(
+        verbose_name="Tamanho do Arquivo (bytes)"
+    )
+    content_type = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Tipo de Conteúdo"
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        verbose_name="Enviado por"
+    )
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Data do Upload"
+    )
+    
+    class Meta:
+        verbose_name = "Anexo do Chamado"
+        verbose_name_plural = "Anexos dos Chamados"
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"#{self.ticket.id} - {self.original_filename}"
+    
+    @property
+    def file_extension(self):
+        """Retorna a extensão do arquivo"""
+        import os
+        return os.path.splitext(self.original_filename)[1].lower()
+    
+    @property
+    def is_image(self):
+        """Verifica se é uma imagem"""
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+        return self.file_extension in image_extensions
+    
+    @property
+    def file_size_formatted(self):
+        """Retorna o tamanho do arquivo formatado"""
+        if self.file_size < 1024:
+            return f"{self.file_size} bytes"
+        elif self.file_size < 1024 * 1024:
+            return f"{self.file_size / 1024:.1f} KB"
+        else:
+            return f"{self.file_size / (1024 * 1024):.1f} MB"

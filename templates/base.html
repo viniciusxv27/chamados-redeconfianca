@@ -197,6 +197,47 @@
                             </ul>
                         </li>
                         
+                        <!-- Menu Projetos - Apenas para setores autorizados -->
+                        {% load projects_tags %}
+                        {% if user|can_access_projects %}
+                        <li>
+                            <a href="{% url 'projects:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Projetos">
+                                <i class="fas fa-project-diagram text-primary flex-shrink-0"></i>
+                                <span class="text-sm">Projetos</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        
+                        <!-- Sub Menu Projetos -->
+                        <li class="ml-4">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'projects:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Dashboard">
+                                        <i class="fas fa-chart-pie text-blue-400 flex-shrink-0"></i>
+                                        <span>Dashboard</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'projects:project_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Todos os Projetos">
+                                        <i class="fas fa-list text-purple-400 flex-shrink-0"></i>
+                                        <span>Todos</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user|can_create_projects %}
+                                <li>
+                                    <a href="{% url 'projects:project_create' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo Projeto">
+                                        <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
+                                        <span>Novo</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </li>
+                        {% endif %}
+                        
                         <!-- Menu específico para níveis superiores -->
                         {% if user.can_manage_users %}
                         <li class="border-t border-gray-800 pt-2 mt-2">

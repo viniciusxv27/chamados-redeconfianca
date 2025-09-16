@@ -382,57 +382,6 @@ def tickets_list_view(request):
     return render(request, 'tickets/list.html', context)
 
 
-@login_required
-def ticket_create_view(request):
-    if request.method == 'POST':
-        title = request.POST.get('title')
-        description = request.POST.get('description')
-        sector_id = request.POST.get('sector')
-        category_id = request.POST.get('category')
-        requires_approval = request.POST.get('requires_approval') == 'on'
-        approval_user_id = request.POST.get('approval_user')
-        
-        sector = get_object_or_404(Sector, id=sector_id)
-        category = get_object_or_404(Category, id=category_id)
-        
-        # Criar ticket
-        ticket = Ticket.objects.create(
-            title=title,
-            description=description,
-            sector=sector,
-            category=category,
-            created_by=request.user,
-            requires_approval=requires_approval or category.requires_approval,
-            approval_user_id=approval_user_id if requires_approval else None,
-            solution_time_hours=int(request.POST.get('solution_time_hours', 24)),
-            priority=request.POST.get('priority', 'MEDIA')
-        )
-        
-        # Criar log inicial
-        TicketLog.objects.create(
-            ticket=ticket,
-            user=request.user,
-            new_status='ABERTO',
-            observation='Chamado criado'
-        )
-        
-        log_action(
-            request.user, 
-            'TICKET_CREATE', 
-            f'Chamado criado: #{ticket.id} - {ticket.title}',
-            request
-        )
-        
-        messages.success(request, f'Chamado #{ticket.id} criado com sucesso!')
-        return redirect('ticket_detail', ticket_id=ticket.id)
-    
-    sectors = Sector.objects.all()
-    context = {
-        'sectors': sectors,
-    }
-    return render(request, 'tickets/create.html', context)
-
-
 def get_categories_by_sector(request):
     sector_id = request.GET.get('sector_id')
     if sector_id:

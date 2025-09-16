@@ -52,6 +52,7 @@ urlpatterns = [
     path('tickets/', include('tickets.urls')),
     path('communications/', include('communications.urls')),
     path('prizes/', include('prizes.urls')),
+    path('projects/', include('projects.urls')),
     path('assets/', include('assets.urls')),
     path('files/', include('files.urls')),
     path('trainings/', include('trainings.urls')),

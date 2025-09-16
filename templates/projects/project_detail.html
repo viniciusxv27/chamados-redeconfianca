@@ -1,0 +1,518 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ project.name }} - Projeto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .project-header {
+        @apply bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg p-6 mb-8;
+    }
+    .info-card {
+        @apply bg-white rounded-lg shadow p-6 border border-gray-200;
+    }
+    .status-badge {
+        @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    }
+    .priority-badge {
+        @apply inline-flex items-center px-2 py-1 rounded text-xs font-medium;
+    }
+    .activity-card {
+        @apply bg-white rounded-lg shadow border border-gray-200 p-4 mb-4;
+    }
+    .progress-bar {
+        @apply w-full bg-gray-200 rounded-full h-3;
+    }
+    .progress-fill {
+        @apply bg-blue-600 h-3 rounded-full transition-all duration-300;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Header do Projeto -->
+    <div class="project-header">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex-1">
+                <div class="flex flex-wrap items-center gap-4 mb-4">
+                    <h1 class="text-3xl font-bold">{{ project.name }}</h1>
+                    
+                    <span class="status-badge {{ project.status_class }}">
+                        {{ project.get_status_display }}
+                    </span>
+                    
+                    {% if project.priority == 'CRITICA' %}
+                        <span class="priority-badge bg-red-100 text-red-800">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>{{ project.get_priority_display }}
+                        </span>
+                    {% elif project.priority == 'ALTA' %}
+                        <span class="priority-badge bg-orange-100 text-orange-800">
+                            <i class="fas fa-arrow-up mr-1"></i>{{ project.get_priority_display }}
+                        </span>
+                    {% elif project.priority == 'MEDIA' %}
+                        <span class="priority-badge bg-yellow-100 text-yellow-800">
+                            <i class="fas fa-minus mr-1"></i>{{ project.get_priority_display }}
+                        </span>
+                    {% else %}
+                        <span class="priority-badge bg-green-100 text-green-800">
+                            <i class="fas fa-arrow-down mr-1"></i>{{ project.get_priority_display }}
+                        </span>
+                    {% endif %}
+                    
+                    {% if project.is_overdue %}
+                        <span class="priority-badge bg-red-100 text-red-800">
+                            <i class="fas fa-clock mr-1"></i>Atrasado
+                        </span>
+                    {% endif %}
+                </div>
+                
+                <p class="text-blue-100 mb-4">{{ project.description }}</p>
+                
+                <!-- Progresso -->
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-2">
+                        <span>Progresso do Projeto</span>
+                        <span>{{ project.progress_percentage }}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill bg-white" 
+                             style="width: {{ project.progress_percentage }}%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col lg:flex-row space-y-2 lg:space-y-0 lg:space-x-4 lg:ml-6">
+                <a href="{% url 'projects:project_list' %}" 
+                   class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-md font-medium text-center">
+                    <i class="fas fa-arrow-left mr-2"></i>Voltar
+                </a>
+                {% if can_edit %}
+                <button onclick="toggleProjectActions()" 
+                        class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-md font-medium">
+                    <i class="fas fa-cog mr-2"></i>Ações
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Informações e Estatísticas -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <!-- Informações do Projeto -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Descrição e Escopo -->
+            <div class="info-card">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-info-circle text-blue-500 mr-2"></i>Informações Detalhadas
+                </h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-medium text-gray-900 mb-2">Escopo</h4>
+                        <p class="text-gray-600 whitespace-pre-line">{{ project.scope }}</p>
+                    </div>
+                    
+                    <div class="border-t pt-4">
+                        <h4 class="font-medium text-gray-900 mb-2">Motivo/Justificativa</h4>
+                        <p class="text-gray-600 whitespace-pre-line">{{ project.reason }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Atividades -->
+            <div class="info-card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-tasks text-green-500 mr-2"></i>Atividades
+                    </h3>
+                    {% if can_edit %}
+                    <button onclick="openActivityModal()" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium">
+                        <i class="fas fa-plus mr-1"></i>Nova Atividade
+                    </button>
+                    {% endif %}
+                </div>
+                
+                <!-- Estatísticas das Atividades -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="text-center p-3 bg-gray-50 rounded">
+                        <div class="text-lg font-bold text-gray-900">{{ activity_stats.total }}</div>
+                        <div class="text-xs text-gray-600">Total</div>
+                    </div>
+                    <div class="text-center p-3 bg-blue-50 rounded">
+                        <div class="text-lg font-bold text-blue-600">{{ activity_stats.em_andamento }}</div>
+                        <div class="text-xs text-gray-600">Em Andamento</div>
+                    </div>
+                    <div class="text-center p-3 bg-green-50 rounded">
+                        <div class="text-lg font-bold text-green-600">{{ activity_stats.concluidas }}</div>
+                        <div class="text-xs text-gray-600">Concluídas</div>
+                    </div>
+                    <div class="text-center p-3 bg-red-50 rounded">
+                        <div class="text-lg font-bold text-red-600">{{ activity_stats.atrasadas }}</div>
+                        <div class="text-xs text-gray-600">Atrasadas</div>
+                    </div>
+                </div>
+                
+                <!-- Lista de Atividades -->
+                {% if activities %}
+                    <div class="space-y-3">
+                        {% for activity in activities %}
+                        <div class="activity-card {% if activity.parent_activity %}ml-8 border-l-4 border-gray-300{% endif %}">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <h4 class="font-medium text-gray-900">
+                                        {% if activity.parent_activity %}
+                                            <i class="fas fa-arrow-right text-gray-400 mr-2"></i>
+                                        {% endif %}
+                                        {{ activity.name }}
+                                    </h4>
+                                    <p class="text-sm text-gray-600 mt-1">{{ activity.description|truncatechars:100 }}</p>
+                                    
+                                    <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-gray-500">
+                                        <span>
+                                            <i class="fas fa-calendar mr-1"></i>
+                                            Prazo: {{ activity.deadline|date:"d/m/Y" }}
+                                        </span>
+                                        {% if activity.responsible_user %}
+                                        <span>
+                                            <i class="fas fa-user mr-1"></i>
+                                            {{ activity.responsible_user.full_name|default:activity.responsible_user.username }}
+                                        </span>
+                                        {% endif %}
+                                        <span>
+                                            <i class="fas fa-flag mr-1"></i>
+                                            {{ activity.get_priority_display }}
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div class="ml-4 flex flex-col items-end space-y-2">
+                                    {% if can_edit %}
+                                    <select onchange="updateActivityStatus({{ activity.id }}, this.value)" 
+                                            class="text-sm border border-gray-300 rounded px-2 py-1">
+                                        <option value="NAO_INICIADA" {% if activity.status == 'NAO_INICIADA' %}selected{% endif %}>
+                                            Não Iniciada
+                                        </option>
+                                        <option value="EM_ANDAMENTO" {% if activity.status == 'EM_ANDAMENTO' %}selected{% endif %}>
+                                            Em Andamento
+                                        </option>
+                                        <option value="CONCLUIDA" {% if activity.status == 'CONCLUIDA' %}selected{% endif %}>
+                                            Concluída
+                                        </option>
+                                        <option value="CANCELADA" {% if activity.status == 'CANCELADA' %}selected{% endif %}>
+                                            Cancelada
+                                        </option>
+                                    </select>
+                                    {% else %}
+                                    <span class="status-badge 
+                                        {% if activity.status == 'NAO_INICIADA' %}bg-gray-100 text-gray-800
+                                        {% elif activity.status == 'EM_ANDAMENTO' %}bg-blue-100 text-blue-800
+                                        {% elif activity.status == 'CONCLUIDA' %}bg-green-100 text-green-800
+                                        {% else %}bg-red-100 text-red-800{% endif %}">
+                                        {{ activity.get_status_display }}
+                                    </span>
+                                    {% endif %}
+                                    
+                                    {% if activity.is_overdue %}
+                                        <span class="text-xs text-red-600 font-medium">
+                                            <i class="fas fa-exclamation-triangle mr-1"></i>Atrasado
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-tasks text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500">Nenhuma atividade cadastrada ainda.</p>
+                        {% if can_edit %}
+                        <button onclick="openActivityModal()" 
+                                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium">
+                            <i class="fas fa-plus mr-2"></i>Criar Primeira Atividade
+                        </button>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Painel Lateral -->
+        <div class="space-y-6">
+            <!-- Informações Gerais -->
+            <div class="info-card">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-info text-blue-500 mr-2"></i>Detalhes
+                </h3>
+                
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Setor:</span>
+                        <span class="font-medium">{{ project.sector.name }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Criado por:</span>
+                        <span class="font-medium">{{ project.created_by.full_name|default:project.created_by.username }}</span>
+                    </div>
+                    
+                    {% if project.responsible_user %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Responsável:</span>
+                        <span class="font-medium">{{ project.responsible_user.full_name|default:project.responsible_user.username }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Criado em:</span>
+                        <span class="font-medium">{{ project.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    
+                    {% if project.start_date %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Início:</span>
+                        <span class="font-medium">{{ project.start_date|date:"d/m/Y" }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Prazo:</span>
+                        <span class="font-medium {% if project.is_overdue %}text-red-600{% endif %}">
+                            {{ project.deadline|date:"d/m/Y" }}
+                        </span>
+                    </div>
+                    
+                    {% if project.completion_date %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Concluído em:</span>
+                        <span class="font-medium">{{ project.completion_date|date:"d/m/Y" }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Anexos -->
+            <div class="info-card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-paperclip text-gray-500 mr-2"></i>Anexos
+                    </h3>
+                    {% if can_edit %}
+                    <button class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                        <i class="fas fa-plus mr-1"></i>Adicionar
+                    </button>
+                    {% endif %}
+                </div>
+                
+                {% if attachments %}
+                    <div class="space-y-2">
+                        {% for attachment in attachments %}
+                        <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div class="flex items-center flex-1">
+                                <i class="fas fa-file text-gray-400 mr-2"></i>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-900 truncate">
+                                        {{ attachment.original_filename }}
+                                    </p>
+                                    <p class="text-xs text-gray-500">
+                                        {{ attachment.file_size_formatted }} • {{ attachment.uploaded_at|date:"d/m/Y" }}
+                                    </p>
+                                </div>
+                            </div>
+                            <a href="{{ attachment.file.url }}" 
+                               target="_blank"
+                               class="text-blue-600 hover:text-blue-700 ml-2">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-gray-500 text-center py-4">Nenhum anexo</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Nova Atividade -->
+{% if can_edit %}
+<div id="activityModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Nova Atividade</h3>
+                    <button onclick="closeActivityModal()" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form id="activityForm" action="{% url 'projects:activity_create' project.id %}" method="POST">
+                    {% csrf_token %}
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Nome da Atividade</label>
+                            <input type="text" name="name" required 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                            <textarea name="description" rows="3" required
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Prazo</label>
+                                <input type="date" name="deadline" required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Prioridade</label>
+                                <select name="priority" required
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="BAIXA">Baixa</option>
+                                    <option value="MEDIA" selected>Média</option>
+                                    <option value="ALTA">Alta</option>
+                                    <option value="CRITICA">Crítica</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-4 mt-6 pt-4 border-t">
+                        <button type="button" onclick="closeActivityModal()" 
+                                class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                            Cancelar
+                        </button>
+                        <button type="submit" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            Criar Atividade
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Funções para o modal de atividade
+function openActivityModal() {
+    document.getElementById('activityModal').classList.remove('hidden');
+    // Definir data mínima para hoje
+    const deadlineInput = document.querySelector('#activityForm input[name="deadline"]');
+    const today = new Date().toISOString().split('T')[0];
+    deadlineInput.min = today;
+}
+
+function closeActivityModal() {
+    document.getElementById('activityModal').classList.add('hidden');
+    document.getElementById('activityForm').reset();
+}
+
+// Atualizar status da atividade via AJAX
+function updateActivityStatus(activityId, newStatus) {
+    fetch(`/projects/activity/${activityId}/status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Atualizar progresso do projeto na página
+            updateProjectProgress(data.new_progress);
+            
+            // Mostrar mensagem de sucesso
+            showNotification('Status atualizado com sucesso!', 'success');
+        } else {
+            showNotification('Erro ao atualizar status: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showNotification('Erro ao atualizar status', 'error');
+    });
+}
+
+// Atualizar barra de progresso
+function updateProjectProgress(newProgress) {
+    const progressFill = document.querySelector('.progress-fill');
+    const progressText = document.querySelector('.progress-bar').previousElementSibling.lastElementChild;
+    
+    if (progressFill && progressText) {
+        progressFill.style.width = newProgress + '%';
+        progressText.textContent = newProgress.toFixed(1) + '%';
+    }
+}
+
+// Mostrar notificações
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-md text-white ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeActivityModal();
+    }
+});
+
+// Formulário de atividade via AJAX
+document.getElementById('activityForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(this.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeActivityModal();
+            // Recarregar página para mostrar nova atividade
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            showNotification(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showNotification('Erro ao criar atividade', 'error');
+    });
+});
+</script>
+{% endblock %}
