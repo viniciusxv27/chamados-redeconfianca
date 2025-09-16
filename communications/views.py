@@ -110,7 +110,7 @@ def communication_list(request):
         now = timezone.now()
         
         communications = Communication.objects.filter(
-            Q(send_to_all=True) | Q(recipients=request.user)
+            Q(send_to_all=True) | Q(recipients=request.user) | Q(sender=request.user)
         ).filter(
             Q(active_from__isnull=True) | Q(active_from__lte=now)
         ).filter(

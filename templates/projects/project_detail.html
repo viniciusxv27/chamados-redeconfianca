@@ -5,232 +5,366 @@
 
 {% block extra_css %}
 <style>
-    .project-header {
-        @apply bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg p-6 mb-8;
+    .project-hero {
+        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 50%, #FFB74D 100%);
+        border-radius: 20px;
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        color: white;
+        position: relative;
+        overflow: hidden;
     }
-    .info-card {
-        @apply bg-white rounded-lg shadow p-6 border border-gray-200;
+    
+    .project-hero::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 200px;
+        height: 200px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: translate(50px, -50px);
     }
-    .status-badge {
-        @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
-    .priority-badge {
-        @apply inline-flex items-center px-2 py-1 rounded text-xs font-medium;
+    
+    .priority-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: 2px solid;
     }
-    .activity-card {
-        @apply bg-white rounded-lg shadow border border-gray-200 p-4 mb-4;
+    
+    .info-panel {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        border: 1px solid #f1f5f9;
+        margin-bottom: 1.5rem;
     }
+    
+    .progress-container {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
     .progress-bar {
-        @apply w-full bg-gray-200 rounded-full h-3;
+        background: #e2e8f0;
+        height: 12px;
+        border-radius: 6px;
+        overflow: hidden;
+        position: relative;
     }
+    
     .progress-fill {
-        @apply bg-blue-600 h-3 rounded-full transition-all duration-300;
+        background: linear-gradient(90deg, #FF6B35 0%, #27AE60 100%);
+        height: 100%;
+        border-radius: 6px;
+        position: relative;
+        transition: width 0.6s ease;
+    }
+    
+    .activity-section {
+        background: white;
+        border-radius: 20px;
+        padding: 2rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        border: 1px solid #f1f5f9;
+    }
+    
+    .activity-item {
+        background: #fafbfc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s ease;
+    }
+    
+    .activity-item:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border-color: #FF6B35;
+    }
+    
+    .hierarchy-line {
+        border-left: 2px solid #e2e8f0;
+        margin-left: 1rem;
+        padding-left: 1rem;
+    }
+    
+    .btn-action {
+        background: #FF6B35;
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-action:hover {
+        background: #e55a2b;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+        color: white;
+    }
+    
+    .btn-secondary {
+        background: white;
+        color: #64748b;
+        border: 2px solid #e2e8f0;
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-secondary:hover {
+        border-color: #FF6B35;
+        color: #FF6B35;
+        transform: translateY(-1px);
+    }
+    
+    .metric-card {
+        text-align: center;
+        padding: 1.5rem;
+        border-radius: 16px;
+        background: white;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    .metric-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #FF6B35;
+        display: block;
+    }
+    
+    .metric-label {
+        color: #64748b;
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: #1f2937;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-6">
-    <!-- Header do Projeto -->
-    <div class="project-header">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex-1">
-                <div class="flex flex-wrap items-center gap-4 mb-4">
-                    <h1 class="text-3xl font-bold">{{ project.name }}</h1>
+<div class="container mx-auto px-6 py-8 max-w-7xl">
+    <!-- Hero Section -->
+    <div class="project-hero">
+        <div class="relative z-10">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <div class="flex-1">
+                    <div class="flex flex-col lg:flex-row lg:items-center gap-4 mb-4">
+                        <h1 class="text-4xl font-bold">{{ project.name }}</h1>
+                        <div class="flex flex-wrap gap-3">
+                            {% if project.status == 'active' %}
+                                <span class="status-chip bg-emerald-500 text-white">
+                                    <i class="fas fa-play-circle mr-2"></i>Ativo
+                                </span>
+                            {% elif project.status == 'on_hold' %}
+                                <span class="status-chip bg-amber-500 text-white">
+                                    <i class="fas fa-pause-circle mr-2"></i>Em Espera
+                                </span>
+                            {% elif project.status == 'completed' %}
+                                <span class="status-chip bg-blue-500 text-white">
+                                    <i class="fas fa-check-circle mr-2"></i>Concluído
+                                </span>
+                            {% elif project.status == 'cancelled' %}
+                                <span class="status-chip bg-red-500 text-white">
+                                    <i class="fas fa-times-circle mr-2"></i>Cancelado
+                                </span>
+                            {% endif %}
+                            
+                            {% if project.priority == 'low' %}
+                                <span class="priority-chip border-gray-300 text-gray-600 bg-white">
+                                    <i class="fas fa-arrow-down mr-2"></i>Baixa
+                                </span>
+                            {% elif project.priority == 'medium' %}
+                                <span class="priority-chip border-yellow-400 text-yellow-700 bg-white">
+                                    <i class="fas fa-minus mr-2"></i>Média
+                                </span>
+                            {% elif project.priority == 'high' %}
+                                <span class="priority-chip border-red-400 text-red-600 bg-white">
+                                    <i class="fas fa-arrow-up mr-2"></i>Alta
+                                </span>
+                            {% elif project.priority == 'urgent' %}
+                                <span class="priority-chip border-red-600 text-red-700 bg-white">
+                                    <i class="fas fa-exclamation mr-2"></i>Urgente
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
                     
-                    <span class="status-badge {{ project.status_class }}">
-                        {{ project.get_status_display }}
-                    </span>
-                    
-                    {% if project.priority == 'CRITICA' %}
-                        <span class="priority-badge bg-red-100 text-red-800">
-                            <i class="fas fa-exclamation-triangle mr-1"></i>{{ project.get_priority_display }}
-                        </span>
-                    {% elif project.priority == 'ALTA' %}
-                        <span class="priority-badge bg-orange-100 text-orange-800">
-                            <i class="fas fa-arrow-up mr-1"></i>{{ project.get_priority_display }}
-                        </span>
-                    {% elif project.priority == 'MEDIA' %}
-                        <span class="priority-badge bg-yellow-100 text-yellow-800">
-                            <i class="fas fa-minus mr-1"></i>{{ project.get_priority_display }}
-                        </span>
-                    {% else %}
-                        <span class="priority-badge bg-green-100 text-green-800">
-                            <i class="fas fa-arrow-down mr-1"></i>{{ project.get_priority_display }}
-                        </span>
+                    {% if project.description %}
+                    <p class="text-lg opacity-95 mb-6 leading-relaxed">{{ project.description }}</p>
                     {% endif %}
                     
-                    {% if project.is_overdue %}
-                        <span class="priority-badge bg-red-100 text-red-800">
-                            <i class="fas fa-clock mr-1"></i>Atrasado
-                        </span>
+                    <div class="flex flex-wrap gap-6 text-sm opacity-90">
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar-plus mr-2"></i>
+                            <span>Criado em {{ project.created_at|date:"d/m/Y" }}</span>
+                        </div>
+                        {% if project.start_date %}
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar-day mr-2"></i>
+                            <span>Início: {{ project.start_date|date:"d/m/Y" }}</span>
+                        </div>
+                        {% endif %}
+                        {% if project.end_date %}
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar-check mr-2"></i>
+                            <span>Prazo: {{ project.end_date|date:"d/m/Y" }}</span>
+                        </div>
+                        {% endif %}
+                        {% if project.deadline %}
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar-check mr-2"></i>
+                            <span>Prazo: {{ project.deadline|date:"d/m/Y" }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <a href="{% url 'projects:project_list' %}" class="btn-secondary">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                    {% if can_edit %}
+                    <a href="{% url 'projects:project_edit' project.pk %}" class="btn-secondary">
+                        <i class="fas fa-edit mr-2"></i>Editar Projeto
+                    </a>
+                    {% endif %}
+                    {% if user.is_superuser %}
+                    <a href="{% url 'projects:project_delete' project.pk %}" class="btn-action" style="background: #ef4444;">
+                        <i class="fas fa-trash mr-2"></i>Excluir
+                    </a>
                     {% endif %}
                 </div>
-                
-                <p class="text-blue-100 mb-4">{{ project.description }}</p>
-                
-                <!-- Progresso -->
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm mb-2">
-                        <span>Progresso do Projeto</span>
-                        <span>{{ project.progress_percentage }}%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill bg-white" 
-                             style="width: {{ project.progress_percentage }}%"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="flex flex-col lg:flex-row space-y-2 lg:space-y-0 lg:space-x-4 lg:ml-6">
-                <a href="{% url 'projects:project_list' %}" 
-                   class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-md font-medium text-center">
-                    <i class="fas fa-arrow-left mr-2"></i>Voltar
-                </a>
-                {% if can_edit %}
-                <button onclick="toggleProjectActions()" 
-                        class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-md font-medium">
-                    <i class="fas fa-cog mr-2"></i>Ações
-                </button>
-                {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- Informações e Estatísticas -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        <!-- Informações do Projeto -->
-        <div class="lg:col-span-2 space-y-6">
-            <!-- Descrição e Escopo -->
-            <div class="info-card">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                    <i class="fas fa-info-circle text-blue-500 mr-2"></i>Informações Detalhadas
+    <!-- Progress Overview -->
+    <div class="progress-container">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-gray-800">Progresso Geral</h3>
+            <span class="text-2xl font-bold text-gray-700">{{ progress_percentage|default:0 }}%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ progress_percentage|default:0 }}%;"></div>
+        </div>
+        <div class="flex justify-between mt-4 text-sm text-gray-600">
+            <span>{{ completed_activities|default:0 }} de {{ total_activities|default:0 }} atividades concluídas</span>
+            <span>{{ remaining_activities|default:0 }} restantes</span>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
+        <!-- Project Details -->
+        <div class="xl:col-span-3 space-y-8">
+            <!-- Project Information -->
+            <div class="info-panel">
+                <h3 class="section-title">
+                    <i class="fas fa-info-circle mr-3 text-orange-500"></i>
+                    Detalhes do Projeto
                 </h3>
                 
-                <div class="space-y-4">
-                    <div>
-                        <h4 class="font-medium text-gray-900 mb-2">Escopo</h4>
-                        <p class="text-gray-600 whitespace-pre-line">{{ project.scope }}</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Setor</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ project.sector.name }}</p>
+                        </div>
+                        {% if project.assigned_to %}
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Responsável</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ project.assigned_to.get_full_name|default:project.assigned_to.username }}</p>
+                        </div>
+                        {% endif %}
+                        {% if project.responsible_user %}
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Responsável</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ project.responsible_user.get_full_name|default:project.responsible_user.username }}</p>
+                        </div>
+                        {% endif %}
                     </div>
                     
-                    <div class="border-t pt-4">
-                        <h4 class="font-medium text-gray-900 mb-2">Motivo/Justificativa</h4>
-                        <p class="text-gray-600 whitespace-pre-line">{{ project.reason }}</p>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Criado por</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ project.created_by.get_full_name|default:project.created_by.username }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Última atualização</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ project.updated_at|date:"d/m/Y H:i" }}</p>
+                        </div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Atividades -->
-            <div class="info-card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-900">
-                        <i class="fas fa-tasks text-green-500 mr-2"></i>Atividades
+
+            <!-- Activities Section -->
+            <div class="activity-section">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="section-title">
+                        <i class="fas fa-tasks mr-3 text-orange-500"></i>
+                        Hierarquia de Atividades
                     </h3>
                     {% if can_edit %}
-                    <button onclick="openActivityModal()" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium">
-                        <i class="fas fa-plus mr-1"></i>Nova Atividade
+                    <button onclick="openActivityModal()" class="btn-action">
+                        <i class="fas fa-plus mr-2"></i>Nova Atividade
                     </button>
                     {% endif %}
                 </div>
                 
-                <!-- Estatísticas das Atividades -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div class="text-center p-3 bg-gray-50 rounded">
-                        <div class="text-lg font-bold text-gray-900">{{ activity_stats.total }}</div>
-                        <div class="text-xs text-gray-600">Total</div>
-                    </div>
-                    <div class="text-center p-3 bg-blue-50 rounded">
-                        <div class="text-lg font-bold text-blue-600">{{ activity_stats.em_andamento }}</div>
-                        <div class="text-xs text-gray-600">Em Andamento</div>
-                    </div>
-                    <div class="text-center p-3 bg-green-50 rounded">
-                        <div class="text-lg font-bold text-green-600">{{ activity_stats.concluidas }}</div>
-                        <div class="text-xs text-gray-600">Concluídas</div>
-                    </div>
-                    <div class="text-center p-3 bg-red-50 rounded">
-                        <div class="text-lg font-bold text-red-600">{{ activity_stats.atrasadas }}</div>
-                        <div class="text-xs text-gray-600">Atrasadas</div>
-                    </div>
-                </div>
-                
-                <!-- Lista de Atividades -->
-                {% if activities %}
+                {% if activities or root_activities %}
                     <div class="space-y-3">
-                        {% for activity in activities %}
-                        <div class="activity-card {% if activity.parent_activity %}ml-8 border-l-4 border-gray-300{% endif %}">
-                            <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    <h4 class="font-medium text-gray-900">
-                                        {% if activity.parent_activity %}
-                                            <i class="fas fa-arrow-right text-gray-400 mr-2"></i>
-                                        {% endif %}
-                                        {{ activity.name }}
-                                    </h4>
-                                    <p class="text-sm text-gray-600 mt-1">{{ activity.description|truncatechars:100 }}</p>
-                                    
-                                    <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-gray-500">
-                                        <span>
-                                            <i class="fas fa-calendar mr-1"></i>
-                                            Prazo: {{ activity.deadline|date:"d/m/Y" }}
-                                        </span>
-                                        {% if activity.responsible_user %}
-                                        <span>
-                                            <i class="fas fa-user mr-1"></i>
-                                            {{ activity.responsible_user.full_name|default:activity.responsible_user.username }}
-                                        </span>
-                                        {% endif %}
-                                        <span>
-                                            <i class="fas fa-flag mr-1"></i>
-                                            {{ activity.get_priority_display }}
-                                        </span>
-                                    </div>
-                                </div>
-                                
-                                <div class="ml-4 flex flex-col items-end space-y-2">
-                                    {% if can_edit %}
-                                    <select onchange="updateActivityStatus({{ activity.id }}, this.value)" 
-                                            class="text-sm border border-gray-300 rounded px-2 py-1">
-                                        <option value="NAO_INICIADA" {% if activity.status == 'NAO_INICIADA' %}selected{% endif %}>
-                                            Não Iniciada
-                                        </option>
-                                        <option value="EM_ANDAMENTO" {% if activity.status == 'EM_ANDAMENTO' %}selected{% endif %}>
-                                            Em Andamento
-                                        </option>
-                                        <option value="CONCLUIDA" {% if activity.status == 'CONCLUIDA' %}selected{% endif %}>
-                                            Concluída
-                                        </option>
-                                        <option value="CANCELADA" {% if activity.status == 'CANCELADA' %}selected{% endif %}>
-                                            Cancelada
-                                        </option>
-                                    </select>
-                                    {% else %}
-                                    <span class="status-badge 
-                                        {% if activity.status == 'NAO_INICIADA' %}bg-gray-100 text-gray-800
-                                        {% elif activity.status == 'EM_ANDAMENTO' %}bg-blue-100 text-blue-800
-                                        {% elif activity.status == 'CONCLUIDA' %}bg-green-100 text-green-800
-                                        {% else %}bg-red-100 text-red-800{% endif %}">
-                                        {{ activity.get_status_display }}
-                                    </span>
-                                    {% endif %}
-                                    
-                                    {% if activity.is_overdue %}
-                                        <span class="text-xs text-red-600 font-medium">
-                                            <i class="fas fa-exclamation-triangle mr-1"></i>Atrasado
-                                        </span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
+                        {% include 'projects/activity_hierarchy.html' with activities=activities|default:root_activities can_edit=can_edit %}
                     </div>
                 {% else %}
-                    <div class="text-center py-8">
-                        <i class="fas fa-tasks text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500">Nenhuma atividade cadastrada ainda.</p>
+                    <div class="text-center py-16">
+                        <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-clipboard-list text-3xl text-gray-400"></i>
+                        </div>
+                        <h4 class="text-xl font-semibold text-gray-600 mb-2">Nenhuma atividade cadastrada</h4>
+                        <p class="text-gray-500 mb-6">Comece criando a primeira atividade para este projeto</p>
                         {% if can_edit %}
-                        <button onclick="openActivityModal()" 
-                                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium">
+                        <button onclick="openActivityModal()" class="btn-action">
                             <i class="fas fa-plus mr-2"></i>Criar Primeira Atividade
                         </button>
                         {% endif %}
@@ -238,100 +372,95 @@
                 {% endif %}
             </div>
         </div>
-        
-        <!-- Painel Lateral -->
+
+        <!-- Sidebar Stats -->
         <div class="space-y-6">
-            <!-- Informações Gerais -->
-            <div class="info-card">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                    <i class="fas fa-info text-blue-500 mr-2"></i>Detalhes
-                </h3>
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-2 xl:grid-cols-1 gap-4">
+                <div class="metric-card">
+                    <span class="metric-number">{{ total_activities|default:0 }}</span>
+                    <span class="metric-label">Total Atividades</span>
+                </div>
                 
-                <div class="space-y-3 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Setor:</span>
-                        <span class="font-medium">{{ project.sector.name }}</span>
-                    </div>
-                    
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Criado por:</span>
-                        <span class="font-medium">{{ project.created_by.full_name|default:project.created_by.username }}</span>
-                    </div>
-                    
-                    {% if project.responsible_user %}
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Responsável:</span>
-                        <span class="font-medium">{{ project.responsible_user.full_name|default:project.responsible_user.username }}</span>
-                    </div>
-                    {% endif %}
-                    
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Criado em:</span>
-                        <span class="font-medium">{{ project.created_at|date:"d/m/Y H:i" }}</span>
-                    </div>
-                    
-                    {% if project.start_date %}
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Início:</span>
-                        <span class="font-medium">{{ project.start_date|date:"d/m/Y" }}</span>
-                    </div>
-                    {% endif %}
-                    
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Prazo:</span>
-                        <span class="font-medium {% if project.is_overdue %}text-red-600{% endif %}">
-                            {{ project.deadline|date:"d/m/Y" }}
-                        </span>
-                    </div>
-                    
-                    {% if project.completion_date %}
-                    <div class="flex justify-between">
-                        <span class="text-gray-600">Concluído em:</span>
-                        <span class="font-medium">{{ project.completion_date|date:"d/m/Y" }}</span>
-                    </div>
-                    {% endif %}
+                <div class="metric-card">
+                    <span class="metric-number">{{ completed_activities|default:0 }}</span>
+                    <span class="metric-label">Concluídas</span>
+                </div>
+                
+                <div class="metric-card">
+                    <span class="metric-number">{{ in_progress_activities|default:0 }}</span>
+                    <span class="metric-label">Em Andamento</span>
+                </div>
+                
+                <div class="metric-card">
+                    <span class="metric-number" style="color: #ef4444;">{{ remaining_activities|default:0 }}</span>
+                    <span class="metric-label">Pendentes</span>
                 </div>
             </div>
-            
-            <!-- Anexos -->
-            <div class="info-card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-900">
-                        <i class="fas fa-paperclip text-gray-500 mr-2"></i>Anexos
-                    </h3>
-                    {% if can_edit %}
-                    <button class="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                        <i class="fas fa-plus mr-1"></i>Adicionar
+
+            <!-- Quick Actions -->
+            <div class="info-panel">
+                <h4 class="font-bold text-gray-800 mb-4">Ações Rápidas</h4>
+                <div class="space-y-3">
+                    <button class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors">
+                        <i class="fas fa-eye mr-3 text-gray-600"></i>
+                        <span class="text-sm font-medium">Ver Relatório</span>
                     </button>
+                    <button class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors">
+                        <i class="fas fa-download mr-3 text-gray-600"></i>
+                        <span class="text-sm font-medium">Exportar Dados</span>
+                    </button>
+                    <button class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors">
+                        <i class="fas fa-share mr-3 text-gray-600"></i>
+                        <span class="text-sm font-medium">Compartilhar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Project Timeline -->
+            <div class="info-panel">
+                <h4 class="font-bold text-gray-800 mb-4">Cronograma</h4>
+                <div class="space-y-4">
+                    <div class="flex items-center text-sm">
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
+                        <div>
+                            <div class="font-medium">Projeto Criado</div>
+                            <div class="text-gray-500">{{ project.created_at|date:"d/m/Y" }}</div>
+                        </div>
+                    </div>
+                    {% if project.start_date %}
+                    <div class="flex items-center text-sm">
+                        <div class="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                        <div>
+                            <div class="font-medium">Data de Início</div>
+                            <div class="text-gray-500">{{ project.start_date|date:"d/m/Y" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if project.end_date %}
+                    <div class="flex items-center text-sm">
+                        <div class="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
+                        <div>
+                            <div class="font-medium">Prazo Final</div>
+                            <div class="text-gray-500">{{ project.end_date|date:"d/m/Y" }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if project.deadline %}
+                    <div class="flex items-center text-sm">
+                        <div class="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
+                        <div>
+                            <div class="font-medium">Prazo Final</div>
+                            <div class="text-gray-500 {% if project.is_overdue %}text-red-600{% endif %}">
+                                {{ project.deadline|date:"d/m/Y" }}
+                                {% if project.is_overdue %}
+                                    <i class="fas fa-exclamation-triangle ml-1 text-red-500"></i>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                     {% endif %}
                 </div>
-                
-                {% if attachments %}
-                    <div class="space-y-2">
-                        {% for attachment in attachments %}
-                        <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <div class="flex items-center flex-1">
-                                <i class="fas fa-file text-gray-400 mr-2"></i>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-sm font-medium text-gray-900 truncate">
-                                        {{ attachment.original_filename }}
-                                    </p>
-                                    <p class="text-xs text-gray-500">
-                                        {{ attachment.file_size_formatted }} • {{ attachment.uploaded_at|date:"d/m/Y" }}
-                                    </p>
-                                </div>
-                            </div>
-                            <a href="{{ attachment.file.url }}" 
-                               target="_blank"
-                               class="text-blue-600 hover:text-blue-700 ml-2">
-                                <i class="fas fa-download"></i>
-                            </a>
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-gray-500 text-center py-4">Nenhum anexo</p>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -357,30 +486,30 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Nome da Atividade</label>
                             <input type="text" name="name" required 
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500">
                         </div>
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
                             <textarea name="description" rows="3" required
-                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"></textarea>
                         </div>
                         
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Prazo</label>
                                 <input type="date" name="deadline" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500">
                             </div>
                             
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Prioridade</label>
                                 <select name="priority" required
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="BAIXA">Baixa</option>
-                                    <option value="MEDIA" selected>Média</option>
-                                    <option value="ALTA">Alta</option>
-                                    <option value="CRITICA">Crítica</option>
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                    <option value="low">Baixa</option>
+                                    <option value="medium" selected>Média</option>
+                                    <option value="high">Alta</option>
+                                    <option value="urgent">Urgente</option>
                                 </select>
                             </div>
                         </div>
@@ -392,7 +521,7 @@
                             Cancelar
                         </button>
                         <button type="submit" 
-                                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                class="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600">
                             Criar Atividade
                         </button>
                     </div>
@@ -453,7 +582,7 @@ function updateActivityStatus(activityId, newStatus) {
 // Atualizar barra de progresso
 function updateProjectProgress(newProgress) {
     const progressFill = document.querySelector('.progress-fill');
-    const progressText = document.querySelector('.progress-bar').previousElementSibling.lastElementChild;
+    const progressText = document.querySelector('.progress-container .text-2xl');
     
     if (progressFill && progressText) {
         progressFill.style.width = newProgress + '%';
@@ -514,5 +643,43 @@ document.getElementById('activityForm')?.addEventListener('submit', function(e) 
         showNotification('Erro ao criar atividade', 'error');
     });
 });
+
+// Funções para hierarquia de atividades
+function openSubActivityModal(parentId) {
+    // Adicionar campo hidden para parent_activity
+    const form = document.getElementById('activityForm');
+    let parentInput = form.querySelector('input[name="parent_activity"]');
+    if (!parentInput) {
+        parentInput = document.createElement('input');
+        parentInput.type = 'hidden';
+        parentInput.name = 'parent_activity';
+        form.appendChild(parentInput);
+    }
+    parentInput.value = parentId;
+    
+    // Atualizar título do modal
+    document.querySelector('#activityModal h3').textContent = 'Nova Sub-atividade';
+    
+    openActivityModal();
+}
+
+function toggleSubActivities(activityId) {
+    const subActivities = document.getElementById(`sub-activities-${activityId}`);
+    const icon = document.getElementById(`toggle-icon-${activityId}`);
+    
+    if (subActivities && subActivities.classList.contains('hidden')) {
+        subActivities.classList.remove('hidden');
+        if (icon) {
+            icon.classList.remove('fa-chevron-right');
+            icon.classList.add('fa-chevron-down');
+        }
+    } else if (subActivities) {
+        subActivities.classList.add('hidden');
+        if (icon) {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-right');
+        }
+    }
+}
 </script>
 {% endblock %}

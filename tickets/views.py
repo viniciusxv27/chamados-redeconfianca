@@ -23,9 +23,13 @@ def tickets_list_view(request):
         # Admin vê todos os tickets (incluindo fechados)
         tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem tickets do setor + seus próprios tickets (incluindo fechados)
+        # Supervisores veem tickets de todos seus setores + seus próprios tickets (incluindo fechados)
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
         tickets = Ticket.objects.filter(
-            models.Q(sector=user.sector) |
+            models.Q(sector__in=user_sectors) |
             models.Q(created_by=user) |
             models.Q(assigned_to=user)
         ).distinct()
@@ -55,9 +59,13 @@ def tickets_history_view(request):
         # Admin vê todos os tickets fechados
         tickets = Ticket.objects.filter(status='FECHADO')
     elif user.can_view_sector_tickets():
-        # Supervisores veem tickets fechados do setor + seus próprios tickets fechados
+        # Supervisores veem tickets fechados de todos seus setores + seus próprios tickets fechados
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+            
         tickets = Ticket.objects.filter(
-            models.Q(sector=user.sector, status='FECHADO') |
+            models.Q(sector__in=user_sectors, status='FECHADO') |
             models.Q(created_by=user, status='FECHADO')
         ).distinct()
     else:
@@ -82,9 +90,13 @@ def ticket_detail_view(request, ticket_id):
     user = request.user
     
     # Verificar permissão para visualizar o ticket
+    user_sectors = list(user.sectors.all())
+    if user.sector:
+        user_sectors.append(user.sector)
+    
     can_view = (
         user.can_view_all_tickets() or 
-        (user.can_view_sector_tickets() and ticket.sector == user.sector) or
+        (user.can_view_sector_tickets() and ticket.sector in user_sectors) or
         ticket.created_by == user or
         user in ticket.get_all_assigned_users()
     )
@@ -371,7 +383,11 @@ def tickets_list_view(request):
     if user.can_view_all_tickets():
         tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        tickets = Ticket.objects.filter(sector=user.sector)
+        # Ver tickets de todos os setores do usuário
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        tickets = Ticket.objects.filter(sector__in=user_sectors)
     else:
         tickets = Ticket.objects.filter(created_by=user)
     
@@ -401,7 +417,11 @@ class TicketViewSet(viewsets.ModelViewSet):
         if user.can_view_all_tickets():
             return Ticket.objects.all()
         elif user.can_view_sector_tickets():
-            return Ticket.objects.filter(sector=user.sector)
+            # Ver tickets de todos os setores do usuário
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            return Ticket.objects.filter(sector__in=user_sectors)
         else:
             return Ticket.objects.filter(created_by=user)
     

@@ -471,14 +471,13 @@ def edit_user_view(request, user_id):
                 user_to_edit.save()
                 
                 # Atualizar setores múltiplos
-                if sectors_ids:
-                    sectors = Sector.objects.filter(id__in=sectors_ids)
-                    user_to_edit.sectors.set(sectors)
-                    
-                    # Se não tem setor principal definido, definir o primeiro da lista
-                    if not user_to_edit.sector and sectors.exists():
-                        user_to_edit.sector = sectors.first()
-                        user_to_edit.save()
+                sectors = Sector.objects.filter(id__in=sectors_ids) if sectors_ids else Sector.objects.none()
+                user_to_edit.sectors.set(sectors)
+                
+                # Se não tem setor principal definido, definir o primeiro da lista
+                if not user_to_edit.sector and sectors.exists():
+                    user_to_edit.sector = sectors.first()
+                    user_to_edit.save()
                 
                 log_action(
                     request.user, 

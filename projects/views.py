@@ -133,28 +133,54 @@ def project_detail(request, project_id):
             project.responsible_user == request.user):
         return HttpResponseForbidden("Você não tem permissão para ver este projeto.")
     
-    # Atividades organizadas hierarquicamente
-    activities = project.activities.select_related(
-        'responsible_user', 'created_by', 'parent_activity'
+    # Atividades organizadas hierarquicamente - apenas as atividades raiz
+    root_activities = project.activities.filter(
+        parent_activity__isnull=True
+    ).select_related(
+        'responsible_user', 'created_by'
+    ).prefetch_related(
+        'sub_activities__responsible_user',
+        'sub_activities__sub_activities__responsible_user'
     ).order_by('order', 'deadline')
+    
+    # Todas as atividades para estatísticas
+    all_activities = project.activities.all()
     
     # Anexos
     attachments = project.attachments.select_related('uploaded_by').order_by('-uploaded_at')
     
     # Estatísticas do projeto
+    total_activities = all_activities.count()
+    completed_activities = all_activities.filter(status='CONCLUIDA').count()
+    in_progress_activities = all_activities.filter(status='EM_ANDAMENTO').count()
+    remaining_activities = total_activities - completed_activities
+    
+    # Calcular progresso
+    if total_activities > 0:
+        progress_percentage = (completed_activities / total_activities) * 100
+    else:
+        progress_percentage = 0
+    
     activity_stats = {
-        'total': activities.count(),
-        'nao_iniciadas': activities.filter(status='NAO_INICIADA').count(),
-        'em_andamento': activities.filter(status='EM_ANDAMENTO').count(),
-        'concluidas': activities.filter(status='CONCLUIDA').count(),
-        'atrasadas': sum(1 for a in activities if a.is_overdue),
+        'total': total_activities,
+        'nao_iniciadas': all_activities.filter(status='NAO_INICIADA').count(),
+        'em_andamento': in_progress_activities,
+        'concluidas': completed_activities,
+        'atrasadas': sum(1 for a in all_activities if a.is_overdue),
     }
     
     context = {
         'project': project,
-        'activities': activities,
+        'root_activities': root_activities,
+        'activities': root_activities,  # Alias for compatibility
+        'all_activities': all_activities,
         'attachments': attachments,
         'activity_stats': activity_stats,
+        'total_activities': total_activities,
+        'completed_activities': completed_activities,
+        'in_progress_activities': in_progress_activities,
+        'remaining_activities': remaining_activities,
+        'progress_percentage': round(progress_percentage, 1),
         'can_edit': (
             user_can_manage_all_projects(request.user) or
             project.created_by == request.user or
@@ -200,7 +226,17 @@ def project_create(request):
     if user_can_manage_all_projects(request.user):
         sectors = Sector.objects.all()
     else:
-        sectors = Sector.objects.filter(id=request.user.sector.id)
+        # Usuário pode ver setores onde tem acesso direto ou é membro
+        user_sectors = []
+        if request.user.sector:
+            user_sectors.append(request.user.sector.id)
+        user_sectors.extend(request.user.sectors.values_list('id', flat=True))
+        
+        if user_sectors:
+            sectors = Sector.objects.filter(id__in=user_sectors)
+        else:
+            # Se usuário não tem nenhum setor, mostrar todos (fallback)
+            sectors = Sector.objects.all()
     
     context = {
         'sectors': sectors,
@@ -377,3 +413,79 @@ def project_dashboard(request):
     }
     
     return render(request, 'projects/dashboard.html', context)
+
+
+@login_required
+def project_edit(request, project_id):
+    """View para editar um projeto"""
+    project = get_object_or_404(Project, id=project_id)
+    
+    # Verificar permissões
+    if not (user_can_manage_all_projects(request.user) or 
+            project.created_by == request.user or 
+            project.responsible_user == request.user):
+        return HttpResponseForbidden("Você não tem permissão para editar este projeto.")
+    
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                project.name = request.POST.get('name')
+                project.description = request.POST.get('description')
+                project.status = request.POST.get('status')
+                project.priority = request.POST.get('priority')
+                project.deadline = request.POST.get('deadline')
+                
+                # Se o usuário pode gerenciar todos os projetos, permitir mudança de responsável
+                if user_can_manage_all_projects(request.user):
+                    responsible_id = request.POST.get('responsible_user')
+                    if responsible_id:
+                        from django.contrib.auth import get_user_model
+                        User = get_user_model()
+                        project.responsible_user = get_object_or_404(User, id=responsible_id)
+                    else:
+                        project.responsible_user = None
+                
+                project.save()
+                messages.success(request, 'Projeto atualizado com sucesso!')
+                return redirect('projects:project_detail', project_id=project.id)
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar projeto: {str(e)}')
+    
+    # Buscar usuários para seleção de responsável
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    
+    context = {
+        'project': project,
+        'users': users,
+        'can_manage_all': user_can_manage_all_projects(request.user),
+    }
+    
+    return render(request, 'projects/project_edit.html', context)
+
+
+@login_required
+def project_delete(request, project_id):
+    """View para excluir um projeto (apenas superadmin)"""
+    project = get_object_or_404(Project, id=project_id)
+    
+    # Apenas superadmin pode excluir projetos
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Apenas superadministradores podem excluir projetos.")
+    
+    if request.method == 'POST':
+        try:
+            project_name = project.name
+            project.delete()
+            messages.success(request, f'Projeto "{project_name}" foi excluído com sucesso!')
+            return redirect('projects:project_list')
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir projeto: {str(e)}')
+            return redirect('projects:project_detail', project_id=project.id)
+    
+    context = {
+        'project': project,
+    }
+    
+    return render(request, 'projects/project_delete.html', context)

@@ -1,0 +1,100 @@
+{% load static %}
+{% load projects_tags %}
+{% load hierarchy_tags %}
+
+<!-- Renderização recursiva de atividades -->
+{% for activity in activities %}
+<div class="activity-item mb-4 {% if activity.hierarchy_level > 0 %}ml-{{ activity.hierarchy_level|mul:6 }}{% endif %}">
+    <div class="activity-card {% if activity.hierarchy_level > 0 %}border-l-4 border-purple-200 bg-purple-50/30{% endif %}">
+        <div class="flex justify-between items-start">
+            <div class="flex-1">
+                <div class="flex items-center mb-2">
+                    {% if activity.hierarchy_level > 0 %}
+                        <span class="text-purple-400 mr-3 font-mono">
+                            {% for i in activity.hierarchy_level|range_filter %}
+                                {% if forloop.last %}└─{% else %}│&nbsp;&nbsp;{% endif %}
+                            {% endfor %}
+                        </span>
+                    {% endif %}
+                    
+                    {% if activity.sub_activities.exists and activity.can_have_children %}
+                        <button onclick="toggleSubActivities({{ activity.id }})" 
+                                class="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 mr-2 focus:outline-none transition-all">
+                            <i id="toggle-icon-{{ activity.id }}" class="fas fa-chevron-down text-xs transition-transform"></i>
+                        </button>
+                    {% endif %}
+                    
+                    <h4 class="font-semibold text-gray-800 text-base">{{ activity.name }}</h4>
+                </div>
+                
+                <p class="text-sm text-gray-600 mb-3 leading-relaxed">{{ activity.description|truncatechars:120 }}</p>
+                
+                <div class="flex flex-wrap items-center gap-4 text-xs">
+                    <span class="flex items-center text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">
+                        <i class="fas fa-calendar-alt mr-1.5"></i>
+                        {{ activity.deadline|date:"d/m/Y" }}
+                    </span>
+                    {% if activity.responsible_user %}
+                    <span class="flex items-center text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
+                        <i class="fas fa-user-circle mr-1.5"></i>
+                        {{ activity.responsible_user.full_name|default:activity.responsible_user.username }}
+                    </span>
+                    {% endif %}
+                    <span class="flex items-center text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
+                        <i class="fas fa-flag mr-1.5"></i>
+                        {{ activity.get_priority_display }}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="ml-4 flex flex-col items-end space-y-3">
+                {% if can_edit %}
+                    <select onchange="updateActivityStatus({{ activity.id }}, this.value)" 
+                            class="text-sm border-0 bg-gray-50 hover:bg-gray-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:outline-none transition-all shadow-sm">
+                        <option value="NAO_INICIADA" {% if activity.status == 'NAO_INICIADA' %}selected{% endif %}>
+                            Não Iniciada
+                        </option>
+                        <option value="EM_ANDAMENTO" {% if activity.status == 'EM_ANDAMENTO' %}selected{% endif %}>
+                            Em Andamento
+                        </option>
+                        <option value="CONCLUIDA" {% if activity.status == 'CONCLUIDA' %}selected{% endif %}>
+                            Concluída
+                        </option>
+                        <option value="CANCELADA" {% if activity.status == 'CANCELADA' %}selected{% endif %}>
+                            Cancelada
+                        </option>
+                    </select>
+                {% else %}
+                    <span class="px-3 py-1.5 text-xs font-medium rounded-full shadow-sm
+                        {% if activity.status == 'NAO_INICIADA' %}bg-gray-100 text-gray-700 border border-gray-200
+                        {% elif activity.status == 'EM_ANDAMENTO' %}bg-blue-100 text-blue-700 border border-blue-200
+                        {% elif activity.status == 'CONCLUIDA' %}bg-emerald-100 text-emerald-700 border border-emerald-200
+                        {% else %}bg-red-100 text-red-700 border border-red-200{% endif %}">
+                        {{ activity.get_status_display }}
+                    </span>
+                {% endif %}
+                
+                {% if activity.is_overdue %}
+                    <span class="flex items-center text-xs text-red-600 font-medium bg-red-50 px-2 py-1 rounded-lg">
+                        <i class="fas fa-exclamation-triangle mr-1.5"></i>Atrasado
+                    </span>
+                {% endif %}
+                
+                {% if activity.can_have_children and can_edit %}
+                    <button onclick="openSubActivityModal({{ activity.id }})" 
+                            class="flex items-center text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 px-3 py-2 rounded-lg font-medium transition-all shadow-sm">
+                        <i class="fas fa-plus mr-1.5"></i>Subtarefa
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sub-atividades -->
+    {% if activity.sub_activities.exists %}
+        <div id="sub-activities-{{ activity.id }}" class="sub-activities mt-2">
+            {% include "projects/activity_hierarchy.html" with activities=activity.sub_activities.all can_edit=can_edit only %}
+        </div>
+    {% endif %}
+</div>
+{% endfor %}

@@ -366,6 +366,49 @@ class Activity(models.Model):
         return f"{self.project.name} > {self.name}"
     
     @property
+    def hierarchy_level(self):
+        """Retorna o nível hierárquico da atividade (0 = raiz, 1 = sub-atividade, etc.)"""
+        if not self.parent_activity:
+            return 0
+        return self.parent_activity.hierarchy_level + 1
+    
+    @property
+    def hierarchy_path(self):
+        """Retorna o caminho hierárquico completo como lista"""
+        path = []
+        current = self
+        while current:
+            path.insert(0, current.name)
+            current = current.parent_activity
+        return path
+    
+    @property
+    def hierarchy_display(self):
+        """Retorna uma string formatada para exibição da hierarquia"""
+        level = self.hierarchy_level
+        prefix = "└── " if level > 0 else ""
+        indent = "    " * max(0, level - 1)
+        return f"{indent}{prefix}{self.name}"
+    
+    def get_all_children(self):
+        """Retorna todas as sub-atividades recursivamente"""
+        children = []
+        for child in self.sub_activities.all():
+            children.append(child)
+            children.extend(child.get_all_children())
+        return children
+    
+    def get_root_activity(self):
+        """Retorna a atividade raiz desta hierarquia"""
+        if not self.parent_activity:
+            return self
+        return self.parent_activity.get_root_activity()
+    
+    def can_have_children(self):
+        """Verifica se pode ter sub-atividades (máximo 3 níveis)"""
+        return self.hierarchy_level < 2
+    
+    @property
     def is_overdue(self):
         """Verifica se a atividade está atrasada"""
         if self.status in ['CONCLUIDA', 'CANCELADA']:

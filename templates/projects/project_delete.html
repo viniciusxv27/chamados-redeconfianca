@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Excluir Projeto - {{ project.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .danger-card {
+        @apply bg-white rounded-3xl shadow-lg border-2 border-red-200 p-8;
+    }
+    
+    .warning-icon {
+        @apply w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6;
+    }
+    
+    .btn-danger {
+        @apply bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-semibold shadow-md hover:shadow-lg transition-all duration-200;
+    }
+    
+    .btn-secondary {
+        @apply bg-gray-200 hover:bg-gray-300 text-gray-700 px-8 py-4 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all duration-200;
+    }
+    
+    .project-info {
+        @apply bg-gray-50 rounded-2xl p-6 border border-gray-200;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="danger-card text-center">
+            <div class="warning-icon">
+                <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-gray-900 mb-4">Confirmar Exclusão</h1>
+            <p class="text-gray-600 mb-8">
+                Tem certeza de que deseja excluir este projeto? Esta ação não pode ser desfeita.
+            </p>
+            
+            <!-- Informações do Projeto -->
+            <div class="project-info text-left mb-8">
+                <h3 class="font-semibold text-gray-800 mb-4">Detalhes do Projeto</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Nome:</span>
+                        <span class="font-semibold text-gray-800">{{ project.name }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Setor:</span>
+                        <span class="font-semibold text-gray-800">{{ project.sector.name }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Status:</span>
+                        <span class="font-semibold text-gray-800">{{ project.get_status_display }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Criado em:</span>
+                        <span class="font-semibold text-gray-800">{{ project.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Atividades:</span>
+                        <span class="font-semibold text-gray-800">{{ project.activities.count }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Aviso -->
+            <div class="bg-red-50 border border-red-200 rounded-2xl p-4 mb-8">
+                <div class="flex items-start">
+                    <i class="fas fa-exclamation-circle text-red-500 mt-1 mr-3"></i>
+                    <div class="text-left">
+                        <p class="text-red-800 font-medium">Atenção!</p>
+                        <p class="text-red-700 text-sm mt-1">
+                            Todas as atividades, comentários e arquivos anexos relacionados a este projeto 
+                            também serão excluídos permanentemente.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Formulário de Confirmação -->
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button type="submit" class="btn-danger">
+                        <i class="fas fa-trash mr-2"></i>Confirmar Exclusão
+                    </button>
+                    <a href="{% url 'projects:project_detail' project.id %}" class="btn-secondary">
+                        <i class="fas fa-arrow-left mr-2"></i>Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Editar Projeto - {{ project.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        @apply bg-white rounded-3xl shadow-sm border border-gray-100 p-8;
+    }
+    
+    .form-group {
+        @apply mb-6;
+    }
+    
+    .form-label {
+        @apply block text-sm font-semibold text-gray-700 mb-3;
+    }
+    
+    .form-input {
+        @apply w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium;
+    }
+    
+    .form-textarea {
+        @apply w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium resize-none;
+    }
+    
+    .form-select {
+        @apply w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium;
+    }
+    
+    .btn-primary {
+        @apply bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold shadow-md hover:shadow-lg transition-all duration-200;
+    }
+    
+    .btn-secondary {
+        @apply bg-gray-200 hover:bg-gray-300 text-gray-700 px-8 py-4 rounded-2xl font-semibold shadow-sm hover:shadow-md transition-all duration-200;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Editar Projeto</h1>
+                <p class="text-gray-600 mt-1">{{ project.name }}</p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="{% url 'projects:project_detail' project.id %}" class="btn-secondary">
+                    <i class="fas fa-arrow-left mr-2"></i>Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="max-w-4xl mx-auto">
+        <div class="form-card">
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Coluna Esquerda -->
+                    <div>
+                        <div class="form-group">
+                            <label for="name" class="form-label">Nome do Projeto *</label>
+                            <input type="text" 
+                                   id="name" 
+                                   name="name" 
+                                   class="form-input" 
+                                   value="{{ project.name }}" 
+                                   required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="description" class="form-label">Descrição *</label>
+                            <textarea id="description" 
+                                      name="description" 
+                                      class="form-textarea" 
+                                      rows="4" 
+                                      required>{{ project.description }}</textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="deadline" class="form-label">Prazo Final *</label>
+                            <input type="date" 
+                                   id="deadline" 
+                                   name="deadline" 
+                                   class="form-input" 
+                                   value="{{ project.deadline|date:'Y-m-d' }}" 
+                                   required>
+                        </div>
+                    </div>
+                    
+                    <!-- Coluna Direita -->
+                    <div>
+                        <div class="form-group">
+                            <label for="status" class="form-label">Status</label>
+                            <select id="status" name="status" class="form-select">
+                                {% for value, label in project.STATUS_CHOICES %}
+                                <option value="{{ value }}" {% if project.status == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="priority" class="form-label">Prioridade</label>
+                            <select id="priority" name="priority" class="form-select">
+                                {% for value, label in project.PRIORITY_CHOICES %}
+                                <option value="{{ value }}" {% if project.priority == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        {% if can_manage_all %}
+                        <div class="form-group">
+                            <label for="responsible_user" class="form-label">Responsável</label>
+                            <select id="responsible_user" name="responsible_user" class="form-select">
+                                <option value="">Selecione um responsável</option>
+                                {% for user in users %}
+                                <option value="{{ user.id }}" 
+                                        {% if project.responsible_user.id == user.id %}selected{% endif %}>
+                                    {{ user.full_name|default:user.username }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Info Card -->
+                        <div class="bg-indigo-50 rounded-2xl p-6 border border-indigo-100">
+                            <h3 class="font-semibold text-indigo-800 mb-3">Informações</h3>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-indigo-600">Setor:</span>
+                                    <span class="font-medium text-indigo-800">{{ project.sector.name }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-indigo-600">Criado por:</span>
+                                    <span class="font-medium text-indigo-800">{{ project.created_by.full_name|default:project.created_by.username }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-indigo-600">Progresso:</span>
+                                    <span class="font-medium text-indigo-800">{{ project.progress_percentage }}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Botões -->
+                <div class="flex flex-col sm:flex-row gap-4 pt-8 border-t border-gray-200 mt-8">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save mr-2"></i>Salvar Alterações
+                    </button>
+                    <a href="{% url 'projects:project_detail' project.id %}" class="btn-secondary text-center">
+                        <i class="fas fa-times mr-2"></i>Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Definir data mínima para hoje
+    document.addEventListener('DOMContentLoaded', function() {
+        const deadlineInput = document.getElementById('deadline');
+        const today = new Date().toISOString().split('T')[0];
+        deadlineInput.min = today;
+    });
+</script>
+{% endblock %}
