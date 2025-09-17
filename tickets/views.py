@@ -332,6 +332,19 @@ def ticket_create_view(request):
             priority=request.POST.get('priority', 'MEDIA')
         )
         
+        # Processar arquivos anexados
+        from .models import TicketAttachment
+        attachments = request.FILES.getlist('attachments')
+        for attachment in attachments:
+            TicketAttachment.objects.create(
+                ticket=ticket,
+                file=attachment,
+                original_filename=attachment.name,
+                file_size=attachment.size,
+                content_type=attachment.content_type,
+                uploaded_by=request.user
+            )
+        
         # Criar log inicial
         TicketLog.objects.create(
             ticket=ticket,
@@ -347,12 +360,18 @@ def ticket_create_view(request):
             request
         )
         
-        messages.success(request, f'Chamado #{ticket.id} criado com sucesso!')
+        if attachments:
+            messages.success(request, f'Chamado #{ticket.id} criado com sucesso! {len(attachments)} arquivo(s) anexado(s).')
+        else:
+            messages.success(request, f'Chamado #{ticket.id} criado com sucesso!')
         return redirect('ticket_detail', ticket_id=ticket.id)
     
     sectors = Sector.objects.all()
+    # Buscar todos os usuários ativos para seleção
+    users = User.objects.filter(is_active=True).exclude(id=request.user.id).order_by('sector__name', 'first_name')
     context = {
         'sectors': sectors,
+        'users': users,
     }
     return render(request, 'tickets/create.html', context)
 
@@ -740,6 +759,19 @@ def ticket_create_fixed_view(request):
             priority=request.POST.get('priority', 'MEDIA')
         )
         
+        # Processar arquivos anexados
+        from .models import TicketAttachment
+        attachments = request.FILES.getlist('attachments')
+        for attachment in attachments:
+            TicketAttachment.objects.create(
+                ticket=ticket,
+                file=attachment,
+                original_filename=attachment.name,
+                file_size=attachment.size,
+                content_type=attachment.content_type,
+                uploaded_by=request.user
+            )
+        
         # Criar log inicial
         TicketLog.objects.create(
             ticket=ticket,
@@ -755,7 +787,10 @@ def ticket_create_fixed_view(request):
             request
         )
         
-        messages.success(request, f'Chamado #{ticket.id} criado com sucesso!')
+        if attachments:
+            messages.success(request, f'Chamado #{ticket.id} criado com sucesso! {len(attachments)} arquivo(s) anexado(s).')
+        else:
+            messages.success(request, f'Chamado #{ticket.id} criado com sucesso!')
         return redirect('ticket_detail', ticket_id=ticket.id)
     
     sectors = Sector.objects.all()
