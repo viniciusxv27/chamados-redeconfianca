@@ -54,26 +54,56 @@ def dashboard_view(request):
     from tickets.models import Ticket
     from communications.models import Communication
     from django.db.models import Q, Count
+    from django.db import models
     from django.utils import timezone
     
     user = request.user
     
-    # Estatísticas de tickets
+    # Estatísticas de tickets - APENAS tickets dos setores do usuário (sem created_by)
     if user.can_view_all_tickets():
+        # Admin vê todos os tickets (incluindo fechados)
         user_tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        user_tickets = Ticket.objects.filter(sector=user.sector)
+        # Supervisores veem APENAS tickets dos seus setores (sem incluir próprios tickets de outros setores)
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        user_tickets = Ticket.objects.filter(
+            models.Q(sector__in=user_sectors) |
+            models.Q(assigned_to=user)
+        ).distinct()
     else:
-        user_tickets = Ticket.objects.filter(created_by=user)
+        # Usuários comuns veem seus próprios tickets + tickets onde estão atribuídos
+        # Excluindo tickets fechados
+        user_tickets = Ticket.objects.filter(
+            models.Q(created_by=user) |
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).exclude(status='FECHADO').distinct()
     
-    # Chamados recentes sempre do setor (exceto para superadmin)
-    if user.hierarchy == 'SUPERADMIN':
+    # Chamados recentes - APENAS tickets dos setores do usuário (sem created_by)
+    if user.can_view_all_tickets():
+        # Admin vê todos os tickets
         sector_recent_tickets = Ticket.objects.all()
+    elif user.can_view_sector_tickets():
+        # Supervisores veem APENAS tickets dos seus setores (sem incluir próprios tickets de outros setores)
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        sector_recent_tickets = Ticket.objects.filter(
+            models.Q(sector__in=user_sectors) |
+            models.Q(assigned_to=user)
+        ).distinct()
     else:
-        # Para todos os outros (incluindo admin, supervisor, administrativo e padrão),
-        # mostrar apenas chamados do setor do usuário
-        sector_recent_tickets = Ticket.objects.filter(sector=user.sector) if user.sector else Ticket.objects.filter(created_by=user)
-    
+        # Usuários comuns veem seus próprios tickets + tickets onde estão atribuídos
+        # Excluindo tickets fechados
+        sector_recent_tickets = Ticket.objects.filter(
+            models.Q(created_by=user) |
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).exclude(status='FECHADO').distinct()
     ticket_stats = {
         'total': user_tickets.count(),
         'abertos': user_tickets.filter(status='ABERTO').count(),
@@ -97,8 +127,8 @@ def dashboard_view(request):
         communicationread__user=user
     ).distinct()[:5]
     
-    # Tickets recentes (sempre do setor, exceto superadmin)
-    recent_tickets = sector_recent_tickets.order_by('-created_at')[:5]
+    # Tickets recentes (sempre do setor, exceto superadmin) - limitado a 3
+    recent_tickets = sector_recent_tickets.order_by('-created_at')[:3]
     
     # Tickets em atraso que o usuário pode ver
     overdue_tickets = user_tickets.filter(
@@ -438,7 +468,7 @@ def edit_user_view(request, user_id):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('dashboard')
     
-    user_to_edit = get_object_or_404(User, id=user_id)
+    user_to_edit = get_object_or_404(User.objects.prefetch_related('sectors'), id=user_id)
     
     if request.method == 'POST':
         email = request.POST.get('email')

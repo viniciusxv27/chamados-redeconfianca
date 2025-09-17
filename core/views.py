@@ -34,21 +34,47 @@ def training_module(request):
 def dashboard(request):
     """Dashboard analítico"""
     from django.db.models import Count, Q
+    from django.db import models
     from datetime import datetime, timedelta
     from users.models import User
     from communications.models import Communication
     
-    # Estatísticas de tickets
-    total_tickets = Ticket.objects.count()
-    open_tickets = Ticket.objects.filter(status='ABERTO').count()
-    closed_tickets = Ticket.objects.filter(status='FECHADO').count()
-    pending_tickets = Ticket.objects.filter(status='EM_ANDAMENTO').count()
+    user = request.user
     
-    # Estatísticas de usuários
+    # Filtrar tickets baseado na hierarquia do usuário (mesma lógica do /tickets)
+    if user.can_view_all_tickets():
+        # Admin vê todos os tickets (incluindo fechados)
+        user_tickets = Ticket.objects.all()
+    elif user.can_view_sector_tickets():
+        # Supervisores veem APENAS tickets dos seus setores + tickets atribuídos a eles
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        user_tickets = Ticket.objects.filter(
+            models.Q(sector__in=user_sectors) |
+            models.Q(assigned_to=user)
+        ).distinct()
+    else:
+        # Usuários comuns veem seus próprios tickets + tickets onde estão atribuídos
+        # Excluindo tickets fechados
+        user_tickets = Ticket.objects.filter(
+            models.Q(created_by=user) |
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).exclude(status='FECHADO').distinct()
+    
+    # Estatísticas de tickets (baseadas nos tickets filtrados)
+    total_tickets = user_tickets.count()
+    open_tickets = user_tickets.filter(status='ABERTO').count()
+    closed_tickets = user_tickets.filter(status='FECHADO').count()
+    pending_tickets = user_tickets.filter(status='EM_ANDAMENTO').count()
+    
+    # Estatísticas de usuários (mantém global)
     total_users = User.objects.count()
     active_users = User.objects.filter(is_active=True).count()
     
-    # Estatísticas de comunicações
+    # Estatísticas de comunicações (mantém global)
     total_communications = Communication.objects.count()
     recent_communications = Communication.objects.filter(
         created_at__gte=datetime.now() - timedelta(days=7)
@@ -60,13 +86,13 @@ def dashboard(request):
         send_to_all=True
     ).order_by('-created_at')[:3]
     
-    # Tickets por categoria
-    tickets_by_category = Ticket.objects.values('category__name').annotate(
+    # Tickets por categoria (baseados nos tickets filtrados)
+    tickets_by_category = user_tickets.values('category__name').annotate(
         count=Count('id')
     ).order_by('-count')[:5]
     
-    # Tickets recentes
-    recent_tickets = Ticket.objects.order_by('-created_at')[:5]
+    # Tickets recentes (apenas os últimos 3 dos setores do usuário)
+    recent_tickets = user_tickets.order_by('-created_at')[:3]
     
     # Comunicações recentes
     recent_comms = Communication.objects.order_by('-created_at')[:5]
