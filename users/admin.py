@@ -21,7 +21,7 @@ class CustomUserAdmin(UserAdmin):
     # Adicionar campos personalizados aos fieldsets
     fieldsets = UserAdmin.fieldsets + (
         ('Informações Adicionais', {
-            'fields': ('sector', 'sectors', 'hierarchy', 'balance_cs', 'phone', 'profile_picture')
+            'fields': ('sector', 'sectors', 'hierarchy', 'balance_cs', 'phone', 'disc_profile', 'uniform_size_shirt', 'uniform_size_pants', 'profile_picture')
         }),
     )
     

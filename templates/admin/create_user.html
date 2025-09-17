@@ -111,6 +111,36 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
+                            <label for="uniform_size_shirt" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-tshirt mr-1 text-blue-500"></i>
+                                Tamanho Uniforme (Blusa)
+                            </label>
+                            <input type="text" 
+                                   id="uniform_size_shirt" 
+                                   name="uniform_size_shirt" 
+                                   maxlength="3"
+                                   placeholder="ex: P, M, G, GG"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Tamanho da blusa do uniforme</p>
+                        </div>
+                        
+                        <div>
+                            <label for="uniform_size_pants" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-user-tie mr-1 text-green-500"></i>
+                                Tamanho Uniforme (Calça)
+                            </label>
+                            <input type="text" 
+                                   id="uniform_size_pants" 
+                                   name="uniform_size_pants" 
+                                   maxlength="3"
+                                   placeholder="ex: P, M, G, 38, 40"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Tamanho da calça do uniforme</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
                             <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
                             <select id="sector" 
                                     name="sector"

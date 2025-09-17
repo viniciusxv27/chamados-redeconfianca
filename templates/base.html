@@ -695,11 +695,14 @@
                 
                 notificationsList.innerHTML = notificationsHTML;
                 
-                // Add click handlers to mark as read
+                // Add click handlers to open modal
                 notificationsList.querySelectorAll('[data-id]').forEach(item => {
                     item.addEventListener('click', function() {
                         const notificationId = this.getAttribute('data-id');
-                        markAsRead(notificationId);
+                        const notification = notifications.find(n => n.id == notificationId);
+                        if (notification) {
+                            openNotificationModal(notification);
+                        }
                     });
                 });
             }
@@ -715,7 +718,7 @@
             }
             
             // Mark notification as read
-            function markAsRead(notificationId) {
+            function markAsRead(notificationId, reloadNotifications = true) {
                 fetch(`/api/notifications/${notificationId}/mark-read/`, {
                     method: 'POST',
                     headers: {
@@ -724,7 +727,7 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
+                    if (data.success && reloadNotifications) {
                         loadNotifications(); // Reload to update UI
                     }
                 });
@@ -760,6 +763,109 @@
                 .then(response => response.json())
                 .then(data => updateNotificationBadge(data.count))
                 .catch(error => console.error('Error loading notification count:', error));
+
+            // Notification Modal functionality
+            const notificationModal = document.getElementById('notificationModal');
+            const closeNotificationModalBtn = document.getElementById('closeNotificationModal');
+            const modalMarkAsReadBtn = document.getElementById('modalMarkAsRead');
+            
+            let currentNotification = null;
+
+            // Open notification modal
+            function openNotificationModal(notification) {
+                currentNotification = notification;
+                
+                // Populate modal content
+                document.getElementById('modalNotificationIcon').innerHTML = getNotificationIcon(notification.notification_type);
+                document.getElementById('modalNotificationTitle').textContent = notification.title;
+                document.getElementById('modalNotificationMessage').textContent = notification.message;
+                document.getElementById('modalNotificationType').textContent = getNotificationTypeLabel(notification.notification_type);
+                document.getElementById('modalNotificationDate').textContent = formatFullDate(notification.created_at);
+                
+                // Handle related URL
+                const urlContainer = document.getElementById('modalNotificationUrl');
+                const linkElement = document.getElementById('modalNotificationLink');
+                if (notification.related_url) {
+                    linkElement.href = notification.related_url;
+                    urlContainer.classList.remove('hidden');
+                } else {
+                    urlContainer.classList.add('hidden');
+                }
+                
+                // Update mark as read button visibility
+                const markAsReadBtn = document.getElementById('modalMarkAsRead');
+                if (notification.is_read) {
+                    markAsReadBtn.classList.add('hidden');
+                } else {
+                    markAsReadBtn.classList.remove('hidden');
+                }
+                
+                // Show modal
+                notificationModal.classList.remove('hidden');
+                
+                // Mark as read automatically when opened
+                if (!notification.is_read) {
+                    markAsRead(notification.id, false); // false = don't reload notifications immediately
+                }
+            }
+
+            // Close notification modal
+            function closeNotificationModal() {
+                notificationModal.classList.add('hidden');
+                currentNotification = null;
+                // Reload notifications to update the dropdown
+                if (!notificationDropdown.classList.contains('hidden')) {
+                    loadNotifications();
+                }
+            }
+
+            // Get notification type label
+            function getNotificationTypeLabel(type) {
+                const labels = {
+                    'FILE': 'Novo Arquivo',
+                    'TICKET': 'Novo Chamado',
+                    'TRAINING': 'Novo Treinamento',
+                    'COMMUNICATION': 'Novo Comunicado',
+                    'TICKET_UPDATE': 'Atualização de Chamado',
+                    'SYSTEM': 'Sistema'
+                };
+                return labels[type] || 'Notificação';
+            }
+
+            // Format full date
+            function formatFullDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            // Event listeners for modal
+            if (closeNotificationModalBtn) {
+                closeNotificationModalBtn.addEventListener('click', closeNotificationModal);
+            }
+
+            if (modalMarkAsReadBtn) {
+                modalMarkAsReadBtn.addEventListener('click', function() {
+                    if (currentNotification) {
+                        markAsRead(currentNotification.id, true); // true = reload notifications
+                        closeNotificationModal();
+                    }
+                });
+            }
+
+            // Close modal when clicking outside
+            if (notificationModal) {
+                notificationModal.addEventListener('click', function(e) {
+                    if (e.target === notificationModal) {
+                        closeNotificationModal();
+                    }
+                });
+            }
         });
     </script>
     
@@ -777,6 +883,52 @@
         }
     </script>
     
+    <!-- Notification Detail Modal -->
+    <div id="notificationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 hidden">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 sm:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <!-- Modal Header -->
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex items-center space-x-2">
+                        <span id="modalNotificationIcon" class="text-lg"></span>
+                        <h3 id="modalNotificationTitle" class="text-lg font-medium text-gray-900"></h3>
+                    </div>
+                    <button id="closeNotificationModal" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <!-- Modal Content -->
+                <div class="mb-4">
+                    <div class="mb-3">
+                        <span id="modalNotificationType" class="inline-block px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"></span>
+                    </div>
+                    <div class="mb-4">
+                        <p id="modalNotificationMessage" class="text-gray-700 whitespace-pre-line"></p>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        <i class="fas fa-clock mr-1"></i>
+                        <span id="modalNotificationDate"></span>
+                    </div>
+                </div>
+                
+                <!-- Modal Actions -->
+                <div class="flex justify-end space-x-3">
+                    <div id="modalNotificationUrl" class="hidden">
+                        <a id="modalNotificationLink" href="#" target="_blank" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded text-sm transition-colors">
+                            <i class="fas fa-external-link-alt mr-1"></i>
+                            Abrir Link
+                        </a>
+                    </div>
+                    <button id="modalMarkAsRead" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors">
+                        <i class="fas fa-check mr-1"></i>
+                        Marcar como Lida
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>

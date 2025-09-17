@@ -419,6 +419,8 @@ def create_user_view(request):
         hierarchy = request.POST.get('hierarchy')
         phone = request.POST.get('phone')
         disc_profile = request.POST.get('disc_profile')
+        uniform_size_shirt = request.POST.get('uniform_size_shirt')
+        uniform_size_pants = request.POST.get('uniform_size_pants')
         
         try:
             # Verificar se email já existe
@@ -442,7 +444,9 @@ def create_user_view(request):
                 sector=sector,
                 hierarchy=hierarchy,
                 phone=phone,
-                disc_profile=disc_profile
+                disc_profile=disc_profile,
+                uniform_size_shirt=uniform_size_shirt,
+                uniform_size_pants=uniform_size_pants
             )
             
             log_action(
@@ -485,6 +489,8 @@ def edit_user_view(request, user_id):
         hierarchy = request.POST.get('hierarchy')
         phone = request.POST.get('phone')
         disc_profile = request.POST.get('disc_profile')
+        uniform_size_shirt = request.POST.get('uniform_size_shirt')
+        uniform_size_pants = request.POST.get('uniform_size_pants')
         is_active = request.POST.get('is_active') == 'on'
         
         try:
@@ -502,6 +508,8 @@ def edit_user_view(request, user_id):
                 user_to_edit.hierarchy = hierarchy
                 user_to_edit.phone = phone
                 user_to_edit.disc_profile = disc_profile
+                user_to_edit.uniform_size_shirt = uniform_size_shirt
+                user_to_edit.uniform_size_pants = uniform_size_pants
                 user_to_edit.is_active = is_active
                 user_to_edit.save()
                 
@@ -1205,6 +1213,8 @@ def update_profile_view(request):
         user.email = request.POST.get('email', user.email)
         user.phone = request.POST.get('phone', user.phone)
         user.disc_profile = request.POST.get('disc_profile', user.disc_profile)
+        user.uniform_size_shirt = request.POST.get('uniform_size_shirt', user.uniform_size_shirt)
+        user.uniform_size_pants = request.POST.get('uniform_size_pants', user.uniform_size_pants)
         
         # Upload de foto de perfil
         if request.FILES.get('profile_picture'):
