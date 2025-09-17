@@ -150,6 +150,59 @@
                         </div>
                     {% endif %}
                     
+                    <!-- Upload New Files Section -->
+                    {% if can_upload and ticket.status != 'FECHADO' %}
+                        <div class="mb-6">
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <h4 class="font-medium text-blue-900 mb-3 flex items-center">
+                                    <i class="fas fa-plus mr-2"></i>
+                                    Adicionar Arquivos
+                                </h4>
+                                <form method="post" enctype="multipart/form-data" class="space-y-3">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="upload_files" value="1">
+                                    
+                                    <div>
+                                        <label for="new_attachments" class="block text-sm font-medium text-blue-900 mb-2">
+                                            Selecionar arquivos:
+                                        </label>
+                                        <input 
+                                            type="file" 
+                                            name="new_attachments" 
+                                            id="new_attachments"
+                                            multiple
+                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.zip,.rar"
+                                            class="w-full px-3 py-2 border border-blue-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600"
+                                            onchange="updateFileInfo(this)"
+                                        >
+                                        <p class="text-xs text-blue-600 mt-1">
+                                            Tipos aceitos: PDF, DOC, DOCX, XLS, XLSX, TXT, JPG, PNG, GIF, ZIP, RAR (máx. 50MB por arquivo)
+                                        </p>
+                                    </div>
+                                    
+                                    <!-- File Preview -->
+                                    <div id="filePreview" class="hidden">
+                                        <div class="bg-white border border-blue-200 rounded p-3">
+                                            <h5 class="text-sm font-medium text-blue-900 mb-2">Arquivos selecionados:</h5>
+                                            <div id="fileList" class="space-y-1"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex justify-end">
+                                        <button 
+                                            type="submit" 
+                                            id="uploadBtn"
+                                            disabled
+                                            class="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                        >
+                                            <i class="fas fa-upload mr-1"></i>Adicionar Arquivos
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    {% endif %}
+                    
                     {% if ticket.status == 'RESOLVIDO' %}
                         <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                             <div class="flex items-start">
@@ -742,6 +795,54 @@ window.onclick = function(event) {
     }
     if (event.target === assignModal) {
         hideAssignModal();
+    }
+}
+
+// File upload functionality
+function updateFileInfo(input) {
+    const filePreview = document.getElementById('filePreview');
+    const fileList = document.getElementById('fileList');
+    const uploadBtn = document.getElementById('uploadBtn');
+    
+    if (input.files && input.files.length > 0) {
+        fileList.innerHTML = '';
+        
+        for (let i = 0; i < input.files.length; i++) {
+            const file = input.files[i];
+            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            
+            const fileItem = document.createElement('div');
+            fileItem.className = 'flex items-center justify-between text-xs text-blue-800';
+            
+            let fileIcon = 'fas fa-file';
+            if (file.type.includes('image/')) fileIcon = 'fas fa-image';
+            else if (file.type.includes('pdf')) fileIcon = 'fas fa-file-pdf';
+            else if (file.type.includes('word') || file.name.endsWith('.doc') || file.name.endsWith('.docx')) fileIcon = 'fas fa-file-word';
+            else if (file.type.includes('excel') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) fileIcon = 'fas fa-file-excel';
+            
+            fileItem.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <i class="${fileIcon}"></i>
+                    <span>${file.name}</span>
+                </div>
+                <span class="${fileSizeMB > 50 ? 'text-red-600 font-medium' : ''}">${fileSizeMB} MB</span>
+            `;
+            
+            if (fileSizeMB > 50) {
+                const errorSpan = document.createElement('span');
+                errorSpan.className = 'text-red-600 text-xs font-medium';
+                errorSpan.textContent = ' (Muito grande!)';
+                fileItem.appendChild(errorSpan);
+            }
+            
+            fileList.appendChild(fileItem);
+        }
+        
+        filePreview.classList.remove('hidden');
+        uploadBtn.disabled = false;
+    } else {
+        filePreview.classList.add('hidden');
+        uploadBtn.disabled = true;
     }
 }
 

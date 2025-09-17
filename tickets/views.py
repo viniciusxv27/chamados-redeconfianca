@@ -105,6 +105,65 @@ def ticket_detail_view(request, ticket_id):
         messages.error(request, 'Você não tem permissão para visualizar este chamado.')
         return redirect('tickets_list')
     
+    # Processar upload de arquivos via POST
+    if request.method == 'POST' and 'upload_files' in request.POST:
+        # Verificar permissão para adicionar arquivos
+        can_upload = (
+            user.can_view_all_tickets() or 
+            (user.can_view_sector_tickets() and ticket.sector in user_sectors) or
+            ticket.created_by == user or
+            ticket.assigned_to == user or
+            user in ticket.get_all_assigned_users()
+        )
+        
+        if not can_upload:
+            messages.error(request, 'Você não tem permissão para adicionar arquivos neste chamado.')
+            return redirect('ticket_detail', ticket_id=ticket.id)
+        
+        # Processar arquivos anexados
+        from .models import TicketAttachment
+        attachments = request.FILES.getlist('new_attachments')
+        
+        if not attachments:
+            messages.error(request, 'Nenhum arquivo foi selecionado.')
+            return redirect('ticket_detail', ticket_id=ticket.id)
+        
+        uploaded_count = 0
+        for attachment in attachments:
+            # Verificar tamanho do arquivo (limite de 50MB por exemplo)
+            if attachment.size > 50 * 1024 * 1024:  # 50MB
+                messages.warning(request, f'Arquivo "{attachment.name}" é muito grande (máximo 50MB). Arquivo ignorado.')
+                continue
+                
+            TicketAttachment.objects.create(
+                ticket=ticket,
+                file=attachment,
+                original_filename=attachment.name,
+                file_size=attachment.size,
+                content_type=attachment.content_type,
+                uploaded_by=user
+            )
+            uploaded_count += 1
+        
+        if uploaded_count > 0:
+            # Adicionar comentário informativo sobre os arquivos adicionados
+            TicketComment.objects.create(
+                ticket=ticket,
+                user=user,
+                comment=f'{uploaded_count} arquivo(s) adicionado(s) ao chamado.',
+                comment_type='COMMENT'
+            )
+            
+            messages.success(request, f'{uploaded_count} arquivo(s) adicionado(s) com sucesso!')
+            log_action(
+                user, 
+                'TICKET_ATTACHMENT', 
+                f'{uploaded_count} arquivo(s) adicionado(s) ao chamado #{ticket.id}',
+                request
+            )
+        
+        return redirect('ticket_detail', ticket_id=ticket.id)
+    
     # Marcar como visualizado
     ticket.mark_as_viewed(user)
     
@@ -118,6 +177,15 @@ def ticket_detail_view(request, ticket_id):
         ticket.assigned_to == user
     )
     
+    # Verificar se pode fazer upload de arquivos
+    can_upload = (
+        user.can_view_all_tickets() or 
+        (user.can_view_sector_tickets() and ticket.sector in user_sectors) or
+        ticket.created_by == user or
+        ticket.assigned_to == user or
+        user in ticket.get_all_assigned_users()
+    )
+    
     # Buscar usuários para atribuição (todos os setores) - sempre disponível
     sector_users = User.objects.filter(is_active=True).exclude(id=user.id).order_by('sector__name', 'first_name')
     
@@ -128,6 +196,7 @@ def ticket_detail_view(request, ticket_id):
         'user': user,
         'can_assume': can_assume,
         'can_assign': can_assign,
+        'can_upload': can_upload,
         'assigned_users': ticket.get_all_assigned_users(),
         'additional_assignments': ticket.additional_assignments.filter(is_active=True).select_related('user', 'assigned_by'),
         'sector_users': sector_users,
