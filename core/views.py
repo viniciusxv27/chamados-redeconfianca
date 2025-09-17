@@ -41,26 +41,29 @@ def dashboard(request):
     
     user = request.user
     
-    # Filtrar tickets baseado na hierarquia do usuário (mesma lógica do /tickets)
+    # Filtrar tickets baseado na hierarquia do usuário
+    # TODOS os usuários sempre veem seus próprios chamados (created_by=user)
+    base_filter = models.Q(created_by=user)
+    
     if user.can_view_all_tickets():
         # Admin vê todos os tickets (incluindo fechados)
         user_tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem tickets dos seus setores + tickets que criaram + tickets atribuídos a eles
+        # Supervisores veem: seus próprios tickets + tickets dos setores + tickets atribuídos
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         user_tickets = Ticket.objects.filter(
+            base_filter |  # Sempre inclui próprios tickets
             models.Q(sector__in=user_sectors) |
-            models.Q(created_by=user) |
             models.Q(assigned_to=user)
         ).distinct()
     else:
-        # Usuários comuns veem seus próprios tickets + tickets onde estão atribuídos
+        # Usuários comuns veem: seus próprios tickets + tickets atribuídos
         # Excluindo tickets fechados
         user_tickets = Ticket.objects.filter(
-            models.Q(created_by=user) |
+            base_filter |  # Sempre inclui próprios tickets
             models.Q(assigned_to=user) |
             models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
         ).exclude(status='FECHADO').distinct()

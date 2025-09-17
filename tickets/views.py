@@ -18,26 +18,29 @@ from core.middleware import log_action
 def tickets_list_view(request):
     user = request.user
     
+    # Filtro base: TODOS os usuários sempre veem seus próprios chamados
+    base_filter = models.Q(created_by=user)
+    
     # Filtrar tickets baseado na hierarquia do usuário
     if user.can_view_all_tickets():
         # Admin vê todos os tickets (incluindo fechados)
         tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem tickets de todos seus setores + seus próprios tickets (incluindo fechados)
+        # Supervisores veem: seus próprios tickets + tickets dos setores + tickets atribuídos
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         tickets = Ticket.objects.filter(
+            base_filter |  # Sempre inclui próprios tickets
             models.Q(sector__in=user_sectors) |
-            models.Q(created_by=user) |
             models.Q(assigned_to=user)
         ).distinct()
     else:
-        # Usuários comuns veem seus próprios tickets + tickets onde estão atribuídos
+        # Usuários comuns veem: seus próprios tickets + tickets atribuídos
         # Excluindo tickets fechados
         tickets = Ticket.objects.filter(
-            models.Q(created_by=user) |
+            base_filter |  # Sempre inclui próprios tickets
             models.Q(assigned_to=user) |
             models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
         ).exclude(status='FECHADO').distinct()
@@ -54,24 +57,28 @@ def tickets_history_view(request):
     """View para mostrar histórico de chamados concluídos"""
     user = request.user
     
+    # Filtro base: TODOS os usuários sempre veem seus próprios chamados fechados
+    base_filter = models.Q(created_by=user, status='FECHADO')
+    
     # Filtrar apenas tickets fechados baseado na hierarquia do usuário
     if user.can_view_all_tickets():
         # Admin vê todos os tickets fechados
         tickets = Ticket.objects.filter(status='FECHADO')
     elif user.can_view_sector_tickets():
-        # Supervisores veem tickets fechados de todos seus setores + seus próprios tickets fechados
+        # Supervisores veem: próprios tickets fechados + tickets fechados dos setores + atribuídos fechados
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
             
         tickets = Ticket.objects.filter(
+            base_filter |  # Sempre inclui próprios tickets fechados
             models.Q(sector__in=user_sectors, status='FECHADO') |
-            models.Q(created_by=user, status='FECHADO')
+            models.Q(assigned_to=user, status='FECHADO')
         ).distinct()
     else:
-        # Usuários comuns veem apenas seus próprios tickets fechados
+        # Usuários comuns veem: próprios tickets fechados + atribuídos fechados
         tickets = Ticket.objects.filter(
-            models.Q(created_by=user, status='FECHADO') |
+            base_filter |  # Sempre inclui próprios tickets fechados
             models.Q(assigned_to=user, status='FECHADO') |
             models.Q(additional_assignments__user=user, additional_assignments__is_active=True, status='FECHADO')
         ).distinct()
@@ -464,20 +471,31 @@ from core.middleware import log_action
 
 
 @login_required
-def tickets_list_view(request):
+def tickets_list_view_duplicate(request):
     user = request.user
+    
+    # Filtro base: TODOS os usuários sempre veem seus próprios chamados
+    base_filter = models.Q(created_by=user)
     
     # Filtrar tickets baseado na hierarquia do usuário
     if user.can_view_all_tickets():
         tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Ver tickets de todos os setores do usuário
+        # Ver tickets dos setores + próprios tickets + atribuídos
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
-        tickets = Ticket.objects.filter(sector__in=user_sectors)
+        tickets = Ticket.objects.filter(
+            base_filter |  # Sempre inclui próprios tickets
+            models.Q(sector__in=user_sectors) |
+            models.Q(assigned_to=user)
+        ).distinct()
     else:
-        tickets = Ticket.objects.filter(created_by=user)
+        tickets = Ticket.objects.filter(
+            base_filter |  # Sempre inclui próprios tickets
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).exclude(status='FECHADO').distinct()
     
     context = {
         'tickets': tickets.order_by('-created_at'),
@@ -502,16 +520,28 @@ class TicketViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        
+        # Filtro base: TODOS os usuários sempre veem seus próprios chamados
+        base_filter = models.Q(created_by=user)
+        
         if user.can_view_all_tickets():
             return Ticket.objects.all()
         elif user.can_view_sector_tickets():
-            # Ver tickets de todos os setores do usuário
+            # Ver tickets dos setores + próprios tickets + atribuídos
             user_sectors = list(user.sectors.all())
             if user.sector:
                 user_sectors.append(user.sector)
-            return Ticket.objects.filter(sector__in=user_sectors)
+            return Ticket.objects.filter(
+                base_filter |  # Sempre inclui próprios tickets
+                models.Q(sector__in=user_sectors) |
+                models.Q(assigned_to=user)
+            ).distinct()
         else:
-            return Ticket.objects.filter(created_by=user)
+            return Ticket.objects.filter(
+                base_filter |  # Sempre inclui próprios tickets
+                models.Q(assigned_to=user) |
+                models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+            ).exclude(status='FECHADO').distinct()
     
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
