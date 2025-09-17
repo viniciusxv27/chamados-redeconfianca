@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
 from django.db import models
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -78,12 +79,30 @@ def tickets_list_view(request):
             models.Q(id__icontains=search)
         )
     
+    # Aplicar ordenação
+    tickets = tickets.order_by('-created_at')
+    
+    # Configurar paginação
+    paginator = Paginator(tickets, 10)  # 15 tickets por página
+    page = request.GET.get('page')
+    
+    try:
+        tickets_page = paginator.page(page)
+    except PageNotAnInteger:
+        # Se a página não for um inteiro, mostrar a primeira página
+        tickets_page = paginator.page(1)
+    except EmptyPage:
+        # Se a página estiver fora do range, mostrar a última página
+        tickets_page = paginator.page(paginator.num_pages)
+    
     context = {
-        'tickets': tickets.order_by('-created_at'),
+        'tickets': tickets_page,
         'user': user,
         'search': search,
         'status': status_filter,
         'origem': origem_filter,
+        'paginator': paginator,
+        'page_obj': tickets_page,
     }
     return render(request, 'tickets/list.html', context)
 
@@ -119,10 +138,28 @@ def tickets_history_view(request):
             models.Q(additional_assignments__user=user, additional_assignments__is_active=True, status='FECHADO')
         ).distinct()
     
+    # Aplicar ordenação
+    tickets = tickets.order_by('-closed_at')
+    
+    # Configurar paginação
+    paginator = Paginator(tickets, 10)  # 15 tickets por página
+    page = request.GET.get('page')
+    
+    try:
+        tickets_page = paginator.page(page)
+    except PageNotAnInteger:
+        # Se a página não for um inteiro, mostrar a primeira página
+        tickets_page = paginator.page(1)
+    except EmptyPage:
+        # Se a página estiver fora do range, mostrar a última página
+        tickets_page = paginator.page(paginator.num_pages)
+    
     context = {
-        'tickets': tickets.order_by('-closed_at'),
+        'tickets': tickets_page,
         'user': user,
         'is_history': True,
+        'paginator': paginator,
+        'page_obj': tickets_page,
     }
     return render(request, 'tickets/history.html', context)
 
