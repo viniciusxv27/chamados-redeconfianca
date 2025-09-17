@@ -261,17 +261,17 @@
                 </div>
                 
                 <div class="flex gap-3">
-                    <a href="{% url 'projects:project_list' %}" class="btn-secondary">
-                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    <a href="{% url 'projects:project_list' %}" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2">
+                        <i class="fas fa-arrow-left"></i>Voltar
                     </a>
                     {% if can_edit %}
-                    <a href="{% url 'projects:project_edit' project.pk %}" class="btn-secondary">
-                        <i class="fas fa-edit mr-2"></i>Editar Projeto
+                    <a href="{% url 'projects:project_edit' project.pk %}" class="px-6 py-3 bg-orange-500 text-white rounded-2xl font-semibold hover:bg-orange-600 transition-colors duration-200 inline-flex items-center gap-2">
+                        <i class="fas fa-edit"></i>Editar Projeto
                     </a>
                     {% endif %}
                     {% if user.is_superuser %}
-                    <a href="{% url 'projects:project_delete' project.pk %}" class="btn-action" style="background: #ef4444;">
-                        <i class="fas fa-trash mr-2"></i>Excluir
+                    <a href="{% url 'projects:project_delete' project.pk %}" class="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-colors duration-200 inline-flex items-center gap-2">
+                        <i class="fas fa-trash"></i>Excluir
                     </a>
                     {% endif %}
                 </div>

@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Fornecedores{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-8 mb-8 text-white shadow-lg">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+                <div>
+                    <h1 class="text-4xl font-bold">Fornecedores</h1>
+                    <p class="text-xl opacity-90 mt-2">Gerencie todos os fornecedores da empresa</p>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="{% url 'suppliers:supplier_create' %}" class="bg-white text-orange-600 hover:bg-gray-100 px-6 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Novo Fornecedor
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ total_suppliers }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Total de Fornecedores</div>
+            </div>
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ page_obj.paginator.count }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Resultados</div>
+            </div>
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ page_obj.paginator.num_pages }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Páginas</div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-8">
+            <form method="GET" class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                    <input type="text" 
+                           name="search" 
+                           value="{{ search|default:'' }}"
+                           placeholder="Buscar por nome, CNPJ, contato ou área de atuação..."
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                </div>
+                <div class="flex space-x-3">
+                    <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-search mr-2"></i>Buscar
+                    </button>
+                    <a href="{% url 'suppliers:supplier_list' %}" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-times mr-2"></i>Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Lista de Fornecedores -->
+        {% if page_obj %}
+            <div class="grid gap-6 mb-8">
+                {% for supplier in page_obj %}
+                <div class="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-6 border border-gray-100">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+                        <div class="flex-1">
+                            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
+                                <h3 class="text-xl font-bold text-gray-900 mb-2">
+                                    <a href="{% url 'suppliers:supplier_detail' supplier.id %}" 
+                                       class="hover:text-orange-600 transition-colors">
+                                        {{ supplier.name }}
+                                    </a>
+                                </h3>
+                                <span class="text-sm text-gray-500 font-mono">{{ supplier.cnpj }}</span>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <div class="flex items-center text-gray-600 mb-2">
+                                        <i class="fas fa-user w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm">{{ supplier.contact }}</span>
+                                    </div>
+                                    <div class="flex items-center text-gray-600">
+                                        <i class="fas fa-map-marker-alt w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm">{{ supplier.area_of_operation }}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex items-start text-gray-600">
+                                        <i class="fas fa-briefcase w-4 h-4 mr-3 mt-1 text-orange-500"></i>
+                                        <span class="text-sm">{{ supplier.services|truncatechars:100 }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center text-xs text-gray-500">
+                                <i class="fas fa-calendar-plus mr-2"></i>
+                                <span>Cadastrado em {{ supplier.created_at|date:"d/m/Y" }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex space-x-3">
+                            <a href="{% url 'suppliers:supplier_detail' supplier.id %}" 
+                               class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                                <i class="fas fa-eye mr-2"></i>Ver Detalhes
+                            </a>
+                            <a href="{% url 'suppliers:supplier_edit' supplier.id %}" 
+                               class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors">
+                                <i class="fas fa-edit mr-2"></i>Editar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Paginação -->
+            {% if page_obj.has_other_pages %}
+            <div class="flex justify-center">
+                <nav class="flex items-center space-x-2">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1{% if search %}&search={{ search }}{% endif %}" 
+                           class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-orange-500">
+                            Primeira
+                        </a>
+                        <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}" 
+                           class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-orange-500">
+                            Anterior
+                        </a>
+                    {% endif %}
+
+                    <span class="px-3 py-2 text-sm font-medium text-white bg-orange-500 border border-orange-500 rounded-lg">
+                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                    </span>
+
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}" 
+                           class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-orange-500">
+                            Próxima
+                        </a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}" 
+                           class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-orange-500">
+                            Última
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="bg-white rounded-xl p-12 text-center shadow-sm">
+                <i class="fas fa-store text-6xl text-gray-300 mb-4"></i>
+                <h3 class="text-xl font-medium text-gray-900 mb-2">Nenhum fornecedor encontrado</h3>
+                <p class="text-gray-600 mb-6">
+                    {% if search %}
+                        Nenhum fornecedor corresponde ao termo buscado.
+                    {% else %}
+                        Ainda não há fornecedores cadastrados.
+                    {% endif %}
+                </p>
+                <a href="{% url 'suppliers:supplier_create' %}" 
+                   class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Cadastrar Primeiro Fornecedor
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

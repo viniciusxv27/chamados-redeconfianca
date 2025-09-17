@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Editar Compra #{{ purchase.id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Editar Compra #{{ purchase.id }}</h1>
+                <p class="text-gray-600 mt-1">Criado em {{ purchase.request_date|date:"d/m/Y" }}</p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="{% url 'purchases:purchase_detail' purchase.pk %}" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2">
+                    <i class="fas fa-arrow-left"></i>Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="{% if message.tags == 'success' %}bg-blue-50 border-l-4 border-l-green-500 text-green-700{% else %}bg-red-50 border-l-4 border-l-red-500 text-red-700{% endif %} p-6 rounded-xl mb-6">
+                        <i class="fas {% if message.tags == 'success' %}fa-check-circle{% else %}fa-exclamation-triangle{% endif %} mr-2"></i>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Coluna Esquerda -->
+                    <div>
+                        <!-- Fornecedor -->
+                        <div class="mb-6">
+                            <label for="supplier" class="block text-sm font-semibold text-gray-700 mb-3">Fornecedor *</label>
+                            <select id="supplier" 
+                                    name="supplier" 
+                                    class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                    required>
+                                <option value="">Selecione um fornecedor</option>
+                                {% for supplier in suppliers %}
+                                    <option value="{{ supplier.id }}" 
+                                            {% if supplier.id == purchase.supplier.id %}selected{% endif %}>
+                                        {{ supplier.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="mb-6">
+                            <label for="status" class="block text-sm font-semibold text-gray-700 mb-3">Status *</label>
+                            <select id="status" 
+                                    name="status" 
+                                    class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                    required>
+                                {% for status_value, status_label in status_choices %}
+                                    <option value="{{ status_value }}" 
+                                            {% if status_value == purchase.status %}selected{% endif %}>
+                                        {{ status_label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Prioridade -->
+                        <div class="mb-6">
+                            <label for="priority" class="block text-sm font-semibold text-gray-700 mb-3">Prioridade *</label>
+                            <select id="priority" 
+                                    name="priority" 
+                                    class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                    required>
+                                {% for priority_value, priority_label in priority_choices %}
+                                    <option value="{{ priority_value }}" 
+                                            {% if priority_value == purchase.priority %}selected{% endif %}>
+                                        {{ priority_label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Quantidade -->
+                        <div class="mb-6">
+                            <label for="quantity" class="block text-sm font-semibold text-gray-700 mb-3">Quantidade *</label>
+                            <input type="number" 
+                                   id="quantity" 
+                                   name="quantity" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                   value="{{ purchase.quantity }}"
+                                   min="1"
+                                   required>
+                        </div>
+
+                        <!-- Preço Unitário -->
+                        <div class="mb-6">
+                            <label for="unit_price" class="block text-sm font-semibold text-gray-700 mb-3">Preço Unitário (R$)</label>
+                            <input type="number" 
+                                   id="unit_price" 
+                                   name="unit_price" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                   value="{% if purchase.unit_price %}{{ purchase.unit_price }}{% endif %}"
+                                   step="0.01"
+                                   min="0"
+                                   placeholder="0,00">
+                        </div>
+                    </div>
+                    
+                    <!-- Coluna Direita -->
+                    <div>
+                        <!-- Descrição -->
+                        <div class="mb-6">
+                            <label for="description" class="block text-sm font-semibold text-gray-700 mb-3">Descrição *</label>
+                            <textarea id="description" 
+                                      name="description" 
+                                      class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium resize-none" 
+                                      rows="4" 
+                                      placeholder="Descreva detalhadamente os itens ou serviços solicitados..."
+                                      required>{{ purchase.description }}</textarea>
+                        </div>
+
+                        <!-- Data Prevista de Entrega -->
+                        <div class="mb-6">
+                            <label for="expected_delivery" class="block text-sm font-semibold text-gray-700 mb-3">Data Prevista de Entrega</label>
+                            <input type="date" 
+                                   id="expected_delivery" 
+                                   name="expected_delivery" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                   value="{% if purchase.expected_delivery %}{{ purchase.expected_delivery|date:"Y-m-d" }}{% endif %}">
+                        </div>
+
+                        <!-- Data de Entrega -->
+                        <div class="mb-6">
+                            <label for="delivery_date" class="block text-sm font-semibold text-gray-700 mb-3">Data de Entrega Realizada</label>
+                            <input type="date" 
+                                   id="delivery_date" 
+                                   name="delivery_date" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium"
+                                   value="{% if purchase.delivery_date %}{{ purchase.delivery_date|date:"Y-m-d" }}{% endif %}">
+                        </div>
+
+                        <!-- Observações -->
+                        <div class="mb-6">
+                            <label for="notes" class="block text-sm font-semibold text-gray-700 mb-3">Observações</label>
+                            <textarea id="notes" 
+                                      name="notes" 
+                                      class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium resize-none" 
+                                      rows="4" 
+                                      placeholder="Observações adicionais sobre a compra...">{{ purchase.notes|default:"" }}</textarea>
+                        </div>
+
+                        <!-- Total Calculado -->
+                        <div class="bg-orange-50 rounded-2xl p-6 border border-orange-100">
+                            <h3 class="font-semibold text-orange-800 mb-3">Valor Total</h3>
+                            <div id="totalCalculator" class="text-2xl font-bold text-orange-800">
+                                R$ 0,00
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Botões -->
+                <div class="flex flex-col sm:flex-row gap-4 pt-8 border-t border-gray-200 mt-8">
+                    <button type="submit" class="px-6 py-3 bg-orange-500 text-white rounded-2xl font-semibold hover:bg-orange-600 transition-colors duration-200 inline-flex items-center gap-2">
+                        <i class="fas fa-save"></i>Salvar Alterações
+                    </button>
+                    <a href="{% url 'purchases:purchase_detail' purchase.pk %}" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2 text-center">
+                        <i class="fas fa-times"></i>Cancelar
+                    </a>
+                    <button type="button" class="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-colors duration-200 inline-flex items-center gap-2" onclick="confirmDelete()">
+                        <i class="fas fa-trash"></i>Excluir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-2xl p-8 max-w-md mx-4">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Confirmar Exclusão</h3>
+            <p class="text-sm text-gray-500 mb-6">
+                Tem certeza que deseja excluir esta compra? Esta ação não pode ser desfeita.
+            </p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="hideDeleteModal()" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2">
+                    Cancelar
+                </button>
+                <form method="post" action="{% url 'purchases:purchase_delete' purchase.pk %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="px-6 py-3 bg-red-500 text-white rounded-2xl font-semibold hover:bg-red-600 transition-colors duration-200 inline-flex items-center gap-2">
+                        Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Calculator functionality
+    const quantityInput = document.getElementById('quantity');
+    const unitPriceInput = document.getElementById('unit_price');
+    const totalDisplay = document.getElementById('totalCalculator');
+
+    function updateTotal() {
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const unitPrice = parseFloat(unitPriceInput.value) || 0;
+        const total = quantity * unitPrice;
+        
+        totalDisplay.textContent = 'R$ ' + total.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    if (quantityInput) quantityInput.addEventListener('input', updateTotal);
+    if (unitPriceInput) unitPriceInput.addEventListener('input', updateTotal);
+    
+    // Initial calculation
+    updateTotal();
+
+    // Date inputs setup
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+        // Set today as minimum date for delivery dates
+        if (input.id.includes('delivery')) {
+            input.min = new Date().toISOString().split('T')[0];
+        }
+    });
+});
+
+function confirmDelete() {
+    document.getElementById('deleteModal').classList.remove('hidden');
+    document.getElementById('deleteModal').classList.add('flex');
+}
+
+function hideDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+    document.getElementById('deleteModal').classList.remove('flex');
+}
+
+// Close modal on outside click
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideDeleteModal();
+    }
+});
+</script>
+{% endblock %}

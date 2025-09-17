@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Compras{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-8 mb-8 text-white shadow-lg">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+                <div>
+                    <h1 class="text-4xl font-bold">Compras</h1>
+                    <p class="text-xl opacity-90 mt-2">Gerencie todas as compras e pedidos</p>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="{% url 'purchases:purchase_create' %}" class="bg-white text-orange-600 hover:bg-gray-100 px-6 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Nova Compra
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ total_purchases }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Total de Compras</div>
+            </div>
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ page_obj.paginator.count }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Resultados</div>
+            </div>
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ page_obj.object_list|length }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Nesta Página</div>
+            </div>
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-center text-white shadow-sm">
+                <div class="text-3xl font-bold mb-2">{{ page_obj.paginator.num_pages }}</div>
+                <div class="text-sm opacity-90 uppercase tracking-wide">Páginas</div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-8">
+            <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                    <input type="text" 
+                           name="search" 
+                           value="{{ search|default:'' }}"
+                           placeholder="Buscar por descrição ou fornecedor..."
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                </div>
+                
+                <div>
+                    <select name="status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                        <option value="">Todos os Status</option>
+                        {% for status, label in status_choices %}
+                            <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <select name="priority" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                        <option value="">Todas as Prioridades</option>
+                        {% for priority, label in priority_choices %}
+                            <option value="{{ priority }}" {% if priority_filter == priority %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <select name="supplier" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                        <option value="">Todos os Fornecedores</option>
+                        {% for supplier in suppliers %}
+                            <option value="{{ supplier.id }}" {% if supplier_filter == supplier.id|stringformat:"s" %}selected{% endif %}>
+                                {{ supplier.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button type="submit" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-search mr-2"></i>Filtrar
+                    </button>
+                    <a href="{% url 'purchases:purchase_list' %}" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-3 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Lista de Compras -->
+        {% if page_obj %}
+            <div class="grid gap-6 mb-8">
+                {% for purchase in page_obj %}
+                <div class="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-6 border border-gray-100">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+                        <div class="flex-1">
+                            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
+                                <h3 class="text-xl font-bold text-gray-900 mb-2">
+                                    <a href="{% url 'purchases:purchase_detail' purchase.id %}" 
+                                       class="hover:text-orange-600 transition-colors">
+                                        {{ purchase.description|truncatechars:60 }}
+                                    </a>
+                                </h3>
+                                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wide
+                                        {% if purchase.status == 'SOLICITADA' %}bg-blue-100 text-blue-800
+                                        {% elif purchase.status == 'APROVADA' %}bg-green-100 text-green-800
+                                        {% elif purchase.status == 'EM_ANDAMENTO' %}bg-yellow-100 text-yellow-800
+                                        {% elif purchase.status == 'ENTREGUE' %}bg-green-100 text-green-800
+                                        {% elif purchase.status == 'CANCELADA' %}bg-red-100 text-red-800
+                                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                        {{ purchase.get_status_display }}
+                                    </span>
+                                    {% if purchase.priority == 'URGENTE' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            <i class="fas fa-exclamation-triangle mr-1"></i>{{ purchase.get_priority_display }}
+                                        </span>
+                                    {% elif purchase.priority == 'ALTA' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                            <i class="fas fa-arrow-up mr-1"></i>{{ purchase.get_priority_display }}
+                                        </span>
+                                    {% elif purchase.priority == 'MEDIA' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            <i class="fas fa-minus mr-1"></i>{{ purchase.get_priority_display }}
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <i class="fas fa-arrow-down mr-1"></i>{{ purchase.get_priority_display }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <div class="flex items-center text-gray-600 mb-2">
+                                        <i class="fas fa-building w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm">
+                                            <a href="{% url 'suppliers:supplier_detail' purchase.supplier.id %}" 
+                                               class="hover:text-orange-600 transition-colors">
+                                                {{ purchase.supplier.name }}
+                                            </a>
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center text-gray-600">
+                                        <i class="fas fa-shopping-cart w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm">Qtd: {{ purchase.quantity }}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    {% if purchase.total_price %}
+                                    <div class="flex items-center text-gray-600 mb-2">
+                                        <i class="fas fa-dollar-sign w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm font-medium">R$ {{ purchase.total_price|floatformat:2 }}</span>
+                                    </div>
+                                    {% endif %}
+                                    <div class="flex items-center text-gray-600">
+                                        <i class="fas fa-calendar w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm">{{ purchase.request_date|date:"d/m/Y" }}</span>
+                                    </div>
+                                    {% if purchase.expected_delivery %}
+                                    <div class="flex items-center text-gray-600 mt-2">
+                                        <i class="fas fa-truck w-4 h-4 mr-3 text-orange-500"></i>
+                                        <span class="text-sm {% if purchase.is_overdue %}text-red-600 font-medium{% endif %}">
+                                            Previsto: {{ purchase.expected_delivery|date:"d/m/Y" }}
+                                            {% if purchase.is_overdue %}
+                                                <i class="fas fa-exclamation-triangle ml-1 text-red-500"></i>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center text-xs text-gray-500">
+                                <i class="fas fa-user mr-2"></i>
+                                <span>Solicitado por {{ purchase.requested_by.get_full_name|default:purchase.requested_by.username }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex space-x-3">
+                            <a href="{% url 'purchases:purchase_detail' purchase.id %}" 
+                               class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                                <i class="fas fa-eye mr-2"></i>Ver Detalhes
+                            </a>
+                            <a href="{% url 'purchases:purchase_edit' purchase.id %}" 
+                               class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors">
+                                <i class="fas fa-edit mr-2"></i>Editar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+        <!-- Paginação -->
+        {% if page_obj.has_other_pages %}
+        <div class="flex justify-center">
+            <nav class="flex items-center space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                        Primeira
+                    </a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                        Anterior
+                    </a>
+                {% endif %}
+
+                <span class="px-3 py-2 text-sm font-medium text-gray-700 bg-orange-50 border border-orange-200 rounded-md">
+                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                        Próxima
+                    </a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                        Última
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+        {% endif %}
+    {% else %}
+        <div class="text-center py-12">
+            <i class="fas fa-shopping-cart text-6xl text-gray-300 mb-4"></i>
+            <h3 class="text-xl font-medium text-gray-900 mb-2">Nenhuma compra encontrada</h3>
+            <p class="text-gray-600 mb-6">
+                {% if search or status_filter or priority_filter or supplier_filter %}
+                    Nenhuma compra corresponde aos filtros selecionados.
+                {% else %}
+                    Ainda não há compras cadastradas.
+                {% endif %}
+            </p>
+            <a href="{% url 'purchases:purchase_create' %}" 
+               class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>Criar Primeira Compra
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

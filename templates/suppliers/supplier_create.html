@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Novo Fornecedor{% endblock %}
+
+
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Novo Fornecedor</h1>
+                <p class="text-gray-600 mt-1">Cadastre um novo fornecedor no sistema</p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="{% url 'suppliers:supplier_list' %}" class="btn-secondary">
+                    <i class="fas fa-arrow-left mr-2"></i>Voltar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Coluna Esquerda -->
+                    <div>
+                        <div class="mb-6">
+                            <label for="name" class="block text-sm font-semibold text-gray-700 mb-3">Nome da Empresa *</label>
+                            <input type="text" 
+                                   id="name" 
+                                   name="name" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium" 
+                                   value="{{ form_data.name|default:'' }}"
+                                   placeholder="Ex: Empresa ABC Ltda"
+                                   required>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <label for="cnpj" class="block text-sm font-semibold text-gray-700 mb-3">CNPJ *</label>
+                            <input type="text" 
+                                   id="cnpj" 
+                                   name="cnpj" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium" 
+                                   value="{{ form_data.cnpj|default:'' }}"
+                                   placeholder="00.000.000/0000-00"
+                                   maxlength="18"
+                                   required>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <label for="contact" class="block text-sm font-semibold text-gray-700 mb-3">Contato *</label>
+                            <input type="text" 
+                                   id="contact" 
+                                   name="contact" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium" 
+                                   value="{{ form_data.contact|default:'' }}"
+                                   placeholder="Nome do responsável ou telefone/email"
+                                   required>
+                        </div>
+                    </div>
+                    
+                    <!-- Coluna Direita -->
+                    <div>
+                        <div class="mb-6">
+                            <label for="area_of_operation" class="block text-sm font-semibold text-gray-700 mb-3">Onde Atua *</label>
+                            <input type="text" 
+                                   id="area_of_operation" 
+                                   name="area_of_operation" 
+                                   class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium" 
+                                   value="{{ form_data.area_of_operation|default:'' }}"
+                                   placeholder="Ex: São Paulo, Rio de Janeiro"
+                                   required>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <label for="services" class="block text-sm font-semibold text-gray-700 mb-3">O que Faz *</label>
+                            <textarea id="services" 
+                                      name="services" 
+                                      class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium resize-none" 
+                                      rows="6" 
+                                      placeholder="Descreva os serviços e produtos oferecidos pela empresa..."
+                                      required>{{ form_data.services|default:'' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Informações Adicionais -->
+                <div class="bg-orange-50 rounded-2xl p-6 border border-orange-100 mb-8">
+                    <h3 class="font-semibold text-orange-800 mb-3 flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Instruções
+                    </h3>
+                    <ul class="text-sm text-orange-700 space-y-1">
+                        <li><i class="fas fa-check mr-2 text-orange-500"></i>Todos os campos marcados com (*) são obrigatórios</li>
+                        <li><i class="fas fa-check mr-2 text-orange-500"></i>O CNPJ será validado automaticamente</li>
+                        <li><i class="fas fa-check mr-2 text-orange-500"></i>Seja específico na descrição dos serviços oferecidos</li>
+                    </ul>
+                </div>
+                
+                <!-- Botões -->
+                                <!-- Botões de ação -->
+                <div class="flex justify-end gap-4 pt-6 border-t border-gray-100">
+                    <a href="{% url 'suppliers:list' %}" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2">
+                        <i class="fas fa-arrow-left"></i>
+                        Voltar
+                    </a>
+                    <button type="submit" class="px-6 py-3 bg-orange-500 text-white rounded-2xl font-semibold hover:bg-orange-600 transition-colors duration-200 inline-flex items-center gap-2">
+                        <i class="fas fa-save"></i>
+                        Salvar Fornecedor
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Máscara para CNPJ
+    document.getElementById('cnpj').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        value = value.replace(/(\d{2})(\d)/, '$1.$2');
+        value = value.replace(/(\d{3})(\d)/, '$1.$2');
+        value = value.replace(/(\d{3})(\d)/, '$1/$2');
+        value = value.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+        e.target.value = value;
+    });
+    
+    // Validação de CNPJ básica
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const cnpj = document.getElementById('cnpj').value.replace(/\D/g, '');
+        if (cnpj.length !== 14) {
+            e.preventDefault();
+            alert('CNPJ deve conter 14 dígitos.');
+            return false;
+        }
+    });
+</script>
+{% endblock %}

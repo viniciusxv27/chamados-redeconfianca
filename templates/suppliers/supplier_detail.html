@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ supplier.name }} - Fornecedor{% endblock %}
+
+
+
+{% block content %}
+<div class="container mx-auto px-6 py-8 max-w-7xl">
+    <!-- Hero Section -->
+    <div class="bg-gradient-to-r from-orange-500 via-orange-600 to-yellow-500 text-white rounded-2xl p-10 mb-8 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-48 h-48 bg-white bg-opacity-10 rounded-full transform translate-x-12 -translate-y-12"></div>
+        <div class="relative z-10">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <div class="flex-1">
+                    <h1 class="text-4xl font-bold mb-4">{{ supplier.name }}</h1>
+                    <p class="text-lg opacity-95 mb-6 leading-relaxed">{{ supplier.services|truncatechars:200 }}</p>
+                    
+                    <div class="flex flex-wrap gap-6 text-sm opacity-90">
+                        <div class="flex items-center">
+                            <i class="fas fa-id-card mr-2"></i>
+                            <span>CNPJ: {{ supplier.cnpj }}</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar-plus mr-2"></i>
+                            <span>Cadastrado em {{ supplier.created_at|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-user mr-2"></i>
+                            <span>Por: {{ supplier.created_by.full_name|default:supplier.created_by.username }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <a href="{% url 'suppliers:supplier_list' %}" class="bg-white text-slate-600 border-2 border-slate-200 px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:border-orange-300 hover:text-orange-600 hover:-translate-y-0.5 cursor-pointer no-underline inline-block">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                    <a href="{% url 'suppliers:supplier_edit' supplier.pk %}" class="bg-white text-slate-600 border-2 border-slate-200 px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:border-orange-300 hover:text-orange-600 hover:-translate-y-0.5 cursor-pointer no-underline inline-block">
+                        <i class="fas fa-edit mr-2"></i>Editar
+                    </a>
+                    <a href="{% url 'suppliers:supplier_delete' supplier.pk %}" class="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-200 cursor-pointer no-underline inline-block">
+                        <i class="fas fa-trash mr-2"></i>Excluir
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
+        <!-- Supplier Details -->
+        <div class="xl:col-span-3 space-y-8">
+            <!-- Informações Principais -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <i class="fas fa-info-circle mr-3 text-orange-500"></i>
+                    Informações do Fornecedor
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Nome da Empresa</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ supplier.name }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">CNPJ</label>
+                            <p class="text-gray-900 font-medium mt-1 font-mono">{{ supplier.cnpj }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Contato</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ supplier.contact }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Área de Atuação</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ supplier.area_of_operation }}</p>
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Última atualização</label>
+                            <p class="text-gray-900 font-medium mt-1">{{ supplier.updated_at|date:"d/m/Y H:i" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Serviços Oferecidos -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <i class="fas fa-briefcase mr-3 text-orange-500"></i>
+                    Serviços Oferecidos
+                </h3>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <p class="text-gray-900 leading-relaxed">{{ supplier.services }}</p>
+                </div>
+            </div>
+
+            <!-- Compras Recentes -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-shopping-cart mr-3 text-orange-500"></i>
+                        Compras Recentes
+                    </h3>
+                    {% if total_purchases > 0 %}
+                    <a href="{% url 'purchases:purchase_list' %}?supplier={{ supplier.id }}" class="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 hover:bg-orange-600 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-orange-200 cursor-pointer no-underline inline-block">
+                        <i class="fas fa-eye mr-2"></i>Ver Todas
+                    </a>
+                    {% endif %}
+                </div>
+                
+                {% if recent_purchases %}
+                    <div class="space-y-3">
+                        {% for purchase in recent_purchases %}
+                        <div class="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                                <div class="flex-1">
+                                    <h4 class="font-medium text-gray-900 mb-1">{{ purchase.description|truncatechars:60 }}</h4>
+                                    <div class="flex items-center space-x-4 text-sm text-gray-600">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ purchase.status_class }}">
+                                            {{ purchase.get_status_display }}
+                                        </span>
+                                        <span><i class="fas fa-calendar mr-1"></i>{{ purchase.created_at|date:"d/m/Y" }}</span>
+                                        {% if purchase.total_price %}
+                                        <span><i class="fas fa-dollar-sign mr-1"></i>R$ {{ purchase.total_price|floatformat:2 }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <a href="{% url 'purchases:purchase_detail' purchase.id %}" class="bg-white text-slate-600 border-2 border-slate-200 px-4 py-2 rounded-lg font-semibold transition-all duration-200 hover:border-orange-500 hover:text-orange-500 hover:-translate-y-0.5 cursor-pointer no-underline inline-block mt-3 sm:mt-0">
+                                    <i class="fas fa-eye mr-1"></i>Ver
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-12">
+                        <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-shopping-cart text-2xl text-gray-400"></i>
+                        </div>
+                        <h4 class="text-lg font-semibold text-gray-600 mb-2">Nenhuma compra realizada</h4>
+                        <p class="text-gray-500 mb-4">Este fornecedor ainda não teve compras registradas</p>
+                        <a href="{% url 'purchases:purchase_create' %}?supplier={{ supplier.id }}" class="bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:bg-orange-600 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-orange-200 cursor-pointer no-underline inline-block">
+                            <i class="fas fa-plus mr-2"></i>Criar Primeira Compra
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar Stats -->
+        <div class="space-y-6">
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-2 xl:grid-cols-1 gap-4">
+                <div class="text-center p-6 rounded-2xl bg-white border border-slate-50 shadow-sm">
+                    <span class="block text-2xl font-bold text-orange-500 mb-2">{{ total_purchases }}</span>
+                    <span class="text-slate-600 text-sm font-medium uppercase tracking-wide">Total de Compras</span>
+                </div>
+                
+                <div class="text-center p-6 rounded-2xl bg-white border border-slate-50 shadow-sm">
+                    <span class="block text-2xl font-bold text-orange-500 mb-2">{{ delivered_purchases }}</span>
+                    <span class="text-slate-600 text-sm font-medium uppercase tracking-wide">Entregues</span>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50">
+                <h4 class="font-bold text-gray-800 mb-4">Ações Rápidas</h4>
+                <div class="space-y-3">
+                    <a href="{% url 'purchases:purchase_create' %}?supplier={{ supplier.id }}" class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-orange-50 rounded-xl transition-colors block no-underline">
+                        <i class="fas fa-plus mr-3 text-orange-600"></i>
+                        <span class="text-sm font-medium">Nova Compra</span>
+                    </a>
+                    <a href="{% url 'suppliers:supplier_edit' supplier.id %}" class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-orange-50 rounded-xl transition-colors block no-underline">
+                        <i class="fas fa-edit mr-3 text-orange-600"></i>
+                        <span class="text-sm font-medium">Editar Dados</span>
+                    </a>
+                    <button onclick="window.print()" class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-orange-50 rounded-xl transition-colors border-0 cursor-pointer">
+                        <i class="fas fa-print mr-3 text-orange-600"></i>
+                        <span class="text-sm font-medium">Imprimir Ficha</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

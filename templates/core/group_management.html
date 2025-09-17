@@ -1,0 +1,347 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerenciamento de Grupos{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Hero Section -->
+        <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-8 mb-8 text-white shadow-lg">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <div>
+                    <h1 class="text-4xl font-bold mb-4">Gerenciamento de Grupos</h1>
+                    <p class="text-xl opacity-90">Organize usuários em grupos de gestão para controle de acesso</p>
+                </div>
+                <div class="bg-white bg-opacity-20 rounded-lg p-4 text-center">
+                    <div class="text-3xl font-bold">{{ total_users }}</div>
+                    <div class="text-sm opacity-90">Usuários Ativos</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {% for group_info in management_groups %}
+            <div class="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group border border-gray-100" 
+                 onclick="window.location.href='{% url 'groups:group_detail' group_info.group.id %}'">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ group_info.group.name }}</h3>
+                    {% if group_info.created %}
+                        <span class="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded-full">Novo</span>
+                    {% endif %}
+                </div>
+                
+                <div class="flex items-center justify-between text-sm text-gray-600">
+                    <span>{{ group_info.user_count }} usuário{{ group_info.user_count|pluralize:",s" }}</span>
+                    <i class="fas fa-arrow-right text-orange-500 group-hover:transform group-hover:translate-x-1 transition-transform"></i>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Users Management -->
+        <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Usuários e Grupos</h2>
+                
+                <div class="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                    <form method="get" class="flex-1 lg:w-80">
+                        <div class="relative">
+                            <input type="text" 
+                                   name="search" 
+                                   value="{{ search_query }}" 
+                                   placeholder="Buscar usuários..." 
+                                   class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </form>
+                    
+                    <button onclick="openBulkModal()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap">
+                        <i class="fas fa-users-cog mr-2"></i>Atribuição em Lote
+                    </button>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="bg-white rounded-lg overflow-hidden border border-gray-200">
+                {% for user in users %}
+                <div class="border-b border-gray-200 last:border-b-0 p-4 hover:bg-gray-50 transition-colors">
+                    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                        <div class="flex items-center gap-4 flex-1">
+                            <input type="checkbox" 
+                                   class="user-checkbox w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500" 
+                                   value="{{ user.id }}">
+                            
+                            <div class="flex-1">
+                                <div class="font-semibold text-gray-900">
+                                    {{ user.get_full_name|default:user.username }}
+                                </div>
+                                <div class="text-sm text-gray-500">{{ user.email }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-wrap gap-2 items-center">
+                            {% for group in user.management_groups %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    {{ group.name }}
+                                </span>
+                            {% empty %}
+                                <span class="text-gray-400 text-sm">Nenhum grupo</span>
+                            {% endfor %}
+                            
+                            <button onclick="openUserModal({{ user.id }}, '{{ user.get_full_name|default:user.username }}')" 
+                                    class="ml-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                                <i class="fas fa-cog mr-1"></i>Gerenciar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-8 text-center text-gray-500">
+                    <i class="fas fa-users text-4xl mb-4 text-gray-300"></i>
+                    <p>Nenhum usuário encontrado</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Pagination -->
+            {% if users.has_other_pages %}
+            <div class="flex justify-center mt-6">
+                <nav class="flex items-center gap-2">
+                    {% if users.has_previous %}
+                        <a href="?page={{ users.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                           class="px-3 py-2 text-gray-500 hover:text-orange-600 rounded-lg border border-gray-300 hover:border-orange-500">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    {% endif %}
+                    
+                    {% for num in users.paginator.page_range %}
+                        {% if users.number == num %}
+                            <span class="px-3 py-2 bg-orange-500 text-white rounded-lg">{{ num }}</span>
+                        {% else %}
+                            <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                               class="px-3 py-2 text-gray-500 hover:text-orange-600 rounded-lg border border-gray-300 hover:border-orange-500">{{ num }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if users.has_next %}
+                        <a href="?page={{ users.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                           class="px-3 py-2 text-gray-500 hover:text-orange-600 rounded-lg border border-gray-300 hover:border-orange-500">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- User Management Modal -->
+<div id="userModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-8 max-w-md mx-4 w-full max-h-96 overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold text-gray-900">Gerenciar Grupos</h3>
+            <button onclick="closeUserModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div id="userModalContent">
+            <!-- Content will be loaded dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Assignment Modal -->
+<div id="bulkModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-8 max-w-md mx-4 w-full">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold text-gray-900">Atribuição em Lote</h3>
+            <button onclick="closeBulkModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="mb-6">
+            <p class="text-gray-600 mb-4">Selecione os grupos para atribuir aos usuários selecionados:</p>
+            
+            <div class="space-y-3">
+                {% for group_info in management_groups %}
+                <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" class="bulk-group-checkbox text-orange-500 focus:ring-orange-500" value="{{ group_info.group.id }}">
+                    <span class="font-medium">{{ group_info.group.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="flex gap-3">
+            <button onclick="bulkAssign('add')" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>Adicionar
+            </button>
+            <button onclick="bulkAssign('remove')" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fas fa-minus mr-2"></i>Remover
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openUserModal(userId, userName) {
+    const modal = document.getElementById('userModal');
+    const content = document.getElementById('userModalContent');
+    
+    content.innerHTML = `
+        <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin text-2xl text-orange-600"></i>
+            <p class="mt-2">Carregando...</p>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    // Load user groups
+    loadUserGroups(userId, userName);
+}
+
+function closeUserModal() {
+    document.getElementById('userModal').classList.add('hidden');
+    document.getElementById('userModal').classList.remove('flex');
+}
+
+function openBulkModal() {
+    const selectedUsers = document.querySelectorAll('.user-checkbox:checked');
+    if (selectedUsers.length === 0) {
+        alert('Selecione pelo menos um usuário');
+        return;
+    }
+    
+    document.getElementById('bulkModal').classList.remove('hidden');
+    document.getElementById('bulkModal').classList.add('flex');
+}
+
+function closeBulkModal() {
+    document.getElementById('bulkModal').classList.add('hidden');
+    document.getElementById('bulkModal').classList.remove('flex');
+}
+
+function loadUserGroups(userId, userName) {
+    const content = document.getElementById('userModalContent');
+    
+    content.innerHTML = `
+        <div class="mb-4">
+            <h4 class="font-semibold text-gray-800">${userName}</h4>
+        </div>
+        
+        <div class="space-y-3">
+            {% for group_info in management_groups %}
+            <label class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <span class="font-medium">{{ group_info.group.name }}</span>
+                <input type="checkbox" 
+                       class="user-group-checkbox w-4 h-4 text-orange-600" 
+                       value="{{ group_info.group.id }}"
+                       onchange="toggleUserGroup(${userId}, {{ group_info.group.id }}, this.checked)">
+            </label>
+            {% endfor %}
+        </div>
+    `;
+    
+    // Check current user groups
+    fetch('/api/users/' + userId + '/')
+        .then(response => response.json())
+        .then(user => {
+            const checkboxes = document.querySelectorAll('.user-group-checkbox');
+            checkboxes.forEach(checkbox => {
+                const groupId = parseInt(checkbox.value);
+                checkbox.checked = user.groups.includes(groupId);
+            });
+        });
+}
+
+function toggleUserGroup(userId, groupId, add) {
+    const url = add ? '{% url "groups:add_user_to_group" %}' : '{% url "groups:remove_user_from_group" %}';
+    
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            user_id: userId,
+            group_id: groupId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            // Refresh page after a short delay
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showMessage(data.error, 'error');
+        }
+    });
+}
+
+function bulkAssign(action) {
+    const selectedUsers = Array.from(document.querySelectorAll('.user-checkbox:checked')).map(cb => cb.value);
+    const selectedGroups = Array.from(document.querySelectorAll('.bulk-group-checkbox:checked')).map(cb => cb.value);
+    
+    if (selectedUsers.length === 0 || selectedGroups.length === 0) {
+        alert('Selecione pelo menos um usuário e um grupo');
+        return;
+    }
+    
+    fetch('{% url "groups:bulk_assign_groups" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            user_ids: selectedUsers,
+            group_ids: selectedGroups,
+            action: action
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            closeBulkModal();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showMessage(data.error, 'error');
+        }
+    });
+}
+
+function showMessage(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} fixed top-4 right-4 z-50 max-w-sm`;
+    alertDiv.innerHTML = `
+        <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-2"></i>
+        ${message}
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+
+// Close modals when clicking outside
+document.getElementById('userModal').addEventListener('click', function(e) {
+    if (e.target === this) closeUserModal();
+});
+
+document.getElementById('bulkModal').addEventListener('click', function(e) {
+    if (e.target === this) closeBulkModal();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ group.name }} - Detalhes do Grupo{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8 max-w-7xl">
+    <!-- Hero Section -->
+    <div class="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl mb-8 p-8">
+        <div class="relative z-10">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <div>
+                    <h1 class="text-4xl font-bold mb-4">{{ group.name }}</h1>
+                    <p class="text-lg opacity-90">Gerencie os membros deste grupo de gestão</p>
+                </div>
+                <div class="flex gap-3">
+                    <a href="{% url 'groups:group_management' %}" class="bg-white text-slate-600 border-2 border-slate-200 px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ease-in-out hover:border-orange-500 hover:text-orange-500 inline-block no-underline">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-50 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-orange-100 hover:shadow-lg">
+            <div class="text-3xl font-bold text-orange-600 mb-2">{{ users_in_group.count }}</div>
+            <div class="text-gray-600">Membros Ativos</div>
+        </div>
+        <div class="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-50 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-orange-100 hover:shadow-lg">
+            <div class="text-3xl font-bold text-blue-600 mb-2">{{ available_users.paginator.count }}</div>
+            <div class="text-gray-600">Usuários Disponíveis</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        <!-- Current Members -->
+        <div class="bg-white rounded-2xl p-8 shadow-lg border border-slate-50 mb-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-6 flex items-center">
+                <i class="fas fa-users mr-3 text-orange-500"></i>
+                Membros Atuais ({{ users_in_group.count }})
+            </h3>
+            
+            <div class="space-y-4 max-h-96 overflow-y-auto">
+                {% for user in users_in_group %}
+                <div class="p-4 border border-gray-100 rounded-xl hover:bg-orange-50 transition-colors duration-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-user text-orange-600"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">
+                                    {{ user.get_full_name|default:user.username }}
+                                </div>
+                                <div class="text-sm text-gray-500">{{ user.email }}</div>
+                            </div>
+                        </div>
+                        
+                        <button onclick="removeUserFromGroup({{ user.id }}, '{{ user.get_full_name|default:user.username }}')" 
+                                class="bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 hover:from-red-600 hover:to-red-700 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-200 cursor-pointer border-0">
+                            <i class="fas fa-user-minus mr-1"></i>
+                            Remover
+                        </button>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-users text-4xl mb-4"></i>
+                    <p>Nenhum membro neste grupo ainda</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Available Users -->
+        <div class="bg-white rounded-2xl p-8 shadow-lg border border-slate-50 mb-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-user-plus mr-3 text-blue-500"></i>
+                    Adicionar Membros
+                </h3>
+            </div>
+            
+            <!-- Search -->
+            <div class="mb-4">
+                <form method="get">
+                    <div class="relative">
+                        <input type="text" 
+                               name="search" 
+                               value="{{ search_query }}" 
+                               placeholder="Buscar usuários disponíveis..." 
+                               class="w-full px-4 py-3 pl-10 border-2 border-gray-200 rounded-xl text-base transition-all duration-200 focus:outline-none focus:border-orange-500 focus:shadow-sm focus:shadow-orange-100">
+                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Available Users List -->
+            <div class="border border-gray-200 rounded-lg max-h-96 overflow-y-auto">
+                {% for user in available_users %}
+                <div class="p-4 border-b border-gray-100 last:border-b-0 hover:bg-orange-50 transition-colors duration-200 cursor-pointer" onclick="addUserToGroup({{ user.id }}, '{{ user.get_full_name|default:user.username }}')">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-user text-gray-600"></i>
+                            </div>
+                            <div>
+                                <div class="font-medium text-gray-900">
+                                    {{ user.get_full_name|default:user.username }}
+                                </div>
+                                <div class="text-sm text-gray-500">{{ user.email }}</div>
+                            </div>
+                        </div>
+                        
+                        <button class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 hover:from-orange-600 hover:to-orange-700 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-orange-200 cursor-pointer border-0">
+                            <i class="fas fa-plus mr-1"></i>
+                            Adicionar
+                        </button>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-4 border-b border-gray-100 last:border-b-0 text-center text-gray-500 py-8">
+                    <i class="fas fa-search text-4xl mb-4"></i>
+                    <p>Nenhum usuário disponível encontrado</p>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Pagination -->
+            {% if available_users.has_other_pages %}
+            <div class="flex justify-center mt-4">
+                <nav class="flex items-center gap-2">
+                    {% if available_users.has_previous %}
+                        <a href="?page={{ available_users.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                           class="px-3 py-2 text-gray-500 hover:text-orange-600">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    {% endif %}
+                    
+                    {% for num in available_users.paginator.page_range %}
+                        {% if available_users.number == num %}
+                            <span class="px-3 py-2 bg-orange-600 text-white rounded">{{ num }}</span>
+                        {% else %}
+                            <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                               class="px-3 py-2 text-gray-500 hover:text-orange-600">{{ num }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if available_users.has_next %}
+                        <a href="?page={{ available_users.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                           class="px-3 py-2 text-gray-500 hover:text-orange-600">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function addUserToGroup(userId, userName) {
+    if (confirm(`Adicionar ${userName} ao grupo {{ group.name }}?`)) {
+        fetch('{% url "groups:add_user_to_group" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                group_id: {{ group.id }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showMessage(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showMessage(data.error, 'error');
+            }
+        })
+        .catch(error => {
+            showMessage('Erro ao adicionar usuário', 'error');
+        });
+    }
+}
+
+function removeUserFromGroup(userId, userName) {
+    if (confirm(`Remover ${userName} do grupo {{ group.name }}?`)) {
+        fetch('{% url "groups:remove_user_from_group" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                group_id: {{ group.id }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showMessage(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showMessage(data.error, 'error');
+            }
+        })
+        .catch(error => {
+            showMessage('Erro ao remover usuário', 'error');
+        });
+    }
+}
+
+function showMessage(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg ${
+        type === 'success' 
+            ? 'bg-green-100 border-l-4 border-green-500 text-green-700' 
+            : 'bg-red-100 border-l-4 border-red-500 text-red-700'
+    }`;
+    alertDiv.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-2"></i>
+            ${message}
+        </div>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+
+// Add CSRF token to forms
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        if (!form.querySelector('[name=csrfmiddlewaretoken]')) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = '{{ csrf_token }}';
+            form.appendChild(csrfInput);
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -56,7 +56,10 @@ urlpatterns = [
     path('assets/', include('assets.urls')),
     path('files/', include('files.urls')),
     path('trainings/', include('trainings.urls')),
+    path('suppliers/', include('suppliers.urls')),
+    path('purchases/', include('purchases.urls')),
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
+    path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training
     path('api/', include(router.urls)),
     path('api-auth/', include('rest_framework.urls')),

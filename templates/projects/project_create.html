@@ -33,21 +33,24 @@
                     id="name" 
                     required
                     maxlength="200"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    placeholder="Digite o nome do projeto"
+                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-orange-300 transition-colors"
+                    placeholder="📝 Digite o nome do projeto"
                 >
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor Responsável *</label>
+                    <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-building text-orange-500 mr-2"></i>Setor Responsável *
+                    </label>
                     <select 
                         name="sector" 
                         id="sector" 
                         required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white hover:border-orange-300 transition-colors appearance-none"
+                        style="background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 4 5\"><path fill=\"%23666\" d=\"M2 0L0 2h4zm0 5L0 3h4z\"/></svg>'); background-repeat: no-repeat; background-position: right 0.7rem center; background-size: 0.65rem;"
                     >
-                        <option value="">Selecione o setor</option>
+                        <option value="" disabled selected>🏢 Selecione o setor responsável</option>
                         {% for sector in sectors %}
                             <option value="{{ sector.id }}">{{ sector.name }}</option>
                         {% endfor %}
@@ -55,14 +58,17 @@
                 </div>
                 
                 <div>
-                    <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">Prioridade *</label>
+                    <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-flag text-orange-500 mr-2"></i>Prioridade *
+                    </label>
                     <select 
                         name="priority" 
                         id="priority" 
                         required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white hover:border-orange-300 transition-colors appearance-none"
+                        style="background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 4 5\"><path fill=\"%23666\" d=\"M2 0L0 2h4zm0 5L0 3h4z\"/></svg>'); background-repeat: no-repeat; background-position: right 0.7rem center; background-size: 0.65rem;"
                     >
-                        <option value="">Selecione a prioridade</option>
+                        <option value="" disabled selected>⚡ Definir nível de prioridade</option>
                         {% for priority, label in priority_choices %}
                             <option value="{{ priority }}">{{ label }}</option>
                         {% endfor %}
@@ -72,24 +78,29 @@
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <label for="deadline" class="block text-sm font-medium text-gray-700 mb-2">Prazo Final *</label>
+                    <label for="deadline" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-calendar-check text-orange-500 mr-2"></i>Prazo Final *
+                    </label>
                     <input 
                         type="date" 
                         name="deadline" 
                         id="deadline" 
                         required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-orange-300 transition-colors"
                     >
                 </div>
                 
                 <div>
-                    <label for="responsible_user" class="block text-sm font-medium text-gray-700 mb-2">Responsável Principal</label>
+                    <label for="responsible_user" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-user-tie text-orange-500 mr-2"></i>Responsável Principal
+                    </label>
                     <select 
                         name="responsible_user" 
                         id="responsible_user"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white hover:border-orange-300 transition-colors appearance-none"
+                        style="background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 4 5\"><path fill=\"%23666\" d=\"M2 0L0 2h4zm0 5L0 3h4z\"/></svg>'); background-repeat: no-repeat; background-position: right 0.7rem center; background-size: 0.65rem;"
                     >
-                        <option value="">Definir depois (opcional)</option>
+                        <option value="">👤 Definir depois (opcional)</option>
                     </select>
                 </div>
             </div>
@@ -101,8 +112,8 @@
                     id="description" 
                     rows="4"
                     required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical"
-                    placeholder="Descreva brevemente o projeto..."
+                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-orange-300 transition-colors resize-vertical"
+                    placeholder="📋 Descreva brevemente o projeto..."
                 ></textarea>
             </div>
             
@@ -113,8 +124,8 @@
                     id="scope" 
                     rows="6"
                     required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical"
-                    placeholder="Descreva detalhadamente o escopo do projeto, objetivos, entregas esperadas e critérios de sucesso..."
+                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-orange-300 transition-colors resize-vertical"
+                    placeholder="🎯 Descreva detalhadamente o escopo do projeto, objetivos, entregas esperadas e critérios de sucesso..."
                 ></textarea>
             </div>
             
@@ -125,20 +136,20 @@
                     id="reason" 
                     rows="4"
                     required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical"
-                    placeholder="Explique a necessidade e justificativa para este projeto..."
+                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-orange-300 transition-colors resize-vertical"
+                    placeholder="💡 Explique a necessidade e justificativa para este projeto..."
                 ></textarea>
             </div>
             
             <!-- Submit Button -->
             <div class="flex justify-end space-x-4 pt-6 border-t border-gray-200">
                 <a href="{% url 'projects:project_list' %}" 
-                   class="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
-                    Cancelar
+                   class="px-6 py-3 border-2 border-gray-300 rounded-lg text-gray-700 hover:border-orange-500 hover:text-orange-600 transition-all duration-200 font-medium">
+                    <i class="fas fa-arrow-left mr-2"></i>Cancelar
                 </a>
-                <button type="submit" 
-                        class="px-6 py-2 bg-primary text-white rounded-md hover:bg-orange-600 transition-colors font-medium">
-                    Criar Projeto
+                <button type="submit" id="submit-btn"
+                        class="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                    <i class="fas fa-plus mr-2"></i>Criar Projeto
                 </button>
             </div>
         </form>
