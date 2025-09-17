@@ -1,0 +1,823 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Arquivos - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    {% csrf_token %}
+    <!-- Page Header -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Arquivos</h1>
+                
+                <!-- Breadcrumb -->
+                {% if breadcrumb or current_folder %}
+                <nav class="flex mt-3" aria-label="Breadcrumb">
+                    <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                        <li class="inline-flex items-center">
+                            <a href="{% url 'files:files_list' %}" class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-primary">
+                                <i class="fas fa-home mr-2"></i>
+                                Início
+                            </a>
+                        </li>
+                        {% for folder in breadcrumb %}
+                        <li>
+                            <div class="flex items-center">
+                                <i class="fas fa-chevron-right text-gray-400 mx-2"></i>
+                                <a href="{% url 'files:files_list' %}?folder={{ folder.id }}" class="ml-1 text-sm font-medium text-gray-700 hover:text-primary md:ml-2">
+                                    {{ folder.name }}
+                                </a>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </nav>
+                {% endif %}
+            </div>
+            
+            {% if user.can_upload_files %}
+            <div class="flex space-x-3">
+                <!-- Admin actions for folders/categories -->
+                {% if user.can_view_sector_tickets %}
+                <div class="flex space-x-2">
+                    <a href="{% url 'files:create_folder' %}{% if current_folder %}?parent={{ current_folder.id }}{% endif %}" 
+                       class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors inline-flex items-center">
+                        <i class="fas fa-folder-plus mr-2"></i>
+                        Nova Pasta
+                    </a>
+                    
+                    <a href="{% url 'files:create_category' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" 
+                       class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors inline-flex items-center">
+                        <i class="fas fa-tag mr-2"></i>
+                        Nova Categoria
+                    </a>
+                </div>
+                {% endif %}
+                
+                <a href="{% url 'files:file_upload' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors inline-flex items-center">
+                    <i class="fas fa-upload mr-2"></i>
+                    Enviar Arquivo
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <form method="GET" class="flex flex-wrap gap-4">
+            {% if current_folder %}
+                <input type="hidden" name="folder" value="{{ current_folder.id }}">
+            {% endif %}
+            
+            <div class="flex-1 min-w-64">
+                <input type="text" name="search" placeholder="Buscar arquivos..." value="{{ search }}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div>
+                <select name="category" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">Todas as categorias</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}" {% if current_category == category.id|stringformat:"s" %}selected{% endif %}>
+                            {{ category.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <button type="submit" class="bg-secondary text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors">
+                <i class="fas fa-search mr-2"></i>Filtrar
+            </button>
+            
+            {% if search or current_category %}
+            <a href="{% url 'files:files_list' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors">
+                <i class="fas fa-times mr-2"></i>Limpar
+            </a>
+            {% endif %}
+        </form>
+    </div>
+    
+    <!-- Folders -->
+    {% if folders %}
+    <div class="mb-8">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-folder mr-2 text-yellow-500"></i>Pastas
+        </h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {% for folder in folders %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-all p-4 text-center group relative">
+                <!-- Admin actions -->
+                {% if user.can_view_sector_tickets %}
+                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div class="flex space-x-1">
+                        <a href="{% url 'files:delete_folder' folder.id %}" 
+                           class="bg-red-500 text-white p-1 rounded text-xs hover:bg-red-600 transition-colors"
+                           title="Deletar pasta">
+                            <i class="fas fa-trash text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <a href="{% url 'files:files_list' %}?folder={{ folder.id }}" class="flex flex-col items-center">
+                    <i class="fas fa-folder text-3xl text-yellow-500 group-hover:text-yellow-600 mb-2"></i>
+                    <span class="text-sm font-medium text-gray-900 group-hover:text-primary truncate w-full" title="{{ folder.name }}">
+                        {{ folder.name }}
+                    </span>
+                    {% if folder.description %}
+                    <span class="text-xs text-gray-500 mt-1 line-clamp-2">{{ folder.description|truncatechars:30 }}</span>
+                    {% endif %}
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Categories in Current Folder -->
+    {% if categories and not search %}
+    <div class="mb-8">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-tags mr-2 text-blue-500"></i>Categorias
+        </h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {% for category in categories %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-all p-4 text-center group relative">
+                <!-- Admin actions -->
+                {% if user.can_view_sector_tickets %}
+                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div class="flex space-x-1">
+                        <a href="{% url 'files:delete_category' category.id %}" 
+                           class="bg-red-500 text-white p-1 rounded text-xs hover:bg-red-600 transition-colors"
+                           title="Deletar categoria">
+                            <i class="fas fa-trash text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <a href="?{% if current_folder %}folder={{ current_folder.id }}&{% endif %}category={{ category.id }}" class="flex flex-col items-center">
+                    <i class="fas fa-tag text-2xl text-blue-500 group-hover:text-blue-600 mb-2"></i>
+                    <span class="text-sm font-medium text-gray-900 group-hover:text-primary truncate w-full" title="{{ category.name }}">
+                        {{ category.name }}
+                    </span>
+                    <span class="text-xs text-gray-500 mt-1">
+                        {{ category.files_count }} arquivo{{ category.files_count|pluralize }}
+                    </span>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Files Grid -->
+    {% if files %}
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-file mr-2 text-gray-500"></i>
+            Arquivos
+            {% if current_category_name %}
+                - {{ current_category_name }}
+            {% endif %}
+        </h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {% for file in files %}
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                <div class="p-6">
+                    <!-- File Icon -->
+                    <div class="flex justify-center mb-4">
+                        <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                            {% if file.file_extension == '.pdf' %}
+                                <i class="fas fa-file-pdf text-3xl text-red-500"></i>
+                            {% elif file.file_extension in '.doc,.docx' %}
+                                <i class="fas fa-file-word text-3xl text-blue-500"></i>
+                            {% elif file.file_extension in '.xls,.xlsx' %}
+                                <i class="fas fa-file-excel text-3xl text-green-500"></i>
+                            {% elif file.file_extension in '.jpg,.jpeg,.png,.gif' %}
+                                <i class="fas fa-file-image text-3xl text-purple-500"></i>
+                            {% else %}
+                                <i class="fas fa-file text-3xl text-gray-500"></i>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- File Info -->
+                    <div class="text-center">
+                        <h3 class="font-semibold text-gray-900 mb-2 truncate" title="{{ file.title }}">{{ file.title }}</h3>
+                        
+                        {% if file.description %}
+                        <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ file.description|truncatechars:80 }}</p>
+                        {% endif %}
+                        
+                        <div class="flex items-center justify-between text-xs text-gray-500 mb-4">
+                            <span>{{ file.category.name }}</span>
+                            <span>{{ file.file_size_formatted }}</span>
+                        </div>
+                        
+                        <div class="text-xs text-gray-400 mb-4">
+                            Por {{ file.uploaded_by.full_name }}<br>
+                            {{ file.created_at|date:"d/m/Y H:i" }}
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="flex space-x-1">
+                        <a href="{% url 'files:file_download' file.id %}" 
+                           class="flex-1 bg-primary text-white text-sm px-3 py-2 rounded text-center hover:bg-primary-dark transition-colors">
+                            <i class="fas fa-download mr-1"></i>Download
+                        </a>
+                        
+                        <a href="{% url 'files:file_detail' file.id %}" 
+                           class="bg-gray-200 text-gray-700 text-sm px-2 py-2 rounded hover:bg-gray-300 transition-colors"
+                           title="Ver detalhes">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        
+                        {% if user.can_view_sector_tickets %}
+                        <button onclick="openMoveModal('{{ file.id }}', '{{ file.title|escapejs }}')"
+                                class="bg-blue-500 text-white text-sm px-2 py-2 rounded hover:bg-blue-600 transition-colors"
+                                title="Mover arquivo">
+                            <i class="fas fa-arrows-alt"></i>
+                        </button>
+                        {% endif %}
+                        
+                        {% if user.can_view_sector_tickets or file.uploaded_by == user %}
+                        <a href="{% url 'files:delete_file' file.id %}" 
+                           class="bg-red-500 text-white text-sm px-2 py-2 rounded hover:bg-red-600 transition-colors"
+                           title="Deletar arquivo">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Download count -->
+                    <div class="text-center mt-2 text-xs text-gray-400">
+                        <i class="fas fa-download mr-1"></i>{{ file.downloads }} download{{ file.downloads|pluralize }}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    {% elif search or current_category %}
+    <!-- No results for search/filter -->
+    <div class="text-center py-12">
+        <div class="max-w-md mx-auto">
+            <i class="fas fa-search text-6xl text-gray-300 mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhum arquivo encontrado</h3>
+            <p class="text-gray-500 mb-4">
+                Não há arquivos que correspondam aos seus filtros.
+            </p>
+            
+            <a href="{% url 'files:files_list' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="text-primary hover:text-primary-dark">
+                <i class="fas fa-arrow-left mr-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+    
+    {% elif not folders and not categories %}
+    <!-- Empty folder -->
+    <div class="text-center py-12">
+        <div class="max-w-md mx-auto">
+            <i class="fas fa-folder-open text-6xl text-gray-300 mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Pasta vazia</h3>
+            <p class="text-gray-500 mb-4">
+                Esta pasta não possui arquivos ou subpastas no momento.
+            </p>
+            
+            {% if user.can_upload_files %}
+            <a href="{% url 'files:file_upload' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors inline-flex items-center">
+                <i class="fas fa-upload mr-2"></i>
+                Enviar primeiro arquivo
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal para mover arquivo -->
+<div id="moveModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-arrows-alt mr-2 text-blue-500"></i>
+                    Mover Arquivo
+                </h3>
+                <button onclick="closeMoveModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <p class="text-sm text-gray-600 mb-2">Arquivo selecionado:</p>
+                <p class="font-medium text-gray-900" id="moveFileName"></p>
+            </div>
+            
+            <form id="moveFileForm" onsubmit="submitMoveFile(event)">
+                <input type="hidden" id="moveFileId" name="file_id">
+                
+                <div class="mb-4">
+                    <label for="moveDestination" class="block text-sm font-medium text-gray-700 mb-2">
+                        Selecionar destino:
+                    </label>
+                    <select id="moveDestination" name="destination" required 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">Selecione o destino</option>
+                    </select>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeMoveModal()" 
+                            class="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-check mr-1"></i>
+                        Mover Arquivo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Sistema de Mover Arquivos -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Função para abrir modal de mover arquivo
+    window.openMoveModal = function(fileId, fileName) {
+        document.getElementById('moveFileId').value = fileId;
+        document.getElementById('moveFileName').textContent = fileName;
+        document.getElementById('moveModal').classList.remove('hidden');
+        loadDestinations();
+    };
+    
+    // Função para fechar modal
+    window.closeMoveModal = function() {
+        document.getElementById('moveModal').classList.add('hidden');
+    };
+    
+    // Carregar destinos disponíveis
+    function loadDestinations() {
+        const select = document.getElementById('moveDestination');
+        select.innerHTML = '<option value="">Carregando...</option>';
+        
+        fetch('{% url "files:get_sectors" %}')
+        .then(response => response.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Selecione o destino</option>';
+            select.innerHTML += '<option value="root">📁 Pasta Raiz</option>';
+            
+            // Adicionar pastas
+            if (data.folders && data.folders.length > 0) {
+                select.innerHTML += '<optgroup label="📁 Pastas">';
+                data.folders.forEach(folder => {
+                    select.innerHTML += `<option value="folder-${folder.id}">📁 ${folder.name}</option>`;
+                });
+                select.innerHTML += '</optgroup>';
+            }
+            
+            // Adicionar categorias
+            if (data.categories && data.categories.length > 0) {
+                select.innerHTML += '<optgroup label="🏷️ Categorias">';
+                data.categories.forEach(category => {
+                    const folderInfo = category.folder_name ? ` (em ${category.folder_name})` : '';
+                    select.innerHTML += `<option value="category-${category.id}">🏷️ ${category.name}${folderInfo}</option>`;
+                });
+                select.innerHTML += '</optgroup>';
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            select.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+    }
+    
+    // Submeter formulário
+    window.submitMoveFile = function(event) {
+        event.preventDefault();
+        
+        const fileId = document.getElementById('moveFileId').value;
+        const destination = document.getElementById('moveDestination').value;
+        
+        if (!destination) {
+            alert('Selecione um destino!');
+            return;
+        }
+        
+        let folderId = null;
+        let categoryId = null;
+        
+        if (destination === 'root') {
+            // Pasta raiz - sem folder nem category
+            folderId = null;
+            categoryId = null;
+        } else if (destination.startsWith('folder-')) {
+            folderId = destination.replace('folder-', '');
+            categoryId = null;
+        } else if (destination.startsWith('category-')) {
+            folderId = null;
+            categoryId = destination.replace('category-', '');
+        }
+        
+        const btn = event.target.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Movendo...';
+        
+        fetch('{% url "files:move_file" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                file_id: fileId,
+                folder_id: folderId,
+                category_id: categoryId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Arquivo movido com sucesso!');
+                window.location.reload();
+            } else {
+                alert('Erro: ' + (data.message || 'Erro ao mover arquivo'));
+            }
+        })
+        .catch(error => {
+            alert('Erro de conexão');
+            console.error(error);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i>Mover Arquivo';
+        });
+    };
+    
+    function getCsrfToken() {
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (input) return input.value;
+        
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'csrftoken') return value;
+        }
+        return '';
+    }
+});
+</script>
+
+{% endblock %}
+    const fileCards = [];
+    const folderCards = [];
+    
+    // Buscar cards de arquivo pela estrutura HTML
+    const fileGrids = document.querySelectorAll('.grid.grid-cols-1, .grid.grid-cols-2, .grid.grid-cols-3, .grid.grid-cols-4');
+    fileGrids.forEach(grid => {
+        const cards = grid.querySelectorAll('.bg-white.rounded-lg');
+        cards.forEach(card => {
+            // Verifica se é um card de arquivo (tem botão de download)
+            if (card.querySelector('a[href*="file_download"]')) {
+                fileCards.push(card);
+                card.dataset.cardType = 'file';
+                console.log('📄 Found file card with download link');
+            }
+        });
+    });
+    
+    // Buscar cards de pasta pela estrutura HTML
+    const folderGrids = document.querySelectorAll('.grid.grid-cols-2, .grid.grid-cols-4, .grid.grid-cols-6');
+    folderGrids.forEach(grid => {
+        const cards = grid.querySelectorAll('.bg-white.rounded-lg');
+        cards.forEach(card => {
+            // Verifica se é um card de pasta (tem link com ?folder=)
+            if (card.querySelector('a[href*="?folder="]')) {
+                folderCards.push(card);
+                card.dataset.cardType = 'folder';
+                console.log('📁 Found folder card');
+            }
+        });
+    });
+    
+    console.log(`📊 Cards found - Files: ${fileCards.length}, Folders: ${folderCards.length}`);
+    
+    const allCards = [...fileCards, ...folderCards];
+    
+    // Configurar arquivos para serem arrastáveis
+    fileCards.forEach((card, index) => {
+        const fileId = getFileIdFromCard(card);
+        
+        if (fileId) {
+            card.draggable = true;
+            card.style.cursor = 'grab';
+            card.dataset.fileId = fileId;
+            card.dataset.cardType = 'file';
+            console.log(`✅ File ${fileId} made draggable`);
+            
+            card.addEventListener('dragstart', function(e) {
+                draggedFile = fileId;
+                this.classList.add('opacity-50');
+                this.style.cursor = 'grabbing';
+                
+                document.body.classList.add('dragging-file');
+                console.log('🎯 Drag started for file:', fileId);
+                
+                // Destacar todas as pastas como possíveis destinos
+                folderCards.forEach(folderCard => {
+                    folderCard.classList.add('drop-target');
+                });
+            });
+            
+            card.addEventListener('dragend', function(e) {
+                this.classList.remove('opacity-50');
+                this.style.cursor = 'grab';
+                document.body.classList.remove('dragging-file');
+                draggedFile = null;
+                
+                // Remover destaque de todas as pastas
+                folderCards.forEach(folderCard => {
+                    folderCard.classList.remove('drop-target', 'border-2', 'border-blue-400', 'bg-blue-50');
+                });
+                console.log('🏁 Drag ended');
+            });
+        }
+    });
+    
+    // Configurar pastas para receber drops
+    folderCards.forEach((card, index) => {
+        const folderId = getFolderIdFromCard(card);
+        
+        if (folderId) {
+            card.dataset.folderId = folderId;
+            card.dataset.cardType = 'folder';
+            console.log(`📁 Folder ${folderId} configured as drop target`);
+            
+            card.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                if (draggedFile && this.classList.contains('drop-target')) {
+                    this.classList.add('border-2', 'border-blue-400', 'bg-blue-50');
+                }
+            });
+            
+            card.addEventListener('dragleave', function(e) {
+                // Verifica se realmente saiu do card
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX;
+                const y = e.clientY;
+                
+                if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                    this.classList.remove('border-2', 'border-blue-400', 'bg-blue-50');
+                }
+            });
+            
+            card.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('border-2', 'border-blue-400', 'bg-blue-50');
+                
+                if (draggedFile) {
+                    console.log('💫 File dropped on folder:', draggedFile, 'to', folderId);
+                    moveFileToFolder(draggedFile, folderId);
+                }
+            });
+        }
+    });
+    
+    function getFileIdFromCard(card) {
+        // Busca o ID do arquivo através do link de download
+        const downloadLink = card.querySelector('a[href*="file_download"]');
+        if (downloadLink) {
+            const href = downloadLink.getAttribute('href');
+            console.log('Found download link:', href);
+            // Padrão: /files/file_download/<id>/
+            const match = href.match(/file_download\/(\d+)/);
+            if (match) {
+                console.log('Extracted file ID:', match[1]);
+                return match[1];
+            }
+        }
+        return null;
+    }
+    
+    function getFolderIdFromCard(card) {
+        // Busca o ID da pasta através do link de navegação
+        const folderLink = card.querySelector('a[href*="?folder="]');
+        if (folderLink) {
+            const href = folderLink.getAttribute('href');
+            console.log('Found folder link:', href);
+            const match = href.match(/[?&]folder=(\d+)/);
+            if (match) {
+                console.log('Extracted folder ID:', match[1]);
+                return match[1];
+            }
+        }
+        return null;
+    }
+    
+    function moveFileToFolder(fileId, folderId) {
+        console.log('Moving file', fileId, 'to folder', folderId);
+        
+        // Mostrar loading
+        const loadingDiv = document.createElement('div');
+        loadingDiv.innerHTML = `
+            <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm">
+                    <div class="flex items-center">
+                        <i class="fas fa-spinner fa-spin text-blue-500 text-2xl mr-3"></i>
+                        <div>
+                            <div class="font-semibold text-gray-900">Movendo arquivo...</div>
+                            <div class="text-sm text-gray-600">Por favor, aguarde</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(loadingDiv);
+        
+        fetch('{% url "files:move_file" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                file_id: fileId,
+                folder_id: folderId
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            document.body.removeChild(loadingDiv);
+            if (data.success) {
+                // Mostrar sucesso com melhor feedback
+                const successDiv = document.createElement('div');
+                successDiv.innerHTML = `
+                    <div class="fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg z-50 flex items-center">
+                        <i class="fas fa-check-circle mr-2"></i>
+                        <span>${data.message || 'Arquivo movido com sucesso!'}</span>
+                    </div>
+                `;
+                document.body.appendChild(successDiv);
+                
+                // Remover notificação após 3 segundos e recarregar
+                setTimeout(() => {
+                    document.body.removeChild(successDiv);
+                    window.location.reload();
+                }, 2000);
+            } else {
+                showErrorMessage(data.message || 'Erro ao mover arquivo');
+            }
+        })
+        .catch(error => {
+            document.body.removeChild(loadingDiv);
+            console.error('Error:', error);
+            showErrorMessage('Erro de conexão ao mover arquivo');
+        });
+    }
+    
+    function showErrorMessage(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.innerHTML = `
+            <div class="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg z-50 flex items-center">
+                <i class="fas fa-exclamation-circle mr-2"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(errorDiv);
+        
+        // Remover notificação após 5 segundos
+        setTimeout(() => {
+            if (document.body.contains(errorDiv)) {
+                document.body.removeChild(errorDiv);
+            }
+        }, 5000);
+    }
+    
+    function getCsrfToken() {
+        // Primeiro tenta pegar do input hidden
+        const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (csrfInput) {
+            return csrfInput.value;
+        }
+        
+        // Se não encontrar, tenta pelo cookie
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'csrftoken') {
+                return value;
+            }
+        }
+        return '';
+    }
+});
+</script>
+
+<style>
+/* Estilos para drag and drop */
+.dragging-file .drop-target {
+    border: 2px dashed #3b82f6 !important;
+    background-color: #eff6ff !important;
+    transform: scale(1.02) !important;
+    transition: all 0.2s ease !important;
+    position: relative !important;
+}
+
+.dragging-file .drop-target::before {
+    content: "📁 Solte o arquivo aqui";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(59, 130, 246, 0.95);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 20;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+/* Efeitos de hover melhorados */
+.bg-white:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+/* Indicador de que um item é arrastável */
+[draggable="true"] {
+    position: relative;
+}
+
+[draggable="true"]::after {
+    content: "⋮⋮";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    color: #9ca3af;
+    font-size: 16px;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+[draggable="true"]:hover::after {
+    opacity: 1;
+}
+
+/* Estilo para o arquivo sendo arrastado */
+[draggable="true"].opacity-50 {
+    opacity: 0.5 !important;
+    transform: rotate(3deg) scale(0.95) !important;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2) !important;
+    z-index: 1000 !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Efeito na área de destino quando hovering */
+.drop-target.border-2 {
+    animation: pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+    from {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+    }
+    to {
+        border-color: #1d4ed8;
+        background-color: #dbeafe;
+    }
+}
+</style>

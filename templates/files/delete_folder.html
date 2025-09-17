@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Deletar Pasta - Arquivos - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center space-x-4">
+            <a href="{% url 'files:files_list' %}{% if folder.parent %}?folder={{ folder.parent.id }}{% endif %}" class="text-gray-600 hover:text-primary">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-bold text-red-600">Deletar Pasta</h1>
+                <p class="text-gray-600 mt-2">Esta ação não pode ser desfeita</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Warning Card -->
+    <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+            </div>
+            <div class="ml-4 flex-1">
+                <h3 class="text-lg font-semibold text-red-800 mb-2">Atenção!</h3>
+                <p class="text-red-700 mb-4">
+                    Você está prestes a deletar a pasta <strong>"{{ folder.name }}"</strong> e todo o seu conteúdo:
+                </p>
+                
+                <div class="space-y-2 text-sm">
+                    {% if total_files > 0 %}
+                    <div class="flex items-center text-red-600">
+                        <i class="fas fa-file mr-2"></i>
+                        <span><strong>{{ total_files }}</strong> arquivo{{ total_files|pluralize:",s" }} será{{ total_files|pluralize:"ão" }} deletado{{ total_files|pluralize:",s" }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if total_categories > 0 %}
+                    <div class="flex items-center text-red-600">
+                        <i class="fas fa-tag mr-2"></i>
+                        <span><strong>{{ total_categories }}</strong> categoria{{ total_categories|pluralize:",s" }} será{{ total_categories|pluralize:"ão" }} deletada{{ total_categories|pluralize:",s" }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if total_subfolders > 0 %}
+                    <div class="flex items-center text-red-600">
+                        <i class="fas fa-folder mr-2"></i>
+                        <span><strong>{{ total_subfolders }}</strong> subpasta{{ total_subfolders|pluralize:",s" }} será{{ total_subfolders|pluralize:"ão" }} deletada{{ total_subfolders|pluralize:",s" }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if total_files == 0 and total_categories == 0 and total_subfolders == 0 %}
+                    <div class="flex items-center text-green-600">
+                        <i class="fas fa-check-circle mr-2"></i>
+                        <span>A pasta está vazia</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Folder Info -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div class="flex items-center mb-4">
+            <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mr-4">
+                <i class="fas fa-folder text-2xl text-yellow-600"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900">{{ folder.name }}</h3>
+                {% if folder.description %}
+                <p class="text-gray-600">{{ folder.description }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+            <div>
+                <strong>Visibilidade:</strong> {{ folder.get_visibility_display }}
+            </div>
+            <div>
+                <strong>Criado por:</strong> {{ folder.created_by.full_name }}
+            </div>
+            {% if folder.target_sector %}
+            <div>
+                <strong>Setor:</strong> {{ folder.target_sector.name }}
+            </div>
+            {% endif %}
+            <div>
+                <strong>Criado em:</strong> {{ folder.created_at|date:"d/m/Y H:i" }}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Form -->
+    <form method="post" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        {% csrf_token %}
+        
+        <div class="mb-6">
+            <label class="flex items-center">
+                <input type="checkbox" id="confirm-delete" class="mr-3 h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                <span class="text-sm text-gray-700">
+                    Eu entendo que esta ação irá deletar permanentemente a pasta "{{ folder.name }}" e todo o seu conteúdo
+                </span>
+            </label>
+        </div>
+        
+        <div class="flex justify-between items-center">
+            <a href="{% url 'files:files_list' %}{% if folder.parent %}?folder={{ folder.parent.id }}{% endif %}" 
+               class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors">
+                <i class="fas fa-times mr-2"></i>Cancelar
+            </a>
+            
+            <button type="submit" id="delete-button" disabled
+                    class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                <i class="fas fa-trash mr-2"></i>Deletar Pasta
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.getElementById('confirm-delete').addEventListener('change', function() {
+    const deleteButton = document.getElementById('delete-button');
+    deleteButton.disabled = !this.checked;
+});
+</script>
+{% endblock %}

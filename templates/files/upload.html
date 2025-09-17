@@ -8,7 +8,7 @@
     <!-- Page Header -->
     <div class="mb-8">
         <div class="flex items-center space-x-4">
-            <a href="{% url 'files_list' %}" class="text-gray-600 hover:text-primary">
+            <a href="{% url 'files:files_list' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="text-gray-600 hover:text-primary">
                 <i class="fas fa-arrow-left text-lg"></i>
             </a>
             <div>
@@ -22,6 +22,20 @@
     <div class="bg-white rounded-lg shadow-sm p-6">
         <form method="post" enctype="multipart/form-data" class="space-y-6">
             {% csrf_token %}
+            
+            {% if current_folder %}
+                <input type="hidden" name="folder" value="{{ current_folder.id }}">
+                
+                <!-- Current Folder Info -->
+                <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                    <div class="flex items-center">
+                        <i class="fas fa-folder text-blue-500 mr-2"></i>
+                        <span class="text-sm text-blue-700">
+                            Enviando para a pasta: <strong>{{ current_folder.name }}</strong>
+                        </span>
+                    </div>
+                </div>
+            {% endif %}
             
             <!-- Title -->
             <div>
@@ -100,10 +114,7 @@
                 <label for="target_sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
                 <select name="target_sector" id="target_sector"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
-                    <option value="">Selecione um setor</option>
-                    {% for sector in sectors %}
-                        <option value="{{ sector.id }}">{{ sector.name }}</option>
-                    {% endfor %}
+                    <option value="">Carregando setores...</option>
                 </select>
             </div>
             
@@ -121,7 +132,7 @@
             
             <!-- Submit Buttons -->
             <div class="flex justify-end space-x-4">
-                <a href="{% url 'files_list' %}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors">
+                <a href="{% url 'files:files_list' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors">
                     Cancelar
                 </a>
                 <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-dark transition-colors">
@@ -208,9 +219,57 @@ function toggleTargetFields() {
     
     if (visibility === 'SECTOR') {
         sectorField.classList.remove('hidden');
+        loadSectorsForUpload();
     } else if (visibility === 'USER') {
         userField.classList.remove('hidden');
     }
+}
+
+function loadSectorsForUpload() {
+    const sectorSelect = document.getElementById('target_sector');
+    
+    // Mostrar loading
+    sectorSelect.innerHTML = '<option value="">Carregando setores...</option>';
+    sectorSelect.disabled = true;
+    
+    console.log('Carregando setores para upload...');
+    
+    fetch('{% url "files:get_sectors" %}', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Setores recebidos para upload:', data);
+        sectorSelect.innerHTML = '<option value="">Selecione um setor</option>';
+        
+        if (data.sectors && data.sectors.length > 0) {
+            data.sectors.forEach(sector => {
+                const option = document.createElement('option');
+                option.value = sector.id;
+                option.textContent = sector.name;
+                sectorSelect.appendChild(option);
+            });
+        } else {
+            sectorSelect.innerHTML = '<option value="">Nenhum setor disponível</option>';
+        }
+        
+        sectorSelect.disabled = false;
+    })
+    .catch(error => {
+        console.error('Erro ao carregar setores:', error);
+        sectorSelect.innerHTML = '<option value="">Erro ao carregar setores</option>';
+        sectorSelect.disabled = false;
+    });
 }
 </script>
 {% endblock %}

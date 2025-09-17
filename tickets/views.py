@@ -18,6 +18,11 @@ from core.middleware import log_action
 def tickets_list_view(request):
     user = request.user
     
+    # Filtros de pesquisa
+    search = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+    origem_filter = request.GET.get('origem', '')
+    
     # Filtro base: TODOS os usuários sempre veem seus próprios chamados
     base_filter = models.Q(created_by=user)
     
@@ -45,9 +50,40 @@ def tickets_list_view(request):
             models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
         ).exclude(status='FECHADO').distinct()
     
+    # Aplicar filtros adicionais
+    
+    # Filtro por origem
+    if origem_filter == 'meus':
+        tickets = tickets.filter(created_by=user)
+    elif origem_filter == 'setor':
+        # Tickets dos setores do usuário (excluindo os próprios)
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        tickets = tickets.filter(sector__in=user_sectors).exclude(created_by=user)
+    
+    # Filtro por status
+    if status_filter == 'abertos':
+        tickets = tickets.filter(status='ABERTO')
+    elif status_filter == 'nao_resolvidos':
+        tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO'])
+    elif status_filter in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']:
+        tickets = tickets.filter(status=status_filter)
+    
+    # Filtro por pesquisa
+    if search:
+        tickets = tickets.filter(
+            models.Q(title__icontains=search) |
+            models.Q(description__icontains=search) |
+            models.Q(id__icontains=search)
+        )
+    
     context = {
         'tickets': tickets.order_by('-created_at'),
         'user': user,
+        'search': search,
+        'status': status_filter,
+        'origem': origem_filter,
     }
     return render(request, 'tickets/list.html', context)
 

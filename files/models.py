@@ -19,20 +19,84 @@ def upload_file_path(instance, filename):
     return f'files/{instance.category}/{filename}'
 
 
+class Folder(models.Model):
+    """Modelo para organizar arquivos em pastas"""
+    name = models.CharField(max_length=100, verbose_name="Nome da Pasta")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    icon = models.CharField(max_length=50, default='fas fa-folder', verbose_name="Ícone")
+    color = models.CharField(max_length=7, default='#3B82F6', verbose_name="Cor", help_text="Cor em hexadecimal")
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subfolders', verbose_name="Pasta Pai")
+    
+    # Controle de visibilidade (herda para as categorias)
+    visibility = models.CharField(max_length=10, choices=[
+        ('ALL', 'Todos os usuários'),
+        ('SECTOR', 'Usuários do setor'),
+        ('ADMIN', 'Apenas administradores'),
+    ], default='ALL', verbose_name="Visibilidade")
+    target_sector = models.ForeignKey(Sector, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Setor alvo")
+    
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Criado por")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    order = models.PositiveIntegerField(default=0, verbose_name="Ordem")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Pasta"
+        verbose_name_plural = "Pastas"
+        ordering = ['order', 'name']
+    
+    def __str__(self):
+        return self.name
+    
+    def get_full_path(self):
+        """Retorna o caminho completo da pasta"""
+        if self.parent:
+            return f"{self.parent.get_full_path()} / {self.name}"
+        return self.name
+    
+    def can_be_viewed_by(self, user):
+        """Verifica se o usuário pode ver esta pasta"""
+        if not self.is_active:
+            return False
+            
+        if self.visibility == 'ALL':
+            return True
+        elif self.visibility == 'SECTOR' and self.target_sector:
+            return user.is_in_sector(self.target_sector)
+        elif self.visibility == 'ADMIN':
+            return user.can_access_admin_panel()
+        
+        return False
+
+
 class FileCategory(models.Model):
     name = models.CharField(max_length=100, verbose_name="Nome")
     description = models.TextField(blank=True, verbose_name="Descrição")
     icon = models.CharField(max_length=50, default='fas fa-file', verbose_name="Ícone")
+    folder = models.ForeignKey(Folder, on_delete=models.CASCADE, null=True, blank=True, related_name='categories', verbose_name="Pasta")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    order = models.PositiveIntegerField(default=0, verbose_name="Ordem")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         verbose_name = "Categoria de Arquivo"
         verbose_name_plural = "Categorias de Arquivos"
-        ordering = ['name']
+        ordering = ['order', 'name']
     
     def __str__(self):
         return self.name
+    
+    def can_be_viewed_by(self, user):
+        """Verifica se o usuário pode ver esta categoria (baseado na pasta)"""
+        if not self.is_active:
+            return False
+        
+        # Se tem pasta, verifica a permissão da pasta
+        if self.folder:
+            return self.folder.can_be_viewed_by(user)
+        
+        # Se não tem pasta, é visível para todos
+        return True
 
 
 class SharedFile(models.Model):
