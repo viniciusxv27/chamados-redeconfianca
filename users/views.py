@@ -64,13 +64,14 @@ def dashboard_view(request):
         # Admin vê todos os tickets (incluindo fechados)
         user_tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem APENAS tickets dos seus setores (sem incluir próprios tickets de outros setores)
+        # Supervisores veem tickets dos seus setores + tickets que criaram + tickets atribuídos a eles
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         user_tickets = Ticket.objects.filter(
             models.Q(sector__in=user_sectors) |
+            models.Q(created_by=user) |
             models.Q(assigned_to=user)
         ).distinct()
     else:
@@ -87,13 +88,14 @@ def dashboard_view(request):
         # Admin vê todos os tickets
         sector_recent_tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem APENAS tickets dos seus setores (sem incluir próprios tickets de outros setores)
+        # Supervisores veem tickets dos seus setores + tickets que criaram + tickets atribuídos a eles
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         sector_recent_tickets = Ticket.objects.filter(
             models.Q(sector__in=user_sectors) |
+            models.Q(created_by=user) |
             models.Q(assigned_to=user)
         ).distinct()
     else:

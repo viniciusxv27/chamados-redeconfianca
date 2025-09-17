@@ -35,9 +35,10 @@ class Command(BaseCommand):
                 
                 user_tickets = Ticket.objects.filter(
                     models.Q(sector__in=user_sectors) |
+                    models.Q(created_by=user) |
                     models.Q(assigned_to=user)
                 ).distinct()
-                self.stdout.write(f"Filtro aplicado: SETOR APENAS - {len(user_tickets)} tickets encontrados")
+                self.stdout.write(f"Filtro aplicado: SETOR + CRIADOS PELO USER - {len(user_tickets)} tickets encontrados")
             else:
                 user_tickets = Ticket.objects.filter(
                     models.Q(created_by=user) |
