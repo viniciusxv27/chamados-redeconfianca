@@ -23,12 +23,16 @@
     <!-- User Info Section -->
     <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
         <div class="flex items-center space-x-4">
-            <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center">
-                <i class="fas fa-user text-2xl text-gray-600"></i>
+            <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
+                {% if user.profile_picture %}
+                    <img src="{{ user.profile_picture.url }}" alt="{{ user.get_full_name }}" class="w-full h-full object-cover">
+                {% else %}
+                    <i class="fas fa-user text-2xl text-gray-600"></i>
+                {% endif %}
             </div>
             <div>
                 <h2 class="text-xl font-semibold text-gray-900">{{ user.first_name }} {{ user.last_name }}</h2>
-                <p class="text-gray-600">{{ user.get_hierarchy_display }} de Operações</p>
+                <p class="text-gray-600">{{ user.sector.name }}</p>
             </div>
         </div>
     </div>
