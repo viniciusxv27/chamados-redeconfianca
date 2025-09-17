@@ -191,7 +191,7 @@ def get_upload_context(folder_id=None):
 
 @login_required
 def file_download(request, pk):
-    """Download de arquivo"""
+    """Download de arquivo - Redireciona para S3"""
     file = get_object_or_404(SharedFile, id=pk)
     
     # Log do download
@@ -201,24 +201,18 @@ def file_download(request, pk):
         ip_address=get_client_ip(request)
     )
     
-    # Servir o arquivo
+    # Incrementar contador de downloads
+    file.increment_downloads()
+    
+    # Redirecionar para a URL S3
     try:
-        if file.file and hasattr(file.file, 'path'):
-            file_path = file.file.path
-            if os.path.exists(file_path):
-                # Usar mimetypes para determinar o content-type
-                content_type, _ = mimetypes.guess_type(file_path)
-                if not content_type:
-                    content_type = "application/octet-stream"
-                
-                with open(file_path, 'rb') as fh:
-                    response = HttpResponse(fh.read(), content_type=content_type)
-                    # Usar o nome original ou nome do arquivo
-                    filename = file.name if file.name else os.path.basename(file.file.name)
-                    response['Content-Disposition'] = f'attachment; filename="{filename}"'
-                    return response
-            else:
-                return HttpResponse("Arquivo não encontrado no sistema de arquivos", status=404)
+        if file.file:
+            # Construir URL completa do S3
+            s3_base_url = "https://s3.dev.redeconfianca.com.br/chamados/media/"
+            file_url = s3_base_url + str(file.file)
+            
+            # Redirecionar diretamente para o S3
+            return redirect(file_url)
         else:
             return HttpResponse("Arquivo não encontrado", status=404)
     except Exception as e:
