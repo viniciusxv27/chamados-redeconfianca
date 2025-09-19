@@ -40,6 +40,20 @@ def login_view(request):
     
     return render(request, 'users/login.html')
 
+def forgot_password_view(request):
+    if request.user.is_authenticated:
+        return redirect('home')
+    
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        try:
+            user = User.objects.get(email=email)
+            # Aqui você implementaria o envio do email de recuperação de senha
+            messages.success(request, 'Instruções para recuperação de senha foram enviadas para seu email.')
+        except User.DoesNotExist:
+            messages.error(request, 'Email não encontrado.')
+    
+    return render(request, 'users/forgot_password.html')
 
 @login_required
 def logout_view(request):
