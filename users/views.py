@@ -1265,9 +1265,58 @@ def help_view(request):
 def change_password_view(request):
     """Alterar senha do usuário"""
     if request.method == 'POST':
-        # Implementar mudança de senha
-        messages.success(request, 'Senha alterada com sucesso!')
-        return redirect('profile')
+        current_password = request.POST.get('current_password')
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+        
+        # Validações
+        if not current_password or not new_password or not confirm_password:
+            messages.error(request, 'Todos os campos são obrigatórios.')
+            return render(request, 'users/change_password.html')
+        
+        # Verificar senha atual
+        if not request.user.check_password(current_password):
+            messages.error(request, 'Senha atual incorreta.')
+            return render(request, 'users/change_password.html')
+        
+        # Verificar se as senhas novas coincidem
+        if new_password != confirm_password:
+            messages.error(request, 'As senhas não coincidem.')
+            return render(request, 'users/change_password.html')
+        
+        # Validar força da senha
+        if len(new_password) < 8:
+            messages.error(request, 'A senha deve ter pelo menos 8 caracteres.')
+            return render(request, 'users/change_password.html')
+        
+        # Verificar se a nova senha não é igual à atual
+        if request.user.check_password(new_password):
+            messages.error(request, 'A nova senha deve ser diferente da senha atual.')
+            return render(request, 'users/change_password.html')
+        
+        try:
+            # Alterar a senha
+            request.user.set_password(new_password)
+            request.user.save()
+            
+            # Log da ação
+            log_action(
+                request.user,
+                'PASSWORD_CHANGE',
+                'Senha alterada pelo usuário',
+                request
+            )
+            
+            # Fazer login novamente para manter a sessão
+            from django.contrib.auth import update_session_auth_hash
+            update_session_auth_hash(request, request.user)
+            
+            messages.success(request, 'Senha alterada com sucesso!')
+            return redirect('profile')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao alterar senha: {str(e)}')
+            return render(request, 'users/change_password.html')
     
     return render(request, 'users/change_password.html')
 
