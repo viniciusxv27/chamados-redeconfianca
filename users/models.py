@@ -143,7 +143,7 @@ class User(AbstractUser):
         return self.hierarchy in ['ADMIN', 'SUPERADMIN']
     
     def can_view_sector_tickets(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+        return self.hierarchy in ['PADRAO', 'ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
     
     def can_create_communications(self):
         return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
