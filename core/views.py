@@ -57,7 +57,8 @@ def dashboard(request):
         user_tickets = Ticket.objects.filter(
             base_filter |  # Sempre inclui próprios tickets
             models.Q(sector__in=user_sectors) |
-            models.Q(assigned_to=user)
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
         ).distinct()
     else:
         # Usuários comuns veem: seus próprios tickets + tickets atribuídos
