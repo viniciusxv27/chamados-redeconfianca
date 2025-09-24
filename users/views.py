@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -1265,14 +1265,240 @@ def update_settings_view(request):
 @login_required
 def help_view(request):
     """Visualizar central de ajuda e tutoriais"""
-    from core.models import Tutorial
+    from core.models import Tutorial, TrainingCategory, TutorialProgress
+    from django.core.paginator import Paginator
     
-    tutorials = Tutorial.objects.filter(is_active=True).order_by('order', 'title')
+    # Filtros
+    category_filter = request.GET.get('category', '')
+    
+    # Buscar categoria selecionada se existe
+    current_category = None
+    if category_filter:
+        try:
+            current_category = TrainingCategory.objects.get(id=category_filter, is_active=True)
+        except TrainingCategory.DoesNotExist:
+            pass
+    
+    # Buscar tutoriais ativos
+    tutorials = Tutorial.objects.filter(is_active=True)
+    
+    if category_filter and current_category:
+        tutorials = tutorials.filter(category=current_category)
+    
+    tutorials = tutorials.select_related('created_by', 'category').order_by('order', 'title')
+    
+    # Paginação
+    paginator = Paginator(tutorials, 12)  # 12 tutoriais por página
+    page = request.GET.get('page')
+    tutorials = paginator.get_page(page)
+    
+    # Buscar progresso do usuário para todos os tutoriais (não só da página atual)
+    all_tutorials = Tutorial.objects.filter(is_active=True)
+    tutorial_progress = {}
+    
+    if all_tutorials:
+        user_progress = TutorialProgress.objects.filter(
+            tutorial__in=all_tutorials,
+            user=request.user
+        ).select_related('tutorial')
+        
+        for progress in user_progress:
+            tutorial_progress[progress.tutorial.id] = progress
+    
+    # Calcular estatísticas do usuário
+    total_tutorials = all_tutorials.count()
+    completed_tutorials = sum(1 for p in tutorial_progress.values() if p.completed_at)
+    viewed_tutorials = sum(1 for p in tutorial_progress.values() if p.viewed_at and not p.completed_at)
+    completion_rate = int((completed_tutorials / total_tutorials * 100)) if total_tutorials > 0 else 0
+    
+    user_stats = {
+        'total_tutorials': total_tutorials,
+        'completed_tutorials': completed_tutorials,
+        'viewed_tutorials': viewed_tutorials,
+        'completion_rate': completion_rate,
+    }
+    
+    # Buscar todas as categorias para filtros
+    categories = TrainingCategory.objects.filter(
+        is_active=True
+    ).prefetch_related('tutorial_set').order_by('name')
     
     context = {
         'tutorials': tutorials,
+        'categories': categories,
+        'current_category': current_category,
+        'selected_category': category_filter,
+        'user_stats': user_stats,
+        'tutorial_progress': tutorial_progress,
     }
     return render(request, 'help/tutorials.html', context)
+
+
+@login_required
+def tutorial_detail_view(request, tutorial_id):
+    """Visualizar tutorial específico"""
+    from core.models import Tutorial, TutorialProgress
+    from core.middleware import log_action
+    
+    tutorial = get_object_or_404(Tutorial, id=tutorial_id, is_active=True)
+    
+    # Buscar ou criar progresso do usuário
+    progress, created = TutorialProgress.objects.get_or_create(
+        tutorial=tutorial,
+        user=request.user
+    )
+    
+    # Marcar como visualizado
+    progress.mark_as_viewed()
+    
+    # Se for POST, marcar como concluído
+    if request.method == 'POST' and request.POST.get('action') == 'complete':
+        progress.mark_as_completed()
+        
+        log_action(
+            request.user,
+            'TUTORIAL_COMPLETE',
+            f'Tutorial concluído: {tutorial.title}',
+            request
+        )
+        
+        messages.success(request, 'Tutorial marcado como concluído!')
+        return redirect('tutorial_detail', tutorial_id=tutorial.id)
+    
+    # Estatísticas para quem criou o tutorial
+    stats = None
+    if request.user == tutorial.created_by or request.user.can_manage_users():
+        stats = {
+            'total_views': tutorial.get_viewers_count(),
+            'total_completed': tutorial.get_completed_count(),
+            'viewers': tutorial.get_all_viewers()[:10],  # Primeiros 10
+            'completed_users': tutorial.get_all_completed()[:10],  # Primeiros 10
+        }
+    
+    context = {
+        'tutorial': tutorial,
+        'progress': progress,
+        'stats': stats,
+    }
+    return render(request, 'help/tutorial_detail.html', context)
+
+
+def forgot_password_view(request):
+    """Solicitar redefinição de senha"""
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        
+        if not email:
+            messages.error(request, 'Por favor, insira seu email.')
+            return render(request, 'users/forgot_password.html')
+        
+        try:
+            user = User.objects.get(email=email, is_active=True)
+            
+            # Gerar token de redefinição
+            from django.contrib.auth.tokens import default_token_generator
+            from django.utils.http import urlsafe_base64_encode
+            from django.utils.encoding import force_bytes
+            from django.core.mail import send_mail
+            from django.conf import settings
+            from django.template.loader import render_to_string
+            
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # Criar link de redefinição
+            reset_link = request.build_absolute_uri(f'/reset-password/{uid}/{token}/')
+            
+            # Renderizar template do email
+            email_context = {
+                'user': user,
+                'reset_link': reset_link,
+                'site_name': 'Sistema Rede Confiança',
+            }
+            
+            email_subject = 'Redefinição de Senha - Sistema Rede Confiança'
+            email_body = render_to_string('emails/password_reset.html', email_context)
+            
+            # Enviar email
+            send_mail(
+                subject=email_subject,
+                message='',  # Texto simples (vazio pois usaremos HTML)
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                html_message=email_body,
+                fail_silently=False,
+            )
+            
+            messages.success(request, 'Instruções de redefinição de senha foram enviadas para seu email.')
+            return redirect('login')
+            
+        except User.DoesNotExist:
+            # Por segurança, não revelamos se o email existe
+            messages.success(request, 'Se o email existir em nosso sistema, você receberá as instruções.')
+            return redirect('login')
+        except Exception as e:
+            messages.error(request, 'Erro ao enviar email. Tente novamente.')
+            return render(request, 'users/forgot_password.html')
+    
+    return render(request, 'users/forgot_password.html')
+
+
+def reset_password_view(request, uidb64, token):
+    """Redefinir senha com token"""
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_decode
+    from django.utils.encoding import force_str
+    
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+    
+    if user is not None and default_token_generator.check_token(user, token):
+        if request.method == 'POST':
+            new_password = request.POST.get('new_password')
+            confirm_password = request.POST.get('confirm_password')
+            
+            if not new_password or not confirm_password:
+                messages.error(request, 'Todos os campos são obrigatórios.')
+                return render(request, 'users/reset_password.html', {'validlink': True})
+            
+            if new_password != confirm_password:
+                messages.error(request, 'As senhas não coincidem.')
+                return render(request, 'users/reset_password.html', {'validlink': True})
+            
+            if len(new_password) < 8:
+                messages.error(request, 'A senha deve ter pelo menos 8 caracteres.')
+                return render(request, 'users/reset_password.html', {'validlink': True})
+            
+            try:
+                user.set_password(new_password)
+                user.save()
+                
+                log_action(
+                    user,
+                    'PASSWORD_RESET',
+                    'Senha redefinida via email',
+                    request
+                )
+                
+                messages.success(request, 'Senha redefinida com sucesso! Faça login com sua nova senha.')
+                return redirect('login')
+                
+            except Exception as e:
+                messages.error(request, f'Erro ao redefinir senha: {str(e)}')
+                return render(request, 'users/reset_password.html', {'validlink': True})
+        
+        return render(request, 'users/reset_password.html', {'validlink': True})
+    else:
+        return render(request, 'users/reset_password.html', {'validlink': False})
 
 
 @login_required
@@ -1342,13 +1568,223 @@ def manage_tutorials_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('dashboard')
     
-    from core.models import Tutorial
-    tutorials = Tutorial.objects.all().order_by('order', 'title')
+    from core.models import Tutorial, TrainingCategory
+    
+    # Filtros
+    category_filter = request.GET.get('category', '')
+    
+    tutorials = Tutorial.objects.all()
+    if category_filter:
+        tutorials = tutorials.filter(category_id=category_filter)
+    
+    tutorials = tutorials.select_related('created_by', 'category').order_by('order', 'title')
+    
+    # Adicionar estatísticas para cada tutorial
+    tutorials_with_stats = []
+    for tutorial in tutorials:
+        tutorials_with_stats.append({
+            'tutorial': tutorial,
+            'viewers_count': tutorial.get_viewers_count(),
+            'completed_count': tutorial.get_completed_count(),
+        })
+    
+    categories = TrainingCategory.objects.filter(is_active=True).order_by('name')
     
     context = {
-        'tutorials': tutorials,
+        'tutorials_with_stats': tutorials_with_stats,
+        'categories': categories,
+        'selected_category': category_filter,
     }
     return render(request, 'admin/tutorials.html', context)
+
+
+@login_required
+def manage_training_categories_view(request):
+    """Gerenciar categorias de treinamento"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('dashboard')
+    
+    from core.models import TrainingCategory
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        is_active = request.POST.get('is_active') == 'on'
+        
+        try:
+            category = TrainingCategory.objects.create(
+                name=name,
+                description=description,
+                is_active=is_active
+            )
+            
+            log_action(
+                request.user,
+                'TRAINING_CATEGORY_CREATE',
+                f'Categoria de treinamento criada: {category.name}',
+                request
+            )
+            
+            messages.success(request, f'Categoria "{category.name}" criada com sucesso!')
+            return redirect('manage_training_categories')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar categoria: {str(e)}')
+            return redirect('manage_training_categories')
+    
+    categories = TrainingCategory.objects.all().order_by('name')
+    
+    context = {
+        'categories': categories,
+    }
+    return render(request, 'admin/training_categories.html', context)
+
+
+@login_required
+def create_training_category_view(request):
+    """Criar nova categoria de treinamento"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        from core.models import TrainingCategory
+        
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        color = request.POST.get('color', '#3B82F6')
+        icon = request.POST.get('icon', 'fas fa-graduation-cap')
+        
+        try:
+            category = TrainingCategory.objects.create(
+                name=name,
+                description=description,
+                color=color,
+                icon=icon
+            )
+            
+            log_action(
+                request.user,
+                'TRAINING_CATEGORY_CREATE',
+                f'Categoria de treinamento criada: {category.name}',
+                request
+            )
+            
+            messages.success(request, f'Categoria "{category.name}" criada com sucesso!')
+            return redirect('manage_training_categories')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar categoria: {str(e)}')
+    
+    return render(request, 'admin/create_training_category.html')
+
+
+@login_required
+def edit_training_category_view(request, category_id):
+    """Editar categoria de treinamento"""
+    if not request.user.can_manage_users():
+        if request.headers.get('Content-Type') == 'application/x-www-form-urlencoded':
+            return JsonResponse({'success': False, 'error': 'Permissão negada'})
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    from core.models import TrainingCategory
+    from django.http import JsonResponse
+    
+    category = get_object_or_404(TrainingCategory, id=category_id)
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'toggle_status':
+            is_active = request.POST.get('is_active') == 'true'
+            category.is_active = is_active
+            category.save()
+            
+            log_action(
+                request.user,
+                'TRAINING_CATEGORY_TOGGLE',
+                f'Categoria {"ativada" if is_active else "desativada"}: {category.name}',
+                request
+            )
+            
+            return JsonResponse({
+                'success': True, 
+                'message': f'Categoria "{category.name}" {"ativada" if is_active else "desativada"} com sucesso!'
+            })
+            
+        elif action == 'delete':
+            category_name = category.name
+            try:
+                category.delete()
+                
+                log_action(
+                    request.user,
+                    'TRAINING_CATEGORY_DELETE',
+                    f'Categoria de treinamento excluída: {category_name}',
+                    request
+                )
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Categoria "{category_name}" excluída com sucesso!'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Erro ao excluir categoria: {str(e)}'
+                })
+        
+        else:
+            # Edição normal do formulário
+            name = request.POST.get('name')
+            description = request.POST.get('description', '')
+            is_active = request.POST.get('is_active') == 'on'
+            category_id = request.POST.get('category_id')
+            
+            try:
+                if category_id:
+                    # Editando categoria existente
+                    category.name = name
+                    category.description = description
+                    category.is_active = is_active
+                    category.save()
+                    
+                    log_action(
+                        request.user,
+                        'TRAINING_CATEGORY_UPDATE',
+                        f'Categoria de treinamento atualizada: {category.name}',
+                        request
+                    )
+                    
+                    messages.success(request, f'Categoria "{category.name}" atualizada com sucesso!')
+                else:
+                    # Criando nova categoria
+                    category = TrainingCategory.objects.create(
+                        name=name,
+                        description=description,
+                        is_active=is_active
+                    )
+                    
+                    log_action(
+                        request.user,
+                        'TRAINING_CATEGORY_CREATE',
+                        f'Categoria de treinamento criada: {category.name}',
+                        request
+                    )
+                    
+                    messages.success(request, f'Categoria "{category.name}" criada com sucesso!')
+                
+                return redirect('manage_training_categories')
+                
+            except Exception as e:
+                messages.error(request, f'Erro ao salvar categoria: {str(e)}')
+    
+    context = {
+        'category': category,
+    }
+    return render(request, 'admin/edit_training_category.html', context)
 
 
 @login_required
@@ -1359,25 +1795,48 @@ def create_tutorial_view(request):
         return redirect('dashboard')
     
     if request.method == 'POST':
-        from core.models import Tutorial
+        from core.models import Tutorial, TrainingCategory
         
         title = request.POST.get('title')
         description = request.POST.get('description')
+        category_id = request.POST.get('category')
         pdf_file = request.FILES.get('pdf_file')
         order = request.POST.get('order', 0)
         
-        tutorial = Tutorial.objects.create(
-            title=title,
-            description=description,
-            pdf_file=pdf_file,
-            order=order,
-            created_by=request.user
-        )
-        
-        messages.success(request, 'Tutorial criado com sucesso!')
-        return redirect('manage_tutorials')
+        try:
+            category = None
+            if category_id:
+                category = get_object_or_404(TrainingCategory, id=category_id)
+            
+            tutorial = Tutorial.objects.create(
+                title=title,
+                description=description,
+                category=category,
+                pdf_file=pdf_file,
+                order=order,
+                created_by=request.user
+            )
+            
+            log_action(
+                request.user,
+                'TUTORIAL_CREATE',
+                f'Tutorial criado: {tutorial.title}',
+                request
+            )
+            
+            messages.success(request, 'Tutorial criado com sucesso!')
+            return redirect('manage_tutorials')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar tutorial: {str(e)}')
     
-    return render(request, 'admin/create_tutorial.html')
+    from core.models import TrainingCategory
+    categories = TrainingCategory.objects.filter(is_active=True).order_by('name')
+    
+    context = {
+        'categories': categories,
+    }
+    return render(request, 'admin/create_tutorial.html', context)
 
 
 @login_required
@@ -2014,3 +2473,427 @@ def reject_cs_transaction(request, transaction_id):
         
     except Exception as e:
         return JsonResponse({'error': f'Erro ao rejeitar transação: {str(e)}'}, status=500)
+
+
+# ===== CHECKLIST VIEWS =====
+@login_required
+def checklist_dashboard_view(request):
+    """Dashboard de checklists do usuário"""
+    from core.models import DailyChecklist, ChecklistItem
+    from django.utils import timezone
+    from datetime import date, timedelta
+    
+    today = date.today()
+    user = request.user
+    
+    # Checklist de hoje
+    today_checklist = DailyChecklist.objects.filter(
+        user=user,
+        date=today
+    ).prefetch_related('items').first()
+    
+    # Checklists da semana (últimos 7 dias)
+    week_ago = today - timedelta(days=7)
+    week_checklists = DailyChecklist.objects.filter(
+        user=user,
+        date__gte=week_ago,
+        date__lte=today
+    ).prefetch_related('items').order_by('-date')
+    
+    # Estatísticas
+    total_checklists = DailyChecklist.objects.filter(user=user).count()
+    completed_checklists = DailyChecklist.objects.filter(
+        user=user, 
+        completed_at__isnull=False
+    ).count()
+    
+    completion_rate = 0
+    if total_checklists > 0:
+        completion_rate = round((completed_checklists / total_checklists) * 100)
+    
+    context = {
+        'today_checklist': today_checklist,
+        'week_checklists': week_checklists,
+        'completion_rate': completion_rate,
+        'total_checklists': total_checklists,
+        'completed_checklists': completed_checklists,
+        'today': today,
+    }
+    return render(request, 'checklist/dashboard.html', context)
+
+
+@login_required
+def checklist_detail_view(request, checklist_id):
+    """Detalhes de um checklist específico"""
+    from core.models import DailyChecklist
+    
+    checklist = get_object_or_404(
+        DailyChecklist, 
+        id=checklist_id,
+        user=request.user
+    )
+    
+    items = checklist.items.all().order_by('order', 'title')
+    
+    context = {
+        'checklist': checklist,
+        'items': items,
+        'completion_percentage': checklist.get_completion_percentage(),
+    }
+    return render(request, 'checklist/detail.html', context)
+
+
+@login_required
+@require_POST
+def update_checklist_item_status(request, item_id):
+    """Atualizar status de um item do checklist"""
+    from core.models import ChecklistItem
+    
+    try:
+        item = get_object_or_404(
+            ChecklistItem,
+            id=item_id,
+            checklist__user=request.user
+        )
+        
+        new_status = request.POST.get('status')
+        if new_status not in ['PENDING', 'DOING', 'DONE']:
+            return JsonResponse({'success': False, 'error': 'Status inválido'})
+        
+        item.status = new_status
+        item.save()
+        
+        # Recalcular porcentagem de conclusão
+        completion_percentage = item.checklist.get_completion_percentage()
+        is_completed = item.checklist.completed_at is not None
+        
+        return JsonResponse({
+            'success': True,
+            'new_status': new_status,
+            'completion_percentage': completion_percentage,
+            'is_completed': is_completed,
+            'message': f'Item "{item.title}" atualizado!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+# ===== ATIVIDADES/TAREFAS VIEWS =====
+@login_required
+def tasks_dashboard_view(request):
+    """Dashboard de tarefas do usuário"""
+    from core.models import TaskActivity
+    from django.utils import timezone
+    from datetime import date, timedelta
+    
+    user = request.user
+    today = timezone.now()
+    
+    # Tarefas do usuário
+    user_tasks = TaskActivity.objects.filter(assigned_to=user)
+    
+    # Separar por status
+    pending_tasks = user_tasks.filter(status='PENDING').order_by('due_date')
+    doing_tasks = user_tasks.filter(status='DOING').order_by('due_date')
+    done_tasks = user_tasks.filter(status='DONE').order_by('-completed_at')[:10]
+    
+    # Tarefas em atraso
+    overdue_tasks = user_tasks.filter(
+        status__in=['PENDING', 'DOING'],
+        due_date__lt=today
+    ).order_by('due_date')
+    
+    # Estatísticas
+    total_tasks = user_tasks.count()
+    completed_tasks = user_tasks.filter(status='DONE').count()
+    completion_rate = 0
+    if total_tasks > 0:
+        completion_rate = round((completed_tasks / total_tasks) * 100)
+    
+    context = {
+        'pending_tasks': pending_tasks,
+        'doing_tasks': doing_tasks,
+        'done_tasks': done_tasks,
+        'overdue_tasks': overdue_tasks,
+        'completion_rate': completion_rate,
+        'total_tasks': total_tasks,
+        'completed_tasks': completed_tasks,
+    }
+    return render(request, 'tasks/dashboard.html', context)
+
+
+@login_required
+@require_POST
+def update_task_status(request, task_id):
+    """Atualizar status de uma tarefa"""
+    from core.models import TaskActivity
+    
+    try:
+        task = get_object_or_404(
+            TaskActivity,
+            id=task_id,
+            assigned_to=request.user
+        )
+        
+        new_status = request.POST.get('status')
+        if new_status not in ['PENDING', 'DOING', 'DONE']:
+            return JsonResponse({'success': False, 'error': 'Status inválido'})
+        
+        task.status = new_status
+        task.save()
+        
+        return JsonResponse({
+            'success': True,
+            'new_status': new_status,
+            'message': f'Tarefa "{task.title}" atualizada!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+# ===== VIEWS ADMINISTRATIVAS PARA SUPERVISORES =====
+@login_required
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+def manage_checklists_view(request):
+    """Gerenciar templates de checklist (apenas supervisores)"""
+    from core.models import ChecklistTemplate, ChecklistTemplateItem
+    
+    if request.method == 'POST':
+        # Criar novo template de checklist
+        title = request.POST.get('title')
+        description = request.POST.get('description')
+        
+        if title:
+            template = ChecklistTemplate.objects.create(
+                title=title,
+                description=description,
+                created_by=request.user
+            )
+            
+            # Adicionar itens se fornecidos
+            items = request.POST.getlist('items[]')
+            for i, item_title in enumerate(items):
+                if item_title.strip():
+                    ChecklistTemplateItem.objects.create(
+                        template=template,
+                        title=item_title.strip(),
+                        order=i + 1
+                    )
+            
+            messages.success(request, f'Template "{title}" criado com sucesso!')
+            return redirect('manage_checklists')
+        else:
+            messages.error(request, 'Nome do template é obrigatório!')
+    
+    templates = ChecklistTemplate.objects.all().prefetch_related('items').order_by('-created_at')
+    
+    context = {
+        'templates': templates,
+    }
+    return render(request, 'admin_panel/manage_checklists.html', context)
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+def create_daily_checklist(request):
+    """Criar checklist diário para usuários"""
+    from core.models import ChecklistTemplate, DailyChecklist, ChecklistItem
+    from datetime import date
+    
+    if request.method == 'POST':
+        template_id = request.POST.get('template_id')
+        user_ids = request.POST.getlist('user_ids')
+        checklist_date = request.POST.get('date', date.today().isoformat())
+        
+        if not template_id or not user_ids:
+            messages.error(request, 'Template e usuários são obrigatórios!')
+            return redirect('create_daily_checklist')
+        
+        try:
+            template = ChecklistTemplate.objects.get(id=template_id)
+            target_date = date.fromisoformat(checklist_date)
+            created_count = 0
+            
+            for user_id in user_ids:
+                user = User.objects.get(id=user_id)
+                
+                # Verificar se já existe checklist para esta data
+                if DailyChecklist.objects.filter(user=user, date=target_date).exists():
+                    continue
+                
+                # Criar checklist
+                daily_checklist = DailyChecklist.objects.create(
+                    user=user,
+                    template=template,
+                    date=target_date,
+                    created_by=request.user
+                )
+                
+                # Criar itens baseados no template
+                for template_item in template.items.all():
+                    ChecklistItem.objects.create(
+                        checklist=daily_checklist,
+                        title=template_item.title,
+                        description=template_item.description,
+                        order=template_item.order
+                    )
+                
+                created_count += 1
+            
+            messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso!')
+            return redirect('manage_checklists')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar checklists: {str(e)}')
+    
+    # GET - mostrar formulário
+    templates = ChecklistTemplate.objects.all().order_by('title')
+    users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    
+    context = {
+        'templates': templates,
+        'users': users,
+        'today': date.today(),
+    }
+    return render(request, 'admin_panel/create_daily_checklist.html', context)
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+def manage_tasks_view(request):
+    """Gerenciar tarefas/atividades (apenas supervisores)"""
+    from core.models import TaskActivity
+    
+    # Filtros
+    status_filter = request.GET.get('status', '')
+    user_filter = request.GET.get('user', '')
+    
+    tasks = TaskActivity.objects.all().select_related('assigned_to', 'created_by')
+    
+    if status_filter:
+        tasks = tasks.filter(status=status_filter)
+    
+    if user_filter:
+        tasks = tasks.filter(assigned_to_id=user_filter)
+    
+    tasks = tasks.order_by('-created_at')
+    
+    # Para estatísticas
+    all_tasks = TaskActivity.objects.all()
+    stats = {
+        'total': all_tasks.count(),
+        'pending': all_tasks.filter(status='PENDING').count(),
+        'doing': all_tasks.filter(status='DOING').count(),
+        'done': all_tasks.filter(status='DONE').count(),
+    }
+    
+    users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    
+    context = {
+        'tasks': tasks,
+        'users': users,
+        'stats': stats,
+        'status_filter': status_filter,
+        'user_filter': user_filter,
+        'STATUS_CHOICES': TaskActivity.STATUS_CHOICES,
+    }
+    return render(request, 'admin_panel/manage_tasks.html', context)
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+def create_task_view(request):
+    """Criar nova tarefa/atividade"""
+    from core.models import TaskActivity
+    from datetime import datetime
+    
+    if request.method == 'POST':
+        title = request.POST.get('title')
+        description = request.POST.get('description')
+        assigned_to_id = request.POST.get('assigned_to')
+        due_date = request.POST.get('due_date')
+        priority = request.POST.get('priority', 'MEDIUM')
+        
+        if not title or not assigned_to_id:
+            messages.error(request, 'Título e usuário são obrigatórios!')
+            return redirect('create_task')
+        
+        try:
+            assigned_user = User.objects.get(id=assigned_to_id)
+            
+            task = TaskActivity.objects.create(
+                title=title,
+                description=description,
+                assigned_to=assigned_user,
+                created_by=request.user,
+                priority=priority,
+                due_date=datetime.fromisoformat(due_date) if due_date else None
+            )
+            
+            messages.success(request, f'Tarefa "{title}" criada com sucesso!')
+            return redirect('manage_tasks')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar tarefa: {str(e)}')
+    
+    users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    
+    context = {
+        'users': users,
+        'PRIORITY_CHOICES': TaskActivity.PRIORITY_CHOICES,
+    }
+    return render(request, 'admin_panel/create_task.html', context)
+
+
+@login_required
+@require_POST
+def delete_checklist_template(request, template_id):
+    """Deletar template de checklist"""
+    from core.models import ChecklistTemplate
+    
+    try:
+        template = get_object_or_404(ChecklistTemplate, id=template_id)
+        
+        # Verificar se o usuário tem permissão
+        if not (request.user.is_staff or request.user.groups.filter(name='Supervisores').exists()):
+            return JsonResponse({'success': False, 'error': 'Permissão negada'})
+        
+        template_name = template.name
+        template.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Template "{template_name}" removido com sucesso!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+@require_POST
+def delete_task(request, task_id):
+    """Deletar tarefa"""
+    from core.models import TaskActivity
+    
+    try:
+        task = get_object_or_404(TaskActivity, id=task_id)
+        
+        # Verificar se o usuário tem permissão (supervisor ou criador da tarefa)
+        if not (request.user.is_staff or 
+                request.user.groups.filter(name='Supervisores').exists() or
+                task.created_by == request.user):
+            return JsonResponse({'success': False, 'error': 'Permissão negada'})
+        
+        task_title = task.title
+        task.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Tarefa "{task_title}" removida com sucesso!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

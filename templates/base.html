@@ -169,6 +169,83 @@
                                 {% endif %}
                             </ul>
                         </li>
+
+                        <!-- Menu Checklists -->
+                        <li>
+                            <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists">
+                                <i class="fas fa-clipboard-check text-primary flex-shrink-0"></i>
+                                <span class="text-sm">Checklists</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        
+                        <!-- Sub Menu Checklists -->
+                        <li class="ml-4">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Checklists">
+                                        <i class="fas fa-list-check text-blue-400 flex-shrink-0"></i>
+                                        <span>Meus Checklists</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user.hierarchy != 'PADRAO' %}
+                                    <li>
+                                        <a href="{% url 'manage_checklists' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Checklists">
+                                            <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
+                                            <span>Gerenciar</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="{% url 'create_daily_checklist' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Criar Checklist">
+                                            <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
+                                            <span>Criar</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </li>
+
+                        <!-- Menu Tarefas -->
+                        <li>
+                            <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Tarefas">
+                                <i class="fas fa-tasks text-primary flex-shrink-0"></i>
+                                <span class="text-sm">Tarefas</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        
+                        <!-- Sub Menu Tarefas -->
+                        <li class="ml-4">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
+                                        <i class="fas fa-user-check text-blue-400 flex-shrink-0"></i>
+                                        <span>Minhas Tarefas</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user.hierarchy in 'SUPERVISOR,ADMINISTRATIVO,ADMIN,SUPERADMIN' %}
+                                    <li>
+                                        <a href="{% url 'manage_tasks' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Tarefas">
+                                            <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
+                                            <span>Gerenciar</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="{% url 'create_task' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Nova Tarefa">
+                                            <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
+                                            <span>Nova</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </li>
+
                         <li>
                             <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Chamados">
                                 <i class="fas fa-ticket-alt text-primary flex-shrink-0"></i>
@@ -374,7 +451,7 @@
                         <li>
                             <ul class="space-y-1">
                                 <li>
-                                    <a href="{% url 'help' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Ajuda">
+                                    <a href="{% url 'help_tutorials' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Ajuda">
                                         <i class="fas fa-question-circle text-cyan-400 flex-shrink-0"></i>
                                         <span>Ajuda</span>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
@@ -466,7 +543,7 @@
                                     <a href="{% url 'settings' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
                                         <i class="fas fa-cog mr-2"></i> Configurações
                                     </a>
-                                    <a href="{% url 'help' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                    <a href="{% url 'help_tutorials' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
                                         <i class="fas fa-question-circle mr-2"></i> Ajuda
                                     </a>
                                     {% if user.can_manage_users %}

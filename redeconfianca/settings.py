@@ -249,3 +249,13 @@ if not DEBUG:
     # Se você estiver usando um domínio específico, adicione aqui
     if 'chamados.redeconfianca.com.br' not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append('chamados.redeconfianca.com.br')
+
+# Configurações de Email
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Sistema Rede Confiança <noreply@redeconfianca.com.br>')

@@ -5,6 +5,7 @@ urlpatterns = [
     path('', views.dashboard_view, name='dashboard'),
     path('login/', views.login_view, name='login'),
     path('forgot-password/', views.forgot_password_view, name='forgot_password'),
+    path('reset-password/<uidb64>/<token>/', views.reset_password_view, name='reset_password'),
     path('logout/', views.logout_view, name='logout'),
     
     # Profile URLs
@@ -12,7 +13,8 @@ urlpatterns = [
     path('profile/update/', views.update_profile_view, name='update_profile'),
     path('settings/', views.settings_view, name='settings'),
     path('settings/update/', views.update_settings_view, name='update_settings'),
-    path('help/', views.help_view, name='help'),
+    path('help/', views.help_view, name='help_tutorials'),
+    path('help/tutorial/<int:tutorial_id>/', views.tutorial_detail_view, name='tutorial_detail'),
     path('change-password/', views.change_password_view, name='change_password'),
     
     # Admin URLs - usando 'manage' para evitar conflito com django admin
@@ -37,6 +39,9 @@ urlpatterns = [
     path('manage/webhooks/create/', views.create_webhook_view, name='create_webhook'),
     path('manage/tutorials/', views.manage_tutorials_view, name='manage_tutorials'),
     path('manage/tutorials/create/', views.create_tutorial_view, name='create_tutorial'),
+    path('manage/training-categories/', views.manage_training_categories_view, name='manage_training_categories'),
+    path('manage/training-categories/create/', views.create_training_category_view, name='create_training_category'),
+    path('manage/training-categories/<int:category_id>/edit/', views.edit_training_category_view, name='edit_training_category'),
     path('manage/prizes/', views.manage_prizes_view, name='manage_prizes'),
     path('manage/prizes/create/', views.create_prize_view, name='create_prize'),
     path('manage/prizes/<int:prize_id>/edit/', views.edit_prize_view, name='edit_prize'),
@@ -56,4 +61,21 @@ urlpatterns = [
     path('manage/cs-transactions/', views.pending_cs_transactions_view, name='pending_cs_transactions'),
     path('manage/cs-transactions/<int:transaction_id>/approve/', views.approve_cs_transaction, name='approve_cs_transaction'),
     path('manage/cs-transactions/<int:transaction_id>/reject/', views.reject_cs_transaction, name='reject_cs_transaction'),
+    
+    # Checklist URLs
+    path('checklist/', views.checklist_dashboard_view, name='checklist_dashboard'),
+    path('checklist/<int:checklist_id>/', views.checklist_detail_view, name='checklist_detail'),
+    path('checklist/item/<int:item_id>/update-status/', views.update_checklist_item_status, name='update_checklist_item_status'),
+    
+    # Tasks URLs
+    path('tasks/', views.tasks_dashboard_view, name='tasks_dashboard'),
+    path('tasks/<int:task_id>/update-status/', views.update_task_status, name='update_task_status'),
+    
+    # Admin Checklist & Tasks Management
+    path('manage/checklists/', views.manage_checklists_view, name='manage_checklists'),
+    path('manage/checklists/create-daily/', views.create_daily_checklist, name='create_daily_checklist'),
+    path('manage/checklists/template/<int:template_id>/delete/', views.delete_checklist_template, name='delete_checklist_template'),
+    path('manage/tasks/', views.manage_tasks_view, name='manage_tasks'),
+    path('manage/tasks/create/', views.create_task_view, name='create_task'),
+    path('manage/tasks/<int:task_id>/delete/', views.delete_task, name='delete_task'),
 ]

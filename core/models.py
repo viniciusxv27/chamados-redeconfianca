@@ -65,9 +65,27 @@ class SystemLog(models.Model):
         return f"{user_name} - {self.action_type}"
 
 
+class TrainingCategory(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Nome")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    color = models.CharField(max_length=7, default="#3B82F6", verbose_name="Cor")  # Hex color
+    icon = models.CharField(max_length=50, default="fas fa-graduation-cap", verbose_name="Ícone")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Categoria de Treinamento"
+        verbose_name_plural = "Categorias de Treinamento"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
 class Tutorial(models.Model):
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(verbose_name="Descrição")
+    category = models.ForeignKey(TrainingCategory, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoria")
     pdf_file = models.FileField(upload_to=upload_tutorial_pdf, storage=get_media_storage(), verbose_name="Arquivo PDF")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
@@ -86,6 +104,66 @@ class Tutorial(models.Model):
 
     def __str__(self):
         return self.title
+    
+    def get_progress_for_user(self, user):
+        """Retorna o progresso do usuário para este tutorial"""
+        try:
+            return self.user_progress.get(user=user)
+        except TutorialProgress.DoesNotExist:
+            return None
+    
+    def get_viewers_count(self):
+        """Retorna quantos usuários visualizaram este tutorial"""
+        return self.user_progress.filter(viewed_at__isnull=False).count()
+    
+    def get_completed_count(self):
+        """Retorna quantos usuários completaram este tutorial"""
+        return self.user_progress.filter(completed_at__isnull=False).count()
+    
+    def get_all_viewers(self):
+        """Retorna todos os usuários que visualizaram este tutorial"""
+        return User.objects.filter(
+            id__in=self.user_progress.filter(viewed_at__isnull=False).values_list('user_id', flat=True)
+        )
+    
+    def get_all_completed(self):
+        """Retorna todos os usuários que completaram este tutorial"""
+        return User.objects.filter(
+            id__in=self.user_progress.filter(completed_at__isnull=False).values_list('user_id', flat=True)
+        )
+
+
+class TutorialProgress(models.Model):
+    """Progresso do usuário em um tutorial"""
+    tutorial = models.ForeignKey(Tutorial, on_delete=models.CASCADE, related_name='user_progress')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tutorial_progress')
+    viewed_at = models.DateTimeField(null=True, blank=True, verbose_name="Visualizado em")
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
+    
+    class Meta:
+        verbose_name = "Progresso do Tutorial"
+        verbose_name_plural = "Progresso dos Tutoriais"
+        unique_together = ['tutorial', 'user']
+        ordering = ['-viewed_at']
+    
+    def __str__(self):
+        status = "Concluído" if self.completed_at else ("Visualizado" if self.viewed_at else "Não iniciado")
+        return f"{self.user.full_name} - {self.tutorial.title} ({status})"
+    
+    def mark_as_viewed(self):
+        """Marca como visualizado se ainda não foi"""
+        if not self.viewed_at:
+            self.viewed_at = timezone.now()
+            self.save()
+    
+    def mark_as_completed(self):
+        """Marca como concluído"""
+        now = timezone.now()
+        if not self.viewed_at:
+            self.viewed_at = now
+        if not self.completed_at:
+            self.completed_at = now
+            self.save()
 
 
 class Report(models.Model):
@@ -278,3 +356,220 @@ class NotificationMixin:
                 )
             )
         return Notification.objects.bulk_create(notifications)
+
+
+# ===== CHECKLIST MODELS =====
+class ChecklistTemplate(models.Model):
+    """Template de checklist padrão que será aplicado diariamente"""
+    title = models.CharField(max_length=200, verbose_name="Título")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    is_default_daily = models.BooleanField(default=False, verbose_name="Checklist Padrão Diário")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_checklist_templates')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Template de Checklist"
+        verbose_name_plural = "Templates de Checklist"
+        ordering = ['title']
+    
+    def __str__(self):
+        return self.title
+
+
+class ChecklistTemplateItem(models.Model):
+    """Itens do template de checklist"""
+    template = models.ForeignKey(ChecklistTemplate, on_delete=models.CASCADE, related_name='items')
+    title = models.CharField(max_length=200, verbose_name="Título")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    order = models.IntegerField(default=0, verbose_name="Ordem")
+    is_required = models.BooleanField(default=True, verbose_name="Obrigatório")
+    
+    class Meta:
+        verbose_name = "Item do Template"
+        verbose_name_plural = "Itens do Template"
+        ordering = ['order', 'title']
+    
+    def __str__(self):
+        return f"{self.template.title} - {self.title}"
+
+
+class DailyChecklist(models.Model):
+    """Checklist diário para um usuário específico"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='daily_checklists')
+    date = models.DateField(verbose_name="Data")
+    title = models.CharField(max_length=200, verbose_name="Título")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_checklists')
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
+    
+    class Meta:
+        verbose_name = "Checklist Diário"
+        verbose_name_plural = "Checklists Diários"
+        unique_together = ['user', 'date', 'title']
+        ordering = ['-date', '-created_at']
+    
+    def __str__(self):
+        return f"{self.user.full_name} - {self.title} ({self.date})"
+    
+    def get_completion_percentage(self):
+        """Calcula a porcentagem de conclusão do checklist"""
+        total_items = self.items.count()
+        if total_items == 0:
+            return 0
+        completed_items = self.items.filter(status='DONE').count()
+        return round((completed_items / total_items) * 100)
+    
+    def is_fully_completed(self):
+        """Verifica se todos os itens obrigatórios foram concluídos"""
+        required_items = self.items.filter(is_required=True)
+        completed_required = required_items.filter(status='DONE')
+        return required_items.count() == completed_required.count()
+    
+    def mark_as_completed(self):
+        """Marca o checklist como concluído se todos os itens obrigatórios estiverem feitos"""
+        if self.is_fully_completed() and not self.completed_at:
+            self.completed_at = timezone.now()
+            self.save()
+
+
+class ChecklistItem(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente'),
+        ('DOING', 'Fazendo'),
+        ('DONE', 'Feito'),
+    ]
+    
+    checklist = models.ForeignKey(DailyChecklist, on_delete=models.CASCADE, related_name='items')
+    title = models.CharField(max_length=200, verbose_name="Título")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")
+    is_required = models.BooleanField(default=True, verbose_name="Obrigatório")
+    order = models.IntegerField(default=0, verbose_name="Ordem")
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Item do Checklist"
+        verbose_name_plural = "Itens do Checklist"
+        ordering = ['order', 'title']
+    
+    def __str__(self):
+        return f"{self.checklist.user.full_name} - {self.title} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        # Atualizar timestamp quando marcado como concluído
+        if self.status == 'DONE' and not self.completed_at:
+            self.completed_at = timezone.now()
+        elif self.status != 'DONE':
+            self.completed_at = None
+        
+        super().save(*args, **kwargs)
+        
+        # Verificar se o checklist pai pode ser marcado como concluído
+        self.checklist.mark_as_completed()
+
+
+# ===== ATIVIDADES MODELS =====
+class TaskActivity(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente'),
+        ('DOING', 'Fazendo'),
+        ('DONE', 'Feito'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', 'Baixa'),
+        ('MEDIUM', 'Média'),
+        ('HIGH', 'Alta'),
+        ('URGENT', 'Urgente'),
+    ]
+    
+    title = models.CharField(max_length=200, verbose_name="Título")
+    description = models.TextField(verbose_name="Descrição")
+    assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='task_activities')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_task_activities')
+    
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM', verbose_name="Prioridade")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")
+    
+    due_date = models.DateTimeField(verbose_name="Prazo")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
+    
+    # Campos opcionais
+    estimated_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="Horas Estimadas")
+    actual_hours = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="Horas Reais")
+    
+    class Meta:
+        verbose_name = "Tarefa"
+        verbose_name_plural = "Tarefas"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['assigned_to', 'status']),
+            models.Index(fields=['due_date', 'status']),
+            models.Index(fields=['created_by', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} - {self.assigned_to.full_name}"
+    
+    def save(self, *args, **kwargs):
+        # Atualizar timestamp quando marcado como concluído
+        if self.status == 'DONE' and not self.completed_at:
+            self.completed_at = timezone.now()
+        elif self.status != 'DONE':
+            self.completed_at = None
+        
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_overdue(self):
+        """Verifica se a atividade está em atraso"""
+        if self.status == 'DONE':
+            return False
+        return timezone.now() > self.due_date
+    
+    @property
+    def priority_color(self):
+        """Retorna a cor baseada na prioridade"""
+        colors = {
+            'LOW': 'green',
+            'MEDIUM': 'yellow',
+            'HIGH': 'orange',
+            'URGENT': 'red',
+        }
+        return colors.get(self.priority, 'gray')
+    
+    def can_be_managed_by(self, user):
+        """Verifica se o usuário pode gerenciar esta atividade"""
+        # O criador pode gerenciar
+        if user == self.created_by:
+            return True
+        
+        # Superadmin pode gerenciar tudo
+        if user.hierarchy == 'SUPERADMIN':
+            return True
+            
+        # Supervisores podem gerenciar atividades dos seus setores
+        if user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            assigned_sectors = list(self.assigned_to.sectors.all())
+            if self.assigned_to.sector:
+                assigned_sectors.append(self.assigned_to.sector)
+            return bool(set(user_sectors) & set(assigned_sectors))
+        
+        return False
+    
+    def can_be_viewed_by(self, user):
+        """Verifica se o usuário pode visualizar esta atividade"""
+        # A pessoa designada pode ver
+        if user == self.assigned_to:
+            return True
+        
+        # Se pode gerenciar, pode visualizar
+        return self.can_be_managed_by(user)

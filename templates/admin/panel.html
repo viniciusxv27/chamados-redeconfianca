@@ -63,7 +63,7 @@
     </div>
     
     <!-- Quick Actions -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow-sm p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
                 <i class="fas fa-users text-blue-600 mr-2"></i>
@@ -108,6 +108,22 @@
                 </a>
                 <a href="{% url 'create_group' %}" class="block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-center text-sm">
                     Criar Grupo
+                </a>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-graduation-cap text-indigo-600 mr-2"></i>
+                Treinamentos
+            </h3>
+            <p class="text-gray-600 mb-4 text-sm">Sistema de treinamentos e tutoriais</p>
+            <div class="space-y-2">
+                <a href="{% url 'help_tutorials' %}" class="block bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-center text-sm">
+                    Ver Treinamentos
+                </a>
+                <a href="{% url 'manage_training_categories' %}" class="block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center text-sm">
+                    Categorias
                 </a>
             </div>
         </div>

@@ -1,0 +1,373 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerenciar Tarefas{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg p-6 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">
+                    <i class="fas fa-tasks mr-3"></i>Gerenciar Tarefas e Atividades
+                </h1>
+                <p class="text-indigo-100">
+                    Visualize, gerencie e acompanhe todas as tarefas dos usuários
+                </p>
+            </div>
+            <a href="{% url 'create_task' %}" 
+               class="bg-white text-indigo-600 hover:bg-gray-100 font-medium py-3 px-6 rounded-lg transition-colors">
+                <i class="fas fa-plus mr-2"></i>Nova Tarefa
+            </a>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-2xl font-bold text-primary">{{ stats.total }}</p>
+                    <p class="text-gray-600">Total</p>
+                </div>
+                <div class="bg-primary bg-opacity-10 p-3 rounded-full">
+                    <i class="fas fa-tasks text-primary text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-2xl font-bold text-yellow-600">{{ stats.pending }}</p>
+                    <p class="text-gray-600">Pendentes</p>
+                </div>
+                <div class="bg-yellow-100 p-3 rounded-full">
+                    <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-2xl font-bold text-blue-600">{{ stats.doing }}</p>
+                    <p class="text-gray-600">Em Andamento</p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-full">
+                    <i class="fas fa-play text-blue-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-2xl font-bold text-green-600">{{ stats.done }}</p>
+                    <p class="text-gray-600">Concluídas</p>
+                </div>
+                <div class="bg-green-100 p-3 rounded-full">
+                    <i class="fas fa-check text-green-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                        id="status-filter" name="status">
+                    <option value="">Todos os status</option>
+                    {% for status_choice in STATUS_CHOICES %}
+                    <option value="{{ status_choice.0 }}" 
+                            {% if status_filter == status_choice.0 %}selected{% endif %}>
+                        {{ status_choice.1 }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="user-filter" class="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                        id="user-filter" name="user">
+                    <option value="">Todos os usuários</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" 
+                            {% if user_filter == user.id|stringformat:"s" %}selected{% endif %}>
+                        {{ user.get_full_name|default:user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="flex space-x-2">
+                <button type="submit" 
+                        class="bg-primary hover:bg-primary-dark text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+                <a href="{% url 'manage_tasks' %}" 
+                   class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-times mr-2"></i>Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Tarefas -->
+    {% if tasks %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for task in tasks %}
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <!-- Header do Card -->
+            <div class="p-6 pb-4">
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="text-lg font-semibold text-gray-900 line-clamp-2">{{ task.title }}</h3>
+                    <div class="relative">
+                        <button type="button" 
+                                class="text-gray-400 hover:text-gray-600 p-1"
+                                onclick="toggleDropdown({{ task.id }})">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <div id="dropdown-{{ task.id }}" 
+                             class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-10 hidden">
+                            <div class="py-2">
+                                <div class="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                                    Ações
+                                </div>
+                                <button onclick="editTask({{ task.id }})" 
+                                        class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                    <i class="fas fa-edit w-4 mr-2"></i>Editar
+                                </button>
+                                <div class="border-t border-gray-100"></div>
+                                <button onclick="deleteTask({{ task.id }}, '{{ task.title|escapejs }}')" 
+                                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                    <i class="fas fa-trash w-4 mr-2"></i>Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prioridade e Status -->
+                <div class="flex items-center space-x-2 mb-3">
+                    {% if task.priority %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                        {% if task.priority == 'HIGH' %}bg-red-100 text-red-800
+                        {% elif task.priority == 'MEDIUM' %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-green-100 text-green-800{% endif %}">
+                        <i class="fas fa-flag mr-1"></i>{{ task.get_priority_display }}
+                    </span>
+                    {% endif %}
+                    
+                    {% if task.status == 'PENDING' %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <i class="fas fa-clock mr-1"></i>Pendente
+                        </span>
+                    {% elif task.status == 'DOING' %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <i class="fas fa-play mr-1"></i>Em Andamento
+                        </span>
+                    {% elif task.status == 'DONE' %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <i class="fas fa-check mr-1"></i>Concluída
+                        </span>
+                    {% endif %}
+                </div>
+
+                <!-- Descrição -->
+                {% if task.description %}
+                <p class="text-sm text-gray-600 mb-4 line-clamp-3">{{ task.description|truncatechars:100 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Informações -->
+            <div class="px-6 pb-4">
+                <div class="space-y-2 text-sm text-gray-600">
+                    <div class="flex items-center">
+                        <i class="fas fa-user w-4 mr-2 text-gray-400"></i>
+                        <span class="font-medium">Atribuído:</span>
+                        <span class="ml-1">{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</span>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <i class="fas fa-user-tie w-4 mr-2 text-gray-400"></i>
+                        <span class="font-medium">Criado por:</span>
+                        <span class="ml-1">{{ task.created_by.get_full_name|default:task.created_by.username }}</span>
+                    </div>
+
+                    {% if task.due_date %}
+                    <div class="flex items-center {% if task.due_date < today and task.status != 'DONE' %}text-red-600{% endif %}">
+                        <i class="fas fa-calendar-alt w-4 mr-2 text-gray-400"></i>
+                        <span class="font-medium">Prazo:</span>
+                        <span class="ml-1">{{ task.due_date|date:"d/m/Y H:i" }}</span>
+                        {% if task.due_date < today and task.status != 'DONE' %}
+                            <span class="ml-2 font-bold text-red-600">
+                                ({{ task.due_date|timesince }} atrás)
+                            </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="flex items-center">
+                        <i class="fas fa-clock w-4 mr-2 text-gray-400"></i>
+                        <span class="font-medium">Criado:</span>
+                        <span class="ml-1">{{ task.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+
+                    {% if task.status == 'DONE' and task.completed_at %}
+                    <div class="flex items-center text-green-600">
+                        <i class="fas fa-check-circle w-4 mr-2"></i>
+                        <span class="font-medium">Concluído:</span>
+                        <span class="ml-1">{{ task.completed_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-200">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-500">ID: #{{ task.id }}</span>
+                    {% if task.priority %}
+                    <span class="text-gray-500 flex items-center">
+                        <i class="fas fa-flag mr-1 
+                            {% if task.priority == 'HIGH' %}text-red-500
+                            {% elif task.priority == 'MEDIUM' %}text-yellow-500
+                            {% else %}text-green-500{% endif %}"></i>
+                        {{ task.get_priority_display }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow-lg p-12 text-center">
+        <i class="fas fa-tasks text-6xl text-gray-400 mb-6"></i>
+        <h3 class="text-2xl font-semibold text-gray-700 mb-2">Nenhuma tarefa encontrada</h3>
+        <p class="text-gray-600 mb-6 max-w-md mx-auto">
+            {% if status_filter or user_filter %}
+            Nenhuma tarefa corresponde aos filtros aplicados.
+            {% else %}
+            Crie a primeira tarefa para começar a gerenciar atividades dos usuários.
+            {% endif %}
+        </p>
+        
+        {% if status_filter or user_filter %}
+        <a href="{% url 'manage_tasks' %}" 
+           class="bg-primary hover:bg-primary-dark text-white font-medium py-2 px-4 rounded-lg transition-colors">
+            <i class="fas fa-times mr-2"></i>Limpar Filtros
+        </a>
+        {% else %}
+        <a href="{% url 'create_task' %}" 
+           class="bg-primary hover:bg-primary-dark text-white font-medium py-3 px-6 rounded-lg transition-colors">
+            <i class="fas fa-plus mr-2"></i>Criar Primeira Tarefa
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function deleteTask(taskId, taskTitle) {
+    if (confirm(`Tem certeza que deseja excluir a tarefa "${taskTitle}"?\n\nEsta ação não pode ser desfeita.`)) {
+        fetch(`{% url 'delete_task' 0 %}`.replace('0', taskId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.error || 'Erro ao excluir tarefa', 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Erro ao excluir tarefa', 'error');
+        });
+    }
+}
+
+function editTask(taskId) {
+    showToast('Funcionalidade de edição será implementada em breve', 'info');
+}
+
+function toggleDropdown(taskId) {
+    // Fechar outros dropdowns
+    document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+        if (dropdown.id !== `dropdown-${taskId}`) {
+            dropdown.classList.add('hidden');
+        }
+    });
+    
+    // Toggle do dropdown atual
+    const dropdown = document.getElementById(`dropdown-${taskId}`);
+    dropdown.classList.toggle('hidden');
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500'
+    };
+    
+    toast.className = `${colors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3 transform transition-all duration-300 translate-x-full`;
+    toast.innerHTML = `
+        <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="ml-2 text-white hover:text-gray-200">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    // Animar entrada
+    setTimeout(() => {
+        toast.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Remover automaticamente após 4 segundos
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Fechar dropdowns ao clicar fora
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.relative')) {
+        document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+            dropdown.classList.add('hidden');
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh a cada 5 minutos
+    setInterval(function() {
+        if (document.hidden === false) {
+            location.reload();
+        }
+    }, 300000);
+});
+</script>
+{% endblock %}

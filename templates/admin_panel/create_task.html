@@ -1,0 +1,405 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Criar Nova Tarefa{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-6 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <nav class="mb-3">
+                    <ol class="flex space-x-2 text-green-100">
+                        <li>
+                            <a href="{% url 'manage_tasks' %}" class="hover:text-white transition-colors">
+                                <i class="fas fa-tasks mr-1"></i>Tarefas
+                            </a>
+                        </li>
+                        <li>/</li>
+                        <li class="text-white font-medium">Nova Tarefa</li>
+                    </ol>
+                </nav>
+                <h1 class="text-3xl font-bold mb-2">
+                    <i class="fas fa-plus mr-3"></i>Criar Nova Tarefa
+                </h1>
+                <p class="text-green-100">
+                    Atribua uma nova tarefa ou atividade para um usuário
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="createTaskForm" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {% csrf_token %}
+        
+        <!-- Formulário Principal -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div class="bg-primary text-white px-6 py-4">
+                    <h2 class="text-lg font-semibold">
+                        <i class="fas fa-cog mr-2"></i>Informações da Tarefa
+                    </h2>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Título -->
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                            Título da Tarefa *
+                        </label>
+                        <input type="text" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                               id="title" name="title" required
+                               placeholder="Digite um título claro e objetivo..."
+                               maxlength="200">
+                        <p class="text-sm text-gray-600 mt-1">
+                            Seja específico sobre o que precisa ser feito (máx. 200 caracteres)
+                        </p>
+                    </div>
+
+                    <!-- Descrição -->
+                    <div>
+                        <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                            Descrição Detalhada
+                        </label>
+                        <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                  id="description" name="description" rows="4"
+                                  placeholder="Descreva detalhadamente o que precisa ser feito, incluindo instruções específicas, recursos necessários, critérios de conclusão, etc."></textarea>
+                        <p class="text-sm text-gray-600 mt-1">
+                            Quanto mais detalhes, melhor será o entendimento da tarefa
+                        </p>
+                    </div>
+
+                    <!-- Usuário -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Atribuir para *
+                        </label>
+                        {% if users %}
+                        <div class="border border-gray-300 rounded-md p-4 max-h-80 overflow-y-auto" id="user-select">
+                            <div class="space-y-2">
+                                {% for user in users %}
+                                <div class="user-option p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-50 border border-transparent" 
+                                     data-user-id="{{ user.id }}" onclick="selectUser(this)">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <div class="font-medium text-gray-900">
+                                                {{ user.get_full_name|default:user.username }}
+                                            </div>
+                                            {% if user.email %}
+                                            <div class="text-sm text-gray-600">{{ user.email }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="text-right">
+                                            {% if user.sector %}
+                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                {{ user.sector.name }}
+                                            </span>
+                                            {% endif %}
+                                            <div class="text-xs text-gray-500 mt-1">ID: {{ user.id }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <input type="hidden" id="assigned_to" name="assigned_to" required>
+                        <div id="selected-user-info" class="mt-3 p-3 bg-blue-50 rounded-lg hidden">
+                            <!-- Informações do usuário selecionado -->
+                        </div>
+                        {% else %}
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                                <span class="text-yellow-800">Nenhum usuário disponível para atribuir tarefas.</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Prioridade -->
+                    <div>
+                        <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">
+                            Prioridade
+                        </label>
+                        <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                id="priority" name="priority" onchange="updatePriorityPreview()">
+                            {% for priority_choice in PRIORITY_CHOICES %}
+                            <option value="{{ priority_choice.0 }}" 
+                                    {% if priority_choice.0 == 'MEDIUM' %}selected{% endif %}>
+                                {{ priority_choice.1 }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div id="priority-preview" class="mt-2">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                                <i class="fas fa-flag mr-1"></i> Prioridade Média
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Data/Prazo -->
+                    <div>
+                        <label for="due_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            Prazo (Opcional)
+                        </label>
+                        <input type="datetime-local" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                               id="due_date" name="due_date">
+                        <p class="text-sm text-gray-600 mt-1">
+                            Se não definido, a tarefa não terá prazo específico
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar com Resumo -->
+        <div class="lg:col-span-1">
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden sticky top-6">
+                <div class="bg-green-500 text-white px-6 py-4">
+                    <h3 class="text-lg font-semibold">
+                        <i class="fas fa-clipboard-check mr-2"></i>Resumo da Tarefa
+                    </h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <div class="text-sm font-medium text-gray-700 mb-1">Título:</div>
+                        <div id="title-preview" class="text-gray-600">
+                            Digite o título da tarefa...
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm font-medium text-gray-700 mb-1">Atribuído para:</div>
+                        <div id="user-preview" class="text-gray-600">
+                            Selecione um usuário...
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm font-medium text-gray-700 mb-1">Prioridade:</div>
+                        <div id="priority-display" class="text-gray-600">
+                            Média
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm font-medium text-gray-700 mb-1">Prazo:</div>
+                        <div id="due-date-preview" class="text-gray-600">
+                            Sem prazo definido
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm font-medium text-gray-700 mb-1">Criado por:</div>
+                        <div class="text-primary font-medium">
+                            {{ request.user.get_full_name|default:request.user.username }}
+                        </div>
+                    </div>
+
+                    <hr class="border-gray-200">
+
+                    <div class="space-y-3">
+                        <button type="submit" 
+                                class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                id="createButton" disabled>
+                            <i class="fas fa-plus mr-2"></i>Criar Tarefa
+                        </button>
+
+                        <a href="{% url 'manage_tasks' %}" 
+                           class="block w-full text-center bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar para Tarefas
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Confirmação -->
+<div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg max-w-md w-full mx-4">
+        <div class="bg-green-500 text-white px-6 py-4 rounded-t-lg">
+            <h3 class="text-lg font-semibold">
+                <i class="fas fa-check mr-2"></i>Confirmar Criação
+            </h3>
+        </div>
+        <div class="p-6">
+            <p class="text-gray-700 mb-4">Você está prestes a criar uma nova tarefa com as seguintes informações:</p>
+            <ul id="confirmation-details" class="space-y-2 text-sm text-gray-600 mb-4">
+                <!-- Será preenchido via JavaScript -->
+            </ul>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div class="flex items-center">
+                    <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                    <div>
+                        <div class="text-sm font-medium text-blue-800">Importante:</div>
+                        <div class="text-sm text-blue-700">O usuário será notificado sobre a nova tarefa atribuída.</div>
+                    </div>
+                </div>
+            </div>
+            <p class="font-medium text-gray-900">Deseja continuar?</p>
+        </div>
+        <div class="bg-gray-50 px-6 py-4 rounded-b-lg flex justify-end space-x-3">
+            <button type="button" 
+                    class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                    onclick="closeConfirmModal()">
+                Cancelar
+            </button>
+            <button type="button" 
+                    class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                    onclick="submitForm()">
+                <i class="fas fa-check mr-2"></i>Confirmar e Criar
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selectUser(element) {
+    // Remover seleção anterior
+    document.querySelectorAll('.user-option').forEach(option => {
+        option.classList.remove('border-primary', 'bg-blue-50');
+        option.classList.add('border-transparent');
+    });
+    
+    // Selecionar atual
+    element.classList.remove('border-transparent');
+    element.classList.add('border-primary', 'bg-blue-50');
+    
+    // Pegar informações do usuário
+    const userId = element.getAttribute('data-user-id');
+    const userName = element.querySelector('.font-medium').textContent;
+    const userEmail = element.querySelector('.text-gray-600')?.textContent || '';
+    const userSector = element.querySelector('.bg-blue-100')?.textContent || '';
+    
+    // Atualizar campo hidden
+    document.getElementById('assigned_to').value = userId;
+    
+    // Mostrar informações do usuário selecionado
+    let userInfo = `<div class="font-medium text-blue-800">${userName}</div>`;
+    if (userEmail) userInfo += `<div class="text-sm text-blue-600">${userEmail}</div>`;
+    if (userSector) userInfo += `<div class="text-sm"><span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">${userSector}</span></div>`;
+    
+    document.getElementById('selected-user-info').innerHTML = userInfo;
+    document.getElementById('selected-user-info').classList.remove('hidden');
+    document.getElementById('user-preview').textContent = userName;
+    
+    updateCreateButton();
+}
+
+function updatePriorityPreview() {
+    const priority = document.getElementById('priority').value;
+    const priorityText = document.getElementById('priority').selectedOptions[0].textContent;
+    
+    let priorityClasses = 'bg-yellow-100 text-yellow-800';
+    let priorityIcon = 'fa-flag';
+    
+    if (priority === 'HIGH') {
+        priorityClasses = 'bg-red-100 text-red-800';
+    } else if (priority === 'LOW') {
+        priorityClasses = 'bg-green-100 text-green-800';
+    }
+    
+    document.getElementById('priority-preview').innerHTML = 
+        `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${priorityClasses}">
+            <i class="fas ${priorityIcon} mr-1"></i> ${priorityText}
+        </span>`;
+    
+    document.getElementById('priority-display').textContent = priorityText;
+}
+
+function updateTitlePreview() {
+    const title = document.getElementById('title').value;
+    document.getElementById('title-preview').textContent = title || 'Digite o título da tarefa...';
+    updateCreateButton();
+}
+
+function updateDueDatePreview() {
+    const dueDate = document.getElementById('due_date').value;
+    if (dueDate) {
+        const date = new Date(dueDate);
+        const formattedDate = date.toLocaleString('pt-BR');
+        document.getElementById('due-date-preview').textContent = formattedDate;
+    } else {
+        document.getElementById('due-date-preview').textContent = 'Sem prazo definido';
+    }
+}
+
+function updateCreateButton() {
+    const title = document.getElementById('title').value.trim();
+    const userId = document.getElementById('assigned_to').value;
+    const createButton = document.getElementById('createButton');
+    
+    const isValid = title !== '' && userId !== '';
+    createButton.disabled = !isValid;
+}
+
+function submitForm() {
+    closeConfirmModal();
+    
+    // Mostrar loading
+    const createButton = document.getElementById('createButton');
+    createButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Criando...';
+    createButton.disabled = true;
+    
+    // Submeter formulário
+    document.getElementById('createTaskForm').submit();
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.add('hidden');
+}
+
+function openConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Event listeners
+    document.getElementById('title').addEventListener('input', updateTitlePreview);
+    document.getElementById('due_date').addEventListener('change', updateDueDatePreview);
+    
+    // Inicializar valores
+    updateTitlePreview();
+    updateDueDatePreview();
+    updatePriorityPreview();
+    
+    // Interceptar submit do formulário para mostrar confirmação
+    document.getElementById('createTaskForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Preencher detalhes da confirmação
+        const title = document.getElementById('title').value;
+        const userName = document.getElementById('user-preview').textContent;
+        const priority = document.getElementById('priority').selectedOptions[0].textContent;
+        const dueDate = document.getElementById('due-date-preview').textContent;
+        const description = document.getElementById('description').value;
+        
+        let confirmationDetails = `
+            <li><span class="font-medium">Título:</span> ${title}</li>
+            <li><span class="font-medium">Atribuído para:</span> ${userName}</li>
+            <li><span class="font-medium">Prioridade:</span> ${priority}</li>
+            <li><span class="font-medium">Prazo:</span> ${dueDate}</li>
+        `;
+        
+        if (description.trim()) {
+            const shortDescription = description.length > 100 ? description.substring(0, 100) + '...' : description;
+            confirmationDetails += `<li><span class="font-medium">Descrição:</span> ${shortDescription}</li>`;
+        }
+        
+        document.getElementById('confirmation-details').innerHTML = confirmationDetails;
+        openConfirmModal();
+    });
+    
+    // Definir data mínima como hoje
+    const today = new Date();
+    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+    document.getElementById('due_date').setAttribute('min', today.toISOString().slice(0, 16));
+});
+</script>
+{% endblock %}

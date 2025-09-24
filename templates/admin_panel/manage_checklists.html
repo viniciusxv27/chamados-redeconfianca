@@ -1,0 +1,403 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerenciar Checklists{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg p-6 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">
+                    <i class="fas fa-clipboard-list mr-3"></i>
+                    Gerenciar Templates de Checklist
+                </h1>
+                <p class="text-purple-100">
+                    Crie e gerencie templates para checklists diários dos usuários
+                </p>
+            </div>
+            <button type="button" 
+                    class="bg-white text-purple-600 hover:bg-gray-100 font-medium py-3 px-6 rounded-lg transition-colors"
+                    onclick="openCreateModal()">
+                <i class="fas fa-plus mr-2"></i>Novo Template
+            </button>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-1">Ações Rápidas</h2>
+                <p class="text-gray-600">Gerencie checklists diários dos usuários</p>
+            </div>
+            <a href="{% url 'create_daily_checklist' %}" 
+               class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-calendar-plus mr-2"></i>Criar Checklist Diário
+            </a>
+        </div>
+    </div>
+
+    <!-- Templates List -->
+    {% if templates %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for template in templates %}
+        <div class="bg-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 border-gray-400 hover:border-blue-500 overflow-hidden">
+            <div class="p-6">
+                <!-- Header do Card -->
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="text-xl font-semibold text-gray-900">{{ template.title }}</h3>
+                    <div class="relative">
+                        <button class="text-gray-400 hover:text-gray-600 p-1" onclick="toggleDropdown({{ template.id }})">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <div id="dropdown-{{ template.id }}" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border">
+                            <div class="py-1">
+                                <button class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left" 
+                                        onclick="editTemplate({{ template.id }})">
+                                    <i class="fas fa-edit mr-2"></i>Editar
+                                </button>
+                                <div class="border-t border-gray-100"></div>
+                                <button class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left" 
+                                        onclick="deleteTemplate({{ template.id }}, '{{ template.title|escapejs }}')">
+                                    <i class="fas fa-trash mr-2"></i>Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Descrição -->
+                {% if template.description %}
+                <p class="text-gray-600 mb-4">{{ template.description }}</p>
+                {% endif %}
+
+                <!-- Itens do Template -->
+                <div class="mb-4">
+                    <h4 class="font-medium text-gray-900 mb-2">Itens ({{ template.items.count }}):</h4>
+                    {% if template.items.count > 0 %}
+                        <div class="max-h-32 overflow-y-auto space-y-1">
+                            {% for item in template.items.all|slice:":10" %}
+                                <span class="inline-block bg-gray-100 text-gray-700 text-sm px-3 py-1 rounded-full mr-2 mb-1">
+                                    {{ item.order }}. {{ item.title|truncatechars:25 }}
+                                </span>
+                            {% endfor %}
+                            {% if template.items.count > 10 %}
+                                <span class="inline-block bg-gray-200 text-gray-500 text-sm px-3 py-1 rounded-full">
+                                    +{{ template.items.count|add:"-10" }} mais...
+                                </span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <p class="text-gray-500 text-sm">Nenhum item adicionado</p>
+                    {% endif %}
+                </div>
+
+                <!-- Footer com informações -->
+                <div class="text-sm text-gray-500 space-y-1">
+                    <div class="flex items-center">
+                        <i class="fas fa-user w-4 mr-2"></i>
+                        <span>{{ template.created_by.get_full_name|default:template.created_by.username }}</span>
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas fa-calendar w-4 mr-2"></i>
+                        <span>{{ template.created_at|date:"d/m/Y H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Footer -->
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
+                <div class="grid grid-cols-2 gap-3">
+                    <button type="button" 
+                            class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
+                            onclick="viewTemplate({{ template.id }})">
+                        <i class="fas fa-eye mr-1"></i>Ver Detalhes
+                    </button>
+                    <a href="{% url 'create_daily_checklist' %}?template={{ template.id }}" 
+                       class="w-full bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors text-center">
+                        <i class="fas fa-plus mr-1"></i>Usar Template
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow-lg p-12 text-center">
+        <i class="fas fa-clipboard-list text-6xl text-gray-400 mb-6"></i>
+        <h3 class="text-2xl font-semibold text-gray-700 mb-2">Nenhum template encontrado</h3>
+        <p class="text-gray-600 mb-6 max-w-md mx-auto">
+            Crie seu primeiro template de checklist para começar a organizar 
+            as tarefas diárias dos usuários.
+        </p>
+        <button type="button" 
+                class="bg-primary hover:bg-primary-dark text-white font-medium py-3 px-6 rounded-lg transition-colors"
+                onclick="openCreateModal()">
+            <i class="fas fa-plus mr-2"></i>Criar Primeiro Template
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Criar Template -->
+<div id="createTemplateModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <form method="post" id="createTemplateForm">
+            {% csrf_token %}
+            <div class="bg-primary text-white px-6 py-4 rounded-t-lg">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-semibold">
+                        <i class="fas fa-plus mr-2"></i>Criar Novo Template
+                    </h3>
+                    <button type="button" class="text-white hover:text-gray-200" onclick="closeCreateModal()">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6 space-y-6">
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                        Nome do Template *
+                    </label>
+                    <input type="text" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                           id="title" name="title" required
+                           placeholder="Ex: Checklist Matinal, Rotina de Fechamento...">
+                </div>
+                
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Descrição
+                    </label>
+                    <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                              id="description" name="description" rows="3"
+                              placeholder="Descreva o propósito deste checklist..."></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Itens do Checklist</label>
+                    <div id="items-container" class="space-y-2">
+                        <div class="flex items-center space-x-2 item-input">
+                            <span class="bg-gray-100 text-gray-700 px-3 py-2 rounded-md font-medium min-w-[40px] text-center">1</span>
+                            <input type="text" 
+                                   class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                                   name="items[]" 
+                                   placeholder="Digite o primeiro item...">
+                            <button type="button" 
+                                    class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md transition-colors" 
+                                    onclick="removeItem(this)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" 
+                            class="mt-3 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm transition-colors" 
+                            onclick="addItem()">
+                        <i class="fas fa-plus mr-2"></i>Adicionar Item
+                    </button>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button type="button" 
+                        class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                        onclick="closeCreateModal()">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
+                    <i class="fas fa-save mr-2"></i>Criar Template
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let itemCounter = 1;
+
+function openCreateModal() {
+    document.getElementById('createTemplateModal').classList.remove('hidden');
+}
+
+function closeCreateModal() {
+    document.getElementById('createTemplateModal').classList.add('hidden');
+    document.getElementById('createTemplateForm').reset();
+    resetItems();
+}
+
+function toggleDropdown(templateId) {
+    // Fechar outros dropdowns
+    document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+        if (dropdown.id !== `dropdown-${templateId}`) {
+            dropdown.classList.add('hidden');
+        }
+    });
+    
+    // Toggle do dropdown atual
+    const dropdown = document.getElementById(`dropdown-${templateId}`);
+    dropdown.classList.toggle('hidden');
+}
+
+function addItem() {
+    itemCounter++;
+    const newItem = document.createElement('div');
+    newItem.className = 'flex items-center space-x-2 item-input';
+    newItem.innerHTML = `
+        <span class="bg-gray-100 text-gray-700 px-3 py-2 rounded-md font-medium min-w-[40px] text-center">${itemCounter}</span>
+        <input type="text" 
+               class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+               name="items[]" 
+               placeholder="Digite o item...">
+        <button type="button" 
+                class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md transition-colors" 
+                onclick="removeItem(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    document.getElementById('items-container').appendChild(newItem);
+    updateItemNumbers();
+    
+    // Focar no novo input
+    setTimeout(() => {
+        newItem.querySelector('input').focus();
+    }, 100);
+}
+
+function removeItem(button) {
+    const items = document.querySelectorAll('.item-input');
+    if (items.length > 1) {
+        button.closest('.item-input').remove();
+        updateItemNumbers();
+    } else {
+        showToast('Deve ter pelo menos um item', 'warning');
+    }
+}
+
+function updateItemNumbers() {
+    const items = document.querySelectorAll('.item-input');
+    items.forEach((item, index) => {
+        item.querySelector('span').textContent = index + 1;
+    });
+    itemCounter = items.length;
+}
+
+function resetItems() {
+    const container = document.getElementById('items-container');
+    container.innerHTML = `
+        <div class="flex items-center space-x-2 item-input">
+            <span class="bg-gray-100 text-gray-700 px-3 py-2 rounded-md font-medium min-w-[40px] text-center">1</span>
+            <input type="text" 
+                   class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                   name="items[]" 
+                   placeholder="Digite o primeiro item...">
+            <button type="button" 
+                    class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md transition-colors" 
+                    onclick="removeItem(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    itemCounter = 1;
+}
+
+function deleteTemplate(templateId, templateName) {
+    if (confirm(`Tem certeza que deseja excluir o template "${templateName}"?\n\nEsta ação não pode ser desfeita.`)) {
+        fetch(`{% url 'delete_checklist_template' 0 %}`.replace('0', templateId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.error || 'Erro ao excluir template', 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Erro ao excluir template', 'error');
+        });
+    }
+}
+
+function editTemplate(templateId) {
+    showToast('Funcionalidade de edição será implementada em breve', 'info');
+}
+
+function viewTemplate(templateId) {
+    showToast('Funcionalidade de visualização será implementada em breve', 'info');
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+    };
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+    
+    toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas ${icons[type]} mr-3"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+    
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Fechar dropdowns clicando fora
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('[onclick*="toggleDropdown"]')) {
+            document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+                dropdown.classList.add('hidden');
+            });
+        }
+    });
+    
+    // Fechar modal clicando fora
+    document.getElementById('createTemplateModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeCreateModal();
+        }
+    });
+    
+    // Enter key para adicionar novos itens
+    document.addEventListener('keypress', function(e) {
+        if (e.target.name === 'items[]' && e.key === 'Enter') {
+            e.preventDefault();
+            addItem();
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Meus Checklists{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">
+                <i class="fas fa-tasks text-primary mr-2"></i>
+                Meus Checklists
+            </h1>
+            <p class="text-gray-600 mt-1">Gerencie suas atividades diárias</p>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ total_checklists }}</h3>
+                    <p class="opacity-90">Total de Checklists</p>
+                </div>
+                <i class="fas fa-list-alt text-3xl opacity-75"></i>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ completed_checklists }}</h3>
+                    <p class="opacity-90">Concluídos</p>
+                </div>
+                <i class="fas fa-check-circle text-3xl opacity-75"></i>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ completion_rate }}%</h3>
+                    <p class="opacity-90">Taxa de Conclusão</p>
+                </div>
+                <i class="fas fa-chart-pie text-3xl opacity-75"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checklist de Hoje -->
+    {% if today_checklist %}
+    <div class="mb-8">
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden border-l-4 {% if today_checklist.completed_at %}border-green-500{% elif today_checklist.items.exists %}border-blue-500{% else %}border-yellow-500{% endif %}">
+            <div class="bg-primary text-white px-6 py-4">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-calendar-day mr-2"></i>
+                    Checklist de Hoje - {{ today|date:"d/m/Y" }}
+                </h2>
+            </div>
+            <div class="p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold">{{ today_checklist.template.name }}</h3>
+                        <p class="text-gray-600 mb-4">{{ today_checklist.template.description }}</p>
+                        
+                        <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div class="bg-green-500 h-2 rounded-full" style="width: {{ today_checklist.get_completion_percentage }}%"></div>
+                        </div>
+                        
+                        <small class="text-gray-500">
+                            {{ today_checklist.items.filter.count }} de {{ today_checklist.items.count }} itens concluídos
+                        </small>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold">
+                                {{ today_checklist.get_completion_percentage }}%
+                            </div>
+                        </div>
+                        
+                        <a href="{% url 'checklist_detail' today_checklist.id %}" 
+                           class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                            <i class="fas fa-arrow-right mr-2"></i>Ver Detalhes
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="mb-8">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <div class="flex items-center">
+                <i class="fas fa-info-circle text-blue-500 text-2xl mr-4"></i>
+                <div>
+                    <h3 class="text-lg font-medium text-blue-900">Nenhum checklist para hoje</h3>
+                    <p class="text-blue-700">Seu checklist diário aparecerá aqui quando for criado.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Histórico da Semana -->
+    <div class="bg-white rounded-lg shadow-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">
+                <i class="fas fa-history text-gray-500 mr-2"></i>
+                Checklists da Semana
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            {% if week_checklists %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for checklist in week_checklists %}
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow border-l-4 {% if checklist.completed_at %}border-green-500{% elif checklist.items.exists %}border-blue-500{% else %}border-yellow-500{% endif %}">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-semibold text-gray-900">{{ checklist.template.name }}</h3>
+                        <span class="text-sm text-gray-500">{{ checklist.date|date:"d/m" }}</span>
+                    </div>
+                    
+                    <p class="text-gray-600 text-sm mb-3">{{ checklist.template.description|truncatechars:60 }}</p>
+                    
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-3">
+                        <div class="{% if checklist.completed_at %}bg-green-500{% else %}bg-yellow-500{% endif %} h-2 rounded-full" 
+                             style="width: {{ checklist.get_completion_percentage }}%"></div>
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">{{ checklist.get_completion_percentage }}% concluído</span>
+                        
+                        {% if checklist.completed_at %}
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                                <i class="fas fa-check mr-1"></i>Concluído
+                            </span>
+                        {% else %}
+                            <a href="{% url 'checklist_detail' checklist.id %}" 
+                               class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium hover:bg-blue-200 transition-colors">
+                                Ver
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-clipboard-list text-gray-300 text-6xl mb-4"></i>
+                <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhum checklist encontrado</h3>
+                <p class="text-gray-400">Seus checklists aparecerão aqui quando forem criados.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,386 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Criar Checklist Diário{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-6 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <nav class="mb-2" aria-label="breadcrumb">
+                    <ol class="flex space-x-2 text-green-100">
+                        <li>
+                            <a href="{% url 'manage_checklists' %}" class="hover:text-white transition-colors">
+                                <i class="fas fa-clipboard-list mr-1"></i>Checklists
+                            </a>
+                        </li>
+                        <li class="before:content-['/'] before:mr-2">/</li>
+                        <li class="text-white">Criar Checklist Diário</li>
+                    </ol>
+                </nav>
+                <h1 class="text-3xl font-bold mb-2">
+                    <i class="fas fa-calendar-plus mr-3"></i>
+                    Criar Checklist Diário
+                </h1>
+                <p class="text-green-100">
+                    Atribua um template de checklist aos usuários para uma data específica
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="createChecklistForm">
+        {% csrf_token %}
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Formulário Principal -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-xl font-semibold text-gray-900">
+                            <i class="fas fa-cog text-primary mr-2"></i>Configurações do Checklist
+                        </h2>
+                    </div>
+                    <div class="p-6 space-y-6">
+                        <!-- Template Selection -->
+                        <div>
+                            <label for="template_id" class="block text-sm font-medium text-gray-700 mb-2">
+                                Template de Checklist *
+                            </label>
+                            <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                                    id="template_id" name="template_id" required onchange="previewTemplate()">
+                                <option value="">Selecione um template...</option>
+                                {% for template in templates %}
+                                <option value="{{ template.id }}" 
+                                        data-description="{{ template.description }}"
+                                        data-items="{{ template.items.count }}">
+                                    {{ template.title }} ({{ template.items.count }} itens)
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div id="template-preview" class="bg-gray-50 rounded-lg p-4 mt-3 hidden">
+                                <!-- Preview será carregado aqui via JavaScript -->
+                            </div>
+                        </div>
+
+                        <!-- Data Selection -->
+                        <div>
+                            <label for="date" class="block text-sm font-medium text-gray-700 mb-2">
+                                Data do Checklist *
+                            </label>
+                            <input type="date" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                                   id="date" name="date" value="{{ today|date:'Y-m-d' }}" required>
+                            <p class="text-sm text-gray-500 mt-1">
+                                Se já existir um checklist para um usuário nesta data, ele não será substituído.
+                            </p>
+                        </div>
+
+                        <!-- User Selection -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Selecionar Usuários *
+                            </label>
+                            <div class="mb-4 flex space-x-2">
+                                <button type="button" 
+                                        class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-sm"
+                                        onclick="selectAllUsers()">
+                                    <i class="fas fa-check-square mr-1"></i>Selecionar Todos
+                                </button>
+                                <button type="button" 
+                                        class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                                        onclick="deselectAllUsers()">
+                                    <i class="fas fa-square mr-1"></i>Desmarcar Todos
+                                </button>
+                            </div>
+
+                            <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 space-y-3">
+                                {% if users %}
+                                    {% for user in users %}
+                                    <div class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors user-checkbox">
+                                        <input type="checkbox" name="user_ids" value="{{ user.id }}" 
+                                               class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-4 user-checkbox-input">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex justify-between items-center">
+                                                <div>
+                                                    <p class="font-medium text-gray-900">{{ user.get_full_name|default:user.username }}</p>
+                                                    {% if user.email %}
+                                                    <p class="text-sm text-gray-500">{{ user.email }}</p>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="text-right">
+                                                    {% if user.sector %}
+                                                    <span class="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                                                        {{ user.sector.name }}
+                                                    </span>
+                                                    {% endif %}
+                                                    <p class="text-xs text-gray-400 mt-1">ID: {{ user.id }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="text-center py-8">
+                                        <i class="fas fa-users text-4xl text-gray-400 mb-4"></i>
+                                        <p class="text-gray-500">Nenhum usuário encontrado</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar com Resumo -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden sticky top-6">
+                    <div class="bg-blue-500 text-white px-6 py-4">
+                        <h3 class="font-semibold">
+                            <i class="fas fa-clipboard-check mr-2"></i>Resumo da Criação
+                        </h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <p class="font-medium text-gray-900 mb-1">Template Selecionado:</p>
+                            <p id="selected-template" class="text-gray-600">
+                                Nenhum template selecionado
+                            </p>
+                        </div>
+
+                        <div>
+                            <p class="font-medium text-gray-900 mb-1">Data:</p>
+                            <p id="selected-date" class="text-gray-600">
+                                {{ today|date:"d/m/Y" }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <p class="font-medium text-gray-900 mb-1">Usuários:</p>
+                            <p id="selected-users-count" class="text-gray-600">
+                                0 usuário(s) selecionado(s)
+                            </p>
+                        </div>
+
+                        <hr class="border-gray-200">
+
+                        <div class="space-y-3">
+                            <button type="submit" 
+                                    class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    id="createButton" disabled>
+                                <i class="fas fa-plus mr-2"></i>Criar Checklists
+                            </button>
+
+                            <a href="{% url 'manage_checklists' %}" 
+                               class="w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors inline-block text-center">
+                                <i class="fas fa-arrow-left mr-2"></i>Voltar para Checklists
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Confirmação -->
+<div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg max-w-md w-full mx-4">
+        <div class="bg-green-500 text-white px-6 py-4 rounded-t-lg">
+            <h3 class="text-lg font-semibold">
+                <i class="fas fa-check mr-2"></i>Confirmar Criação
+            </h3>
+        </div>
+        <div class="p-6">
+            <p class="text-gray-700 mb-4">Você está prestes a criar checklists diários com as seguintes configurações:</p>
+            <ul id="confirmation-details" class="list-disc list-inside text-gray-600 mb-4 space-y-1">
+                <!-- Será preenchido via JavaScript -->
+            </ul>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p class="text-blue-800 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong>Importante:</strong> Se já existir um checklist para um usuário na data selecionada, 
+                    ele não será substituído.
+                </p>
+            </div>
+            <p class="font-medium text-gray-900">Deseja continuar?</p>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button type="button" 
+                    class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                    onclick="closeModal()">
+                Cancelar
+            </button>
+            <button type="button" 
+                    class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                    onclick="submitForm()">
+                <i class="fas fa-check mr-2"></i>Confirmar e Criar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewTemplate() {
+    const select = document.getElementById('template_id');
+    const preview = document.getElementById('template-preview');
+    const selectedTemplate = document.getElementById('selected-template');
+    
+    if (select.value) {
+        const option = select.options[select.selectedIndex];
+        const templateName = option.text;
+        const description = option.dataset.description;
+        const itemsCount = option.dataset.items;
+        
+        selectedTemplate.textContent = templateName;
+        
+        preview.innerHTML = `
+            <h4 class="font-semibold text-gray-900 mb-2">${templateName}</h4>
+            ${description ? `<p class="text-gray-600 mb-2">${description}</p>` : ''}
+            <p class="text-blue-600 text-sm"><i class="fas fa-list mr-1"></i>${itemsCount} itens</p>
+        `;
+        preview.classList.remove('hidden');
+    } else {
+        selectedTemplate.textContent = 'Nenhum template selecionado';
+        preview.classList.add('hidden');
+    }
+    
+    updateCreateButton();
+}
+
+function selectAllUsers() {
+    const checkboxes = document.querySelectorAll('input[name="user_ids"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateUsersCount();
+}
+
+function deselectAllUsers() {
+    const checkboxes = document.querySelectorAll('input[name="user_ids"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateUsersCount();
+}
+
+function updateUsersCount() {
+    const checkedBoxes = document.querySelectorAll('input[name="user_ids"]:checked');
+    const count = checkedBoxes.length;
+    
+    document.getElementById('selected-users-count').textContent = 
+        `${count} usuário(s) selecionado(s)`;
+    
+    updateCreateButton();
+}
+
+function updateDate() {
+    const dateInput = document.getElementById('date');
+    const selectedDate = document.getElementById('selected-date');
+    
+    if (dateInput.value) {
+        const date = new Date(dateInput.value);
+        selectedDate.textContent = date.toLocaleDateString('pt-BR');
+    }
+}
+
+function updateCreateButton() {
+    const templateSelect = document.getElementById('template_id');
+    const checkedUsers = document.querySelectorAll('input[name="user_ids"]:checked');
+    const createButton = document.getElementById('createButton');
+    
+    const hasTemplate = templateSelect.value !== '';
+    const hasUsers = checkedUsers.length > 0;
+    
+    createButton.disabled = !(hasTemplate && hasUsers);
+}
+
+function openModal() {
+    document.getElementById('confirmModal').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('confirmModal').classList.add('hidden');
+}
+
+function submitForm() {
+    closeModal();
+    
+    const createButton = document.getElementById('createButton');
+    createButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Criando...';
+    createButton.disabled = true;
+    
+    document.getElementById('createChecklistForm').submit();
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    toast.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas ${icon} mr-3"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+    
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Checkboxes de usuários
+    document.querySelectorAll('input[name="user_ids"]').forEach(checkbox => {
+        checkbox.addEventListener('change', updateUsersCount);
+    });
+    
+    // Input de data
+    document.getElementById('date').addEventListener('change', updateDate);
+    
+    // Interceptar submit do formulário
+    document.getElementById('createChecklistForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const templateText = document.getElementById('template_id').options[document.getElementById('template_id').selectedIndex].text;
+        const dateText = new Date(document.getElementById('date').value).toLocaleDateString('pt-BR');
+        const usersCount = document.querySelectorAll('input[name="user_ids"]:checked').length;
+        
+        const confirmationDetails = `
+            <li><strong>Template:</strong> ${templateText}</li>
+            <li><strong>Data:</strong> ${dateText}</li>
+            <li><strong>Usuários:</strong> ${usersCount} selecionado(s)</li>
+        `;
+        
+        document.getElementById('confirmation-details').innerHTML = confirmationDetails;
+        openModal();
+    });
+    
+    // Fechar modal clicando fora
+    document.getElementById('confirmModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeModal();
+        }
+    });
+    
+    // Inicializar
+    updateUsersCount();
+    updateDate();
+    previewTemplate();
+});
+</script>
+{% endblock %}

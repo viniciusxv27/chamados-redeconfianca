@@ -1,0 +1,346 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Minhas Tarefas{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">
+                <i class="fas fa-tasks text-primary mr-2"></i>
+                Minhas Tarefas
+            </h1>
+            <p class="text-gray-600 mt-1">Gerencie suas tarefas e atividades</p>
+        </div>
+        
+        <div class="flex space-x-2">
+            <button onclick="showSection('all')" 
+                    class="section-btn px-4 py-2 rounded-lg font-medium transition-colors bg-primary text-white">
+                <i class="fas fa-list mr-2"></i>Todas
+            </button>
+            <button onclick="showSection('pending')" 
+                    class="section-btn px-4 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
+                <i class="fas fa-clock mr-2"></i>Pendentes
+            </button>
+            <button onclick="showSection('doing')" 
+                    class="section-btn px-4 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
+                <i class="fas fa-play mr-2"></i>Em Andamento
+            </button>
+            <button onclick="showSection('done')" 
+                    class="section-btn px-4 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
+                <i class="fas fa-check mr-2"></i>Concluídas
+            </button>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ total_tasks }}</h3>
+                    <p class="opacity-90">Total</p>
+                </div>
+                <i class="fas fa-tasks text-3xl opacity-75"></i>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ pending_tasks.count }}</h3>
+                    <p class="opacity-90">Pendentes</p>
+                </div>
+                <i class="fas fa-clock text-3xl opacity-75"></i>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-r from-blue-400 to-blue-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ doing_tasks.count }}</h3>
+                    <p class="opacity-90">Em Andamento</p>
+                </div>
+                <i class="fas fa-play text-3xl opacity-75"></i>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ completion_rate }}%</h3>
+                    <p class="opacity-90">Taxa de Conclusão</p>
+                </div>
+                <i class="fas fa-chart-pie text-3xl opacity-75"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarefas em Atraso -->
+    {% if overdue_tasks %}
+    <div id="overdue-section" class="mb-8">
+        <div class="bg-red-50 border border-red-200 rounded-lg overflow-hidden">
+            <div class="bg-red-500 text-white px-6 py-4">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Tarefas em Atraso ({{ overdue_tasks.count }})
+                </h2>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for task in overdue_tasks %}
+                        {% include 'tasks/task_card.html' with task=task is_overdue=True %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tarefas Pendentes -->
+    <div id="pending-section" class="mb-8">
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div class="bg-yellow-500 text-white px-6 py-4">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-clock mr-2"></i>
+                    Tarefas Pendentes ({{ pending_tasks.count }})
+                </h2>
+            </div>
+            <div class="p-6">
+                {% if pending_tasks %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for task in pending_tasks %}
+                        {% include 'tasks/task_card.html' %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-check-circle text-green-300 text-6xl mb-4"></i>
+                    <h3 class="text-xl font-medium text-gray-500 mb-2">Parabéns!</h3>
+                    <p class="text-gray-400">Não há tarefas pendentes no momento.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarefas Em Andamento -->
+    <div id="doing-section" class="mb-8">
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div class="bg-blue-500 text-white px-6 py-4">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-play mr-2"></i>
+                    Tarefas Em Andamento ({{ doing_tasks.count }})
+                </h2>
+            </div>
+            <div class="p-6">
+                {% if doing_tasks %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for task in doing_tasks %}
+                        {% include 'tasks/task_card.html' %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-play text-blue-300 text-6xl mb-4"></i>
+                    <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhuma tarefa em andamento</h3>
+                    <p class="text-gray-400">Inicie uma das tarefas pendentes.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarefas Concluídas -->
+    <div id="done-section" class="mb-8">
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div class="bg-green-500 text-white px-6 py-4">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-check mr-2"></i>
+                    Últimas Tarefas Concluídas
+                </h2>
+            </div>
+            <div class="p-6">
+                {% if done_tasks %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for task in done_tasks %}
+                        {% include 'tasks/task_card.html' %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-tasks text-gray-300 text-6xl mb-4"></i>
+                    <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhuma tarefa concluída</h3>
+                    <p class="text-gray-400">Suas tarefas concluídas aparecerão aqui.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Atualização de Status -->
+<div id="updateStatusModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">
+                <i class="fas fa-edit mr-2"></i>Atualizar Status da Tarefa
+            </h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div id="task-details" class="mb-6"></div>
+        
+        <div class="space-y-3">
+            <button onclick="updateTaskStatus('PENDING')" 
+                    class="w-full px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                <i class="fas fa-clock mr-2"></i>Pendente
+            </button>
+            <button onclick="updateTaskStatus('DOING')" 
+                    class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                <i class="fas fa-play mr-2"></i>Em Andamento
+            </button>
+            <button onclick="updateTaskStatus('DONE')" 
+                    class="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
+                <i class="fas fa-check mr-2"></i>Concluída
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentTaskId = null;
+
+function showSection(section) {
+    // Atualizar botões ativos
+    document.querySelectorAll('.section-btn').forEach(btn => {
+        btn.classList.remove('bg-primary', 'text-white');
+        btn.classList.add('bg-gray-200', 'text-gray-700');
+    });
+    event.target.classList.remove('bg-gray-200', 'text-gray-700');
+    event.target.classList.add('bg-primary', 'text-white');
+    
+    // Mostrar/ocultar seções
+    const sections = ['pending-section', 'doing-section', 'done-section', 'overdue-section'];
+    sections.forEach(sec => {
+        const element = document.getElementById(sec);
+        if (element) element.style.display = 'none';
+    });
+    
+    if (section === 'all') {
+        sections.forEach(sec => {
+            const element = document.getElementById(sec);
+            if (element) element.style.display = 'block';
+        });
+    } else if (section === 'pending') {
+        const pending = document.getElementById('pending-section');
+        const overdue = document.getElementById('overdue-section');
+        if (pending) pending.style.display = 'block';
+        if (overdue) overdue.style.display = 'block';
+    } else {
+        const element = document.getElementById(section + '-section');
+        if (element) element.style.display = 'block';
+    }
+}
+
+function openTaskModal(taskId, taskTitle, taskDescription, currentStatus) {
+    currentTaskId = taskId;
+    
+    const statusText = {
+        'PENDING': 'Pendente',
+        'DOING': 'Em Andamento', 
+        'DONE': 'Concluída'
+    };
+    
+    const statusColor = {
+        'PENDING': 'bg-yellow-100 text-yellow-800',
+        'DOING': 'bg-blue-100 text-blue-800',
+        'DONE': 'bg-green-100 text-green-800'
+    };
+    
+    document.getElementById('task-details').innerHTML = `
+        <h4 class="font-semibold mb-2">${taskTitle}</h4>
+        <p class="text-gray-600 mb-3">${taskDescription || 'Sem descrição'}</p>
+        <p class="text-sm">
+            <strong>Status Atual:</strong> 
+            <span class="px-2 py-1 rounded-full text-xs font-medium ${statusColor[currentStatus]}">
+                ${statusText[currentStatus]}
+            </span>
+        </p>
+    `;
+    
+    document.getElementById('updateStatusModal').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('updateStatusModal').classList.add('hidden');
+}
+
+function updateTaskStatus(newStatus) {
+    if (!currentTaskId) return;
+    
+    fetch("{% url 'update_task_status' 0 %}".replace('0', currentTaskId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `status=${newStatus}&csrfmiddlewaretoken={{ csrf_token }}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        closeModal();
+        
+        if (data.success) {
+            location.reload();
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.error || 'Erro ao atualizar status', 'error');
+        }
+    })
+    .catch(error => {
+        closeModal();
+        showToast('Erro ao atualizar status', 'error');
+    });
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    toast.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas ${icon} mr-3"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+    
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Fechar modal clicando fora
+document.getElementById('updateStatusModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

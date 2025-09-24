@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ tutorial.title }} - Tutorial{% endblock %}
+
+{% block content %}
+<div class="p-6 max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <div class="flex justify-between items-start">
+            <div class="flex-1">
+                <div class="flex items-center mb-2">
+                    <a href="{% url 'help_tutorials' %}" class="text-gray-600 hover:text-primary mr-3">
+                        <i class="fas fa-arrow-left"></i> Voltar aos Tutoriais
+                    </a>
+                    {% if tutorial.category %}
+                    <span class="bg-gray-100 text-gray-800 text-sm font-medium px-3 py-1 rounded-full">
+                        {{ tutorial.category.name }}
+                    </span>
+                    {% endif %}
+                </div>
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ tutorial.title }}</h1>
+                <p class="text-gray-600 text-lg mb-4">{{ tutorial.description }}</p>
+                
+                <!-- Info do Tutorial -->
+                <div class="flex items-center text-sm text-gray-500 space-x-6">
+                    <div class="flex items-center">
+                        <i class="fas fa-user mr-2"></i>
+                        Criado por {{ tutorial.created_by.get_full_name|default:tutorial.created_by.username }}
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas fa-calendar mr-2"></i>
+                        {{ tutorial.created_at|date:"d/m/Y H:i" }}
+                    </div>
+                    {% if tutorial.updated_at != tutorial.created_at %}
+                    <div class="flex items-center">
+                        <i class="fas fa-edit mr-2"></i>
+                        Atualizado em {{ tutorial.updated_at|date:"d/m/Y H:i" }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Status e Ações -->
+            <div class="ml-6 text-right">
+                {% if progress.completed_at %}
+                <div class="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium mb-3">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    Concluído em {{ progress.completed_at|date:"d/m/Y H:i" }}
+                </div>
+                {% elif progress.viewed_at %}
+                <div class="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-medium mb-3">
+                    <i class="fas fa-eye mr-2"></i>
+                    Visualizado em {{ progress.viewed_at|date:"d/m/Y H:i" }}
+                </div>
+                {% else %}
+                <div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg font-medium mb-3">
+                    <i class="fas fa-clock mr-2"></i>
+                    Não iniciado
+                </div>
+                {% endif %}
+                
+                {% if not progress.completed_at %}
+                <form method="post" class="mb-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="complete">
+                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-check mr-2"></i>Marcar como Concluído
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Conteúdo Principal -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-lg">
+                <div class="p-6 border-b border-gray-200">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-2">
+                        <i class="fas fa-file-pdf text-red-500 mr-2"></i>
+                        Documento do Tutorial
+                    </h2>
+                    <p class="text-gray-600">Visualize o documento completo abaixo:</p>
+                </div>
+                
+                <div class="p-6">
+                    {% if tutorial.pdf_file %}
+                    <div class="border border-gray-200 rounded-lg overflow-hidden">
+                        <iframe 
+                            src="{{ tutorial.pdf_file.url }}" 
+                            width="100%" 
+                            height="800"
+                            class="border-0">
+                            <p class="p-4 text-center text-gray-600">
+                                Seu navegador não suporta visualização de PDF. 
+                                <a href="{{ tutorial.pdf_file.url }}" target="_blank" class="text-primary hover:underline">
+                                    Clique aqui para baixar o arquivo
+                                </a>
+                            </p>
+                        </iframe>
+                    </div>
+                    
+                    <div class="mt-4 text-center">
+                        <a href="{{ tutorial.pdf_file.url }}" target="_blank" 
+                           class="inline-flex items-center bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            <i class="fas fa-download mr-2"></i>
+                            Baixar PDF
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-12 text-gray-500">
+                        <i class="fas fa-file-pdf text-6xl mb-4"></i>
+                        <h3 class="text-lg font-medium mb-2">Arquivo não disponível</h3>
+                        <p>O arquivo PDF deste tutorial não foi encontrado.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel Lateral -->
+        <div class="space-y-6">
+            <!-- Estatísticas (apenas para criador ou admin) -->
+            {% if stats %}
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-chart-bar mr-2"></i>
+                    Estatísticas
+                </h3>
+                
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <div class="flex items-center">
+                            <i class="fas fa-eye text-blue-500 mr-2"></i>
+                            <span class="text-gray-700">Visualizações</span>
+                        </div>
+                        <span class="font-semibold text-blue-600">{{ stats.total_views }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <div class="flex items-center">
+                            <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                            <span class="text-gray-700">Concluídos</span>
+                        </div>
+                        <span class="font-semibold text-green-600">{{ stats.total_completed }}</span>
+                    </div>
+                    
+                    {% if stats.total_views > 0 %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <i class="fas fa-percentage text-gray-500 mr-2"></i>
+                            <span class="text-gray-700">Taxa de Conclusão</span>
+                        </div>
+                        <span class="font-semibold text-gray-600">
+                            {{ stats.total_completed|floatformat:0 }}/{{ stats.total_views }} 
+                            ({% widthratio stats.total_completed stats.total_views 100 %}%)
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Usuários que Visualizaram -->
+            {% if stats.viewers %}
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-users mr-2"></i>
+                    Usuários que Visualizaram
+                </h3>
+                
+                <div class="space-y-2">
+                    {% for viewer in stats.viewers %}
+                    <div class="flex items-center p-2 hover:bg-gray-50 rounded">
+                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                            <i class="fas fa-user text-blue-600 text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">
+                                {{ viewer.get_full_name|default:viewer.username }}
+                            </div>
+                            {% with viewer.tutorial_progress.get:tutorial_id=tutorial.id as user_progress %}
+                            {% if user_progress.completed_at %}
+                            <div class="text-xs text-green-600">
+                                <i class="fas fa-check-circle mr-1"></i>Concluído
+                            </div>
+                            {% else %}
+                            <div class="text-xs text-blue-600">
+                                <i class="fas fa-eye mr-1"></i>Visualizou
+                            </div>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    {% if stats.total_views > stats.viewers|length %}
+                    <div class="text-center text-sm text-gray-500 pt-2 border-t">
+                        E mais {{ stats.total_views|add:stats.viewers|length|neg }} usuários...
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            <!-- Navegação -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-compass mr-2"></i>
+                    Navegação
+                </h3>
+                
+                <div class="space-y-2">
+                    <a href="{% url 'help_tutorials' %}" 
+                       class="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
+                        <i class="fas fa-list mr-3 w-4"></i>
+                        Todos os Tutoriais
+                    </a>
+                    
+                    {% if tutorial.category %}
+                    <a href="{% url 'help_tutorials' %}?category={{ tutorial.category.id }}" 
+                       class="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
+                        <i class="fas fa-folder mr-3 w-4"></i>
+                        Categoria: {{ tutorial.category.name }}
+                    </a>
+                    {% endif %}
+                    
+                    <a href="{% url 'dashboard' %}" 
+                       class="flex items-center p-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
+                        <i class="fas fa-home mr-3 w-4"></i>
+                        Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-marcar como visualizado após alguns segundos
+setTimeout(function() {
+    // Apenas para garantir que foi registrado como visualizado
+    console.log('Tutorial visualizado registrado');
+}, 3000);
+
+// Confirmar antes de marcar como concluído
+document.addEventListener('DOMContentLoaded', function() {
+    const completeForm = document.querySelector('form input[value="complete"]');
+    if (completeForm) {
+        const form = completeForm.closest('form');
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Tem certeza que deseja marcar este tutorial como concluído?')) {
+                e.preventDefault();
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

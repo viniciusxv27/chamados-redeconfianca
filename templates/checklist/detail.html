@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklist - {{ checklist.template.name }}{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6 mb-8">
+        <nav class="mb-4">
+            <ol class="flex space-x-2 text-sm text-blue-100">
+                <li>
+                    <a href="{% url 'checklist_dashboard' %}" class="hover:text-white transition-colors">
+                        <i class="fas fa-tasks mr-1"></i>Checklists
+                    </a>
+                </li>
+                <li><i class="fas fa-chevron-right mx-2"></i></li>
+                <li class="text-white">{{ checklist.template.name }}</li>
+            </ol>
+        </nav>
+        
+        <div class="flex items-center justify-between">
+            <div class="flex-1">
+                <h1 class="text-3xl font-bold mb-2">{{ checklist.template.name }}</h1>
+                <p class="text-blue-100 mb-2">{{ checklist.template.description }}</p>
+                <div class="text-sm text-blue-200">
+                    <i class="fas fa-calendar mr-2"></i>{{ checklist.date|date:"d/m/Y" }}
+                    {% if checklist.completed_at %}
+                        <i class="fas fa-check-circle ml-4 mr-2"></i>Concluído em {{ checklist.completed_at|date:"d/m/Y H:i" }}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="text-center ml-8">
+                <div class="text-4xl font-bold mb-2">{{ completion_percentage }}%</div>
+                <div class="w-full bg-blue-300 rounded-full h-2 mb-2">
+                    <div class="bg-white h-2 rounded-full transition-all duration-300" 
+                         style="width: {{ completion_percentage }}%"></div>
+                </div>
+                <div class="text-sm text-blue-200">Progresso Geral</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Itens -->
+    {% if items %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {% for item in items %}
+        <div class="bg-white rounded-lg shadow-lg border-l-4 transition-all duration-300 hover:shadow-xl
+                    {% if item.status == 'DONE' %}border-green-500 bg-green-50
+                    {% elif item.status == 'DOING' %}border-blue-500 bg-blue-50
+                    {% else %}border-yellow-500{% endif %}">
+            <div class="p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="font-semibold text-gray-900 text-lg">{{ item.title }}</h3>
+                    <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm">#{{ item.order }}</span>
+                </div>
+                
+                {% if item.description %}
+                <p class="text-gray-600 mb-4">{{ item.description }}</p>
+                {% endif %}
+                
+                <!-- Botões de Status -->
+                <div class="space-y-2 mb-4">
+                    <button onclick="updateItemStatus({{ item.id }}, 'PENDING')"
+                            class="w-full px-4 py-2 rounded-lg font-medium transition-colors {% if item.status == 'PENDING' %}bg-yellow-500 text-white{% else %}bg-yellow-100 text-yellow-800 hover:bg-yellow-200{% endif %}">
+                        <i class="fas fa-clock mr-2"></i>Pendente
+                    </button>
+                    
+                    <button onclick="updateItemStatus({{ item.id }}, 'DOING')"
+                            class="w-full px-4 py-2 rounded-lg font-medium transition-colors {% if item.status == 'DOING' %}bg-blue-500 text-white{% else %}bg-blue-100 text-blue-800 hover:bg-blue-200{% endif %}">
+                        <i class="fas fa-play mr-2"></i>Fazendo
+                    </button>
+                    
+                    <button onclick="updateItemStatus({{ item.id }}, 'DONE')"
+                            class="w-full px-4 py-2 rounded-lg font-medium transition-colors {% if item.status == 'DONE' %}bg-green-500 text-white{% else %}bg-green-100 text-green-800 hover:bg-green-200{% endif %}">
+                        <i class="fas fa-check mr-2"></i>Concluído
+                    </button>
+                </div>
+                
+                {% if item.updated_at %}
+                <div class="text-sm text-gray-500 border-t pt-3">
+                    <i class="fas fa-clock mr-1"></i>
+                    Atualizado: {{ item.updated_at|date:"d/m H:i" }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow-lg p-12 text-center">
+        <i class="fas fa-clipboard-list text-gray-300 text-6xl mb-4"></i>
+        <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhum item encontrado</h3>
+        <p class="text-gray-400">Este checklist ainda não possui itens.</p>
+    </div>
+    {% endif %}
+
+    <!-- Botão de Voltar -->
+    <div class="mt-8">
+        <a href="{% url 'checklist_dashboard' %}" 
+           class="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>Voltar para Meus Checklists
+        </a>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+        <p class="text-gray-600">Atualizando status...</p>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateItemStatus(itemId, newStatus) {
+    // Mostrar loading
+    document.getElementById('loadingModal').classList.remove('hidden');
+    
+    // Enviar requisição
+    fetch("{% url 'update_checklist_item_status' 0 %}".replace('0', itemId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `status=${newStatus}&csrfmiddlewaretoken={{ csrf_token }}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingModal').classList.add('hidden');
+        
+        if (data.success) {
+            location.reload();
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.error || 'Erro ao atualizar status', 'error');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao atualizar status', 'error');
+    });
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    toast.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas ${icon} mr-3"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    // Animar entrada
+    setTimeout(() => {
+        toast.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Remover após 3 segundos
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 3000);
+}
+
+// Atalhos de teclado
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        window.location.href = "{% url 'checklist_dashboard' %}";
+    }
+});
+</script>
+{% endblock %}

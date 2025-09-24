@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerenciar Categorias de Treinamento{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg p-6 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">
+                    <i class="fas fa-tags mr-3"></i>
+                    Categorias de Treinamento
+                </h1>
+                <p class="text-blue-100">
+                    Organize seus treinamentos em categorias para facilitar a navegação
+                </p>
+            </div>
+            <button type="button" 
+                    class="bg-white text-blue-600 hover:bg-gray-100 font-medium py-3 px-6 rounded-lg transition-colors"
+                    onclick="openCreateModal()">
+                <i class="fas fa-plus mr-2"></i>Nova Categoria
+            </button>
+        </div>
+    </div>
+
+    <!-- Categorias List -->
+    {% if categories %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for category in categories %}
+        <div class="bg-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 {% if category.is_active %}border-green-500{% else %}border-gray-400{% endif %} overflow-hidden">
+            <div class="p-6">
+                <!-- Header do Card -->
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex-1">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-1">{{ category.name }}</h3>
+                        {% if not category.is_active %}
+                        <span class="inline-block bg-gray-100 text-gray-600 text-xs font-medium px-2 py-1 rounded-full">
+                            Inativa
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="relative">
+                        <button class="text-gray-400 hover:text-gray-600 p-1" onclick="toggleDropdown({{ category.id }})">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <div id="dropdown-{{ category.id }}" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border">
+                            <div class="py-1">
+                                <button class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left" 
+                                        onclick="editCategory({{ category.id }}, '{{ category.name|escapejs }}', '{{ category.description|escapejs }}', {{ category.is_active|yesno:'true,false' }})">
+                                    <i class="fas fa-edit mr-2"></i>Editar
+                                </button>
+                                {% if category.is_active %}
+                                <button class="block px-4 py-2 text-sm text-yellow-600 hover:bg-gray-100 w-full text-left" 
+                                        onclick="toggleCategoryStatus({{ category.id }}, false)">
+                                    <i class="fas fa-pause mr-2"></i>Desativar
+                                </button>
+                                {% else %}
+                                <button class="block px-4 py-2 text-sm text-green-600 hover:bg-gray-100 w-full text-left" 
+                                        onclick="toggleCategoryStatus({{ category.id }}, true)">
+                                    <i class="fas fa-play mr-2"></i>Ativar
+                                </button>
+                                {% endif %}
+                                <div class="border-t border-gray-100"></div>
+                                <button class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left" 
+                                        onclick="deleteCategory({{ category.id }}, '{{ category.name|escapejs }}')">
+                                    <i class="fas fa-trash mr-2"></i>Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Descrição -->
+                {% if category.description %}
+                <p class="text-gray-600 mb-4">{{ category.description }}</p>
+                {% endif %}
+
+                <!-- Estatísticas -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="text-center p-3 bg-blue-50 rounded-lg">
+                        <div class="text-2xl font-bold text-blue-600">{{ category.tutorial_set.count }}</div>
+                        <div class="text-xs text-blue-500">Tutorial{{ category.tutorial_set.count|pluralize }}</div>
+                    </div>
+                    <div class="text-center p-3 bg-green-50 rounded-lg">
+                        <div class="text-2xl font-bold text-green-600">{{ category.tutorial_set.count }}</div>
+                        <div class="text-xs text-green-500">Ativo{{ category.tutorial_set.count|pluralize }}</div>
+                    </div>
+                </div>
+
+                <!-- Footer com informações -->
+                <div class="text-sm text-gray-500 space-y-1">
+                    <div class="flex items-center">
+                        <i class="fas fa-calendar w-4 mr-2"></i>
+                        <span>Criada em {{ category.created_at|date:"d/m/Y" }}</span>
+                    </div>
+                    {% if category.updated_at != category.created_at %}
+                    <div class="flex items-center">
+                        <i class="fas fa-edit w-4 mr-2"></i>
+                        <span>Atualizada em {{ category.updated_at|date:"d/m/Y" }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Actions Footer -->
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
+                <div class="flex justify-center">
+                    <a href="{% url 'help_tutorials' %}?category={{ category.id }}" 
+                       class="w-full bg-primary hover:bg-primary-dark text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors text-center">
+                        <i class="fas fa-eye mr-1"></i>Ver Treinamentos
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow-lg p-12 text-center">
+        <i class="fas fa-tags text-6xl text-gray-400 mb-6"></i>
+        <h3 class="text-2xl font-semibold text-gray-700 mb-2">Nenhuma categoria encontrada</h3>
+        <p class="text-gray-600 mb-6 max-w-md mx-auto">
+            Crie categorias para organizar seus treinamentos e facilitar a navegação dos usuários.
+        </p>
+        <button type="button" 
+                class="bg-primary hover:bg-primary-dark text-white font-medium py-3 px-6 rounded-lg transition-colors"
+                onclick="openCreateModal()">
+            <i class="fas fa-plus mr-2"></i>Criar Primeira Categoria
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Criar/Editar Categoria -->
+<div id="categoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg max-w-lg w-full mx-4">
+        <form method="post" id="categoryForm" action="{% url 'manage_training_categories' %}">
+            {% csrf_token %}
+            <input type="hidden" id="category_id" name="category_id">
+            <div class="bg-primary text-white px-6 py-4 rounded-t-lg">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-semibold" id="modal-title">
+                        <i class="fas fa-plus mr-2"></i>Nova Categoria
+                    </h3>
+                    <button type="button" class="text-white hover:text-gray-200" onclick="closeCategoryModal()">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Nome da Categoria *
+                    </label>
+                    <input type="text" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                           id="name" name="name" required
+                           placeholder="Ex: Segurança, Vendas, Produtos...">
+                </div>
+                
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Descrição
+                    </label>
+                    <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                              id="description" name="description" rows="3"
+                              placeholder="Descreva o tipo de treinamentos desta categoria..."></textarea>
+                </div>
+                
+                <div class="flex items-center">
+                    <input type="checkbox" 
+                           class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary" 
+                           id="is_active" name="is_active" checked>
+                    <label for="is_active" class="ml-2 text-sm text-gray-700">
+                        Categoria ativa (visível para usuários)
+                    </label>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button type="button" 
+                        class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                        onclick="closeCategoryModal()">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
+                    <i class="fas fa-save mr-2"></i><span id="submit-text">Criar Categoria</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function openCreateModal() {
+    document.getElementById('modal-title').innerHTML = '<i class="fas fa-plus mr-2"></i>Nova Categoria';
+    document.getElementById('submit-text').textContent = 'Criar Categoria';
+    document.getElementById('category_id').value = '';
+    document.getElementById('categoryForm').reset();
+    document.getElementById('is_active').checked = true;
+    document.getElementById('categoryModal').classList.remove('hidden');
+}
+
+function editCategory(id, name, description, isActive) {
+    document.getElementById('modal-title').innerHTML = '<i class="fas fa-edit mr-2"></i>Editar Categoria';
+    document.getElementById('submit-text').textContent = 'Salvar Alterações';
+    document.getElementById('category_id').value = id;
+    document.getElementById('name').value = name;
+    document.getElementById('description').value = description;
+    document.getElementById('is_active').checked = isActive;
+    document.getElementById('categoryModal').classList.remove('hidden');
+}
+
+function closeCategoryModal() {
+    document.getElementById('categoryModal').classList.add('hidden');
+    document.getElementById('categoryForm').reset();
+}
+
+function toggleDropdown(categoryId) {
+    // Fechar outros dropdowns
+    document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+        if (dropdown.id !== `dropdown-${categoryId}`) {
+            dropdown.classList.add('hidden');
+        }
+    });
+    
+    // Toggle do dropdown atual
+    const dropdown = document.getElementById(`dropdown-${categoryId}`);
+    dropdown.classList.toggle('hidden');
+}
+
+function toggleCategoryStatus(categoryId, activate) {
+    const action = activate ? 'ativar' : 'desativar';
+    if (confirm(`Tem certeza que deseja ${action} esta categoria?`)) {
+        fetch(`{% url 'edit_training_category' 0 %}`.replace('0', categoryId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: `action=toggle_status&is_active=${activate}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.error || `Erro ao ${action} categoria`, 'error');
+            }
+        })
+        .catch(error => {
+            showToast(`Erro ao ${action} categoria`, 'error');
+        });
+    }
+}
+
+function deleteCategory(categoryId, categoryName) {
+    if (confirm(`Tem certeza que deseja excluir a categoria "${categoryName}"?\n\nEsta ação não pode ser desfeita e todos os treinamentos desta categoria ficarão sem categoria.`)) {
+        fetch(`{% url 'edit_training_category' 0 %}`.replace('0', categoryId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: `action=delete`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.error || 'Erro ao excluir categoria', 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Erro ao excluir categoria', 'error');
+        });
+    }
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+    };
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+    
+    toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas ${icons[type]} mr-3"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+    
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Form submission handler
+    document.getElementById('categoryForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const categoryId = document.getElementById('category_id').value;
+        const formData = new FormData(this);
+        
+        let url = '{% url "manage_training_categories" %}';
+        if (categoryId) {
+            url = `{% url 'edit_training_category' 0 %}`.replace('0', categoryId);
+        }
+        
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.redirected) {
+                window.location.href = response.url;
+            }
+            return response.text();
+        })
+        .then(data => {
+            // Se não foi redirecionado, recarregar página
+            if (!document.querySelector('.alert')) {
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showToast('Erro ao salvar categoria', 'error');
+        });
+    });
+    
+    // Fechar dropdowns clicando fora
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('[onclick*="toggleDropdown"]')) {
+            document.querySelectorAll('[id^="dropdown-"]').forEach(dropdown => {
+                dropdown.classList.add('hidden');
+            });
+        }
+    });
+    
+    // Fechar modal clicando fora
+    document.getElementById('categoryModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeCategoryModal();
+        }
+    });
+});
+</script>
+{% endblock %}

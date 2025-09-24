@@ -3,12 +3,49 @@ from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
 from django.urls import reverse
 from django.conf import settings
+from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import os
 import uuid
 
 User = get_user_model()
+
+
+class TrainingCategory(models.Model):
+    """Modelo para categorias de treinamentos"""
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name="Nome da Categoria"
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descrição"
+    )
+    color = models.CharField(
+        max_length=7,
+        default="#3B82F6",
+        verbose_name="Cor",
+        help_text="Cor em hexadecimal (ex: #FF5733)"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Ativo"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Criado em"
+    )
+    
+    class Meta:
+        verbose_name = "Categoria de Treinamento"
+        verbose_name_plural = "Categorias de Treinamento"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
 
 def get_training_storage():
     """Return training storage backend"""
@@ -49,6 +86,15 @@ class Training(models.Model):
     description = models.TextField(
         verbose_name="Descrição",
         help_text="Descrição detalhada do treinamento"
+    )
+    
+    category = models.ForeignKey(
+        TrainingCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Categoria",
+        related_name="trainings"
     )
     
     video_file = models.FileField(
@@ -271,6 +317,12 @@ class TrainingView(models.Model):
         help_text="Se o usuário assistiu ao vídeo completo"
     )
     
+    completion_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Data de Conclusão"
+    )
+    
     class Meta:
         verbose_name = "Visualização de Treinamento"
         verbose_name_plural = "Visualizações de Treinamentos"
@@ -278,3 +330,52 @@ class TrainingView(models.Model):
         
     def __str__(self):
         return f"{self.user.username} - {self.training.title}"
+    
+    def save(self, *args, **kwargs):
+        # Marcar data de conclusão quando completado
+        if self.completed and not self.completion_date:
+            self.completion_date = timezone.now()
+        elif not self.completed:
+            self.completion_date = None
+        super().save(*args, **kwargs)
+
+
+class TrainingProgress(models.Model):
+    """Modelo para progresso detalhado de treinamentos"""
+    training = models.ForeignKey(
+        Training,
+        on_delete=models.CASCADE,
+        related_name="training_progress"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="training_progress"
+    )
+    started_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Iniciado em"
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Concluído em"
+    )
+    is_completed = models.BooleanField(
+        default=False,
+        verbose_name="Concluído"
+    )
+    progress_percentage = models.FloatField(
+        default=0.0,
+        verbose_name="Progresso (%)"
+    )
+    
+    class Meta:
+        verbose_name = "Progresso de Treinamento"
+        verbose_name_plural = "Progressos de Treinamentos"
+        unique_together = ['training', 'user']
+        ordering = ['-started_at']
+    
+    def __str__(self):
+        status = "Concluído" if self.is_completed else f"{self.progress_percentage:.1f}%"
+        return f"{self.user.full_name} - {self.training.title} ({status})"

@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% load static %}
+{% load tutorial_filters %}
 
 {% block title %}Central de Ajuda{% endblock %}
 
@@ -21,6 +23,10 @@
                         <i class="fas fa-plus mr-2"></i>
                         Novo Tutorial
                     </a>
+                    <a href="{% url 'manage_training_categories' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center">
+                        <i class="fas fa-tags mr-2"></i>
+                        Categorias
+                    </a>
                     {% endif %}
                     <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
                         <i class="fas fa-arrow-left mr-2"></i>
@@ -31,7 +37,74 @@
         </div>
     </div>
 
-    <div class="max-w-6xl mx-auto">
+    <div class="max-w-6xl mx-auto px-4">
+        <!-- Filtros -->
+        {% if categories or request.GET.category %}
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-filter mr-2"></i>Filtrar por Categoria
+            </h3>
+            
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'help_tutorials' %}" 
+                   class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if not request.GET.category %}bg-primary text-white{% else %}bg-gray-200 text-gray-700 hover:bg-gray-300{% endif %}">
+                    <i class="fas fa-list mr-1"></i>Todas
+                </a>
+                
+                {% for category in categories %}
+                <a href="{% url 'help_tutorials' %}?category={{ category.id }}" 
+                   class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if request.GET.category == category.id|stringformat:'s' %}bg-primary text-white{% else %}bg-gray-200 text-gray-700 hover:bg-gray-300{% endif %}">
+                    <i class="fas fa-folder mr-1"></i>{{ category.name }}
+                    <span class="ml-1 text-xs opacity-75">({{ category.tutorial_set.count }})</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Estatísticas do Usuário -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold">{{ user_stats.total_tutorials }}</h3>
+                        <p class="text-blue-100 text-sm">Total de Tutoriais</p>
+                    </div>
+                    <i class="fas fa-book text-2xl opacity-75"></i>
+                </div>
+            </div>
+            
+            <div class="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold">{{ user_stats.completed_tutorials }}</h3>
+                        <p class="text-green-100 text-sm">Concluídos</p>
+                    </div>
+                    <i class="fas fa-check-circle text-2xl opacity-75"></i>
+                </div>
+            </div>
+            
+            <div class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold">{{ user_stats.viewed_tutorials }}</h3>
+                        <p class="text-yellow-100 text-sm">Em Progresso</p>
+                    </div>
+                    <i class="fas fa-eye text-2xl opacity-75"></i>
+                </div>
+            </div>
+            
+            <div class="bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold">{{ user_stats.completion_rate }}%</h3>
+                        <p class="text-purple-100 text-sm">Taxa de Conclusão</p>
+                    </div>
+                    <i class="fas fa-chart-pie text-2xl opacity-75"></i>
+                </div>
+            </div>
+        </div>
+
         <!-- Quick Access Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white">
@@ -65,6 +138,156 @@
                 <a href="#admin" class="text-white underline text-sm hover:text-purple-100">
                     Ver tutoriais →
                 </a>
+            </div>
+        </div>
+
+        <!-- Tutorials Section -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-graduation-cap mr-2"></i>
+                    Tutoriais Disponíveis
+                    {% if current_category %}
+                    - {{ current_category.name }}
+                    {% endif %}
+                </h3>
+            </div>
+            
+            <div class="p-6">
+                {% if tutorials %}
+                <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {% for tutorial in tutorials %}
+                    <div class="border border-gray-200 rounded-lg hover:shadow-md transition-all duration-200 overflow-hidden">
+                        <!-- Header do Card -->
+                        <div class="p-4 border-b border-gray-100">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                                        <i class="fas fa-file-pdf text-red-600"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-900 line-clamp-1">{{ tutorial.title }}</h4>
+                                        {% if tutorial.category %}
+                                        <span class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded mt-1">
+                                            {{ tutorial.category.name }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                                                <!-- Status Badge -->
+                                {% with tutorial|get_progress_for_user:user as progress %}
+                                {% if progress.completed_at %}
+                                <span class="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
+                                    <i class="fas fa-check-circle mr-1"></i>Concluído
+                                </span>
+                                {% elif progress.viewed_at %}
+                                <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                                    <i class="fas fa-eye mr-1"></i>Em Progresso
+                                </span>
+                                {% else %}
+                                <span class="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-1 rounded-full">
+                                    <i class="fas fa-clock mr-1"></i>Não Iniciado
+                                </span>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                            
+                            <p class="text-gray-600 text-sm line-clamp-2 mb-3">{{ tutorial.description }}</p>
+                            
+                            <!-- Metadados -->
+                            <div class="flex items-center text-xs text-gray-500 space-x-4">
+                                <div class="flex items-center">
+                                    <i class="fas fa-calendar mr-1"></i>
+                                    {{ tutorial.created_at|date:"d/m/Y" }}
+                                </div>
+                                <div class="flex items-center">
+                                    <i class="fas fa-user mr-1"></i>
+                                    {{ tutorial.created_by.get_full_name|default:tutorial.created_by.username }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="p-4 bg-gray-50">
+                            <div class="flex justify-between items-center">
+                                <div class="flex space-x-2">
+                                    <a href="{% url 'tutorial_detail' tutorial.id %}" 
+                                       class="text-primary hover:text-primary-dark text-sm font-medium">
+                                        <i class="fas fa-play mr-1"></i>Visualizar
+                                    </a>
+                                    <a href="{{ tutorial.pdf_file.url }}" 
+                                       target="_blank"
+                                       class="text-gray-600 hover:text-gray-800 text-sm">
+                                        <i class="fas fa-download mr-1"></i>Download
+                                    </a>
+                                </div>
+                                
+                                <!-- Progress Info for Creators -->
+                                {% if user == tutorial.created_by or user.can_manage_users %}
+                                <div class="text-xs text-gray-500">
+                                    <i class="fas fa-eye mr-1"></i>{{ tutorial.get_viewers_count }}
+                                    <i class="fas fa-check-circle ml-2 mr-1"></i>{{ tutorial.get_completed_count }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Paginação -->
+                {% if tutorials.has_other_pages %}
+                <div class="flex justify-center mt-8">
+                    <div class="flex space-x-1">
+                        {% if tutorials.has_previous %}
+                        <a href="?page={{ tutorials.previous_page_number }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" 
+                           class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                        {% endif %}
+                        
+                        <span class="px-3 py-2 text-sm bg-primary text-white rounded">
+                            {{ tutorials.number }} de {{ tutorials.paginator.num_pages }}
+                        </span>
+                        
+                        {% if tutorials.has_next %}
+                        <a href="?page={{ tutorials.next_page_number }}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" 
+                           class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% else %}
+                <div class="text-center py-12">
+                    <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-file-pdf text-gray-400 text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                        {% if current_category %}
+                        Nenhum tutorial encontrado na categoria "{{ current_category.name }}"
+                        {% else %}
+                        Nenhum tutorial disponível
+                        {% endif %}
+                    </h3>
+                    <p class="text-gray-600 mb-4">
+                        {% if current_category %}
+                        Tutoriais para esta categoria serão adicionados em breve.
+                        {% else %}
+                        Tutoriais em PDF serão adicionados em breve.
+                        {% endif %}
+                    </p>
+                    {% if current_category %}
+                    <a href="{% url 'help_tutorials' %}" 
+                       class="text-primary hover:text-primary-dark">
+                        Ver todos os tutoriais
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -116,52 +339,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Tutorials Section -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900">Tutoriais em PDF</h3>
-            </div>
-            
-            <div class="p-6">
-                {% if tutorials %}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {% for tutorial in tutorials %}
-                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div class="flex items-start">
-                            <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mr-4">
-                                <i class="fas fa-file-pdf text-red-600 text-xl"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <h4 class="text-lg font-medium text-gray-900 mb-2">{{ tutorial.title }}</h4>
-                                <p class="text-gray-600 text-sm mb-3">{{ tutorial.description|truncatechars:100 }}</p>
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs text-gray-500">
-                                        {{ tutorial.created_at|date:"d/m/Y" }}
-                                    </span>
-                                    <a href="{{ tutorial.pdf_file.url }}" 
-                                       target="_blank"
-                                       class="bg-primary text-white px-3 py-1 rounded text-sm hover:bg-orange-600 transition-colors">
-                                        <i class="fas fa-download mr-1"></i>
-                                        Baixar
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="text-center py-12">
-                    <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i class="fas fa-file-pdf text-gray-400 text-3xl"></i>
-                    </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Nenhum tutorial disponível</h3>
-                    <p class="text-gray-600">Tutoriais em PDF serão adicionados em breve.</p>
-                </div>
-                {% endif %}
             </div>
         </div>
 
