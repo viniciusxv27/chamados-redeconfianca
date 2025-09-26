@@ -2769,7 +2769,7 @@ def create_daily_checklist(request):
         creation_type = request.POST.get('creation_type', 'template')
         user_ids = request.POST.getlist('user_ids')
         checklist_date = request.POST.get('date', date.today().isoformat())
-        repeat_daily = request.POST.get('repeat_daily') == 'on'
+        repeat_type = request.POST.get('repeat_type', 'none')
         
         if not user_ids:
             messages.error(request, 'Selecione pelo menos um usuário!')
@@ -2800,7 +2800,7 @@ def create_daily_checklist(request):
                         template=template,
                         title=template.title,
                         date=target_date,
-                        repeat_daily=repeat_daily,
+                        repeat_daily=(repeat_type != 'none'),
                         created_by=request.user
                     )
                     
@@ -2835,7 +2835,7 @@ def create_daily_checklist(request):
                         user=user,
                         title=custom_title,
                         date=target_date,
-                        repeat_daily=repeat_daily,
+                        repeat_daily=(repeat_type != 'none'),
                         created_by=request.user
                     )
                     
@@ -2850,12 +2850,36 @@ def create_daily_checklist(request):
                     
                     created_count += 1
             
-            # Se repeat_daily está ativado, criar para os próximos 30 dias
-            if repeat_daily and created_count > 0:
+            # Implementar lógica de repetição
+            if repeat_type != 'none' and created_count > 0:
                 repeat_count = 0
-                for days_ahead in range(1, 31):  # Próximos 30 dias
-                    future_date = target_date + timedelta(days=days_ahead)
-                    
+                
+                # Mapear dias da semana
+                weekday_map = {
+                    'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                    'friday': 4, 'saturday': 5, 'sunday': 6
+                }
+                
+                # Gerar datas para repetição
+                future_dates = []
+                current_date = target_date + timedelta(days=1)
+                end_date = target_date + timedelta(days=30)
+                
+                if repeat_type == 'daily':
+                    # Repetir todos os dias
+                    while current_date <= end_date:
+                        future_dates.append(current_date)
+                        current_date += timedelta(days=1)
+                elif repeat_type in weekday_map:
+                    # Repetir em dia específico da semana
+                    target_weekday = weekday_map[repeat_type]
+                    while current_date <= end_date:
+                        if current_date.weekday() == target_weekday:
+                            future_dates.append(current_date)
+                        current_date += timedelta(days=1)
+                
+                # Criar checklists para as datas futuras
+                for future_date in future_dates:
                     for user_id in user_ids:
                         user = User.objects.get(id=user_id)
                         
@@ -2906,7 +2930,19 @@ def create_daily_checklist(request):
                         
                         repeat_count += 1
                 
-                messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso! {repeat_count} checklist(s) adicionais criados para repetição diária.')
+                # Mensagem específica para o tipo de repetição
+                repeat_labels = {
+                    'daily': 'repetição diária',
+                    'monday': 'repetição nas segundas-feiras',
+                    'tuesday': 'repetição nas terças-feiras', 
+                    'wednesday': 'repetição nas quartas-feiras',
+                    'thursday': 'repetição nas quintas-feiras',
+                    'friday': 'repetição nas sextas-feiras',
+                    'saturday': 'repetição nos sábados',
+                    'sunday': 'repetição nos domingos'
+                }
+                repeat_label = repeat_labels.get(repeat_type, 'repetição')
+                messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso! {repeat_count} checklist(s) adicionais criados para {repeat_label}.')
             else:
                 messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso!')
             
@@ -2917,7 +2953,30 @@ def create_daily_checklist(request):
     
     # GET - mostrar formulário
     templates = ChecklistTemplate.objects.all().order_by('title')
-    users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    
+    # Filtrar usuários por setor para SUPERVISOR e ADMINISTRATIVO
+    if request.user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
+        # Pegar setores do usuário atual (tanto ManyToMany quanto ForeignKey)
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if user_sectors:
+            # Filtrar usuários que pertencem aos mesmos setores (considerando ambos os campos)
+            from django.db.models import Q
+            users = User.objects.filter(
+                is_staff=False
+            ).filter(
+                Q(sectors__in=user_sectors) | Q(sector__in=user_sectors)
+            ).exclude(
+                id=request.user.id  # Excluir o próprio usuário
+            ).distinct().order_by('first_name', 'username')
+        else:
+            # Se não tem setor definido, não pode criar para ninguém
+            users = User.objects.none()
+    else:
+        # ADMIN e SUPERADMIN podem criar para todos (exceto eles mesmos)
+        users = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
     
     context = {
         'templates': templates,
@@ -3011,7 +3070,29 @@ def create_task_view(request):
         except Exception as e:
             messages.error(request, f'Erro ao criar tarefa: {str(e)}')
     
-    users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    # Filtrar usuários por setor para SUPERVISOR e ADMINISTRATIVO
+    if request.user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
+        # Pegar setores do usuário atual (tanto ManyToMany quanto ForeignKey)
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if user_sectors:
+            # Filtrar usuários que pertencem aos mesmos setores (considerando ambos os campos)
+            from django.db.models import Q
+            users = User.objects.filter(
+                is_staff=False
+            ).filter(
+                Q(sectors__in=user_sectors) | Q(sector__in=user_sectors)
+            ).exclude(
+                id=request.user.id  # Excluir o próprio usuário
+            ).distinct().order_by('first_name', 'username')
+        else:
+            # Se não tem setor definido, não pode criar para ninguém
+            users = User.objects.none()
+    else:
+        # ADMIN e SUPERADMIN podem criar para todos (exceto eles mesmos)
+        users = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
     
     context = {
         'users': users,

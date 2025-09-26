@@ -144,17 +144,76 @@
                             </p>
                         </div>
 
-                        <!-- Repeat Daily Option -->
+                        <!-- Repeat Options -->
                         <div>
-                            <div class="flex items-center">
-                                <input type="checkbox" name="repeat_daily" id="repeat_daily" 
-                                       class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-3">
-                                <label for="repeat_daily" class="text-sm font-medium text-gray-700">
-                                    Repetir todos os dias
-                                </label>
+                            <label class="block text-sm font-medium text-gray-700 mb-3">Opções de Repetição</label>
+                            <div class="space-y-2">
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="none" id="repeat_none" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3" checked>
+                                    <label for="repeat_none" class="text-sm text-gray-700">
+                                        Apenas uma vez
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="daily" id="repeat_daily" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_daily" class="text-sm text-gray-700">
+                                        Repetir todos os dias (30 dias)
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="monday" id="repeat_monday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_monday" class="text-sm text-gray-700">
+                                        Repetir toda segunda-feira
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="tuesday" id="repeat_tuesday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_tuesday" class="text-sm text-gray-700">
+                                        Repetir toda terça-feira
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="wednesday" id="repeat_wednesday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_wednesday" class="text-sm text-gray-700">
+                                        Repetir toda quarta-feira
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="thursday" id="repeat_thursday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_thursday" class="text-sm text-gray-700">
+                                        Repetir toda quinta-feira
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="friday" id="repeat_friday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_friday" class="text-sm text-gray-700">
+                                        Repetir toda sexta-feira
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="saturday" id="repeat_saturday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_saturday" class="text-sm text-gray-700">
+                                        Repetir todo sábado
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" name="repeat_type" value="sunday" id="repeat_sunday" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
+                                    <label for="repeat_sunday" class="text-sm text-gray-700">
+                                        Repetir todo domingo
+                                    </label>
+                                </div>
                             </div>
-                            <p class="text-sm text-gray-500 mt-1 ml-7">
-                                Se marcado, criará este checklist automaticamente para os próximos 30 dias
+                            <p class="text-sm text-gray-500 mt-2">
+                                Opções de repetição criarão checklists automaticamente pelos próximos 30 dias nos dias selecionados
                             </p>
                         </div>
 
@@ -479,12 +538,33 @@ function updateDate() {
     }
 }
 
+function getRepeatLabel(value) {
+    const repeatLabels = {
+        'none': 'Apenas uma vez',
+        'daily': 'Repetir por 30 dias',
+        'monday': 'Repetir toda segunda-feira',
+        'tuesday': 'Repetir toda terça-feira',
+        'wednesday': 'Repetir toda quarta-feira',
+        'thursday': 'Repetir toda quinta-feira',
+        'friday': 'Repetir toda sexta-feira',
+        'saturday': 'Repetir todo sábado',
+        'sunday': 'Repetir todo domingo'
+    };
+    return repeatLabels[value] || 'Apenas uma vez';
+}
+
 function updateRepeat() {
-    const repeatCheckbox = document.getElementById('repeat_daily');
+    const repeatRadios = document.querySelectorAll('input[name="repeat_type"]');
     const selectedRepeat = document.getElementById('selected-repeat');
     
-    selectedRepeat.textContent = repeatCheckbox.checked ? 
-        'Repetir por 30 dias' : 'Apenas uma vez';
+    let selectedValue = 'none';
+    repeatRadios.forEach(radio => {
+        if (radio.checked) {
+            selectedValue = radio.value;
+        }
+    });
+    
+    selectedRepeat.textContent = getRepeatLabel(selectedValue);
 }
 
 function updateCreateButton() {
@@ -560,7 +640,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('date').addEventListener('change', updateDate);
     
     // Checkbox de repetição
-    document.getElementById('repeat_daily').addEventListener('change', updateRepeat);
+    // Event listeners para repetição
+    document.querySelectorAll('input[name="repeat_type"]').forEach(radio => {
+        radio.addEventListener('change', updateRepeat);
+    });
     
     // Input do título customizado
     document.getElementById('custom_title').addEventListener('input', function() {
@@ -575,7 +658,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const templateType = document.getElementById('type_template').checked;
         const dateText = new Date(document.getElementById('date').value).toLocaleDateString('pt-BR');
         const usersCount = document.querySelectorAll('input[name="user_ids"]:checked').length;
-        const repeatDaily = document.getElementById('repeat_daily').checked;
+        const repeatType = document.querySelector('input[name="repeat_type"]:checked').value;
         
         let confirmationDetails = '';
         
@@ -600,7 +683,7 @@ document.addEventListener('DOMContentLoaded', function() {
         confirmationDetails += `
             <li><strong>Data:</strong> ${dateText}</li>
             <li><strong>Usuários:</strong> ${usersCount} selecionado(s)</li>
-            <li><strong>Repetição:</strong> ${repeatDaily ? 'Repetir por 30 dias' : 'Apenas uma vez'}</li>
+            <li><strong>Repetição:</strong> ${getRepeatLabel(repeatType)}</li>
         `;
         
         document.getElementById('confirmation-details').innerHTML = confirmationDetails;
