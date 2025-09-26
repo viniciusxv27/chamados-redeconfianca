@@ -23,6 +23,9 @@ def tickets_list_view(request):
     search = request.GET.get('search', '')
     status_filter = request.GET.get('status', '')
     origem_filter = request.GET.get('origem', '')
+    categoria_filter = request.GET.get('categoria', '')
+    setor_filter = request.GET.get('setor', '')
+    prioridade_filter = request.GET.get('prioridade', '')
     
     # Filtro base: TODOS os usuários sempre veem seus próprios chamados
     base_filter = models.Q(created_by=user)
@@ -72,6 +75,18 @@ def tickets_list_view(request):
     elif status_filter in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']:
         tickets = tickets.filter(status=status_filter)
     
+    # Filtro por categoria
+    if categoria_filter:
+        tickets = tickets.filter(category_id=categoria_filter)
+    
+    # Filtro por setor
+    if setor_filter:
+        tickets = tickets.filter(sector_id=setor_filter)
+    
+    # Filtro por prioridade
+    if prioridade_filter:
+        tickets = tickets.filter(priority=prioridade_filter)
+    
     # Filtro por pesquisa
     if search:
         tickets = tickets.filter(
@@ -96,12 +111,48 @@ def tickets_list_view(request):
         # Se a página estiver fora do range, mostrar a última página
         tickets_page = paginator.page(paginator.num_pages)
     
+    # Obter categorias e setores do usuário para os filtros
+    user_sectors = list(user.sectors.all())
+    if user.sector:
+        user_sectors.append(user.sector)
+    
+    # Remover duplicatas
+    user_sectors = list(set(user_sectors))
+    
+    # Obter categorias dos setores do usuário
+    user_categories = Category.objects.filter(sector__in=user_sectors).order_by('sector__name', 'name')
+    
+    # Obter nomes para exibição dos filtros aplicados
+    categoria_name = ''
+    setor_name = ''
+    
+    if categoria_filter:
+        try:
+            categoria_obj = Category.objects.get(id=categoria_filter)
+            categoria_name = categoria_obj.name
+        except Category.DoesNotExist:
+            pass
+    
+    if setor_filter:
+        try:
+            setor_obj = Sector.objects.get(id=setor_filter)
+            setor_name = setor_obj.name
+        except Sector.DoesNotExist:
+            pass
+    
     context = {
         'tickets': tickets_page,
         'user': user,
         'search': search,
         'status': status_filter,
         'origem': origem_filter,
+        'categoria': categoria_filter,
+        'setor': setor_filter,
+        'prioridade': prioridade_filter,
+        'categoria_name': categoria_name,
+        'setor_name': setor_name,
+        'user_categories': user_categories,
+        'user_sectors': user_sectors,
         'paginator': paginator,
         'page_obj': tickets_page,
     }
@@ -915,6 +966,7 @@ def ticket_create_fixed_view(request):
         category_id = request.POST.get('category')
         requires_approval = request.POST.get('requires_approval') == 'on'
         approval_user_id = request.POST.get('approval_user')
+        assigned_user_id = request.POST.get('copy')
         
         sector = get_object_or_404(Sector, id=sector_id)
         category = get_object_or_404(Category, id=category_id)
@@ -928,6 +980,7 @@ def ticket_create_fixed_view(request):
             created_by=request.user,
             requires_approval=requires_approval or category.requires_approval,
             approval_user_id=approval_user_id if requires_approval else None,
+            assigned_to_id=assigned_user_id if assigned_user_id else None,
             solution_time_hours=int(request.POST.get('solution_time_hours', 24)),
             priority=request.POST.get('priority', 'MEDIA')
         )
