@@ -2711,7 +2711,7 @@ def update_task_status(request, task_id):
 
 # ===== VIEWS ADMINISTRATIVAS PARA SUPERVISORES =====
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
 def manage_checklists_view(request):
     """Gerenciar templates de checklist (apenas supervisores)"""
     from core.models import ChecklistTemplate, ChecklistTemplateItem
@@ -2752,7 +2752,7 @@ def manage_checklists_view(request):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
 def create_daily_checklist(request):
     """Criar checklist diário para usuários"""
     from core.models import ChecklistTemplate, DailyChecklist, ChecklistItem
@@ -2922,7 +2922,7 @@ def create_daily_checklist(request):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
 def manage_tasks_view(request):
     """Gerenciar tarefas/atividades (apenas supervisores)"""
     from core.models import TaskActivity
@@ -2964,7 +2964,7 @@ def manage_tasks_view(request):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisores').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
 def create_task_view(request):
     """Criar nova tarefa/atividade"""
     from core.models import TaskActivity
