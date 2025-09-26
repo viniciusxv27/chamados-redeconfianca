@@ -142,7 +142,7 @@ async function approveTransaction(transactionId) {
     }
     
     try {
-        const response = await fetch(`/manage/cs-transactions/${transactionId}/approve/`, {
+        const response = await fetch(`/users/manage/cs-transactions/${transactionId}/approve/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -179,7 +179,7 @@ async function rejectTransaction(transactionId) {
     }
     
     try {
-        const response = await fetch(`/manage/cs-transactions/${transactionId}/reject/`, {
+        const response = await fetch(`/users/manage/cs-transactions/${transactionId}/reject/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,

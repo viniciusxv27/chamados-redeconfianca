@@ -2410,7 +2410,7 @@ def pending_cs_transactions_view(request):
 def approve_cs_transaction(request, transaction_id):
     """Aprovar uma transação C$ pendente"""
     if not request.user.can_manage_users():
-        return JsonResponse({'error': 'Acesso negado'}, status=403)
+        return JsonResponse({'error': 'Acesso negado. Apenas SUPERADMIN pode aprovar transações C$.'}, status=403)
     
     from prizes.models import CSTransaction
     from django.utils import timezone
@@ -2419,28 +2419,59 @@ def approve_cs_transaction(request, transaction_id):
         with transaction.atomic():
             cs_transaction = get_object_or_404(CSTransaction, id=transaction_id, status='PENDING')
             
+            # Verificar se o usuário não está tentando aprovar sua própria solicitação
+            if cs_transaction.created_by == request.user:
+                return JsonResponse({
+                    'error': 'Você não pode aprovar sua própria solicitação de C$. A aprovação deve ser feita por outro SUPERADMIN.'
+                }, status=400)
+            
+            # Verificar se o aprovador é realmente SUPERADMIN
+            if request.user.hierarchy != 'SUPERADMIN':
+                return JsonResponse({
+                    'error': 'Apenas usuários com hierarquia SUPERADMIN podem aprovar transações C$.'
+                }, status=403)
+            
             # Aprovar a transação
             cs_transaction.status = 'APPROVED'
             cs_transaction.approved_by = request.user
             cs_transaction.approved_at = timezone.now()
             cs_transaction.save()
             
-            # Adicionar o valor ao saldo do usuário
-            user = cs_transaction.user
-            user.balance_cs += cs_transaction.amount
-            user.save()
+            # Adicionar o valor ao saldo do usuário APENAS se for uma transação de crédito
+            if cs_transaction.transaction_type == 'CREDIT':
+                user = cs_transaction.user
+                user.balance_cs += cs_transaction.amount
+                user.save()
+                
+                log_action(
+                    request.user,
+                    'CS_APPROVE',
+                    f'Transação C$ aprovada: +C$ {cs_transaction.amount} para {user.get_full_name()} por {request.user.get_full_name()}',
+                    request
+                )
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Transação aprovada com sucesso! C$ {cs_transaction.amount} foi adicionado ao saldo de {user.get_full_name()}.',
+                    'new_balance': float(user.balance_cs)
+                })
+            else:
+                log_action(
+                    request.user,
+                    'CS_APPROVE',
+                    f'Transação C$ aprovada: {cs_transaction.transaction_type} de C$ {cs_transaction.amount} para {cs_transaction.user.get_full_name()} por {request.user.get_full_name()}',
+                    request
+                )
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Transação {cs_transaction.get_transaction_type_display().lower()} aprovada com sucesso!',
+                })
             
-            log_action(
-                request.user,
-                'CS_APPROVE',
-                f'Transação C$ aprovada: +C$ {cs_transaction.amount} para {user.full_name}',
-                request
-            )
-            
-            return JsonResponse({'message': f'Transação aprovada! C$ {cs_transaction.amount} adicionado ao saldo de {user.full_name}.'})
-            
+    except CSTransaction.DoesNotExist:
+        return JsonResponse({'error': 'Transação não encontrada ou já foi processada.'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': f'Erro ao aprovar transação: {str(e)}'}, status=500)
+        return JsonResponse({'error': f'Erro interno do servidor: {str(e)}'}, status=500)
 
 
 @login_required
@@ -2448,31 +2479,56 @@ def approve_cs_transaction(request, transaction_id):
 def reject_cs_transaction(request, transaction_id):
     """Rejeitar uma transação C$ pendente"""
     if not request.user.can_manage_users():
-        return JsonResponse({'error': 'Acesso negado'}, status=403)
+        return JsonResponse({'error': 'Acesso negado. Apenas SUPERADMIN pode rejeitar transações C$.'}, status=403)
     
     from prizes.models import CSTransaction
     from django.utils import timezone
     
     try:
-        cs_transaction = get_object_or_404(CSTransaction, id=transaction_id, status='PENDING')
+        with transaction.atomic():
+            cs_transaction = get_object_or_404(CSTransaction, id=transaction_id, status='PENDING')
+            
+            # Verificar se o usuário não está tentando rejeitar sua própria solicitação
+            if cs_transaction.created_by == request.user:
+                return JsonResponse({
+                    'error': 'Você não pode rejeitar sua própria solicitação de C$. A rejeição deve ser feita por outro SUPERADMIN.'
+                }, status=400)
+            
+            # Verificar se o aprovador é realmente SUPERADMIN
+            if request.user.hierarchy != 'SUPERADMIN':
+                return JsonResponse({
+                    'error': 'Apenas usuários com hierarquia SUPERADMIN podem rejeitar transações C$.'
+                }, status=403)
+            
+            # Obter motivo da rejeição (se fornecido)
+            rejection_reason = request.POST.get('reason', '').strip()
+            
+            # Rejeitar a transação
+            cs_transaction.status = 'REJECTED'
+            cs_transaction.approved_by = request.user
+            cs_transaction.approved_at = timezone.now()
+            if rejection_reason:
+                cs_transaction.rejection_reason = rejection_reason
+            cs_transaction.save()
+            
+            log_action(
+                request.user,
+                'CS_REJECT',
+                f'Transação C$ rejeitada: C$ {cs_transaction.amount} para {cs_transaction.user.get_full_name()} por {request.user.get_full_name()}' + 
+                (f' - Motivo: {rejection_reason}' if rejection_reason else ''),
+                request
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Transação rejeitada com sucesso. C$ {cs_transaction.amount} para {cs_transaction.user.get_full_name()} foi negado.' +
+                          (f' Motivo: {rejection_reason}' if rejection_reason else '')
+            })
         
-        # Rejeitar a transação
-        cs_transaction.status = 'REJECTED'
-        cs_transaction.approved_by = request.user
-        cs_transaction.approved_at = timezone.now()
-        cs_transaction.save()
-        
-        log_action(
-            request.user,
-            'CS_REJECT',
-            f'Transação C$ rejeitada: C$ {cs_transaction.amount} para {cs_transaction.user.full_name}',
-            request
-        )
-        
-        return JsonResponse({'message': f'Transação rejeitada.'})
-        
+    except CSTransaction.DoesNotExist:
+        return JsonResponse({'error': 'Transação não encontrada ou já foi processada.'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': f'Erro ao rejeitar transação: {str(e)}'}, status=500)
+        return JsonResponse({'error': f'Erro interno do servidor: {str(e)}'}, status=500)
 
 
 # ===== CHECKLIST VIEWS =====

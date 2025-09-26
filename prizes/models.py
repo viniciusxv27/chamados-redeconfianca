@@ -161,6 +161,7 @@ class CSTransaction(models.Model):
         verbose_name="Aprovado por"
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Data de Aprovação")
+    rejection_reason = models.TextField(blank=True, verbose_name="Motivo da Rejeição")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data")
     
     class Meta:
