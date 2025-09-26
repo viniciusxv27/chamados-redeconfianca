@@ -2711,7 +2711,7 @@ def update_task_status(request, task_id):
 
 # ===== VIEWS ADMINISTRATIVAS PARA SUPERVISORES =====
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='SUPERVISORES').exists())
 def manage_checklists_view(request):
     """Gerenciar templates de checklist (apenas supervisores)"""
     from core.models import ChecklistTemplate, ChecklistTemplateItem
@@ -2752,7 +2752,7 @@ def manage_checklists_view(request):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='SUPERVISORES').exists())
 def create_daily_checklist(request):
     """Criar checklist diário para usuários"""
     from core.models import ChecklistTemplate, DailyChecklist, ChecklistItem
@@ -2922,7 +2922,7 @@ def create_daily_checklist(request):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='SUPERVISORES').exists())
 def manage_tasks_view(request):
     """Gerenciar tarefas/atividades (apenas supervisores)"""
     from core.models import TaskActivity
@@ -2964,7 +2964,7 @@ def manage_tasks_view(request):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='Supervisor').exists())
+@user_passes_test(lambda u: u.is_staff or u.groups.filter(name='SUPERVISORES').exists())
 def create_task_view(request):
     """Criar nova tarefa/atividade"""
     from core.models import TaskActivity
@@ -3018,7 +3018,7 @@ def delete_checklist_template(request, template_id):
         template = get_object_or_404(ChecklistTemplate, id=template_id)
         
         # Verificar se o usuário tem permissão
-        if not (request.user.is_staff or request.user.groups.filter(name='Supervisores').exists()):
+        if not (request.user.is_staff or request.user.groups.filter(name='SUPERVISORESes').exists()):
             return JsonResponse({'success': False, 'error': 'Permissão negada'})
         
         template_name = template.name
@@ -3044,7 +3044,7 @@ def delete_task(request, task_id):
         
         # Verificar se o usuário tem permissão (supervisor ou criador da tarefa)
         if not (request.user.is_staff or 
-                request.user.groups.filter(name='Supervisores').exists() or
+                request.user.groups.filter(name='SUPERVISORESes').exists() or
                 task.created_by == request.user):
             return JsonResponse({'success': False, 'error': 'Permissão negada'})
         
