@@ -2713,7 +2713,7 @@ def update_task_status(request, task_id):
 @login_required
 def manage_checklists_view(request):
     """Gerenciar templates de checklist (apenas supervisores)"""
-    if not (request.user.hierarchy in ['ADMIN', 'ADMINISTRATIVO'] or request.user.is_staff):
+    if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('dashboard')
     """Gerenciar templates de checklist (apenas supervisores)"""
