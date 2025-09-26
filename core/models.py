@@ -398,20 +398,23 @@ class ChecklistTemplateItem(models.Model):
 class DailyChecklist(models.Model):
     """Checklist diário para um usuário específico"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='daily_checklists')
+    template = models.ForeignKey(ChecklistTemplate, on_delete=models.CASCADE, related_name='daily_checklists', verbose_name="Template", null=True, blank=True)
     date = models.DateField(verbose_name="Data")
     title = models.CharField(max_length=200, verbose_name="Título")
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_checklists')
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
+    repeat_daily = models.BooleanField(default=False, verbose_name="Repetir todos os dias")
     
     class Meta:
         verbose_name = "Checklist Diário"
         verbose_name_plural = "Checklists Diários"
-        unique_together = ['user', 'date', 'title']
+        unique_together = ['user', 'title', 'date']
         ordering = ['-date', '-created_at']
     
     def __str__(self):
-        return f"{self.user.full_name} - {self.title} ({self.date})"
+        template_title = self.template.title if self.template else self.title
+        return f"{self.user.get_full_name() or self.user.username} - {template_title} ({self.date})"
     
     def get_completion_percentage(self):
         """Calcula a porcentagem de conclusão do checklist"""

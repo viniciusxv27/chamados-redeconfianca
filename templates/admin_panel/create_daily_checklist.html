@@ -43,13 +43,44 @@
                         </h2>
                     </div>
                     <div class="p-6 space-y-6">
-                        <!-- Template Selection -->
+                        <!-- Tipo de Criação -->
                         <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-3">Tipo de Criação</label>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="relative">
+                                    <input type="radio" name="creation_type" value="template" id="type_template" 
+                                           class="peer sr-only" checked onchange="toggleCreationType()">
+                                    <label for="type_template" 
+                                           class="flex items-center justify-center p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white transition-all">
+                                        <div class="text-center">
+                                            <i class="fas fa-clipboard-list text-2xl mb-2"></i>
+                                            <div class="font-medium">Usar Template</div>
+                                            <div class="text-sm opacity-75">Baseado em template existente</div>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="relative">
+                                    <input type="radio" name="creation_type" value="custom" id="type_custom" 
+                                           class="peer sr-only" onchange="toggleCreationType()">
+                                    <label for="type_custom" 
+                                           class="flex items-center justify-center p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white transition-all">
+                                        <div class="text-center">
+                                            <i class="fas fa-plus-circle text-2xl mb-2"></i>
+                                            <div class="font-medium">Criar Customizado</div>
+                                            <div class="text-sm opacity-75">Criar do zero</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Template Selection (apenas para tipo template) -->
+                        <div id="template-section">
                             <label for="template_id" class="block text-sm font-medium text-gray-700 mb-2">
                                 Template de Checklist *
                             </label>
                             <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
-                                    id="template_id" name="template_id" required onchange="previewTemplate()">
+                                    id="template_id" name="template_id" onchange="previewTemplate()">
                                 <option value="">Selecione um template...</option>
                                 {% for template in templates %}
                                 <option value="{{ template.id }}" 
@@ -64,6 +95,42 @@
                             </div>
                         </div>
 
+                        <!-- Custom Creation Section (apenas para tipo customizado) -->
+                        <div id="custom-section" class="hidden space-y-4">
+                            <div>
+                                <label for="custom_title" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Título do Checklist *
+                                </label>
+                                <input type="text" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                                       id="custom_title" name="custom_title" 
+                                       placeholder="Digite o título do checklist...">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Itens do Checklist</label>
+                                <div id="custom-items-container" class="space-y-2">
+                                    <div class="flex items-center space-x-2 custom-item">
+                                        <span class="bg-gray-100 text-gray-700 px-3 py-2 rounded-md font-medium min-w-[40px] text-center">1</span>
+                                        <input type="text" 
+                                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                                               name="custom_items[]" 
+                                               placeholder="Digite o primeiro item...">
+                                        <button type="button" 
+                                                class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md transition-colors" 
+                                                onclick="removeCustomItem(this)">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <button type="button" 
+                                        class="mt-3 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+                                        onclick="addCustomItem()">
+                                    <i class="fas fa-plus mr-2"></i>Adicionar Item
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Data Selection -->
                         <div>
                             <label for="date" class="block text-sm font-medium text-gray-700 mb-2">
@@ -74,6 +141,20 @@
                                    id="date" name="date" value="{{ today|date:'Y-m-d' }}" required>
                             <p class="text-sm text-gray-500 mt-1">
                                 Se já existir um checklist para um usuário nesta data, ele não será substituído.
+                            </p>
+                        </div>
+
+                        <!-- Repeat Daily Option -->
+                        <div>
+                            <div class="flex items-center">
+                                <input type="checkbox" name="repeat_daily" id="repeat_daily" 
+                                       class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-3">
+                                <label for="repeat_daily" class="text-sm font-medium text-gray-700">
+                                    Repetir todos os dias
+                                </label>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-1 ml-7">
+                                Se marcado, criará este checklist automaticamente para os próximos 30 dias
                             </p>
                         </div>
 
@@ -143,10 +224,20 @@
                     </div>
                     <div class="p-6 space-y-4">
                         <div>
-                            <p class="font-medium text-gray-900 mb-1">Template Selecionado:</p>
+                            <p class="font-medium text-gray-900 mb-1">Tipo:</p>
+                            <p id="selected-type" class="text-gray-600">Template</p>
+                        </div>
+
+                        <div>
+                            <p class="font-medium text-gray-900 mb-1">Checklist:</p>
                             <p id="selected-template" class="text-gray-600">
                                 Nenhum template selecionado
                             </p>
+                        </div>
+
+                        <div>
+                            <p class="font-medium text-gray-900 mb-1">Itens:</p>
+                            <p id="selected-items" class="text-gray-600">0 itens</p>
                         </div>
 
                         <div>
@@ -154,6 +245,11 @@
                             <p id="selected-date" class="text-gray-600">
                                 {{ today|date:"d/m/Y" }}
                             </p>
+                        </div>
+
+                        <div>
+                            <p class="font-medium text-gray-900 mb-1">Repetição:</p>
+                            <p id="selected-repeat" class="text-gray-600">Apenas uma vez</p>
                         </div>
 
                         <div>
@@ -227,6 +323,31 @@
 
 {% block extra_js %}
 <script>
+let customItemCounter = 1;
+
+function toggleCreationType() {
+    const templateType = document.getElementById('type_template').checked;
+    const templateSection = document.getElementById('template-section');
+    const customSection = document.getElementById('custom-section');
+    const templateSelect = document.getElementById('template_id');
+    const customTitle = document.getElementById('custom_title');
+    
+    if (templateType) {
+        templateSection.classList.remove('hidden');
+        customSection.classList.add('hidden');
+        templateSelect.required = true;
+        customTitle.required = false;
+    } else {
+        templateSection.classList.add('hidden');
+        customSection.classList.remove('hidden');
+        templateSelect.required = false;
+        customTitle.required = true;
+    }
+    
+    updateCreateButton();
+    updateSummary();
+}
+
 function previewTemplate() {
     const select = document.getElementById('template_id');
     const preview = document.getElementById('template-preview');
@@ -252,6 +373,74 @@ function previewTemplate() {
     }
     
     updateCreateButton();
+    updateSummary();
+}
+
+function addCustomItem() {
+    customItemCounter++;
+    const container = document.getElementById('custom-items-container');
+    const newItem = document.createElement('div');
+    newItem.className = 'flex items-center space-x-2 custom-item';
+    newItem.innerHTML = `
+        <span class="bg-gray-100 text-gray-700 px-3 py-2 rounded-md font-medium min-w-[40px] text-center">${customItemCounter}</span>
+        <input type="text" 
+               class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+               name="custom_items[]" 
+               placeholder="Digite o item..." 
+               oninput="updateSummary()">
+        <button type="button" 
+                class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md transition-colors" 
+                onclick="removeCustomItem(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    container.appendChild(newItem);
+    updateSummary();
+}
+
+function removeCustomItem(button) {
+    button.parentElement.remove();
+    
+    // Reordenar números
+    const items = document.querySelectorAll('.custom-item');
+    items.forEach((item, index) => {
+        const numberSpan = item.querySelector('span');
+        numberSpan.textContent = index + 1;
+    });
+    
+    customItemCounter = items.length;
+    updateSummary();
+}
+
+function updateSummary() {
+    const templateType = document.getElementById('type_template').checked;
+    const selectedTemplate = document.getElementById('selected-template');
+    const selectedType = document.getElementById('selected-type');
+    const selectedItems = document.getElementById('selected-items');
+    
+    // Atualizar tipo
+    selectedType.textContent = templateType ? 'Template' : 'Customizado';
+    
+    if (templateType) {
+        // Usando template
+        const select = document.getElementById('template_id');
+        if (select.value) {
+            const option = select.options[select.selectedIndex];
+            selectedTemplate.textContent = option.text;
+            selectedItems.textContent = `${option.dataset.items} itens`;
+        } else {
+            selectedTemplate.textContent = 'Nenhum template selecionado';
+            selectedItems.textContent = '0 itens';
+        }
+    } else {
+        // Criação customizada
+        const customTitle = document.getElementById('custom_title').value;
+        const customItems = document.querySelectorAll('input[name="custom_items[]"]');
+        const filledItems = Array.from(customItems).filter(item => item.value.trim() !== '');
+        
+        selectedTemplate.textContent = customTitle || 'Digite o título...';
+        selectedItems.textContent = `${filledItems.length} itens`;
+    }
 }
 
 function selectAllUsers() {
@@ -290,15 +479,33 @@ function updateDate() {
     }
 }
 
+function updateRepeat() {
+    const repeatCheckbox = document.getElementById('repeat_daily');
+    const selectedRepeat = document.getElementById('selected-repeat');
+    
+    selectedRepeat.textContent = repeatCheckbox.checked ? 
+        'Repetir por 30 dias' : 'Apenas uma vez';
+}
+
 function updateCreateButton() {
-    const templateSelect = document.getElementById('template_id');
+    const templateType = document.getElementById('type_template').checked;
     const checkedUsers = document.querySelectorAll('input[name="user_ids"]:checked');
     const createButton = document.getElementById('createButton');
     
-    const hasTemplate = templateSelect.value !== '';
-    const hasUsers = checkedUsers.length > 0;
+    let isValid = false;
     
-    createButton.disabled = !(hasTemplate && hasUsers);
+    if (templateType) {
+        const templateSelect = document.getElementById('template_id');
+        isValid = templateSelect.value !== '' && checkedUsers.length > 0;
+    } else {
+        const customTitle = document.getElementById('custom_title').value;
+        const customItems = document.querySelectorAll('input[name="custom_items[]"]');
+        const filledItems = Array.from(customItems).filter(item => item.value.trim() !== '');
+        
+        isValid = customTitle.trim() !== '' && filledItems.length > 0 && checkedUsers.length > 0;
+    }
+    
+    createButton.disabled = !isValid;
 }
 
 function openModal() {
@@ -352,18 +559,48 @@ document.addEventListener('DOMContentLoaded', function() {
     // Input de data
     document.getElementById('date').addEventListener('change', updateDate);
     
+    // Checkbox de repetição
+    document.getElementById('repeat_daily').addEventListener('change', updateRepeat);
+    
+    // Input do título customizado
+    document.getElementById('custom_title').addEventListener('input', function() {
+        updateSummary();
+        updateCreateButton();
+    });
+    
     // Interceptar submit do formulário
     document.getElementById('createChecklistForm').addEventListener('submit', function(e) {
         e.preventDefault();
         
-        const templateText = document.getElementById('template_id').options[document.getElementById('template_id').selectedIndex].text;
+        const templateType = document.getElementById('type_template').checked;
         const dateText = new Date(document.getElementById('date').value).toLocaleDateString('pt-BR');
         const usersCount = document.querySelectorAll('input[name="user_ids"]:checked').length;
+        const repeatDaily = document.getElementById('repeat_daily').checked;
         
-        const confirmationDetails = `
-            <li><strong>Template:</strong> ${templateText}</li>
+        let confirmationDetails = '';
+        
+        if (templateType) {
+            const templateText = document.getElementById('template_id').options[document.getElementById('template_id').selectedIndex].text;
+            confirmationDetails = `
+                <li><strong>Tipo:</strong> Template</li>
+                <li><strong>Template:</strong> ${templateText}</li>
+            `;
+        } else {
+            const customTitle = document.getElementById('custom_title').value;
+            const customItems = document.querySelectorAll('input[name="custom_items[]"]');
+            const filledItems = Array.from(customItems).filter(item => item.value.trim() !== '');
+            
+            confirmationDetails = `
+                <li><strong>Tipo:</strong> Customizado</li>
+                <li><strong>Título:</strong> ${customTitle}</li>
+                <li><strong>Itens:</strong> ${filledItems.length} itens</li>
+            `;
+        }
+        
+        confirmationDetails += `
             <li><strong>Data:</strong> ${dateText}</li>
             <li><strong>Usuários:</strong> ${usersCount} selecionado(s)</li>
+            <li><strong>Repetição:</strong> ${repeatDaily ? 'Repetir por 30 dias' : 'Apenas uma vez'}</li>
         `;
         
         document.getElementById('confirmation-details').innerHTML = confirmationDetails;
@@ -378,9 +615,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Inicializar
+    toggleCreationType();
     updateUsersCount();
     updateDate();
-    previewTemplate();
+    updateRepeat();
+    updateSummary();
 });
 </script>
 {% endblock %}

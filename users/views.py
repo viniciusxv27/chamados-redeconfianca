@@ -2756,49 +2756,154 @@ def manage_checklists_view(request):
 def create_daily_checklist(request):
     """Criar checklist diário para usuários"""
     from core.models import ChecklistTemplate, DailyChecklist, ChecklistItem
-    from datetime import date
+    from datetime import date, timedelta
     
     if request.method == 'POST':
-        template_id = request.POST.get('template_id')
+        # Verificar se é criação baseada em template ou customizada
+        creation_type = request.POST.get('creation_type', 'template')
         user_ids = request.POST.getlist('user_ids')
         checklist_date = request.POST.get('date', date.today().isoformat())
+        repeat_daily = request.POST.get('repeat_daily') == 'on'
         
-        if not template_id or not user_ids:
-            messages.error(request, 'Template e usuários são obrigatórios!')
+        if not user_ids:
+            messages.error(request, 'Selecione pelo menos um usuário!')
             return redirect('create_daily_checklist')
         
         try:
-            template = ChecklistTemplate.objects.get(id=template_id)
             target_date = date.fromisoformat(checklist_date)
             created_count = 0
             
-            for user_id in user_ids:
-                user = User.objects.get(id=user_id)
+            if creation_type == 'template':
+                template_id = request.POST.get('template_id')
+                if not template_id:
+                    messages.error(request, 'Selecione um template!')
+                    return redirect('create_daily_checklist')
                 
-                # Verificar se já existe checklist para esta data
-                if DailyChecklist.objects.filter(user=user, date=target_date).exists():
-                    continue
+                template = ChecklistTemplate.objects.get(id=template_id)
                 
-                # Criar checklist
-                daily_checklist = DailyChecklist.objects.create(
-                    user=user,
-                    template=template,
-                    date=target_date,
-                    created_by=request.user
-                )
-                
-                # Criar itens baseados no template
-                for template_item in template.items.all():
-                    ChecklistItem.objects.create(
-                        checklist=daily_checklist,
-                        title=template_item.title,
-                        description=template_item.description,
-                        order=template_item.order
+                for user_id in user_ids:
+                    user = User.objects.get(id=user_id)
+                    
+                    # Verificar se já existe checklist para esta data
+                    if DailyChecklist.objects.filter(user=user, template=template, date=target_date).exists():
+                        continue
+                    
+                    # Criar checklist
+                    daily_checklist = DailyChecklist.objects.create(
+                        user=user,
+                        template=template,
+                        title=template.title,
+                        date=target_date,
+                        repeat_daily=repeat_daily,
+                        created_by=request.user
                     )
-                
-                created_count += 1
+                    
+                    # Criar itens baseados no template
+                    for template_item in template.items.all():
+                        ChecklistItem.objects.create(
+                            checklist=daily_checklist,
+                            title=template_item.title,
+                            description=template_item.description,
+                            order=template_item.order
+                        )
+                    
+                    created_count += 1
             
-            messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso!')
+            else:  # creation_type == 'custom'
+                custom_title = request.POST.get('custom_title')
+                custom_items = request.POST.getlist('custom_items[]')
+                
+                if not custom_title or not custom_items:
+                    messages.error(request, 'Título e itens são obrigatórios para checklist customizado!')
+                    return redirect('create_daily_checklist')
+                
+                for user_id in user_ids:
+                    user = User.objects.get(id=user_id)
+                    
+                    # Verificar se já existe checklist com este título para esta data
+                    if DailyChecklist.objects.filter(user=user, title=custom_title, date=target_date).exists():
+                        continue
+                    
+                    # Criar checklist customizado
+                    daily_checklist = DailyChecklist.objects.create(
+                        user=user,
+                        title=custom_title,
+                        date=target_date,
+                        repeat_daily=repeat_daily,
+                        created_by=request.user
+                    )
+                    
+                    # Criar itens customizados
+                    for i, item_title in enumerate(custom_items):
+                        if item_title.strip():
+                            ChecklistItem.objects.create(
+                                checklist=daily_checklist,
+                                title=item_title.strip(),
+                                order=i + 1
+                            )
+                    
+                    created_count += 1
+            
+            # Se repeat_daily está ativado, criar para os próximos 30 dias
+            if repeat_daily and created_count > 0:
+                repeat_count = 0
+                for days_ahead in range(1, 31):  # Próximos 30 dias
+                    future_date = target_date + timedelta(days=days_ahead)
+                    
+                    for user_id in user_ids:
+                        user = User.objects.get(id=user_id)
+                        
+                        # Verificar se já existe checklist para esta data
+                        if creation_type == 'template':
+                            if DailyChecklist.objects.filter(user=user, template=template, date=future_date).exists():
+                                continue
+                            
+                            # Criar checklist repetido
+                            future_checklist = DailyChecklist.objects.create(
+                                user=user,
+                                template=template,
+                                title=template.title,
+                                date=future_date,
+                                repeat_daily=True,
+                                created_by=request.user
+                            )
+                            
+                            # Criar itens baseados no template
+                            for template_item in template.items.all():
+                                ChecklistItem.objects.create(
+                                    checklist=future_checklist,
+                                    title=template_item.title,
+                                    description=template_item.description,
+                                    order=template_item.order
+                                )
+                        else:
+                            if DailyChecklist.objects.filter(user=user, title=custom_title, date=future_date).exists():
+                                continue
+                                
+                            # Criar checklist customizado repetido
+                            future_checklist = DailyChecklist.objects.create(
+                                user=user,
+                                title=custom_title,
+                                date=future_date,
+                                repeat_daily=True,
+                                created_by=request.user
+                            )
+                            
+                            # Criar itens customizados
+                            for i, item_title in enumerate(custom_items):
+                                if item_title.strip():
+                                    ChecklistItem.objects.create(
+                                        checklist=future_checklist,
+                                        title=item_title.strip(),
+                                        order=i + 1
+                                    )
+                        
+                        repeat_count += 1
+                
+                messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso! {repeat_count} checklist(s) adicionais criados para repetição diária.')
+            else:
+                messages.success(request, f'{created_count} checklist(s) criado(s) com sucesso!')
+            
             return redirect('manage_checklists')
             
         except Exception as e:
