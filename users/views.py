@@ -2541,20 +2541,32 @@ def checklist_dashboard_view(request):
     
     today = date.today()
     user = request.user
+    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
     
-    # Checklist de hoje
+    # Checklist de hoje do usuário
     today_checklist = DailyChecklist.objects.filter(
         user=user,
         date=today
     ).prefetch_related('items').first()
     
-    # Checklists da semana (últimos 7 dias)
+    # Checklists da semana do usuário (últimos 7 dias)
     week_ago = today - timedelta(days=7)
     week_checklists = DailyChecklist.objects.filter(
         user=user,
         date__gte=week_ago,
         date__lte=today
     ).prefetch_related('items').order_by('-date')
+    
+    # Para supervisores: checklists que criaram para usuários do seu setor
+    sector_checklists = []
+    if is_supervisor and user.sector:
+        sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
+        sector_checklists = DailyChecklist.objects.filter(
+            created_by=user,
+            user__in=sector_users,
+            date__gte=week_ago,
+            date__lte=today
+        ).select_related('user', 'template').prefetch_related('items').order_by('-date')
     
     # Estatísticas
     total_checklists = DailyChecklist.objects.filter(user=user).count()
@@ -2567,15 +2579,115 @@ def checklist_dashboard_view(request):
     if total_checklists > 0:
         completion_rate = round((completed_checklists / total_checklists) * 100)
     
+    # Templates criados pelo usuário
+    from core.models import ChecklistTemplate
+    user_templates = ChecklistTemplate.objects.filter(created_by=user, is_active=True).prefetch_related('items')
+    
+    # Estatísticas para supervisores
+    sector_stats = {}
+    if is_supervisor and sector_checklists.exists():
+        total_sector_checklists = sector_checklists.count()
+        completed_sector_checklists = sector_checklists.filter(completed_at__isnull=False).count()
+        sector_completion_rate = 0
+        if total_sector_checklists > 0:
+            sector_completion_rate = round((completed_sector_checklists / total_sector_checklists) * 100)
+        
+        sector_stats = {
+            'total': total_sector_checklists,
+            'completed': completed_sector_checklists,
+            'completion_rate': sector_completion_rate
+        }
+    
     context = {
         'today_checklist': today_checklist,
         'week_checklists': week_checklists,
         'completion_rate': completion_rate,
         'total_checklists': total_checklists,
         'completed_checklists': completed_checklists,
+        'user_templates': user_templates,
+        'is_supervisor': is_supervisor,
+        'sector_checklists': sector_checklists,
+        'sector_stats': sector_stats,
         'today': today,
     }
     return render(request, 'checklist/dashboard.html', context)
+
+
+@login_required
+def sector_checklists_view(request):
+    """View para supervisores gerenciarem checklists do setor"""
+    from core.models import DailyChecklist
+    from django.utils import timezone
+    from datetime import date, timedelta, datetime
+    
+    user = request.user
+    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
+    
+    if not is_supervisor:
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('checklist_dashboard')
+    
+    if not user.sector:
+        messages.error(request, 'Você precisa estar vinculado a um setor para gerenciar checklists.')
+        return redirect('checklist_dashboard')
+    
+    # Filtros
+    date_filter = request.GET.get('date', '')
+    user_filter = request.GET.get('user', '')
+    status_filter = request.GET.get('status', '')
+    
+    # Data padrão (últimos 30 dias)
+    today = date.today()
+    start_date = today - timedelta(days=30)
+    
+    if date_filter:
+        try:
+            filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
+            start_date = filter_date
+        except ValueError:
+            pass
+    
+    # Usuários do setor
+    sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
+    
+    # Query base: checklists criados pelo supervisor para usuários do setor
+    checklists_query = DailyChecklist.objects.filter(
+        created_by=user,
+        user__in=sector_users,
+        date__gte=start_date
+    ).select_related('user', 'template').prefetch_related('items')
+    
+    # Aplicar filtros
+    if user_filter:
+        checklists_query = checklists_query.filter(user_id=user_filter)
+    
+    if status_filter == 'completed':
+        checklists_query = checklists_query.filter(completed_at__isnull=False)
+    elif status_filter == 'pending':
+        checklists_query = checklists_query.filter(completed_at__isnull=True)
+    
+    checklists = checklists_query.order_by('-date', '-created_at')
+    
+    # Estatísticas
+    total_checklists = checklists.count()
+    completed_checklists = checklists.filter(completed_at__isnull=False).count()
+    completion_rate = 0
+    if total_checklists > 0:
+        completion_rate = round((completed_checklists / total_checklists) * 100)
+    
+    context = {
+        'checklists': checklists,
+        'sector_users': sector_users,
+        'total_checklists': total_checklists,
+        'completed_checklists': completed_checklists,
+        'completion_rate': completion_rate,
+        'date_filter': date_filter,
+        'user_filter': user_filter,
+        'status_filter': status_filter,
+        'sector_name': user.sector.name if user.sector else 'Setor',
+    }
+    
+    return render(request, 'checklist/sector_management.html', context)
 
 
 @login_required
@@ -2712,15 +2824,14 @@ def update_task_status(request, task_id):
 # ===== VIEWS ADMINISTRATIVAS PARA SUPERVISORES =====
 @login_required
 def manage_checklists_view(request):
-    """Gerenciar templates de checklist (apenas supervisores)"""
-    if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff):
-        messages.error(request, 'Você não tem permissão para acessar esta página.')
-        return redirect('dashboard')
+    """Gerenciar templates de checklist"""
+    # Supervisores podem ver todos os templates, usuários comuns só os seus próprios
+    is_supervisor = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff
     """Gerenciar templates de checklist (apenas supervisores)"""
     from core.models import ChecklistTemplate, ChecklistTemplateItem
     
-    if request.method == 'POST':
-        # Criar novo template de checklist
+    if request.method == 'POST' and is_supervisor:
+        # Criar novo template de checklist (apenas supervisores)
         title = request.POST.get('title')
         description = request.POST.get('description')
         
@@ -2746,10 +2857,16 @@ def manage_checklists_view(request):
         else:
             messages.error(request, 'Nome do template é obrigatório!')
     
-    templates = ChecklistTemplate.objects.all().prefetch_related('items').order_by('-created_at')
+    # Se for supervisor/admin, mostra todos os templates
+    # Se for usuário comum, mostra apenas os que ele criou
+    if is_supervisor:
+        templates = ChecklistTemplate.objects.all().prefetch_related('items').order_by('-created_at')
+    else:
+        templates = ChecklistTemplate.objects.filter(created_by=request.user).prefetch_related('items').order_by('-created_at')
     
     context = {
         'templates': templates,
+        'is_supervisor': is_supervisor,
     }
     return render(request, 'admin_panel/manage_checklists.html', context)
 
@@ -3114,7 +3231,7 @@ def delete_checklist_template(request, template_id):
         if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff):
             return JsonResponse({'success': False, 'error': 'Permissão negada'})
         
-        template_name = template.name
+        template_name = template.title
         template.delete()
         
         return JsonResponse({

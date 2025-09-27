@@ -14,6 +14,18 @@
             </h1>
             <p class="text-gray-600 mt-1">Gerencie suas atividades diárias</p>
         </div>
+        {% if is_supervisor %}
+        <div class="flex gap-3">
+            <a href="{% url 'sector_checklists' %}" 
+               class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-users-cog mr-2"></i>Gerenciar Setor
+            </a>
+            <a href="{% url 'manage_checklists' %}" 
+               class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-plus mr-2"></i>Criar Template
+            </a>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Estatísticas -->
@@ -62,7 +74,7 @@
             <div class="p-6">
                 <div class="flex items-center justify-between">
                     <div class="flex-1">
-                        <h3 class="text-lg font-semibold">{{ today_checklist.template.name }}</h3>
+                        <h3 class="text-lg font-semibold">{{ today_checklist.template.title }}</h3>
                         <p class="text-gray-600 mb-4">{{ today_checklist.template.description }}</p>
                         
                         <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
@@ -104,12 +116,129 @@
     </div>
     {% endif %}
 
+    <!-- Meus Templates -->
+    {% if user_templates %}
+    <div class="bg-white rounded-lg shadow-lg mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">
+                <i class="fas fa-user-check text-gray-500 mr-2"></i>
+                Meus Templates de Checklist
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for template in user_templates %}
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow border-l-4 border-purple-500">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-semibold text-gray-900">{{ template.title }}</h3>
+                        <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
+                            Meu Template
+                        </span>
+                    </div>
+                    
+                    <p class="text-gray-600 text-sm mb-3">{{ template.description|truncatechars:80 }}</p>
+                    
+                    <div class="flex justify-between items-center text-sm text-gray-500">
+                        <span>{{ template.items.count }} item{{ template.items.count|pluralize }}</span>
+                        <span>{{ template.created_at|date:"d/m/Y" }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Checklists do Setor (Supervisores) -->
+    {% if is_supervisor and sector_checklists %}
+    <div class="bg-white rounded-lg shadow-lg mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-users-cog text-orange-500 mr-2"></i>
+                    Checklists do Meu Setor
+                </h2>
+                <div class="flex items-center gap-3">
+                    <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-sm">
+                        {{ sector_stats.completion_rate }}% de conclusão
+                    </span>
+                    <a href="{% url 'sector_checklists' %}" 
+                       class="text-orange-600 hover:text-orange-800 text-sm font-medium">
+                        Ver todos <i class="fas fa-arrow-right ml-1"></i>
+                    </a>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm mt-1">Checklists que você criou para usuários do seu setor</p>
+        </div>
+        
+        <div class="p-6">
+            <!-- Estatísticas do Setor -->
+            <div class="grid grid-cols-3 gap-4 mb-6 p-4 bg-orange-50 rounded-lg">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-orange-600">{{ sector_stats.total }}</div>
+                    <div class="text-sm text-gray-600">Total</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600">{{ sector_stats.completed }}</div>
+                    <div class="text-sm text-gray-600">Concluídos</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-orange-600">{{ sector_stats.completion_rate }}%</div>
+                    <div class="text-sm text-gray-600">Taxa</div>
+                </div>
+            </div>
+
+            <!-- Lista de Checklists do Setor -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for checklist in sector_checklists %}
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow border-l-4 {% if checklist.completed_at %}border-green-500{% elif checklist.items.exists %}border-orange-500{% else %}border-yellow-500{% endif %}">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="font-semibold text-gray-900">{{ checklist.template.title|default:checklist.title }}</h3>
+                            <p class="text-sm text-gray-600">
+                                <i class="fas fa-user mr-1"></i>{{ checklist.user.get_full_name }}
+                            </p>
+                        </div>
+                        <span class="text-sm text-gray-500">{{ checklist.date|date:"d/m" }}</span>
+                    </div>
+                    
+                    {% if checklist.template.description %}
+                    <p class="text-gray-600 text-sm mb-3">{{ checklist.template.description|truncatechars:60 }}</p>
+                    {% endif %}
+                    
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-3">
+                        <div class="{% if checklist.completed_at %}bg-green-500{% else %}bg-orange-500{% endif %} h-2 rounded-full" 
+                             style="width: {{ checklist.get_completion_percentage }}%"></div>
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">{{ checklist.get_completion_percentage }}% concluído</span>
+                        
+                        {% if checklist.completed_at %}
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                                <i class="fas fa-check mr-1"></i>Concluído
+                            </span>
+                        {% else %}
+                            <a href="{% url 'checklist_detail' checklist.id %}" 
+                               class="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-xs font-medium hover:bg-orange-200 transition-colors">
+                                Monitorar
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Histórico da Semana -->
     <div class="bg-white rounded-lg shadow-lg">
         <div class="px-6 py-4 border-b border-gray-200">
             <h2 class="text-xl font-semibold">
                 <i class="fas fa-history text-gray-500 mr-2"></i>
-                Checklists da Semana
+                Meus Checklists da Semana
             </h2>
         </div>
         
@@ -119,7 +248,7 @@
                 {% for checklist in week_checklists %}
                 <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow border-l-4 {% if checklist.completed_at %}border-green-500{% elif checklist.items.exists %}border-blue-500{% else %}border-yellow-500{% endif %}">
                     <div class="flex justify-between items-start mb-3">
-                        <h3 class="font-semibold text-gray-900">{{ checklist.template.name }}</h3>
+                        <h3 class="font-semibold text-gray-900">{{ checklist.template.title }}</h3>
                         <span class="text-sm text-gray-500">{{ checklist.date|date:"d/m" }}</span>
                     </div>
                     
