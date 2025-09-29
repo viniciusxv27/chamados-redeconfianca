@@ -172,15 +172,44 @@ class Ticket(models.Model):
     def trigger_webhook(self):
         """Dispara webhook quando o ticket é criado"""
         try:
+            # Buscar usuários do setor onde o chamado foi aberto
+            from users.models import User
+            sector_users = []
+            if self.sector:
+                sector_users_qs = User.objects.filter(sector=self.sector).values(
+                    'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
+                )
+                sector_users = [
+                    {
+                        'id': user['id'],
+                        'name': f"{user['first_name']} {user['last_name']}".strip(),
+                        'email': user['email'],
+                        'phone': user['phone'] or '',
+                        'hierarchy': user['hierarchy']
+                    }
+                    for user in sector_users_qs
+                ]
+            
             payload = {
-                'ticket_id': self.id,
-                'title': self.title,
-                'description': self.description,
-                'sector': self.sector.name,
-                'category': self.category.name,
-                'created_by': self.created_by.full_name,
-                'created_at': self.created_at.isoformat(),
-                'status': self.status
+                'event': 'ticket_created',
+                'ticket': {
+                    'id': self.id,
+                    'title': self.title,
+                    'description': self.description,
+                    'sector': self.sector.name if self.sector else '',
+                    'category': self.category.name,
+                    'created_by': {
+                        'id': self.created_by.id,
+                        'name': self.created_by.get_full_name(),
+                        'email': self.created_by.email,
+                        'phone': getattr(self.created_by, 'phone', '') or '',
+                        'hierarchy': self.created_by.hierarchy
+                    },
+                    'created_at': self.created_at.isoformat(),
+                    'status': self.status
+                },
+                'sector_users': sector_users,
+                'timestamp': timezone.now().isoformat()
             }
             requests.post(self.category.webhook_url, json=payload, timeout=10)
         except Exception as e:
@@ -503,35 +532,97 @@ class Webhook(models.Model):
             payload['object_id'] = instance.id
         
         if self.event.startswith('TICKET_'):
+            # Buscar usuários do setor onde o chamado foi aberto
+            from users.models import User
+            sector_users = []
+            if instance.sector:
+                sector_users_qs = User.objects.filter(sector=instance.sector).values(
+                    'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
+                )
+                sector_users = [
+                    {
+                        'id': user['id'],
+                        'name': f"{user['first_name']} {user['last_name']}".strip(),
+                        'email': user['email'],
+                        'phone': user['phone'] or '',
+                        'hierarchy': user['hierarchy']
+                    }
+                    for user in sector_users_qs
+                ]
+            
             payload['ticket'] = {
                 'id': instance.id,
                 'title': instance.title,
                 'description': instance.description,
                 'status': instance.status,
                 'priority': instance.priority,
-                'sector': instance.sector.name,
+                'sector': instance.sector.name if instance.sector else '',
                 'category': instance.category.name,
-                'created_by': instance.created_by.full_name,
+                'created_by': {
+                    'id': instance.created_by.id,
+                    'name': instance.created_by.get_full_name(),
+                    'email': instance.created_by.email,
+                    'phone': getattr(instance.created_by, 'phone', '') or '',
+                    'hierarchy': instance.created_by.hierarchy
+                },
                 'created_at': instance.created_at.isoformat(),
                 'due_date': instance.due_date.isoformat() if instance.due_date else None,
                 'is_overdue': instance.is_overdue
             }
+            payload['sector_users'] = sector_users
         elif self.event.startswith('COMMUNICATION_'):
+            # Buscar usuários que devem receber o comunicado
+            from users.models import User
+            recipients_data = []
+            
+            if instance.send_to_all:
+                # Se é para todos, buscar todos os usuários ativos
+                recipients_data = list(User.objects.filter(is_active=True).values(
+                    'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
+                ).annotate(
+                    name=models.Concat('first_name', models.Value(' '), 'last_name', output_field=models.CharField())
+                ))
+            else:
+                # Se é para usuários específicos, buscar os recipients
+                recipients_data = list(instance.recipients.values(
+                    'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
+                ).annotate(
+                    name=models.Concat('first_name', models.Value(' '), 'last_name', output_field=models.CharField())
+                ))
+            
+            # Formatar dados dos recipients
+            recipients_users = [
+                {
+                    'id': user['id'],
+                    'name': f"{user['first_name']} {user['last_name']}".strip(),
+                    'email': user['email'],
+                    'phone': user['phone'] or '',
+                    'hierarchy': user['hierarchy']
+                }
+                for user in recipients_data
+            ]
+            
             payload['communication'] = {
                 'id': instance.id,
                 'title': instance.title,
                 'message': instance.message,
-                'sender': instance.sender.full_name,
-                'sender_email': instance.sender.email,
+                'sender': {
+                    'id': instance.sender.id,
+                    'name': instance.sender.get_full_name(),
+                    'email': instance.sender.email,
+                    'phone': getattr(instance.sender, 'phone', '') or '',
+                    'hierarchy': instance.sender.hierarchy
+                },
                 'send_to_all': instance.send_to_all,
                 'is_pinned': instance.is_pinned,
                 'is_popup': instance.is_popup,
                 'created_at': instance.created_at.isoformat(),
                 'active_from': instance.active_from.isoformat() if instance.active_from else None,
                 'active_until': instance.active_until.isoformat() if instance.active_until else None,
-                'recipients_count': instance.recipients.count() if not instance.send_to_all else None,
+                'recipients_count': len(recipients_users),
                 'has_image': bool(instance.image)
             }
+            payload['recipients_users'] = recipients_users
         
         if user:
             payload['user'] = {
@@ -660,10 +751,23 @@ class PurchaseOrderApproval(models.Model):
         for webhook in webhooks:
             payload = {
                 'event': 'approval_request',
-                'user': self.approver.full_name,
-                'order_id': str(self.ticket.id),
-                'amount': float(self.amount),
-                'callback_url': f"/api/purchase-orders/{self.ticket.id}/approve/{self.id}/"
+                'purchase_approval': {
+                    'id': self.id,
+                    'ticket_id': self.ticket.id,
+                    'amount': float(self.amount),
+                    'approval_step': self.approval_step,
+                    'status': self.status,
+                    'created_at': self.created_at.isoformat(),
+                    'callback_url': f"/api/purchase-orders/{self.ticket.id}/approve/{self.id}/"
+                },
+                'approver_user': {
+                    'id': self.approver.id,
+                    'name': self.approver.get_full_name(),
+                    'email': self.approver.email,
+                    'phone': getattr(self.approver, 'phone', '') or '',
+                    'hierarchy': self.approver.hierarchy
+                },
+                'timestamp': timezone.now().isoformat()
             }
             webhook._send_webhook(payload)
     
@@ -671,12 +775,37 @@ class PurchaseOrderApproval(models.Model):
         """Dispara webhook de aprovação final"""
         webhooks = Webhook.objects.filter(event='APPROVED', is_active=True)
         
+        # Buscar todos os aprovadores que participaram do processo
+        all_approvals = PurchaseOrderApproval.objects.filter(
+            ticket=self.ticket,
+            status='APPROVED'
+        ).select_related('approver')
+        
+        approvers_data = [
+            {
+                'id': approval.approver.id,
+                'name': approval.approver.get_full_name(),
+                'email': approval.approver.email,
+                'phone': getattr(approval.approver, 'phone', '') or '',
+                'hierarchy': approval.approver.hierarchy,
+                'approval_step': approval.approval_step,
+                'decided_at': approval.decided_at.isoformat() if approval.decided_at else None,
+                'comment': approval.comment
+            }
+            for approval in all_approvals
+        ]
+        
         for webhook in webhooks:
             payload = {
                 'event': 'approved',
-                'user': 'Sistema',
-                'order_id': str(self.ticket.id),
-                'amount': float(self.amount)
+                'purchase_approval': {
+                    'ticket_id': self.ticket.id,
+                    'amount': float(self.amount),
+                    'final_status': 'APPROVED',
+                    'completed_at': timezone.now().isoformat()
+                },
+                'approvers_users': approvers_data,
+                'timestamp': timezone.now().isoformat()
             }
             webhook._send_webhook(payload)
     
@@ -687,9 +816,23 @@ class PurchaseOrderApproval(models.Model):
         for webhook in webhooks:
             payload = {
                 'event': 'rejected',
-                'user': self.approver.full_name,
-                'order_id': str(self.ticket.id),
-                'amount': float(self.amount)
+                'purchase_approval': {
+                    'id': self.id,
+                    'ticket_id': self.ticket.id,
+                    'amount': float(self.amount),
+                    'approval_step': self.approval_step,
+                    'status': self.status,
+                    'decided_at': self.decided_at.isoformat() if self.decided_at else None,
+                    'comment': self.comment
+                },
+                'rejector_user': {
+                    'id': self.approver.id,
+                    'name': self.approver.get_full_name(),
+                    'email': self.approver.email,
+                    'phone': getattr(self.approver, 'phone', '') or '',
+                    'hierarchy': self.approver.hierarchy
+                },
+                'timestamp': timezone.now().isoformat()
             }
             webhook._send_webhook(payload)
 
