@@ -3,6 +3,75 @@
 
 {% block title %}Criar Nova Tarefa{% endblock %}
 
+{% block extra_css %}
+<style>
+.user-option {
+    transition: all 0.2s ease-in-out;
+}
+
+.user-option:hover {
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.search-highlight {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.fade-out {
+    animation: fadeOut 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-10px); }
+}
+
+.user-search-container {
+    position: relative;
+}
+
+.user-search-container .search-icon {
+    transition: color 0.2s ease-in-out;
+}
+
+.user-search-container input:focus + .search-icon {
+    color: #3b82f6;
+}
+
+#user-select::-webkit-scrollbar {
+    width: 6px;
+}
+
+#user-select::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+#user-select::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+#user-select::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="p-6">
     <!-- Header -->
@@ -76,11 +145,50 @@
                             Atribuir para *
                         </label>
                         {% if users %}
+                        <!-- Campo de busca -->
+                        <div class="mb-3">
+                            <div class="relative">
+                                <input type="text" 
+                                       id="user-search" 
+                                       placeholder="Digite o nome do usuário para buscar..."
+                                       class="w-full px-4 py-2 pl-10 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                       oninput="filterUsers(this.value)"
+                                       autocomplete="off">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fas fa-search text-gray-400"></i>
+                                </div>
+                                <button type="button" 
+                                        id="clear-search" 
+                                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 hidden"
+                                        onclick="clearUserSearch()"
+                                        title="Limpar busca">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="flex justify-between items-center mt-1">
+                                <div class="text-sm text-gray-600">
+                                    <span>Digite parte do nome, email ou setor para filtrar</span>
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        <i class="fas fa-keyboard mr-1"></i>
+                                        <kbd class="px-1 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Enter</kbd> para selecionar o primeiro
+                                        • <kbd class="px-1 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Esc</kbd> para limpar
+                                    </div>
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    <span id="user-count">{{ users|length }}</span> usuário(s)
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="border border-gray-300 rounded-md p-4 max-h-80 overflow-y-auto" id="user-select">
-                            <div class="space-y-2">
+                            <div class="space-y-2" id="user-list">
                                 {% for user in users %}
                                 <div class="user-option p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-50 border border-transparent" 
-                                     data-user-id="{{ user.id }}" onclick="selectUser(this)">
+                                     data-user-id="{{ user.id }}" 
+                                     data-user-name="{{ user.get_full_name|default:user.username }}"
+                                     data-user-email="{{ user.email|default:'' }}"
+                                     data-user-sector="{{ user.sector.name|default:'' }}"
+                                     onclick="selectUser(this)">
                                     <div class="flex justify-between items-center">
                                         <div>
                                             <div class="font-medium text-gray-900">
@@ -102,6 +210,13 @@
                                 </div>
                                 {% endfor %}
                             </div>
+                        </div>
+                        
+                        <!-- Mensagem quando nenhum usuário é encontrado -->
+                        <div id="no-users-found" class="hidden text-center py-4 text-gray-500">
+                            <i class="fas fa-user-slash text-2xl mb-2"></i>
+                            <p>Nenhum usuário encontrado com esse critério de busca.</p>
+                            <p class="text-sm mt-1">Tente buscar por nome, email ou setor.</p>
                         </div>
                         <input type="hidden" id="assigned_to" name="assigned_to" required>
                         <div id="selected-user-info" class="mt-3 p-3 bg-blue-50 rounded-lg hidden">
@@ -260,6 +375,102 @@
 
 {% block extra_js %}
 <script>
+function filterUsers(searchTerm) {
+    const userOptions = document.querySelectorAll('.user-option');
+    const noUsersFound = document.getElementById('no-users-found');
+    const clearButton = document.getElementById('clear-search');
+    const userCount = document.getElementById('user-count');
+    let visibleCount = 0;
+    
+    // Normalizar termo de busca (remover acentos e converter para lowercase)
+    const normalizedSearch = normalizeText(searchTerm.toLowerCase());
+    
+    userOptions.forEach(option => {
+        const userName = normalizeText(option.getAttribute('data-user-name').toLowerCase());
+        const userEmail = normalizeText(option.getAttribute('data-user-email').toLowerCase());
+        const userSector = normalizeText(option.getAttribute('data-user-sector').toLowerCase());
+        
+        // Verificar se o termo de busca existe no nome, email ou setor
+        const matchesName = userName.includes(normalizedSearch);
+        const matchesEmail = userEmail.includes(normalizedSearch);
+        const matchesSector = userSector.includes(normalizedSearch);
+        
+        if (matchesName || matchesEmail || matchesSector || searchTerm === '') {
+            option.style.display = 'block';
+            visibleCount++;
+            
+            // Destacar texto encontrado
+            highlightSearchTerm(option, searchTerm);
+        } else {
+            option.style.display = 'none';
+        }
+    });
+    
+    // Atualizar contador de usuários
+    userCount.textContent = visibleCount;
+    
+    // Mostrar/ocultar botão de limpar busca
+    if (searchTerm !== '') {
+        clearButton.classList.remove('hidden');
+    } else {
+        clearButton.classList.add('hidden');
+    }
+    
+    // Mostrar/ocultar mensagem de "nenhum usuário encontrado"
+    if (visibleCount === 0 && searchTerm !== '') {
+        noUsersFound.classList.remove('hidden');
+    } else {
+        noUsersFound.classList.add('hidden');
+    }
+}
+
+function normalizeText(text) {
+    // Remove acentos e caracteres especiais
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function highlightSearchTerm(element, searchTerm) {
+    // Resetar highlights anteriores
+    const textElements = element.querySelectorAll('.font-medium, .text-sm');
+    textElements.forEach(el => {
+        if (el.getAttribute('data-original-text')) {
+            el.innerHTML = el.getAttribute('data-original-text');
+        } else {
+            el.setAttribute('data-original-text', el.innerHTML);
+        }
+    });
+    
+    if (searchTerm === '' || searchTerm.length < 2) {
+        return;
+    }
+    
+    // Destacar termo de busca
+    const normalizedSearch = normalizeText(searchTerm.toLowerCase());
+    
+    textElements.forEach(el => {
+        const originalText = el.getAttribute('data-original-text');
+        const normalizedText = normalizeText(originalText.toLowerCase());
+        
+        if (normalizedText.includes(normalizedSearch)) {
+            // Encontrar a posição real do texto para manter a capitalização original
+            const regex = new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi');
+            const highlightedText = originalText.replace(regex, '<span class="search-highlight">$1</span>');
+            el.innerHTML = highlightedText;
+        }
+    });
+}
+
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function clearUserSearch() {
+    const searchInput = document.getElementById('user-search');
+    searchInput.value = '';
+    searchInput.focus();
+    filterUsers('');
+}
+
 function selectUser(element) {
     // Remover seleção anterior
     document.querySelectorAll('.user-option').forEach(option => {
@@ -363,6 +574,44 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners
     document.getElementById('title').addEventListener('input', updateTitlePreview);
     document.getElementById('due_date').addEventListener('change', updateDueDatePreview);
+    
+    // Event listener para busca de usuários
+    const userSearch = document.getElementById('user-search');
+    if (userSearch) {
+        userSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                this.value = '';
+                filterUsers('');
+                this.blur();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                // Selecionar primeiro usuário visível
+                const firstVisible = document.querySelector('.user-option[style="display: block"], .user-option:not([style])');
+                if (firstVisible) {
+                    selectUser(firstVisible);
+                    this.value = '';
+                    filterUsers('');
+                    this.blur();
+                    
+                    // Animação de feedback visual
+                    const selectedUserInfo = document.getElementById('selected-user-info');
+                    selectedUserInfo.classList.add('fade-in');
+                    setTimeout(() => {
+                        selectedUserInfo.classList.remove('fade-in');
+                    }, 300);
+                }
+            }
+        });
+        
+        // Focar no campo de busca com Ctrl+F ou Cmd+F quando estiver na página
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                userSearch.focus();
+                userSearch.select();
+            }
+        });
+    }
     
     // Inicializar valores
     updateTitlePreview();
