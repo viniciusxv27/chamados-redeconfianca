@@ -62,14 +62,11 @@ def user_can_create_projects(user):
 
 def user_can_manage_all_projects(user):
     """Verifica se o usuário pode gerenciar todos os projetos"""
-    if user.is_superuser:
+    # Apenas SUPERADMINs podem gerenciar todos os projetos
+    if user.is_superuser or user.hierarchy == 'SUPERADMIN':
         return True
     
-    try:
-        access = ProjectSectorAccess.objects.get(sector=user.sector)
-        return access.can_manage_all_projects
-    except (ProjectSectorAccess.DoesNotExist, AttributeError):
-        return False
+    return False
 
 
 @login_required
@@ -149,7 +146,7 @@ def project_detail(request, project_id):
     project = get_object_or_404(Project, id=project_id)
     
     # Verificar permissão para ver este projeto
-    if not (user_can_manage_all_projects(request.user) or 
+    if not (request.user.hierarchy == 'SUPERADMIN' or 
             project.sector == request.user.sector or
             project.created_by == request.user or
             project.responsible_user == request.user):
@@ -418,9 +415,10 @@ def project_dashboard(request):
         return HttpResponseForbidden("Você não tem permissão para acessar esta área.")
     
     # Projetos acessíveis
-    if user_can_manage_all_projects(request.user):
+    if request.user.hierarchy == 'SUPERADMIN':
         projects = Project.objects.all()
     else:
+        # Usuários não-SUPERADMIN só veem projetos do seu setor
         projects = Project.objects.filter(
             Q(sector=request.user.sector) | 
             Q(created_by=request.user) |
@@ -476,7 +474,7 @@ def project_edit(request, project_id):
     project = get_object_or_404(Project, id=project_id)
     
     # Verificar permissões
-    if not (user_can_manage_all_projects(request.user) or 
+    if not (request.user.hierarchy == 'SUPERADMIN' or 
             project.created_by == request.user or 
             project.responsible_user == request.user):
         return HttpResponseForbidden("Você não tem permissão para editar este projeto.")
@@ -490,8 +488,8 @@ def project_edit(request, project_id):
                 project.priority = request.POST.get('priority')
                 project.deadline = request.POST.get('deadline')
                 
-                # Se o usuário pode gerenciar todos os projetos, permitir mudança de responsável
-                if user_can_manage_all_projects(request.user):
+                # Se o usuário é SUPERADMIN, permitir mudança de responsável
+                if request.user.hierarchy == 'SUPERADMIN':
                     responsible_id = request.POST.get('responsible_user')
                     if responsible_id:
                         from django.contrib.auth import get_user_model
@@ -556,8 +554,10 @@ def activity_detail_api(request, activity_id):
         activity = get_object_or_404(Activity, id=activity_id)
         
         # Verificar permissão de acesso
-        if not user_can_manage_all_projects(request.user):
-            if activity.project.sector != request.user.sector:
+        if request.user.hierarchy != 'SUPERADMIN':
+            if (activity.project.sector != request.user.sector and 
+                activity.project.created_by != request.user and 
+                activity.project.responsible_user != request.user):
                 return JsonResponse({'error': 'Acesso negado'}, status=403)
         
         # Buscar comentários
