@@ -1,17 +1,17 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Editar Projeto - {{ project.name }}{% endblock %}
+{% block title %}Editar Atividade - {{ activity.name }}{% endblock %}
 
 {% block extra_css %}
 <style>
-    .edit-hero {
+    .activity-edit-hero {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         position: relative;
         overflow: hidden;
     }
     
-    .edit-hero::before {
+    .activity-edit-hero::before {
         content: '';
         position: absolute;
         top: 0;
@@ -22,133 +22,36 @@
         border-radius: 50%;
         transform: translate(50px, -50px);
     }
-    
-    .form-input:focus {
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-    }
-    
-    .form-textarea:focus {
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-    }
-    
-    .form-select:focus {
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-    }
-        
-    
-    .btn-primary {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        color: white;
-        padding: 1rem 2rem;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 1rem;
-        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
-        transition: all 0.3s ease;
-        border: none;
-        cursor: pointer;
-    }
-    
-    .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
-        background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
-    }
-    
-    .btn-secondary {
-        background: #f1f5f9;
-        color: #64748b;
-        padding: 1rem 2rem;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 1rem;
-        border: 2px solid #e2e8f0;
-        transition: all 0.3s ease;
-        text-decoration: none;
-        cursor: pointer;
-    }
-    
-    .btn-secondary:hover {
-        background: #e2e8f0;
-        border-color: #cbd5e1;
-        transform: translateY(-1px);
-        color: #475569;
-    }
-    
-    .section-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: #1f2937;
-        margin-bottom: 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    
-    .section-title i {
-        color: #6366f1;
-        font-size: 1.1rem;
-    }
-    
-    .info-card {
-        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-        border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 2rem;
-    }
-    
-    .status-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.025em;
-    }
-    
-    .priority-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        border: 2px solid;
-        background: transparent;
-    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-6">
     <!-- Hero Header -->
-    <div class="edit-hero">
+    <div class="activity-edit-hero rounded-3xl p-10 mb-8 text-white relative z-10">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
             <div>
-                <h1 class="text-3xl font-bold mb-2">
+                <h1 class="text-4xl font-bold mb-2">
                     <i class="fas fa-edit mr-3"></i>
-                    Editar Projeto
+                    Editar Atividade
                 </h1>
-                <p class="text-blue-100 text-lg">{{ project.name }}</p>
-                <div class="flex items-center gap-4 mt-3">
-                    <span class="status-indicator bg-white/20 text-white">
-                        <i class="fas fa-info-circle"></i>
-                        {{ project.get_status_display }}
+                <p class="text-blue-100 text-lg">{{ activity.name }}</p>
+                <div class="flex items-center gap-4 mt-4">
+                    <span class="inline-flex items-center gap-2 bg-white/20 text-white px-4 py-2 rounded-full text-sm font-semibold">
+                        <i class="fas fa-project-diagram"></i>
+                        {{ activity.project.name }}
                     </span>
                     <span class="text-blue-100 text-sm">
-                        <i class="fas fa-calendar mr-1"></i>
-                        Criado em {{ project.created_at|date:"d/m/Y" }}
+                        <i class="fas fa-calendar mr-2"></i>
+                        Criado em {{ activity.created_at|date:"d/m/Y" }}
                     </span>
                 </div>
             </div>
             <div class="flex space-x-3">
-                <a href="{% url 'projects:project_detail' project.id %}" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2">
-                    <i class="fas fa-arrow-left mr-2"></i>Voltar
+                <a href="{% url 'projects:project_detail' activity.project.id %}" 
+                   class="inline-flex items-center px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-xl transition-all duration-300 hover:-translate-y-1 shadow-lg">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar ao Projeto
                 </a>
             </div>
         </div>
@@ -157,19 +60,19 @@
     <!-- Formulário -->
     <div class="max-w-4xl mx-auto">
         <div class="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
-            <form method="post" id="project-form">
+            <form method="post" id="activity-form">
                 {% csrf_token %}
                 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <!-- Coluna Esquerda -->
                     <div>
                         <div class="mb-7">
-                            <label for="name" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Nome do Projeto *</label>
+                            <label for="name" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Nome da Atividade *</label>
                             <input type="text" 
                                    id="name" 
                                    name="name" 
                                    class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300" 
-                                   value="{{ project.name }}" 
+                                   value="{{ activity.name }}" 
                                    required>
                         </div>
                         
@@ -179,17 +82,16 @@
                                       name="description" 
                                       class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300 resize-vertical min-h-[120px]" 
                                       rows="4" 
-                                      required>{{ project.description }}</textarea>
+                                      required>{{ activity.description }}</textarea>
                         </div>
                         
                         <div class="mb-7">
-                            <label for="deadline" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Prazo Final *</label>
+                            <label for="deadline" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Prazo</label>
                             <input type="date" 
                                    id="deadline" 
                                    name="deadline" 
                                    class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300" 
-                                   value="{{ project.deadline|date:'Y-m-d' }}" 
-                                   required>
+                                   value="{% if activity.deadline %}{{ activity.deadline|date:'Y-m-d' }}{% endif %}">
                         </div>
                     </div>
                     
@@ -198,8 +100,8 @@
                         <div class="mb-7">
                             <label for="status" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Status</label>
                             <select id="status" name="status" class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300">
-                                {% for value, label in project.STATUS_CHOICES %}
-                                <option value="{{ value }}" {% if project.status == value %}selected{% endif %}>
+                                {% for value, label in activity.STATUS_CHOICES %}
+                                <option value="{{ value }}" {% if activity.status == value %}selected{% endif %}>
                                     {{ label }}
                                 </option>
                                 {% endfor %}
@@ -209,23 +111,35 @@
                         <div class="mb-7">
                             <label for="priority" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Prioridade</label>
                             <select id="priority" name="priority" class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300">
-                                {% for value, label in project.PRIORITY_CHOICES %}
-                                <option value="{{ value }}" {% if project.priority == value %}selected{% endif %}>
+                                {% for value, label in activity.PRIORITY_CHOICES %}
+                                <option value="{{ value }}" {% if activity.priority == value %}selected{% endif %}>
                                     {{ label }}
                                 </option>
                                 {% endfor %}
                             </select>
                         </div>
                         
-                        {% if can_manage_all %}
+                        <div class="mb-7">
+                            <label for="category" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Categoria</label>
+                            <select id="category" name="category" class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300">
+                                <option value="">Selecione uma categoria</option>
+                                {% for value, label in categories %}
+                                <option value="{{ value }}" {% if activity.category == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        {% if can_manage %}
                         <div class="mb-7">
                             <label for="responsible_user" class="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Responsável</label>
                             <select id="responsible_user" name="responsible_user" class="w-full px-4 py-4 border border-gray-200 rounded-xl text-sm bg-white transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 hover:border-gray-300">
                                 <option value="">Selecione um responsável</option>
-                                {% for user in users %}
+                                {% for user in available_users %}
                                 <option value="{{ user.id }}" 
-                                        {% if project.responsible_user.id == user.id %}selected{% endif %}>
-                                    {{ user.full_name|default:user.username }}
+                                        {% if activity.responsible_user.id == user.id %}selected{% endif %}>
+                                    {{ user.get_full_name|default:user.username }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -237,16 +151,22 @@
                             <h3 class="font-semibold text-indigo-800 mb-3">Informações</h3>
                             <div class="space-y-2 text-sm">
                                 <div class="flex justify-between">
-                                    <span class="text-indigo-600">Setor:</span>
-                                    <span class="font-medium text-indigo-800">{{ project.sector.name }}</span>
+                                    <span class="text-indigo-600">Projeto:</span>
+                                    <span class="font-medium text-indigo-800">{{ activity.project.name }}</span>
                                 </div>
                                 <div class="flex justify-between">
                                     <span class="text-indigo-600">Criado por:</span>
-                                    <span class="font-medium text-indigo-800">{{ project.created_by.full_name|default:project.created_by.username }}</span>
+                                    <span class="font-medium text-indigo-800">{{ activity.created_by.get_full_name|default:activity.created_by.username }}</span>
                                 </div>
                                 <div class="flex justify-between">
-                                    <span class="text-indigo-600">Progresso:</span>
-                                    <span class="font-medium text-indigo-800">{{ project.progress_percentage }}%</span>
+                                    <span class="text-indigo-600">Responsável atual:</span>
+                                    <span class="font-medium text-indigo-800">
+                                        {% if activity.responsible_user %}
+                                            {{ activity.responsible_user.get_full_name|default:activity.responsible_user.username }}
+                                        {% else %}
+                                            Não atribuído
+                                        {% endif %}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -258,7 +178,7 @@
                     <button type="submit" class="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl transition-all duration-300 hover:-translate-y-1 shadow-lg hover:shadow-xl">
                         <i class="fas fa-save mr-2"></i>Salvar Alterações
                     </button>
-                    <a href="{% url 'projects:project_detail' project.id %}" class="inline-flex items-center justify-center px-8 py-4 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-xl transition-all duration-300 hover:-translate-y-1 shadow-lg text-center">
+                    <a href="{% url 'projects:project_detail' activity.project.id %}" class="inline-flex items-center justify-center px-8 py-4 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-xl transition-all duration-300 hover:-translate-y-1 shadow-lg text-center">
                         <i class="fas fa-times mr-2"></i>Cancelar
                     </a>
                 </div>
@@ -273,31 +193,9 @@
     // Definir data mínima para hoje e adicionar funcionalidades
     document.addEventListener('DOMContentLoaded', function() {
         const deadlineInput = document.getElementById('deadline');
-        const today = new Date().toISOString().split('T')[0];
-        deadlineInput.min = today;
-        
-        // Validação em tempo real
-        const form = document.querySelector('form');
+        const form = document.getElementById('activity-form');
         const nameInput = document.getElementById('name');
         const descriptionInput = document.getElementById('description');
-        
-        // Contador de caracteres para descrição
-        const descriptionCounter = document.createElement('div');
-        descriptionCounter.className = 'text-sm text-gray-500 mt-1';
-        descriptionInput.parentNode.appendChild(descriptionCounter);
-        
-        function updateDescriptionCounter() {
-            const length = descriptionInput.value.length;
-            descriptionCounter.textContent = `${length} caracteres`;
-            if (length > 1000) {
-                descriptionCounter.className = 'text-sm text-red-500 mt-1';
-            } else {
-                descriptionCounter.className = 'text-sm text-gray-500 mt-1';
-            }
-        }
-        
-        descriptionInput.addEventListener('input', updateDescriptionCounter);
-        updateDescriptionCounter();
         
         // Auto-resize textarea
         function autoResize() {

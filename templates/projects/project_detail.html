@@ -168,6 +168,120 @@
         font-size: 0.875rem;
         font-weight: 500;
         text-transform: uppercase;
+    }
+    
+    /* Kanban Styles */
+    .kanban-board {
+        min-height: 400px;
+    }
+    
+    .kanban-column {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 1rem;
+        min-height: 400px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .kanban-header {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+    
+    .kanban-content {
+        flex-grow: 1;
+        min-height: 300px;
+    }
+    
+    .kanban-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-left: 4px solid #e2e8f0;
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+    }
+    
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .kanban-card.priority-alta {
+        border-left-color: #f59e0b;
+    }
+    
+    .kanban-card.priority-critica {
+        border-left-color: #ef4444;
+    }
+    
+    .kanban-card.priority-baixa {
+        border-left-color: #10b981;
+    }
+    
+    .kanban-card.overdue {
+        border-left-color: #dc2626;
+        background: #fef2f2;
+    }
+    
+    .kanban-card .activity-title {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.5rem;
+        line-height: 1.3;
+    }
+    
+    .kanban-card .activity-description {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .kanban-card .activity-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+    
+    .kanban-card .activity-assignee {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .kanban-card .activity-deadline {
+        font-weight: 500;
+    }
+    
+    .kanban-card.compact {
+        padding: 0.75rem;
+    }
+    
+    .kanban-card.compact .activity-title {
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .kanban-card.compact .activity-description {
+        font-size: 0.75rem;
+        -webkit-line-clamp: 1;
+    }
+    
+    .kanban-card.compact .activity-meta {
+        font-size: 0.625rem;
         letter-spacing: 0.05em;
     }
     
@@ -178,6 +292,89 @@
         margin-bottom: 1rem;
         display: flex;
         align-items: center;
+    }
+    
+    /* Drag & Drop Styles */
+    .drop-zone {
+        min-height: 400px;
+        transition: all 0.3s ease;
+    }
+    
+    .drop-zone.drag-over {
+        background-color: rgba(59, 130, 246, 0.1);
+        border: 2px dashed #3b82f6;
+        border-radius: 8px;
+    }
+    
+    .kanban-card.dragging {
+        opacity: 0.5;
+        transform: rotate(5deg);
+        z-index: 1000;
+    }
+    
+    .drag-handle {
+        cursor: grab;
+        user-select: none;
+    }
+    
+    .drag-handle:active {
+        cursor: grabbing;
+    }
+    
+    .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    /* Estilos para botões de ação dos cartões */
+    .activity-actions {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        display: none;
+        gap: 0.25rem;
+        z-index: 10;
+    }
+    
+    .kanban-card:hover .activity-actions {
+        display: flex;
+    }
+    
+    .action-btn {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 0.25rem;
+        border: none;
+        background: rgba(255, 255, 255, 0.9);
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .action-btn:hover {
+        background: #ffffff;
+        color: #374151;
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Posição relativa para o cartão permitir posicionamento absoluto dos botões */
+    .kanban-card {
+        position: relative;
+    }
+    
+    /* Melhorar hover do cartão */
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
     }
 </style>
 {% endblock %}
@@ -350,35 +547,233 @@
 
             <!-- Activities Section -->
             <div class="activity-section">
-                <div class="flex justify-between items-center mb-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <h3 class="section-title">
                         <i class="fas fa-tasks mr-3 text-orange-500"></i>
-                        Hierarquia de Atividades
+                        {% if view_mode == 'kanban' %}Kanban de Atividades{% else %}Hierarquia de Atividades{% endif %}
                     </h3>
-                    {% if can_edit %}
-                    <button onclick="openActivityModal()" class="btn-action">
-                        <i class="fas fa-plus mr-2"></i>Nova Atividade
-                    </button>
-                    {% endif %}
-                </div>
-                
-                {% if activities or root_activities %}
-                    <div class="space-y-3">
-                        {% include 'projects/activity_hierarchy.html' with activities=activities|default:root_activities can_edit=can_edit %}
-                    </div>
-                {% else %}
-                    <div class="text-center py-16">
-                        <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
-                            <i class="fas fa-clipboard-list text-3xl text-gray-400"></i>
+                    
+                    <div class="flex flex-wrap items-center gap-3">
+                        <!-- View Mode Toggle -->
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <a href="?view=hierarchy" 
+                               class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors {% if view_mode != 'kanban' %}bg-white text-gray-900 shadow-sm{% else %}text-gray-600 hover:text-gray-900{% endif %}">
+                                <i class="fas fa-sitemap mr-1.5"></i>Hierárquica
+                            </a>
+                            <a href="?view=kanban" 
+                               class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors {% if view_mode == 'kanban' %}bg-white text-gray-900 shadow-sm{% else %}text-gray-600 hover:text-gray-900{% endif %}">
+                                <i class="fas fa-columns mr-1.5"></i>Kanban
+                            </a>
                         </div>
-                        <h4 class="text-xl font-semibold text-gray-600 mb-2">Nenhuma atividade cadastrada</h4>
-                        <p class="text-gray-500 mb-6">Comece criando a primeira atividade para este projeto</p>
+                        
                         {% if can_edit %}
-                        <button onclick="openActivityModal()" class="btn-action">
-                            <i class="fas fa-plus mr-2"></i>Criar Primeira Atividade
+                        <button onclick="openNewActivityModal()" class="btn-action">
+                            <i class="fas fa-plus mr-2"></i>Nova Atividade
                         </button>
                         {% endif %}
                     </div>
+                </div>
+                
+                {% if view_mode == 'kanban' %}
+                    <!-- Kanban View -->
+                    {% if kanban_activities %}
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                            <!-- Não Iniciada Column -->
+                            <div class="bg-gray-50 rounded-xl border border-gray-200 min-h-[500px]">
+                                <div class="flex items-center justify-between p-4 bg-gray-100 rounded-t-xl border-b border-gray-200">
+                                    <div class="flex items-center space-x-2 text-gray-700">
+                                        <i class="fas fa-clock"></i>
+                                        <span class="font-semibold">Não Iniciada</span>
+                                    </div>
+                                    <span class="bg-gray-200 text-gray-600 px-3 py-1 rounded-full text-xs font-medium">
+                                        {{ kanban_activities.NAO_INICIADA.count }}
+                                    </span>
+                                </div>
+                                <div class="p-4 drop-zone" 
+                                     ondrop="handleDrop(event, 'NAO_INICIADA')"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event)"
+                                     ondragleave="handleDragLeave(event)"
+                                     data-status="NAO_INICIADA">
+                                    {% for activity in kanban_activities.NAO_INICIADA %}
+                                        {% include 'projects/kanban_card.html' with activity=activity %}
+                                    {% endfor %}
+                                    {% if not kanban_activities.NAO_INICIADA %}
+                                    <div class="text-center text-gray-400 mt-8">
+                                        <i class="fas fa-plus-circle text-3xl mb-2"></i>
+                                        <p class="text-sm">Arraste atividades para cá</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Em Andamento Column -->
+                            <div class="bg-blue-50 rounded-xl border border-blue-200 min-h-[500px]">
+                                <div class="flex items-center justify-between p-4 bg-blue-100 rounded-t-xl border-b border-blue-200">
+                                    <div class="flex items-center space-x-2 text-blue-700">
+                                        <i class="fas fa-play"></i>
+                                        <span class="font-semibold">Em Andamento</span>
+                                    </div>
+                                    <span class="bg-blue-200 text-blue-600 px-3 py-1 rounded-full text-xs font-medium">
+                                        {{ kanban_activities.EM_ANDAMENTO.count }}
+                                    </span>
+                                </div>
+                                <div class="p-4 drop-zone" 
+                                     ondrop="handleDrop(event, 'EM_ANDAMENTO')"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event)"
+                                     ondragleave="handleDragLeave(event)"
+                                     data-status="EM_ANDAMENTO">
+                                    {% for activity in kanban_activities.EM_ANDAMENTO %}
+                                        {% include 'projects/kanban_card.html' with activity=activity %}
+                                    {% endfor %}
+                                    {% if not kanban_activities.EM_ANDAMENTO %}
+                                    <div class="text-center text-gray-400 mt-8">
+                                        <i class="fas fa-plus-circle text-3xl mb-2"></i>
+                                        <p class="text-sm">Arraste atividades para cá</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Concluída Column -->
+                            <div class="bg-green-50 rounded-xl border border-green-200 min-h-[500px]">
+                                <div class="flex items-center justify-between p-4 bg-green-100 rounded-t-xl border-b border-green-200">
+                                    <div class="flex items-center space-x-2 text-green-700">
+                                        <i class="fas fa-check"></i>
+                                        <span class="font-semibold">Concluída</span>
+                                    </div>
+                                    <span class="bg-green-200 text-green-600 px-3 py-1 rounded-full text-xs font-medium">
+                                        {{ kanban_activities.CONCLUIDA.count }}
+                                    </span>
+                                </div>
+                                <div class="p-4 drop-zone" 
+                                     ondrop="handleDrop(event, 'CONCLUIDA')"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event)"
+                                     ondragleave="handleDragLeave(event)"
+                                     data-status="CONCLUIDA">
+                                    {% for activity in kanban_activities.CONCLUIDA %}
+                                        {% include 'projects/kanban_card.html' with activity=activity %}
+                                    {% endfor %}
+                                    {% if not kanban_activities.CONCLUIDA %}
+                                    <div class="text-center text-gray-400 mt-8">
+                                        <i class="fas fa-plus-circle text-3xl mb-2"></i>
+                                        <p class="text-sm">Arraste atividades para cá</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Cancelada Column -->
+                            <div class="bg-red-50 rounded-xl border border-red-200 min-h-[500px]">
+                                <div class="flex items-center justify-between p-4 bg-red-100 rounded-t-xl border-b border-red-200">
+                                    <div class="flex items-center space-x-2 text-red-700">
+                                        <i class="fas fa-times"></i>
+                                        <span class="font-semibold">Cancelada</span>
+                                    </div>
+                                    <span class="bg-red-200 text-red-600 px-3 py-1 rounded-full text-xs font-medium">
+                                        {{ kanban_activities.CANCELADA.count }}
+                                    </span>
+                                </div>
+                                <div class="p-4 drop-zone" 
+                                     ondrop="handleDrop(event, 'CANCELADA')"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event)"
+                                     ondragleave="handleDragLeave(event)"
+                                     data-status="CANCELADA">
+                                    {% for activity in kanban_activities.CANCELADA %}
+                                        {% include 'projects/kanban_card.html' with activity=activity %}
+                                    {% endfor %}
+                                    {% if not kanban_activities.CANCELADA %}
+                                    <div class="text-center text-gray-400 mt-8">
+                                        <i class="fas fa-plus-circle text-3xl mb-2"></i>
+                                        <p class="text-sm">Arraste atividades para cá</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Kanban por Categoria -->
+                        {% if activities_by_category %}
+                            <div class="mt-8">
+                                <h4 class="text-lg font-semibold text-gray-900 mb-4">Atividades por Categoria</h4>
+                                {% for category, category_activities in activities_by_category.items %}
+                                    <div class="mb-8">
+                                        <h5 class="text-md font-medium text-gray-700 mb-3">{{ category }}</h5>
+                                        <div class="kanban-board grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <div class="kanban-column">
+                                                <div class="kanban-header bg-gray-50 text-gray-700 text-sm">Não Iniciada</div>
+                                                <div class="kanban-content space-y-2">
+                                                    {% for activity in category_activities.NAO_INICIADA %}
+                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            <div class="kanban-column">
+                                                <div class="kanban-header bg-blue-50 text-blue-700 text-sm">Em Andamento</div>
+                                                <div class="kanban-content space-y-2">
+                                                    {% for activity in category_activities.EM_ANDAMENTO %}
+                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            <div class="kanban-column">
+                                                <div class="kanban-header bg-green-50 text-green-700 text-sm">Concluída</div>
+                                                <div class="kanban-content space-y-2">
+                                                    {% for activity in category_activities.CONCLUIDA %}
+                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            <div class="kanban-column">
+                                                <div class="kanban-header bg-red-50 text-red-700 text-sm">Cancelada</div>
+                                                <div class="kanban-content space-y-2">
+                                                    {% for activity in category_activities.CANCELADA %}
+                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-16">
+                            <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-clipboard-list text-3xl text-gray-400"></i>
+                            </div>
+                            <h4 class="text-xl font-semibold text-gray-600 mb-2">Nenhuma atividade cadastrada</h4>
+                            <p class="text-gray-500 mb-6">Comece criando a primeira atividade para este projeto</p>
+                            {% if can_edit %}
+                            <button onclick="openNewActivityModal()" class="btn-action">
+                                <i class="fas fa-plus mr-2"></i>Criar Primeira Atividade
+                            </button>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <!-- Hierarchy View -->
+                    {% if activities or root_activities %}
+                        <div class="space-y-3">
+                            {% include 'projects/activity_hierarchy.html' with activities=activities|default:root_activities can_edit=can_edit %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-16">
+                            <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-clipboard-list text-3xl text-gray-400"></i>
+                            </div>
+                            <h4 class="text-xl font-semibold text-gray-600 mb-2">Nenhuma atividade cadastrada</h4>
+                            <p class="text-gray-500 mb-6">Comece criando a primeira atividade para este projeto</p>
+                            {% if can_edit %}
+                            <button onclick="openNewActivityModal()" class="btn-action">
+                                <i class="fas fa-plus mr-2"></i>Criar Primeira Atividade
+                            </button>
+                            {% endif %}
+                        </div>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -541,12 +936,15 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Incluir Modal de Detalhes da Atividade -->
+{% include 'projects/activity_modal.html' %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
 // Funções para o modal de atividade
-function openActivityModal() {
+function openNewActivityModal() {
     document.getElementById('activityModal').classList.remove('hidden');
     // Definir data mínima para hoje
     const deadlineInput = document.querySelector('#activityForm input[name="deadline"]');
@@ -557,6 +955,12 @@ function openActivityModal() {
 function closeActivityModal() {
     document.getElementById('activityModal').classList.add('hidden');
     document.getElementById('activityForm').reset();
+}
+
+function closeActivityDetailModal() {
+    document.getElementById('activityDetailModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    currentActivityId = null;
 }
 
 // Atualizar status da atividade via AJAX
@@ -670,7 +1074,7 @@ function openSubActivityModal(parentId) {
     // Atualizar título do modal
     document.querySelector('#activityModal h3').textContent = 'Nova Sub-atividade';
     
-    openActivityModal();
+    openNewActivityModal();
 }
 
 function toggleSubActivities(activityId) {
@@ -690,6 +1094,243 @@ function toggleSubActivities(activityId) {
             icon.classList.add('fa-chevron-right');
         }
     }
+}
+
+// Drag & Drop Functionality
+let draggedElement = null;
+let draggedActivityId = null;
+
+function handleDragStart(event, activityId) {
+    draggedElement = event.target;
+    draggedActivityId = activityId;
+    
+    // Add dragging class for visual feedback
+    event.target.classList.add('dragging');
+    
+    // Set drag data
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/html', event.target.outerHTML);
+    event.dataTransfer.setData('text/plain', activityId);
+    
+    // Style drag image
+    setTimeout(() => {
+        event.target.style.opacity = '0.5';
+    }, 0);
+}
+
+function handleDragEnd(event) {
+    // Reset visual state
+    event.target.classList.remove('dragging');
+    event.target.style.opacity = '1';
+    
+    // Remove drag over styles from all drop zones
+    document.querySelectorAll('.drop-zone').forEach(zone => {
+        zone.classList.remove('drag-over');
+    });
+    
+    draggedElement = null;
+    draggedActivityId = null;
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function handleDragEnter(event) {
+    event.preventDefault();
+    if (event.target.classList.contains('drop-zone') || event.target.closest('.drop-zone')) {
+        const dropZone = event.target.classList.contains('drop-zone') ? 
+                        event.target : event.target.closest('.drop-zone');
+        dropZone.classList.add('drag-over');
+    }
+}
+
+function handleDragLeave(event) {
+    if (event.target.classList.contains('drop-zone') || event.target.closest('.drop-zone')) {
+        const dropZone = event.target.classList.contains('drop-zone') ? 
+                        event.target : event.target.closest('.drop-zone');
+        
+        // Only remove drag-over if we're actually leaving the drop zone
+        if (!dropZone.contains(event.relatedTarget)) {
+            dropZone.classList.remove('drag-over');
+        }
+    }
+}
+
+function handleDrop(event, newStatus) {
+    event.preventDefault();
+    
+    const dropZone = event.target.classList.contains('drop-zone') ? 
+                    event.target : event.target.closest('.drop-zone');
+    
+    if (dropZone) {
+        dropZone.classList.remove('drag-over');
+    }
+    
+    if (!draggedActivityId) return;
+    
+    const currentStatus = draggedElement.dataset.status;
+    
+    // If status is the same, don't make API call
+    if (currentStatus === newStatus) {
+        return;
+    }
+    
+    // Move the card immediately for better UX
+    if (draggedElement && dropZone) {
+        // Update the card's data attribute
+        draggedElement.dataset.status = newStatus;
+        
+        // Append to new column
+        dropZone.appendChild(draggedElement);
+        
+        // Update column counts
+        updateColumnCounts();
+        
+        // Reset visual state
+        draggedElement.style.opacity = '1';
+        draggedElement.style.pointerEvents = 'auto';
+        
+        // Show success message immediately
+        showNotification(`Atividade movida para "${getStatusLabel(newStatus)}"`, 'success');
+    }
+    
+    // Make API call to update status in background
+    fetch(`/projects/activity/${draggedActivityId}/status/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update project progress if available
+            if (data.new_progress !== undefined) {
+                updateProjectProgress(data.new_progress);
+            }
+        } else {
+            // Revert on error
+            location.reload();
+            showNotification('Erro ao mover atividade: ' + (data.message || 'Erro desconhecido'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        // Revert on error
+        location.reload();
+        showNotification('Erro ao mover atividade', 'error');
+    });
+}
+
+function updateColumnCounts() {
+    // Update count badges for each column
+    const columns = document.querySelectorAll('.drop-zone');
+    columns.forEach(column => {
+        const status = column.dataset.status;
+        const cards = column.querySelectorAll('[data-activity-id]').length;
+        const badge = column.parentElement.querySelector('.rounded-full');
+        if (badge) {
+            badge.textContent = cards;
+        }
+        
+        // Show/hide empty state
+        const emptyState = column.querySelector('.text-center.text-gray-400');
+        if (emptyState) {
+            emptyState.style.display = cards === 0 ? 'block' : 'none';
+        }
+    });
+}
+
+function getStatusLabel(status) {
+    const labels = {
+        'NAO_INICIADA': 'Não Iniciada',
+        'EM_ANDAMENTO': 'Em Andamento',
+        'CONCLUIDA': 'Concluída',
+        'CANCELADA': 'Cancelada'
+    };
+    return labels[status] || status;
+}
+
+// Função para editar atividade
+function editActivity(activityId) {
+    window.location.href = `/projects/activity/${activityId}/edit/`;
+}
+
+// Initialize drag and drop on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Add touch support for mobile drag & drop
+    if ('ontouchstart' in window) {
+        // Add mobile drag & drop support here if needed
+        console.log('Mobile drag & drop could be implemented here');
+    }
+    
+    // Initialize column counts
+    updateColumnCounts();
+});
+
+// Modal functions for activity details
+function openActivityModal(activityId) {
+    window.currentActivityId = activityId;
+    
+    // Fazer requisição para buscar dados da atividade
+    fetch(`/projects/activity/${activityId}/detail/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Erro: ' + data.error);
+                return;
+            }
+            
+            // Preencher dados do modal
+            document.getElementById('modalTitle').textContent = data.title;
+            document.getElementById('modalStatus').textContent = data.status_display;
+            document.getElementById('modalPriority').textContent = data.priority_display;
+            document.getElementById('modalCategory').textContent = data.category_name || 'Sem categoria';
+            document.getElementById('modalResponsible').textContent = data.responsible_name || 'Não atribuído';
+            document.getElementById('modalDeadline').textContent = data.deadline || 'Sem prazo';
+            document.getElementById('modalProgressText').textContent = `${data.progress}%`;
+            document.getElementById('modalProgressBar').style.width = `${data.progress}%`;
+            document.getElementById('modalCreatedAt').textContent = data.created_at;
+            document.getElementById('modalUpdatedAt').textContent = data.updated_at;
+            document.getElementById('modalCreatedBy').textContent = data.created_by;
+            document.getElementById('modalDescription').innerHTML = data.description || 'Sem descrição';
+            
+            // Carregar subtarefas
+            loadSubtasks(data.subtasks);
+            
+            // Carregar comentários
+            loadComments(data.comments);
+            
+            // Mostrar modal
+            document.getElementById('activityDetailModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        })
+        .catch(error => {
+            console.error('Erro ao carregar atividade:', error);
+            alert('Erro ao carregar detalhes da atividade');
+        });
+}
+
+function editActivity(activityId) {
+    // Check if there's an edit modal or redirect to edit page
+    window.location.href = `/projects/activity/${activityId}/edit/`;
+}
+
+// Function to handle card clicks (prevent event bubbling from action buttons)
+function handleCardClick(event, activityId) {
+    // Check if the click was on an action button or drag handle
+    if (event.target.closest('.opacity-0') || event.target.closest('.drag-handle')) {
+        return;
+    }
+    
+    // Open activity modal
+    openActivityModal(activityId);
 }
 </script>
 {% endblock %}

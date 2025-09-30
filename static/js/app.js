@@ -331,8 +331,209 @@ function copyToClipboard(text) {
     });
 }
 
+// =============================================
+// SISTEMA DE NOTIFICAÇÕES EM TEMPO REAL
+// =============================================
+
+// Variáveis globais para notificações
+let notificationBell = null;
+let notificationBadge = null;
+let notificationDropdown = null;
+let currentUnreadCount = 0;
+
+// Inicializar sistema de notificações
+function initializeNotificationSystem() {
+    // Procurar elementos da UI
+    notificationBell = document.getElementById('notification-bell');
+    notificationBadge = document.getElementById('notification-badge');
+    notificationDropdown = document.getElementById('notification-dropdown');
+    
+    if (notificationBell) {
+        // Adicionar event listener para toggle do dropdown
+        notificationBell.addEventListener('click', toggleNotificationDropdown);
+        
+        // Carregar notificações iniciais
+        loadRecentNotifications();
+        
+        // Atualizar contador a cada 30 segundos
+        setInterval(updateUnreadCount, 30000);
+    }
+}
+
+// Toggle do dropdown de notificações
+function toggleNotificationDropdown() {
+    if (notificationDropdown) {
+        notificationDropdown.classList.toggle('hidden');
+        
+        // Se está abrindo, carregar notificações recentes
+        if (!notificationDropdown.classList.contains('hidden')) {
+            loadRecentNotifications();
+        }
+    }
+}
+
+// Atualizar contador de notificações não lidas
+async function updateUnreadCount() {
+    try {
+        const response = await fetch('/notifications/api/unread-count/');
+        const data = await response.json();
+        
+        if (data.success) {
+            currentUnreadCount = data.unread_count;
+            updateNotificationBadge(currentUnreadCount);
+        }
+    } catch (error) {
+        console.log('Erro ao carregar contador de notificações:', error);
+    }
+}
+
+// Carregar notificações recentes
+async function loadRecentNotifications() {
+    try {
+        const response = await fetch('/notifications/api/recent/');
+        const data = await response.json();
+        
+        if (data.success) {
+            renderNotificationDropdown(data.notifications);
+            currentUnreadCount = data.notifications.filter(n => !n.is_read).length;
+            updateNotificationBadge(currentUnreadCount);
+        }
+    } catch (error) {
+        console.log('Erro ao carregar notificações:', error);
+    }
+}
+
+// Atualizar badge de notificações
+function updateNotificationBadge(count) {
+    if (notificationBadge) {
+        if (count > 0) {
+            notificationBadge.textContent = count > 99 ? '99+' : count;
+            notificationBadge.classList.remove('hidden');
+        } else {
+            notificationBadge.classList.add('hidden');
+        }
+    }
+}
+
+// Renderizar dropdown de notificações
+function renderNotificationDropdown(notifications) {
+    if (!notificationDropdown) return;
+    
+    let html = '<div class="p-4 border-b border-gray-200"><h3 class="text-sm font-medium text-gray-900">Notificações Recentes</h3></div>';
+    
+    if (notifications.length === 0) {
+        html += '<div class="p-4 text-center text-gray-500"><p class="text-sm">Nenhuma notificação</p></div>';
+    } else {
+        html += '<div class="max-h-80 overflow-y-auto">';
+        
+        notifications.forEach(notification => {
+            const bgClass = notification.is_read ? 'bg-white' : 'bg-blue-50';
+            const iconColor = notification.type.color || 'blue';
+            
+            html += `
+                <div class="${bgClass} p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="handleNotificationClick(${notification.id}, '${notification.action_url || ''}')">
+                    <div class="flex items-start space-x-3">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-${iconColor}-100 rounded-full flex items-center justify-center">
+                                <i class="${notification.type.icon} text-${iconColor}-600 text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900">${notification.title}</p>
+                            <p class="text-xs text-gray-600 mt-1">${notification.message}</p>
+                            <p class="text-xs text-gray-400 mt-1">${formatNotificationTime(notification.sent_at)}</p>
+                        </div>
+                        ${!notification.is_read ? '<div class="w-2 h-2 bg-blue-600 rounded-full"></div>' : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        // Footer com link para ver todas
+        html += `
+            <div class="p-3 border-t border-gray-200 bg-gray-50">
+                <a href="/notifications/my/" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                    Ver todas as notificações
+                </a>
+            </div>
+        `;
+    }
+    
+    notificationDropdown.innerHTML = html;
+}
+
+// Lidar com clique em notificação
+async function handleNotificationClick(notificationId, actionUrl) {
+    try {
+        // Marcar como lida
+        await fetch(`/notifications/api/${notificationId}/mark-read/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        // Atualizar contador
+        updateUnreadCount();
+        
+        // Fechar dropdown
+        if (notificationDropdown) {
+            notificationDropdown.classList.add('hidden');
+        }
+        
+        // Redirecionar se há URL de ação
+        if (actionUrl && actionUrl !== '') {
+            window.location.href = actionUrl;
+        }
+        
+    } catch (error) {
+        console.log('Erro ao processar notificação:', error);
+    }
+}
+
+// Marcar todas como lidas
+async function markAllNotificationsAsRead() {
+    try {
+        const response = await fetch('/notifications/api/mark-all-read/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            updateNotificationBadge(0);
+            loadRecentNotifications();
+            showNotification('Todas as notificações foram marcadas como lidas', 'success');
+        }
+    } catch (error) {
+        console.log('Erro ao marcar notificações como lidas:', error);
+    }
+}
+
+// Formatar tempo da notificação
+function formatNotificationTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) return 'agora';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m atrás`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h atrás`;
+    
+    return date.toLocaleDateString();
+}
+
 // Export functions to global scope for inline handlers
-window.showNotification = showNotification;
+// showNotification já está definida como window.showNotification na função initializeNotifications
 window.removeNotification = removeNotification;
 window.toggleSidebar = toggleSidebar;
 window.copyToClipboard = copyToClipboard;
+window.initializeNotificationSystem = initializeNotificationSystem;
+window.handleNotificationClick = handleNotificationClick;
+window.markAllNotificationsAsRead = markAllNotificationsAsRead;

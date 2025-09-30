@@ -3124,24 +3124,64 @@ def manage_tasks_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('dashboard')
     """Gerenciar tarefas/atividades (apenas supervisores)"""
-    from core.models import TaskActivity
+    from core.models import TaskActivity, TaskCategory
+    from django.db.models import Q
     
     # Filtros
     status_filter = request.GET.get('status', '')
     user_filter = request.GET.get('user', '')
+    category_filter = request.GET.get('category', '')
+    sector_filter = request.GET.get('sector', '')
     
-    tasks = TaskActivity.objects.all().select_related('assigned_to', 'created_by')
+    # Segmentação por setor
+    if request.user.hierarchy == 'SUPERADMIN':
+        # SUPERADMIN vê todas as tarefas
+        tasks = TaskActivity.objects.all().select_related('assigned_to', 'created_by', 'category')
+        all_tasks = TaskActivity.objects.all()
+        
+        # SUPERADMIN pode filtrar por setor específico
+        if sector_filter:
+            tasks = tasks.filter(
+                Q(assigned_to__sector_id=sector_filter) |
+                Q(assigned_to__sectors__id=sector_filter)
+            ).distinct()
+            all_tasks = all_tasks.filter(
+                Q(assigned_to__sector_id=sector_filter) |
+                Q(assigned_to__sectors__id=sector_filter)
+            ).distinct()
+    else:
+        # Outros usuários só veem tarefas do seu setor ou que criaram
+        user_sectors = []
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        user_sectors.extend(request.user.sectors.all())
+        
+        # Filtrar tarefas por setor do usuário atribuído ou criador
+        tasks = TaskActivity.objects.filter(
+            Q(assigned_to__sector__in=user_sectors) |
+            Q(assigned_to__sectors__in=user_sectors) |
+            Q(created_by=request.user)
+        ).distinct().select_related('assigned_to', 'created_by', 'category')
+        
+        all_tasks = TaskActivity.objects.filter(
+            Q(assigned_to__sector__in=user_sectors) |
+            Q(assigned_to__sectors__in=user_sectors) |
+            Q(created_by=request.user)
+        ).distinct()
     
+    # Aplicar filtros
     if status_filter:
         tasks = tasks.filter(status=status_filter)
     
     if user_filter:
         tasks = tasks.filter(assigned_to_id=user_filter)
+        
+    if category_filter:
+        tasks = tasks.filter(category_id=category_filter)
     
     tasks = tasks.order_by('-created_at')
     
     # Para estatísticas
-    all_tasks = TaskActivity.objects.all()
     stats = {
         'total': all_tasks.count(),
         'pending': all_tasks.filter(status='PENDING').count(),
@@ -3149,17 +3189,162 @@ def manage_tasks_view(request):
         'done': all_tasks.filter(status='DONE').count(),
     }
     
-    users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    # Categorias disponíveis para o usuário
+    if request.user.hierarchy == 'SUPERADMIN':
+        categories = TaskCategory.objects.filter(is_active=True)
+    else:
+        user_sectors = []
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        user_sectors.extend(request.user.sectors.all())
+        
+        categories = TaskCategory.objects.filter(
+            is_active=True,
+            sectors__in=user_sectors
+        ).distinct()
+        
+        if not categories.exists():
+            categories = TaskCategory.objects.filter(is_active=True, sectors__isnull=True)
+    
+    # Usuários disponíveis para filtro
+    if request.user.hierarchy == 'SUPERADMIN':
+        users = User.objects.filter(is_staff=False).order_by('first_name', 'username')
+    else:
+        # Apenas usuários do mesmo setor
+        user_sectors = []
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        user_sectors.extend(request.user.sectors.all())
+        
+        users = User.objects.filter(
+            Q(sector__in=user_sectors) |
+            Q(sectors__in=user_sectors)
+        ).distinct().order_by('first_name', 'username')
+    
+    # Setores disponíveis (apenas para SUPERADMIN)
+    from users.models import Sector
+    sectors = Sector.objects.all().order_by('name') if request.user.hierarchy == 'SUPERADMIN' else None
     
     context = {
         'tasks': tasks,
         'users': users,
+        'categories': categories,
+        'sectors': sectors,
         'stats': stats,
         'status_filter': status_filter,
         'user_filter': user_filter,
+        'category_filter': category_filter,
+        'sector_filter': sector_filter,
         'STATUS_CHOICES': TaskActivity.STATUS_CHOICES,
+        'is_superadmin': request.user.hierarchy == 'SUPERADMIN',
     }
     return render(request, 'admin_panel/manage_tasks.html', context)
+
+
+@login_required
+def task_detail_view(request, task_id):
+    """Visualizar detalhes da tarefa com chat"""
+    from core.models import TaskActivity, TaskMessage
+    
+    task = get_object_or_404(TaskActivity, id=task_id)
+    
+    # Verificar permissão
+    if not (task.can_be_managed_by(request.user) or 
+            task.assigned_to == request.user or 
+            task.created_by == request.user):
+        messages.error(request, 'Você não tem permissão para ver esta tarefa.')
+        return redirect('manage_tasks')
+    
+    # Mensagens da tarefa
+    task_messages = task.messages.select_related('user').order_by('created_at')
+    
+    # Marcar mensagens como lidas para o usuário atual
+    task_messages.filter(is_read=False).exclude(user=request.user).update(is_read=True)
+    
+    context = {
+        'task': task,
+        'messages': task_messages,
+        'can_manage': task.can_be_managed_by(request.user),
+    }
+    
+    return render(request, 'tasks/task_detail.html', context)
+
+
+@login_required
+def task_messages_api(request, task_id):
+    """API para buscar mensagens da tarefa"""
+    from core.models import TaskActivity, TaskMessage
+    
+    task = get_object_or_404(TaskActivity, id=task_id)
+    
+    # Verificar permissão
+    if not (task.can_be_managed_by(request.user) or 
+            task.assigned_to == request.user or 
+            task.created_by == request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    messages = task.messages.select_related('user').order_by('created_at')
+    
+    messages_data = []
+    for message in messages:
+        messages_data.append({
+            'id': message.id,
+            'user': {
+                'name': message.user.get_full_name(),
+                'id': message.user.id,
+            },
+            'message': message.message,
+            'message_type': message.message_type,
+            'created_at': message.created_at.isoformat(),
+            'is_own': message.user == request.user,
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'messages': messages_data
+    })
+
+
+@login_required
+@require_POST
+def send_task_message(request, task_id):
+    """Enviar mensagem para o chat da tarefa"""
+    from core.models import TaskActivity, TaskMessage
+    
+    task = get_object_or_404(TaskActivity, id=task_id)
+    
+    # Verificar permissão
+    if not (task.can_be_managed_by(request.user) or 
+            task.assigned_to == request.user or 
+            task.created_by == request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    message_text = request.POST.get('message', '').strip()
+    if not message_text:
+        return JsonResponse({'success': False, 'error': 'Mensagem não pode estar vazia'})
+    
+    # Criar mensagem
+    message = TaskMessage.objects.create(
+        task=task,
+        user=request.user,
+        message=message_text,
+        message_type='MESSAGE'
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': {
+            'id': message.id,
+            'user': {
+                'name': request.user.get_full_name(),
+                'id': request.user.id,
+            },
+            'message': message.message,
+            'message_type': message.message_type,
+            'created_at': message.created_at.isoformat(),
+            'is_own': True,
+        }
+    })
 
 
 @login_required

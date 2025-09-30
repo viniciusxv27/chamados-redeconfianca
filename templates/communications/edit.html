@@ -99,13 +99,64 @@
                         <label for="message" class="block text-sm font-semibold text-gray-900 mb-2">
                             Mensagem <span class="text-red-500">*</span>
                         </label>
-                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                                  id="message" 
-                                  name="message" 
-                                  rows="8" 
-                                  placeholder="Digite a mensagem do comunicado"
-                                  required>{{ communication.message }}</textarea>
-                        <p class="text-sm text-gray-500 mt-1">Use uma linguagem clara e objetiva para melhor compreensão.</p>
+                        
+                        <!-- Rich Text Editor Toolbar -->
+                        <div class="border border-gray-300 rounded-lg overflow-hidden">
+                            <div class="bg-gray-50 px-3 py-2 border-b border-gray-300">
+                                <div class="flex items-center space-x-1">
+                                    <button type="button" onclick="formatText('bold')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-bold text-gray-600"></i>
+                                    </button>
+                                    <button type="button" onclick="formatText('italic')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-italic text-gray-600"></i>
+                                    </button>
+                                    <button type="button" onclick="formatText('underline')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-underline text-gray-600"></i>
+                                    </button>
+                                    <div class="w-px h-6 bg-gray-300 mx-2"></div>
+                                    <button type="button" onclick="formatText('insertUnorderedList')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-list-ul text-gray-600"></i>
+                                    </button>
+                                    <button type="button" onclick="formatText('insertOrderedList')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-list-ol text-gray-600"></i>
+                                    </button>
+                                    <div class="w-px h-6 bg-gray-300 mx-2"></div>
+                                    <button type="button" onclick="formatText('justifyLeft')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-align-left text-gray-600"></i>
+                                    </button>
+                                    <button type="button" onclick="formatText('justifyCenter')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-align-center text-gray-600"></i>
+                                    </button>
+                                    <button type="button" onclick="formatText('justifyRight')" class="p-2 hover:bg-gray-200 rounded">
+                                        <i class="fas fa-align-right text-gray-600"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Editor Area -->
+                            <div 
+                                id="message-editor" 
+                                class="min-h-[200px] p-4 outline-none focus:ring-0 bg-white"
+                                contenteditable="true"
+                                placeholder="Digite a mensagem do comunicado..."
+                                style="max-height: 400px; overflow-y: auto;"
+                                onkeyup="syncContent()"
+                                onpaste="handlePaste(event)"
+                            >{{ communication.message|safe }}</div>
+                        </div>
+                        
+                        <!-- Hidden textarea for form submission -->
+                        <textarea 
+                            class="hidden" 
+                            id="message" 
+                            name="message" 
+                            required
+                        >{{ communication.message }}</textarea>
+                        
+                        <p class="text-sm text-gray-500 mt-2">
+                            Use a barra de ferramentas para formatar o texto. Suporte a <strong>negrito</strong>, 
+                            <em>itálico</em>, listas e alinhamento.
+                        </p>
                     </div>
 
                     <!-- Período de Ativação -->
@@ -334,15 +385,70 @@ function cancelNewPhoto() {
     previewContainer.style.display = 'none';
 }
 
+// Rich Text Editor Functions
+function formatText(command) {
+    document.execCommand(command, false, null);
+    document.getElementById('message-editor').focus();
+    syncContent();
+}
+
+function syncContent() {
+    const editor = document.getElementById('message-editor');
+    const hiddenTextarea = document.getElementById('message');
+    hiddenTextarea.value = editor.innerHTML;
+}
+
+function handlePaste(event) {
+    event.preventDefault();
+    
+    // Get pasted data
+    const paste = (event.clipboardData || window.clipboardData).getData('text');
+    
+    // Insert as plain text to avoid unwanted formatting
+    document.execCommand('insertText', false, paste);
+    syncContent();
+}
+
+// Add CSS for placeholder
+const style = document.createElement('style');
+style.textContent = `
+    #message-editor:empty:before {
+        content: attr(placeholder);
+        color: #9CA3AF;
+        pointer-events: none;
+        font-style: italic;
+    }
+    #message-editor:focus:before {
+        display: none;
+    }
+`;
+document.head.appendChild(style);
+
 // Executar na carga da página
 document.addEventListener('DOMContentLoaded', function() {
     toggleRecipients();
     
+    // Initialize editor content
+    syncContent();
+    
     // Validação do formulário
     const form = document.querySelector('form');
     form.addEventListener('submit', function(e) {
+        // Sincronizar conteúdo do editor antes de enviar
+        syncContent();
+        
         const sendToAll = document.getElementById('send_to_all');
         const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]:checked');
+        const messageEditor = document.getElementById('message-editor');
+        const messageContent = messageEditor.textContent.trim();
+        
+        // Validar mensagem
+        if (!messageContent) {
+            e.preventDefault();
+            alert('Por favor, digite uma mensagem para o comunicado.');
+            messageEditor.focus();
+            return false;
+        }
         
         if (!sendToAll.checked && recipientCheckboxes.length === 0) {
             e.preventDefault();

@@ -494,6 +494,16 @@ class TaskActivity(models.Model):
     assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='task_activities')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_task_activities')
     
+    # Categoria para organização no Kanban
+    category = models.ForeignKey(
+        'TaskCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tasks',
+        verbose_name="Categoria"
+    )
+    
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM', verbose_name="Prioridade")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")
     
@@ -567,6 +577,83 @@ class TaskActivity(models.Model):
             return bool(set(user_sectors) & set(assigned_sectors))
         
         return False
+
+
+class TaskMessage(models.Model):
+    """Modelo para mensagens/chat das tarefas"""
+    
+    task = models.ForeignKey(
+        TaskActivity,
+        on_delete=models.CASCADE,
+        related_name='messages',
+        verbose_name="Tarefa"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name="Usuário"
+    )
+    message = models.TextField(verbose_name="Mensagem")
+    
+    # Tipo da mensagem
+    MESSAGE_TYPES = [
+        ('MESSAGE', 'Mensagem'),
+        ('STATUS_UPDATE', 'Atualização de Status'),
+        ('SYSTEM', 'Sistema'),
+    ]
+    message_type = models.CharField(
+        max_length=20,
+        choices=MESSAGE_TYPES,
+        default='MESSAGE',
+        verbose_name="Tipo da Mensagem"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False, verbose_name="Lida")
+    
+    class Meta:
+        verbose_name = "Mensagem da Tarefa"
+        verbose_name_plural = "Mensagens das Tarefas"
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.task.title} - {self.user.full_name}: {self.message[:50]}"
+
+
+class TaskCategory(models.Model):
+    """Categorias para organização das tarefas em Kanban"""
+    
+    name = models.CharField(max_length=100, verbose_name="Nome da Categoria")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    color = models.CharField(
+        max_length=20,
+        default="blue",
+        verbose_name="Cor",
+        help_text="Cor para exibição no Kanban"
+    )
+    icon = models.CharField(
+        max_length=50,
+        default="fas fa-tag",
+        verbose_name="Ícone Font Awesome"
+    )
+    
+    # Permissões por setor
+    sectors = models.ManyToManyField(
+        'users.Sector',
+        blank=True,
+        verbose_name="Setores que podem usar esta categoria"
+    )
+    
+    is_active = models.BooleanField(default=True, verbose_name="Ativa")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Categoria de Tarefa"
+        verbose_name_plural = "Categorias de Tarefas"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
     
     def can_be_viewed_by(self, user):
         """Verifica se o usuário pode visualizar esta atividade"""

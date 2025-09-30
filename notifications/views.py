@@ -1,16 +1,116 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import JsonResponse
+from django.utils import timezone
+from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Q, Count
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from django.utils import timezone
-from django.db.models import Q, Count
-from django.core.paginator import Paginator
+from .models import PushNotification, NotificationCategory, UserNotification, DeviceToken
+from users.models import Sector, User
 import json
 
-from .models import PushNotification, UserNotification, DeviceToken, NotificationCategory
-from users.models import User, Sector
+
+def is_superuser_or_admin(user):
+    """Verifica se o usuário é superuser ou admin"""
+    return user.is_superuser or user.can_view_all_tickets()
+
+
+@login_required
+def api_unread_count(request):
+    """API para retornar contagem de notificações não lidas"""
+    
+    unread_count = UserNotification.objects.filter(
+        user=request.user,
+        is_read=False
+    ).count()
+    
+    return JsonResponse({
+        'unread_count': unread_count,
+        'success': True
+    })
+
+
+@login_required
+def api_recent_notifications(request):
+    """API para retornar notificações recentes do usuário"""
+    
+    recent_notifications = UserNotification.objects.filter(
+        user=request.user
+    ).select_related(
+        'notification', 'notification__category'
+    ).order_by('-created_at')[:10]
+    
+    notifications_data = []
+    for user_notification in recent_notifications:
+        notification = user_notification.notification
+        notifications_data.append({
+            'id': user_notification.id,
+            'title': notification.title,
+            'message': notification.message[:100] + ('...' if len(notification.message) > 100 else ''),
+            'type': {
+                'name': notification.get_notification_type_display(),
+                'icon': notification.category.icon if notification.category else notification.icon,
+                'color': notification.category.color if notification.category else 'blue',
+            },
+            'priority': notification.get_priority_display(),
+            'is_read': user_notification.is_read,
+            'sent_at': user_notification.created_at.isoformat(),
+            'action_url': notification.action_url,
+            'action_text': notification.action_text,
+        })
+    
+    return JsonResponse({
+        'notifications': notifications_data,
+        'success': True
+    })
+
+
+@login_required
+def api_mark_as_read(request, notification_id):
+    """API para marcar notificação como lida"""
+    
+    if request.method == 'POST':
+        try:
+            user_notification = UserNotification.objects.get(
+                id=notification_id,
+                user=request.user
+            )
+            user_notification.mark_as_read()
+            return JsonResponse({'success': True})
+        except UserNotification.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Notificação não encontrada'})
+    
+    return JsonResponse({'success': False, 'error': 'Método não permitido'})
+
+
+@login_required
+def api_mark_all_as_read(request):
+    """API para marcar todas as notificações como lidas"""
+    
+    if request.method == 'POST':
+        try:
+            updated = UserNotification.objects.filter(
+                user=request.user,
+                is_read=False
+            ).update(
+                is_read=True,
+                read_at=timezone.now()
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'updated_count': updated
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Método não permitido'})
 
 
 @login_required

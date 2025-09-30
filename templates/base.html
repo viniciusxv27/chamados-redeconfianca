@@ -522,13 +522,13 @@
                             {% if user.hierarchy == 'SUPERADMIN' %}
                             <!-- Notifications -->
                             <div class="relative">
-                                <button id="notificationToggle" class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors">
+                                <button id="notification-bell" class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors">
                                     <i class="fas fa-bell text-lg"></i>
-                                    <span id="notificationBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
+                                    <span id="notification-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
                                 </button>
                                 
                                 <!-- Notifications Dropdown -->
-                                <div id="notificationDropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
+                                <div id="notification-dropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
                                     <div class="p-4 border-b border-gray-200">
                                         <h3 class="font-semibold text-gray-800">Notificações</h3>
                                     </div>
@@ -732,43 +732,23 @@
             // Initialize on page load
             initializeSidebar();
             
-            // Notification functionality
-            const notificationToggle = document.getElementById('notificationToggle');
-            const notificationDropdown = document.getElementById('notificationDropdown');
-            const notificationBadge = document.getElementById('notificationBadge');
-            const notificationsList = document.getElementById('notificationsList');
+            // Inicializar sistema de notificações
+            if (typeof initializeNotificationSystem === 'function') {
+                initializeNotificationSystem();
+            }
             
-            if (notificationToggle && notificationDropdown) {
-                notificationToggle.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    notificationDropdown.classList.toggle('hidden');
-                    if (!notificationDropdown.classList.contains('hidden')) {
-                        loadNotifications();
-                    }
-                });
+            // Fechar dropdown ao clicar fora
+            document.addEventListener('click', function(e) {
+                const notificationBell = document.getElementById('notification-bell');
+                const notificationDropdown = document.getElementById('notification-dropdown');
                 
-                // Close dropdown when clicking outside
-                document.addEventListener('click', function(e) {
-                    if (!notificationToggle.contains(e.target) && !notificationDropdown.contains(e.target)) {
-                        notificationDropdown.classList.add('hidden');
-                    }
-                });
-            }
-            
-            // Load notifications function
-            function loadNotifications() {
-                fetch('/api/notifications/')
-                    .then(response => response.json())
-                    .then(data => {
-                        displayNotifications(data.notifications);
-                        updateNotificationBadge(data.unread_count);
-                    })
-                    .catch(error => {
-                        console.error('Error loading notifications:', error);
-                        notificationsList.innerHTML = '<div class="p-4 text-gray-500 text-center">Erro ao carregar notificações</div>';
-                    });
-            }
+                if (notificationBell && notificationDropdown && 
+                    !notificationBell.contains(e.target) && 
+                    !notificationDropdown.contains(e.target)) {
+                    notificationDropdown.classList.add('hidden');
+                }
+            });
+
             
             // Display notifications
             function displayNotifications(notifications) {

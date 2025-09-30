@@ -1,0 +1,425 @@
+<!-- Modal de Detalhes da Atividade -->
+<div id="activityDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        <!-- Header do Modal -->
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6">
+            <div class="flex justify-between items-start">
+                <div class="flex-1">
+                    <h2 id="modalTitle" class="text-2xl font-bold mb-2">Detalhes da Atividade</h2>
+                    <div class="flex items-center gap-4">
+                        <span id="modalStatus" class="px-3 py-1 rounded-full text-sm bg-white/20">Status</span>
+                        <span id="modalPriority" class="px-3 py-1 rounded-full text-sm bg-white/20">Prioridade</span>
+                        <span id="modalCategory" class="px-3 py-1 rounded-full text-sm bg-white/20">Categoria</span>
+                    </div>
+                </div>
+                <button onclick="closeActivityDetailModal()" class="text-white hover:text-gray-200 transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Conteúdo do Modal -->
+        <div class="p-6 overflow-y-auto max-h-[70vh]">
+            <!-- Informações Básicas -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Informações da Atividade -->
+                <div class="space-y-4">
+                    <div class="bg-gray-50 rounded-xl p-4">
+                        <h3 class="font-semibold text-gray-800 mb-3 flex items-center">
+                            <i class="fas fa-info-circle mr-2 text-indigo-600"></i>
+                            Informações Gerais
+                        </h3>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Responsável:</span>
+                                <span id="modalResponsible" class="font-medium">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Prazo:</span>
+                                <span id="modalDeadline" class="font-medium">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Progresso:</span>
+                                <div id="modalProgress" class="flex items-center gap-2">
+                                    <div class="w-20 bg-gray-200 rounded-full h-2">
+                                        <div id="modalProgressBar" class="bg-indigo-600 h-2 rounded-full" style="width: 0%"></div>
+                                    </div>
+                                    <span id="modalProgressText" class="text-xs font-medium">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Timestamps -->
+                    <div class="bg-blue-50 rounded-xl p-4">
+                        <h3 class="font-semibold text-blue-800 mb-3 flex items-center">
+                            <i class="fas fa-clock mr-2 text-blue-600"></i>
+                            Histórico
+                        </h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-blue-600">Criado em:</span>
+                                <span id="modalCreatedAt" class="font-medium text-blue-800">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-blue-600">Atualizado em:</span>
+                                <span id="modalUpdatedAt" class="font-medium text-blue-800">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-blue-600">Criado por:</span>
+                                <span id="modalCreatedBy" class="font-medium text-blue-800">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Métricas e Estatísticas -->
+                <div class="space-y-4">
+                    <!-- Subtarefas -->
+                    <div class="bg-green-50 rounded-xl p-4">
+                        <h3 class="font-semibold text-green-800 mb-3 flex items-center">
+                            <i class="fas fa-tasks mr-2 text-green-600"></i>
+                            Subtarefas
+                            <span id="modalSubtaskCount" class="ml-2 bg-green-200 text-green-800 px-2 py-1 rounded-full text-xs">0</span>
+                        </h3>
+                        <div id="modalSubtasks" class="space-y-2">
+                            <!-- Subtarefas serão carregadas aqui -->
+                        </div>
+                        <button onclick="addSubtask()" class="mt-3 text-green-600 hover:text-green-700 text-sm font-medium flex items-center">
+                            <i class="fas fa-plus mr-1"></i>
+                            Adicionar Subtarefa
+                        </button>
+                    </div>
+                    
+                    <!-- Anexos -->
+                    <div class="bg-purple-50 rounded-xl p-4">
+                        <h3 class="font-semibold text-purple-800 mb-3 flex items-center">
+                            <i class="fas fa-paperclip mr-2 text-purple-600"></i>
+                            Anexos
+                        </h3>
+                        <div id="modalAttachments" class="space-y-2">
+                            <p class="text-sm text-purple-600">Nenhum anexo ainda</p>
+                        </div>
+                        <button class="mt-3 text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center">
+                            <i class="fas fa-upload mr-1"></i>
+                            Adicionar Anexo
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Descrição -->
+            <div class="mb-8">
+                <h3 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <i class="fas fa-align-left mr-2 text-indigo-600"></i>
+                    Descrição
+                </h3>
+                <div id="modalDescription" class="bg-gray-50 rounded-xl p-4 prose max-w-none text-sm">
+                    <!-- Descrição será carregada aqui -->
+                </div>
+            </div>
+            
+            <!-- Comentários/Atividade -->
+            <div class="mb-6">
+                <h3 class="font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fas fa-comments mr-2 text-indigo-600"></i>
+                    Comentários e Atividade
+                </h3>
+                
+                <!-- Form para novo comentário -->
+                <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                    <textarea id="newComment" placeholder="Adicione um comentário..." 
+                              class="w-full p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              rows="3"></textarea>
+                    <div class="flex justify-end mt-3">
+                        <button onclick="addComment()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Enviar
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Lista de comentários -->
+                <div id="modalComments" class="space-y-3">
+                    <!-- Comentários serão carregados aqui -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer do Modal -->
+        <div class="bg-gray-50 px-6 py-4 flex justify-between items-center border-t border-gray-200">
+            <div class="flex space-x-3">
+                <button onclick="duplicateActivity()" class="text-green-600 hover:text-green-700 text-sm font-medium flex items-center">
+                    <i class="fas fa-copy mr-1"></i>
+                    Duplicar
+                </button>
+                <button onclick="archiveActivity()" class="text-red-600 hover:text-red-700 text-sm font-medium flex items-center">
+                    <i class="fas fa-archive mr-1"></i>
+                    Arquivar
+                </button>
+            </div>
+            <button onclick="closeActivityDetailModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                Fechar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Variável global para armazenar o ID da atividade atual
+window.currentActivityId = null;
+
+function loadSubtasks(subtasks) {
+    const container = document.getElementById('modalSubtasks');
+    const countElement = document.getElementById('modalSubtaskCount');
+    
+    countElement.textContent = subtasks.length;
+    
+    if (subtasks.length === 0) {
+        container.innerHTML = '<p class="text-sm text-green-600">Nenhuma subtarefa ainda</p>';
+        return;
+    }
+    
+    container.innerHTML = subtasks.map(subtask => `
+        <div class="flex items-center gap-3 p-2 bg-white rounded-lg border border-green-200">
+            <input type="checkbox" ${subtask.completed ? 'checked' : ''} 
+                   onchange="toggleSubtask(${subtask.id})"
+                   class="text-green-600 focus:ring-green-500">
+            <span class="flex-1 text-sm ${subtask.completed ? 'line-through text-gray-500' : 'text-gray-700'}">
+                ${subtask.title}
+            </span>
+            <button onclick="deleteSubtask(${subtask.id})" class="text-red-500 hover:text-red-700">
+                <i class="fas fa-trash-alt text-xs"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function loadComments(comments) {
+    const container = document.getElementById('modalComments');
+    
+    if (comments.length === 0) {
+        container.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Nenhum comentário ainda</p>';
+        return;
+    }
+    
+    container.innerHTML = comments.map(comment => `
+        <div class="bg-white rounded-lg p-4 border border-gray-200">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                    <i class="fas fa-user text-indigo-600 text-sm"></i>
+                </div>
+                <div class="flex-1">
+                    <span class="font-medium text-gray-800">${comment.author_name}</span>
+                    <span class="text-sm text-gray-500 ml-2">${comment.created_at}</span>
+                </div>
+            </div>
+            <p class="text-sm text-gray-700 leading-relaxed">${comment.text}</p>
+        </div>
+    `).join('');
+}
+
+function openActivityModal(activityId) {
+    window.currentActivityId = activityId;
+    
+    // Fazer requisição para buscar dados da atividade
+    fetch(`/projects/activity/${activityId}/detail/`)
+        .then(response => response.json())
+        .then(data => {
+            // Preencher dados do modal
+            document.getElementById('modalTitle').textContent = data.title;
+            document.getElementById('modalStatus').textContent = data.status_display;
+            document.getElementById('modalPriority').textContent = data.priority_display;
+            document.getElementById('modalCategory').textContent = data.category_name || 'Sem categoria';
+            document.getElementById('modalResponsible').textContent = data.responsible_name || 'Não atribuído';
+            document.getElementById('modalDeadline').textContent = data.deadline || 'Sem prazo';
+            document.getElementById('modalProgressText').textContent = `${data.progress}%`;
+            document.getElementById('modalProgressBar').style.width = `${data.progress}%`;
+            document.getElementById('modalCreatedAt').textContent = data.created_at;
+            document.getElementById('modalUpdatedAt').textContent = data.updated_at;
+            document.getElementById('modalCreatedBy').textContent = data.created_by;
+            document.getElementById('modalDescription').innerHTML = data.description || 'Sem descrição';
+            
+            // Carregar subtarefas
+            loadSubtasks(data.subtasks);
+            
+            // Carregar comentários
+            loadComments(data.comments);
+            
+            // Mostrar modal
+            document.getElementById('activityDetailModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        })
+        .catch(error => {
+            console.error('Erro ao carregar atividade:', error);
+            alert('Erro ao carregar detalhes da atividade');
+        });
+}
+
+function closeActivityDetailModal() {
+    document.getElementById('activityDetailModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    window.currentActivityId = null;
+}
+
+function addComment() {
+    const textarea = document.getElementById('newComment');
+    const text = textarea.value.trim();
+    
+    if (!text) {
+        alert('Por favor, digite um comentário');
+        return;
+    }
+    
+    fetch(`/projects/activity/${window.currentActivityId}/comment/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        },
+        body: JSON.stringify({ text: text })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            textarea.value = '';
+            // Recarregar modal
+            if (window.currentActivityId) {
+                openActivityModal(window.currentActivityId);
+            }
+        } else {
+            alert('Erro ao adicionar comentário');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao adicionar comentário');
+    });
+}
+
+function addSubtask() {
+    const title = prompt('Título da subtarefa:');
+    if (!title) return;
+    
+    fetch(`/projects/activity/${window.currentActivityId}/subtask/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        },
+        body: JSON.stringify({ title: title })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Recarregar modal
+            if (window.currentActivityId) {
+                openActivityModal(window.currentActivityId);
+            }
+        } else {
+            alert('Erro ao adicionar subtarefa');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao adicionar subtarefa');
+    });
+}
+
+function toggleSubtask(subtaskId) {
+    fetch(`/projects/subtask/${subtaskId}/toggle/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            alert('Erro ao atualizar subtarefa');
+            // Recarregar para reverter mudança
+            if (window.currentActivityId) {
+                openActivityModal(window.currentActivityId);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atualizar subtarefa');
+    });
+}
+
+function editActivity() {
+    if (confirm('Deseja duplicar esta atividade?')) {
+        window.location.href = `/projects/activity/${window.currentActivityId}/edit/`;
+    }
+}
+
+function duplicateActivity() {
+    if (confirm('Deseja duplicar esta atividade?')) {
+        fetch(`/projects/activity/${window.currentActivityId}/duplicate/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Atividade duplicada com sucesso!');
+                location.reload();
+            } else {
+                alert('Erro ao duplicar atividade');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao duplicar atividade');
+        });
+    }
+}
+
+function archiveActivity() {
+    if (confirm('Deseja arquivar esta atividade? Ela não aparecerá mais na lista principal.')) {
+        fetch(`/projects/activity/${window.currentActivityId}/archive/`, {
+            method: 'POST',
+            headers: {
+                'X-CSrfToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Atividade arquivada com sucesso!');
+                closeActivityDetailModal();
+                location.reload();
+            } else {
+                alert('Erro ao arquivar atividade');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao arquivar atividade');
+        });
+    }
+}
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !document.getElementById('activityDetailModal').classList.contains('hidden')) {
+        closeActivityDetailModal();
+    }
+});
+
+// Fechar modal clicando fora
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('activityDetailModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeActivityDetailModal();
+            }
+        });
+    }
+});
+</script>

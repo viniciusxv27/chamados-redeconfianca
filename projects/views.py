@@ -13,7 +13,27 @@ from .models import (
     Project, Activity, ProjectAttachment, ActivityComment, 
     ProjectSectorAccess
 )
-from users.models import Sector
+from users.models import Sector, User
+
+# Categorias de atividades
+ACTIVITY_CATEGORIES = [
+    ('desenvolvimento', 'Desenvolvimento'),
+    ('design', 'Design'),
+    ('marketing', 'Marketing'),
+    ('vendas', 'Vendas'),
+    ('suporte', 'Suporte'),
+    ('administracao', 'Administração'),
+    ('outros', 'Outros'),
+]
+
+
+def get_user_sectors(user):
+    """Retorna todos os setores do usuário"""
+    sectors = []
+    if user.sector:
+        sectors.append(user.sector)
+    sectors.extend(user.sectors.all())
+    return sectors
 
 
 def user_can_access_projects(user):
@@ -135,6 +155,30 @@ def project_detail(request, project_id):
             project.responsible_user == request.user):
         return HttpResponseForbidden("Você não tem permissão para ver este projeto.")
     
+    # Verificar se deve exibir em modo Kanban
+    view_mode = request.GET.get('view', 'hierarchy')
+    
+    if view_mode == 'kanban':
+        # Organizar atividades por status para visão Kanban
+        kanban_activities = {
+            'NAO_INICIADA': project.activities.filter(status='NAO_INICIADA').select_related('responsible_user'),
+            'EM_ANDAMENTO': project.activities.filter(status='EM_ANDAMENTO').select_related('responsible_user'),
+            'CONCLUIDA': project.activities.filter(status='CONCLUIDA').select_related('responsible_user'),
+            'CANCELADA': project.activities.filter(status='CANCELADA').select_related('responsible_user'),
+        }
+        
+        # Organizar também por categoria se tiver
+        categories = project.activities.exclude(category='').values_list('category', flat=True).distinct()
+        activities_by_category = {}
+        for category in categories:
+            if category:
+                activities_by_category[category] = {
+                    'NAO_INICIADA': project.activities.filter(category=category, status='NAO_INICIADA').select_related('responsible_user'),
+                    'EM_ANDAMENTO': project.activities.filter(category=category, status='EM_ANDAMENTO').select_related('responsible_user'),
+                    'CONCLUIDA': project.activities.filter(category=category, status='CONCLUIDA').select_related('responsible_user'),
+                    'CANCELADA': project.activities.filter(category=category, status='CANCELADA').select_related('responsible_user'),
+                }
+    
     # Atividades organizadas hierarquicamente - apenas as atividades raiz
     root_activities = project.activities.filter(
         parent_activity__isnull=True
@@ -183,12 +227,21 @@ def project_detail(request, project_id):
         'in_progress_activities': in_progress_activities,
         'remaining_activities': remaining_activities,
         'progress_percentage': round(progress_percentage, 1),
+        'view_mode': view_mode,
         'can_edit': (
             user_can_manage_all_projects(request.user) or
             project.created_by == request.user or
             project.responsible_user == request.user
         ),
     }
+    
+    # Adicionar dados do Kanban se for o modo selecionado
+    if view_mode == 'kanban':
+        context.update({
+            'kanban_activities': kanban_activities,
+            'activities_by_category': activities_by_category if 'activities_by_category' in locals() else {},
+            'categories': list(categories) if 'categories' in locals() else [],
+        })
     
     return render(request, 'projects/project_detail.html', context)
 
@@ -491,3 +544,352 @@ def project_delete(request, project_id):
     }
     
     return render(request, 'projects/project_delete.html', context)
+
+
+@login_required
+def activity_detail_api(request, activity_id):
+    """API para detalhes da atividade (para modal)"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    try:
+        activity = get_object_or_404(Activity, id=activity_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if activity.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Buscar comentários
+        comments = []
+        for comment in activity.comments.select_related('user').order_by('created_at'):
+            comments.append({
+                'id': comment.id,
+                'text': comment.text,
+                'author_name': comment.user.get_full_name() or comment.user.username,
+                'created_at': comment.created_at.strftime('%d/%m/%Y às %H:%M')
+            })
+        
+        # Buscar subtarefas (simulado - você pode implementar um modelo real)
+        subtasks = []
+        for sub_activity in activity.sub_activities.all():
+            subtasks.append({
+                'id': sub_activity.id,
+                'title': sub_activity.name,
+                'completed': sub_activity.status == 'CONCLUIDA'
+            })
+        
+        data = {
+            'id': activity.id,
+            'title': activity.name,
+            'description': activity.description,
+            'status': activity.status,
+            'status_display': activity.get_status_display(),
+            'priority': activity.priority,
+            'priority_display': activity.get_priority_display(),
+            'category_name': activity.category if activity.category else None,
+            'responsible_name': activity.responsible_user.get_full_name() if activity.responsible_user else None,
+            'deadline': activity.deadline.strftime('%d/%m/%Y') if activity.deadline else None,
+            'progress': 100 if activity.status == 'CONCLUIDA' else (50 if activity.status == 'EM_ANDAMENTO' else 0),
+            'created_at': activity.created_at.strftime('%d/%m/%Y às %H:%M'),
+            'updated_at': activity.updated_at.strftime('%d/%m/%Y às %H:%M'),
+            'created_by': activity.created_by.get_full_name() or activity.created_by.username,
+            'comments': comments,
+            'subtasks': subtasks
+        }
+        
+        return JsonResponse(data)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required 
+def activity_add_comment(request, activity_id):
+    """Adicionar comentário à atividade"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    try:
+        activity = get_object_or_404(Activity, id=activity_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if activity.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        data = json.loads(request.body)
+        text = data.get('text', '').strip()
+        
+        if not text:
+            return JsonResponse({'error': 'Comentário não pode estar vazio'}, status=400)
+        
+        comment = ActivityComment.objects.create(
+            activity=activity,
+            user=request.user,
+            text=text
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Comentário adicionado com sucesso',
+            'comment': {
+                'id': comment.id,
+                'text': comment.text,
+                'author_name': comment.user.get_full_name() or comment.user.username,
+                'created_at': comment.created_at.strftime('%d/%m/%Y às %H:%M')
+            }
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def activity_add_subtask(request, activity_id):
+    """Adicionar subtarefa à atividade"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    try:
+        activity = get_object_or_404(Activity, id=activity_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if activity.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        data = json.loads(request.body)
+        title = data.get('title', '').strip()
+        
+        if not title:
+            return JsonResponse({'error': 'Título da subtarefa não pode estar vazio'}, status=400)
+        
+        # Criar uma nova atividade como sub-atividade
+        subtask = Activity.objects.create(
+            project=activity.project,
+            name=title,
+            description=f'Subtarefa de: {activity.name}',
+            parent_activity=activity,
+            responsible_user=activity.responsible_user,
+            created_by=request.user,
+            priority='MEDIA',
+            status='NAO_INICIADA'
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Subtarefa criada com sucesso',
+            'subtask': {
+                'id': subtask.id,
+                'title': subtask.name,
+                'completed': False
+            }
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def subtask_toggle(request, subtask_id):
+    """Alternar status de completude da subtarefa"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    try:
+        subtask = get_object_or_404(Activity, id=subtask_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if subtask.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Alternar status
+        if subtask.status == 'CONCLUIDA':
+            subtask.status = 'EM_ANDAMENTO'
+        else:
+            subtask.status = 'CONCLUIDA'
+        
+        subtask.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Status da subtarefa atualizado',
+            'completed': subtask.status == 'CONCLUIDA'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def activity_duplicate(request, activity_id):
+    """Duplicar atividade"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    try:
+        activity = get_object_or_404(Activity, id=activity_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if activity.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Duplicar atividade
+        new_activity = Activity.objects.create(
+            project=activity.project,
+            name=f"{activity.name} (Cópia)",
+            description=activity.description,
+            priority=activity.priority,
+            responsible_user=activity.responsible_user,
+            deadline=activity.deadline,
+            category=activity.category,
+            created_by=request.user,
+            status='NAO_INICIADA'
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Atividade duplicada com sucesso',
+            'new_activity_id': new_activity.id
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def activity_archive(request, activity_id):
+    """Arquivar atividade"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    try:
+        activity = get_object_or_404(Activity, id=activity_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if activity.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Arquivar atividade (mudar status para cancelled ou criar campo archived)
+        activity.status = 'CANCELADA'
+        activity.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Atividade arquivada com sucesso'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def activity_edit(request, activity_id):
+    """Editar uma atividade"""
+    activity = get_object_or_404(Activity, id=activity_id)
+    
+    # Verificar permissão
+    if not user_can_access_projects(request.user):
+        return HttpResponseForbidden("Você não tem permissão para acessar esta área.")
+    
+    if not (user_can_manage_all_projects(request.user) or 
+            activity.project.created_by == request.user or
+            activity.project.responsible_user == request.user or
+            activity.responsible_user == request.user):
+        messages.error(request, 'Você não tem permissão para editar esta atividade.')
+        return redirect('projects:project_detail', project_id=activity.project.id)
+    
+    if request.method == 'POST':
+        try:
+            # Atualizar dados da atividade
+            activity.name = request.POST.get('name', '').strip()
+            activity.description = request.POST.get('description', '').strip()
+            activity.status = request.POST.get('status', activity.status)
+            activity.priority = request.POST.get('priority', activity.priority)
+            activity.category = request.POST.get('category', '')
+            
+            # Atualizar deadline se fornecido
+            deadline = request.POST.get('deadline')
+            if deadline:
+                try:
+                    from datetime import datetime
+                    activity.deadline = datetime.strptime(deadline, '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+            
+            # Atualizar responsável se fornecido e permitido
+            if user_can_manage_all_projects(request.user):
+                responsible_user_id = request.POST.get('responsible_user')
+                if responsible_user_id:
+                    try:
+                        responsible_user = User.objects.get(id=responsible_user_id)
+                        activity.responsible_user = responsible_user
+                    except User.DoesNotExist:
+                        pass
+            
+            activity.save()
+            
+            messages.success(request, 'Atividade atualizada com sucesso!')
+            
+            # Se for AJAX, retornar JSON
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Atividade atualizada com sucesso!'
+                })
+            
+            return redirect('projects:project_detail', project_id=activity.project.id)
+            
+        except Exception as e:
+            error_msg = f'Erro ao atualizar atividade: {str(e)}'
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'message': error_msg
+                })
+            
+            messages.error(request, error_msg)
+    
+    # Buscar usuários disponíveis para atribuição
+    if user_can_manage_all_projects(request.user):
+        available_users = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    else:
+        # Apenas usuários do mesmo setor
+        user_sectors = get_user_sectors(request.user)
+        available_users = User.objects.filter(
+            Q(sector__in=user_sectors) | Q(sectors__in=user_sectors)
+        ).distinct().order_by('first_name', 'username')
+    
+    context = {
+        'activity': activity,
+        'project': activity.project,
+        'available_users': available_users,
+        'can_manage': user_can_manage_all_projects(request.user),
+        'categories': ACTIVITY_CATEGORIES,
+    }
+    
+    return render(request, 'projects/activity_edit.html', context)

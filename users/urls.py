@@ -79,4 +79,7 @@ urlpatterns = [
     path('manage/tasks/', views.manage_tasks_view, name='manage_tasks'),
     path('manage/tasks/create/', views.create_task_view, name='create_task'),
     path('manage/tasks/<int:task_id>/delete/', views.delete_task, name='delete_task'),
+    path('tasks/<int:task_id>/detail/', views.task_detail_view, name='task_detail'),
+    path('tasks/<int:task_id>/messages/', views.task_messages_api, name='task_messages_api'),
+    path('tasks/<int:task_id>/send-message/', views.send_task_message, name='send_task_message'),
 ]

@@ -339,6 +339,14 @@ class Activity(models.Model):
         verbose_name="Responsável"
     )
     
+    # Categoria para organização no Kanban
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Categoria",
+        help_text="Categoria para organização no Kanban"
+    )
+    
     # Ordem de exibição
     order = models.PositiveIntegerField(
         default=0,

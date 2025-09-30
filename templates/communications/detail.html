@@ -73,7 +73,7 @@
                 {% endif %}
                 
                 <div class="prose max-w-none">
-                    {{ communication.message|linebreaks }}
+                    {{ communication.message|safe }}
                 </div>
                 
                 <!-- Reactions Section -->
