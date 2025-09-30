@@ -3419,6 +3419,34 @@ def create_task_view(request):
 
 
 @login_required
+def checklist_template_detail(request, template_id):
+    """Ver detalhes de um template de checklist"""
+    from core.models import ChecklistTemplate
+    
+    template = get_object_or_404(ChecklistTemplate, id=template_id)
+    
+    # Verificar se o usuário pode ver este template
+    is_supervisor = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff
+    
+    if not (is_supervisor or template.created_by == request.user):
+        messages.error(request, 'Você não tem permissão para ver este template.')
+        return redirect('manage_checklists')
+    
+    # Buscar todos os checklists criados a partir deste template
+    from core.models import DailyChecklist
+    related_checklists = DailyChecklist.objects.filter(template=template).select_related('user').order_by('-date')[:10]
+    
+    context = {
+        'template': template,
+        'related_checklists': related_checklists,
+        'is_supervisor': is_supervisor,
+        'can_edit': is_supervisor or template.created_by == request.user,
+    }
+    
+    return render(request, 'admin_panel/checklist_template_detail.html', context)
+
+
+@login_required
 @require_POST
 def delete_checklist_template(request, template_id):
     """Deletar template de checklist"""
