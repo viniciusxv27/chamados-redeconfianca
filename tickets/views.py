@@ -75,13 +75,28 @@ def tickets_list_view(request):
     elif status_filter in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']:
         tickets = tickets.filter(status=status_filter)
     
-    # Filtro por categoria
+    # Filtro por categoria - SUPERADMINs podem filtrar por qualquer categoria
     if categoria_filter:
-        tickets = tickets.filter(category_id=categoria_filter)
+        if user.hierarchy == 'SUPERADMIN' or user.can_view_all_tickets():
+            # SUPERADMIN pode filtrar por qualquer categoria
+            tickets = tickets.filter(category_id=categoria_filter)
+        else:
+            # Outros usuários só podem filtrar pelas categorias que têm acesso
+            tickets = tickets.filter(category_id=categoria_filter)
     
-    # Filtro por setor
+    # Filtro por setor - SUPERADMINs podem filtrar por qualquer setor
     if setor_filter:
-        tickets = tickets.filter(sector_id=setor_filter)
+        if user.hierarchy == 'SUPERADMIN' or user.can_view_all_tickets():
+            # SUPERADMIN pode filtrar por qualquer setor
+            tickets = tickets.filter(sector_id=setor_filter)
+        else:
+            # Outros usuários só podem filtrar pelos setores que têm acesso
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            sector_ids = [s.id for s in user_sectors] if user_sectors else []
+            if int(setor_filter) in sector_ids:
+                tickets = tickets.filter(sector_id=setor_filter)
     
     # Filtro por prioridade
     if prioridade_filter:

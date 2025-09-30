@@ -59,9 +59,11 @@ def project_list(request):
         return HttpResponseForbidden("Você não tem permissão para acessar esta área.")
     
     # Filtros baseados nas permissões
-    if user_can_manage_all_projects(request.user):
+    # Apenas SUPERADMINs podem ver todos os projetos
+    if request.user.hierarchy == 'SUPERADMIN':
         projects = Project.objects.all()
     else:
+        # Outros usuários só veem projetos do seu setor
         projects = Project.objects.filter(
             Q(sector=request.user.sector) | 
             Q(created_by=request.user) |

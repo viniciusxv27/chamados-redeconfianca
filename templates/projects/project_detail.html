@@ -231,7 +231,17 @@
                     </div>
                     
                     {% if project.description %}
-                    <p class="text-lg opacity-95 mb-6 leading-relaxed">{{ project.description }}</p>
+                    <p class="text-lg opacity-95 mb-4 leading-relaxed">{{ project.description }}</p>
+                    {% endif %}
+                    
+                    {% if project.scope %}
+                    <div class="mb-6 p-4 bg-white bg-opacity-25 rounded-lg border border-white border-opacity-30">
+                        <h4 class="font-semibold mb-2 flex items-center">
+                            <i class="fas fa-list-ul mr-2"></i>
+                            Escopo do Projeto
+                        </h4>
+                        <p class="opacity-95 leading-relaxed">{{ project.scope }}</p>
+                    </div>
                     {% endif %}
                     
                     <div class="flex flex-wrap gap-6 text-sm opacity-90">

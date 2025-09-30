@@ -1,0 +1,489 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configurações de Push{% endblock %}
+
+{% block extra_css %}
+<style>
+    .setting-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .setting-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+    }
+    
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 24px;
+    }
+    
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+        background-color: #10b981;
+    }
+    
+    input:checked + .slider:before {
+        transform: translateX(26px);
+    }
+    
+    .device-item {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .device-item:hover {
+        transform: scale(1.02);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">
+                <i class="fas fa-mobile-alt text-blue-500 mr-2"></i>
+                Configurações Push
+            </h1>
+            <p class="text-gray-600 mt-1">Configure suas preferências de notificações push</p>
+        </div>
+        
+        <div class="flex gap-3">
+            <button onclick="testPushNotification()" 
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-paper-plane mr-2"></i>Testar Push
+            </button>
+            
+            <a href="{% url 'notifications:dashboard' %}" 
+               class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Status do Push -->
+    <div class="bg-white rounded-lg shadow-lg mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">
+                <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                Status das Notificações Push
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            <div id="pushStatus" class="flex items-center justify-between p-4 rounded-lg border-2">
+                <div class="flex items-center">
+                    <div id="statusIcon" class="w-12 h-12 rounded-full flex items-center justify-center mr-4">
+                        <i class="fas fa-spinner fa-spin text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 id="statusTitle" class="text-lg font-semibold">Verificando...</h3>
+                        <p id="statusDescription" class="text-gray-600">Verificando suporte a notificações push</p>
+                    </div>
+                </div>
+                
+                <button id="enableButton" onclick="enablePushNotifications()" 
+                        class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors hidden">
+                    <i class="fas fa-bell mr-2"></i>Ativar Push
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configurações -->
+    <div class="bg-white rounded-lg shadow-lg mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">
+                <i class="fas fa-cogs text-gray-500 mr-2"></i>
+                Preferências de Notificação
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            <form id="preferencesForm">
+                {% csrf_token %}
+                
+                <div class="space-y-6">
+                    <!-- Chamados -->
+                    <div class="setting-card bg-white border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mr-4">
+                                    <i class="fas fa-ticket-alt text-purple-600"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold">Chamados</h3>
+                                    <p class="text-gray-600">Novos chamados e atualizações</p>
+                                </div>
+                            </div>
+                            
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="tickets_enabled" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Comunicados -->
+                    <div class="setting-card bg-white border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4">
+                                    <i class="fas fa-bullhorn text-green-600"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold">Comunicados</h3>
+                                    <p class="text-gray-600">Comunicados importantes</p>
+                                </div>
+                            </div>
+                            
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="communications_enabled" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Sistema -->
+                    <div class="setting-card bg-white border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+                                    <i class="fas fa-cog text-blue-600"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold">Sistema</h3>
+                                    <p class="text-gray-600">Atualizações do sistema</p>
+                                </div>
+                            </div>
+                            
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="system_enabled" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Personalizadas -->
+                    <div class="setting-card bg-white border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mr-4">
+                                    <i class="fas fa-star text-orange-600"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold">Personalizadas</h3>
+                                    <p class="text-gray-600">Notificações customizadas</p>
+                                </div>
+                            </div>
+                            
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="custom_enabled" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <button type="submit" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>Salvar Preferências
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dispositivos Registrados -->
+    <div class="bg-white rounded-lg shadow-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">
+                <i class="fas fa-devices text-gray-500 mr-2"></i>
+                Dispositivos Registrados
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            <div id="devicesList" class="space-y-4">
+                <!-- Dispositivos serão carregados via JavaScript -->
+            </div>
+            
+            <div id="noDevices" class="text-center py-8 hidden">
+                <i class="fas fa-mobile-alt text-gray-300 text-6xl mb-4"></i>
+                <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhum dispositivo registrado</h3>
+                <p class="text-gray-400">Ative as notificações push para registrar este dispositivo.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Verificar suporte a notificações
+document.addEventListener('DOMContentLoaded', function() {
+    checkPushSupport();
+    loadDevices();
+    loadPreferences();
+});
+
+function checkPushSupport() {
+    const statusDiv = document.getElementById('pushStatus');
+    const statusIcon = document.getElementById('statusIcon');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusDescription = document.getElementById('statusDescription');
+    const enableButton = document.getElementById('enableButton');
+    
+    if (!('serviceWorker' in navigator)) {
+        updateStatus('error', 'Não Suportado', 'Seu navegador não suporta notificações push');
+        return;
+    }
+    
+    if (!('PushManager' in window)) {
+        updateStatus('error', 'Não Suportado', 'Notificações push não são suportadas');
+        return;
+    }
+    
+    // Verificar permissão atual
+    if (Notification.permission === 'granted') {
+        updateStatus('success', 'Ativado', 'Notificações push estão ativadas');
+    } else if (Notification.permission === 'denied') {
+        updateStatus('error', 'Bloqueado', 'Notificações foram bloqueadas pelo usuário');
+    } else {
+        updateStatus('warning', 'Não Ativado', 'Clique para ativar as notificações push');
+        enableButton.classList.remove('hidden');
+    }
+    
+    function updateStatus(type, title, description) {
+        const colors = {
+            success: { bg: 'border-green-200 bg-green-50', icon: 'bg-green-100 text-green-600', iconClass: 'fas fa-check-circle' },
+            warning: { bg: 'border-yellow-200 bg-yellow-50', icon: 'bg-yellow-100 text-yellow-600', iconClass: 'fas fa-exclamation-triangle' },
+            error: { bg: 'border-red-200 bg-red-50', icon: 'bg-red-100 text-red-600', iconClass: 'fas fa-times-circle' }
+        };
+        
+        const color = colors[type];
+        statusDiv.className = `flex items-center justify-between p-4 rounded-lg border-2 ${color.bg}`;
+        statusIcon.className = `w-12 h-12 rounded-full flex items-center justify-center mr-4 ${color.icon}`;
+        statusIcon.innerHTML = `<i class="${color.iconClass} text-2xl"></i>`;
+        statusTitle.textContent = title;
+        statusDescription.textContent = description;
+    }
+}
+
+async function enablePushNotifications() {
+    try {
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+            // Registrar service worker
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            
+            // Obter subscription
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array('{{ vapid_public_key }}')
+            });
+            
+            // Enviar subscription para o servidor
+            await fetch('/notifications/register-device/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    subscription: subscription,
+                    device_info: {
+                        userAgent: navigator.userAgent,
+                        platform: navigator.platform
+                    }
+                })
+            });
+            
+            location.reload();
+        } else {
+            alert('Permissão negada para notificações push');
+        }
+    } catch (error) {
+        console.error('Erro ao ativar push notifications:', error);
+        alert('Erro ao ativar notificações push');
+    }
+}
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+async function testPushNotification() {
+    try {
+        const response = await fetch('/notifications/test-push/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Notificação de teste enviada!');
+        } else {
+            alert('Erro ao enviar notificação de teste: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao enviar notificação de teste');
+    }
+}
+
+async function loadDevices() {
+    try {
+        const response = await fetch('/notifications/devices/');
+        const data = await response.json();
+        
+        const devicesList = document.getElementById('devicesList');
+        const noDevices = document.getElementById('noDevices');
+        
+        if (data.devices && data.devices.length > 0) {
+            devicesList.innerHTML = data.devices.map(device => `
+                <div class="device-item text-white rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-4">
+                                <i class="fas fa-${device.is_mobile ? 'mobile-alt' : 'desktop'} text-2xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold">${device.device_name || 'Dispositivo'}</h3>
+                                <p class="opacity-90">Registrado em ${device.created_at}</p>
+                            </div>
+                        </div>
+                        
+                        <button onclick="removeDevice('${device.id}')" 
+                                class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1 rounded-lg transition-colors">
+                            <i class="fas fa-trash mr-1"></i>Remover
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            noDevices.classList.add('hidden');
+        } else {
+            devicesList.innerHTML = '';
+            noDevices.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Erro ao carregar dispositivos:', error);
+    }
+}
+
+async function removeDevice(deviceId) {
+    if (confirm('Remover este dispositivo?')) {
+        try {
+            const response = await fetch(`/notifications/remove-device/${deviceId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                loadDevices();
+            } else {
+                alert('Erro ao remover dispositivo');
+            }
+        } catch (error) {
+            console.error('Erro:', error);
+            alert('Erro ao remover dispositivo');
+        }
+    }
+}
+
+async function loadPreferences() {
+    // Carregar preferências salvas (implementar se necessário)
+}
+
+// Submissão do formulário de preferências
+document.getElementById('preferencesForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const preferences = {};
+    
+    for (let [key, value] of formData.entries()) {
+        if (key !== 'csrfmiddlewaretoken') {
+            preferences[key] = value === 'on';
+        }
+    }
+    
+    try {
+        const response = await fetch('/notifications/preferences/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(preferences)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Preferências salvas com sucesso!');
+        } else {
+            alert('Erro ao salvar preferências');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao salvar preferências');
+    }
+});
+</script>
+{% endblock %}

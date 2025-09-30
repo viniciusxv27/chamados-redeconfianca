@@ -119,6 +119,20 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% if user.hierarchy == 'SUPERADMIN' %}
+                        <li>
+                            <a href="{% url 'notifications:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Notificações">
+                                <i class="fas fa-bell text-primary flex-shrink-0"></i>
+                                <span class="text-sm">Notificações</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                {% if unread_notifications_count > 0 %}
+                                <span class="notification-count-badge bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-auto">
+                                    {{ unread_notifications_count }}
+                                </span>
+                                {% endif %}
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
                                 <i class="fas fa-folder text-primary flex-shrink-0"></i>
@@ -134,15 +148,17 @@
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'trainings_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Treinamentos">
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('trainings-menu')" title="Treinamentos">
                                 <i class="fas fa-play-circle text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Treinamentos</span>
+                                <span class="text-sm flex-1">Treinamentos</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="trainings-menu-icon"></i>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            </div>
                         </li>
                         
                         <!-- Sub Menu Treinamentos -->
-                        <li class="ml-4">
+                        <li class="ml-4 submenu-content hidden" id="trainings-menu">
                             <ul class="space-y-1">
                                 <li>
                                     <a href="{% url 'trainings_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Ver Treinamentos">
@@ -172,15 +188,17 @@
 
                         <!-- Menu Checklists -->
                         <li>
-                            <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists">
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('checklists-menu')" title="Checklists">
                                 <i class="fas fa-clipboard-check text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Checklists</span>
+                                <span class="text-sm flex-1">Checklists</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="checklists-menu-icon"></i>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            </div>
                         </li>
                         
                         <!-- Sub Menu Checklists -->
-                        <li class="ml-4">
+                        <li class="ml-4 submenu-content hidden" id="checklists-menu">
                             <ul class="space-y-1">
                                 <li>
                                     <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Checklists">
@@ -210,15 +228,17 @@
 
                         <!-- Menu Tarefas -->
                         <li>
-                            <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Tarefas">
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('tasks-menu')" title="Tarefas">
                                 <i class="fas fa-tasks text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Tarefas</span>
+                                <span class="text-sm flex-1">Tarefas</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="tasks-menu-icon"></i>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            </div>
                         </li>
                         
                         <!-- Sub Menu Tarefas -->
-                        <li class="ml-4">
+                        <li class="ml-4 submenu-content hidden" id="tasks-menu">
                             <ul class="space-y-1">
                                 <li>
                                     <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
@@ -247,15 +267,17 @@
                         </li>
 
                         <li>
-                            <a href="{% url 'tickets_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Chamados">
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('tickets-menu')" title="Chamados">
                                 <i class="fas fa-ticket-alt text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Chamados</span>
+                                <span class="text-sm flex-1">Chamados</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="tickets-menu-icon"></i>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            </div>
                         </li>
                         
                         <!-- Sub Menu Chamados -->
-                        <li class="ml-4">
+                        <li class="ml-4 submenu-content hidden" id="tickets-menu">
                             <ul class="space-y-1">
                                 <li>
                                     <a href="{% url 'ticket_create' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo Chamado">
@@ -278,15 +300,17 @@
                         {% load projects_tags %}
                         {% if user|can_access_projects %}
                         <li>
-                            <a href="{% url 'projects:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Projetos">
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('projects-menu')" title="Projetos">
                                 <i class="fas fa-project-diagram text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Projetos</span>
+                                <span class="text-sm flex-1">Projetos</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="projects-menu-icon"></i>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            </div>
                         </li>
                         
                         <!-- Sub Menu Projetos -->
-                        <li class="ml-4">
+                        <li class="ml-4 submenu-content hidden" id="projects-menu">
                             <ul class="space-y-1">
                                 <li>
                                     <a href="{% url 'projects:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Dashboard">
@@ -318,14 +342,17 @@
                         <!-- Menu GESTÃO - Para usuários autorizados -->
                         {% if user.can_manage_users or user.groups.all %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
-                            <div class="px-2 py-1">
-                                <span class="text-xs text-gray-400 font-medium">GESTÃO</span>
+                            <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer" 
+                                 onclick="toggleSubmenu('management-menu')">
+                                <i class="fas fa-cogs text-gray-400 flex-shrink-0"></i>
+                                <span class="text-xs text-gray-400 font-medium flex-1">GESTÃO</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="management-menu-icon"></i>
                             </div>
                         </li>
                         
                         <!-- Sub Menu Gestão -->
-                        <li>
-                            <ul class="space-y-1">
+                        <li class="submenu-content hidden" id="management-menu">
+                            <ul class="space-y-1 ml-4">
                                 <!-- Gestão de Fornecedores, Compras, Projetos -->
                                 {% for group in user.groups.all %}
                                     {% if group.name == "Gestores de Fornecedores" %}
@@ -492,6 +519,7 @@
                         </div>
                         
                         <div class="flex items-center space-x-2 lg:space-x-4">
+                            {% if user.hierarchy == 'SUPERADMIN' %}
                             <!-- Notifications -->
                             <div class="relative">
                                 <button id="notificationToggle" class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors">
@@ -508,10 +536,11 @@
                                         <!-- Notifications will be loaded here -->
                                     </div>
                                     <div class="p-3 border-t border-gray-200">
-                                        <a href="#" class="text-sm text-primary hover:text-primary-dark">Ver todas as notificações</a>
+                                        <a href="{% url 'notifications:dashboard' %}" class="text-sm text-primary hover:text-primary-dark">Ver todas as notificações</a>
                                     </div>
                                 </div>
                             </div>
+                            {% endif %}
                             
                             <!-- Search -->
                             <div class="relative hidden lg:block">
@@ -943,6 +972,57 @@
                     }
                 });
             }
+        });
+    </script>
+    
+    <!-- Submenu Toggle Script -->
+    <script>
+        function toggleSubmenu(menuId) {
+            const menu = document.getElementById(menuId);
+            const icon = document.getElementById(menuId + '-icon');
+            
+            if (menu.classList.contains('hidden')) {
+                // Abrir menu
+                menu.classList.remove('hidden');
+                menu.style.maxHeight = menu.scrollHeight + 'px';
+                icon.style.transform = 'rotate(180deg)';
+                
+                // Salvar estado no localStorage
+                localStorage.setItem('submenu_' + menuId, 'open');
+            } else {
+                // Fechar menu
+                menu.style.maxHeight = '0px';
+                icon.style.transform = 'rotate(0deg)';
+                setTimeout(() => {
+                    menu.classList.add('hidden');
+                }, 300);
+                
+                // Salvar estado no localStorage
+                localStorage.setItem('submenu_' + menuId, 'closed');
+            }
+        }
+        
+        // Restaurar estado dos menus ao carregar a página
+        document.addEventListener('DOMContentLoaded', function() {
+            const menus = ['trainings-menu', 'checklists-menu', 'tasks-menu', 'tickets-menu', 'projects-menu', 'management-menu'];
+            
+            menus.forEach(menuId => {
+                const menu = document.getElementById(menuId);
+                const icon = document.getElementById(menuId + '-icon');
+                const state = localStorage.getItem('submenu_' + menuId);
+                
+                if (menu && icon) {
+                    if (state === 'open') {
+                        menu.classList.remove('hidden');
+                        menu.style.maxHeight = menu.scrollHeight + 'px';
+                        icon.style.transform = 'rotate(180deg)';
+                    } else {
+                        menu.classList.add('hidden');
+                        menu.style.maxHeight = '0px';
+                        icon.style.transform = 'rotate(0deg)';
+                    }
+                }
+            });
         });
     </script>
     

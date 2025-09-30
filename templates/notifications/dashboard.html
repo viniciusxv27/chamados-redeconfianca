@@ -1,0 +1,304 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Notificações{% endblock %}
+
+{% block extra_css %}
+<style>
+    .notification-item {
+        transition: all 0.3s ease;
+        border-left: 4px solid transparent;
+    }
+    
+    .notification-item.unread {
+        background-color: #f0f9ff;
+        border-left-color: #3b82f6;
+    }
+    
+    .notification-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .notification-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #ef4444;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .priority-high {
+        border-left-color: #f59e0b !important;
+    }
+    
+    .priority-urgent {
+        border-left-color: #ef4444 !important;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">
+                <i class="fas fa-bell text-blue-500 mr-2"></i>
+                Notificações
+            </h1>
+            <p class="text-gray-600 mt-1">Central de notificações do sistema</p>
+        </div>
+        
+        <div class="flex gap-3">
+            {% if unread_count > 0 %}
+            <button onclick="markAllAsRead()" 
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-check-double mr-2"></i>Marcar Todas como Lidas
+            </button>
+            {% endif %}
+            
+            {% if user.hierarchy == 'SUPERADMIN' %}
+            <a href="{% url 'notifications:manage' %}" 
+               class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                <i class="fas fa-cogs mr-2"></i>Gerenciar
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ total_notifications }}</h3>
+                    <p class="opacity-90">Total de Notificações</p>
+                </div>
+                <i class="fas fa-bell text-3xl opacity-75"></i>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-2xl font-bold">{{ unread_count }}</h3>
+                    <p class="opacity-90">Não Lidas</p>
+                </div>
+                <div class="relative">
+                    <i class="fas fa-envelope text-3xl opacity-75"></i>
+                    {% if unread_count > 0 %}
+                    <div class="notification-badge">{{ unread_count }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Notificações -->
+    <div class="bg-white rounded-lg shadow-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">
+                <i class="fas fa-list text-gray-500 mr-2"></i>
+                Suas Notificações
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            {% if user_notifications %}
+            <div class="space-y-4">
+                {% for notification in user_notifications %}
+                <div class="notification-item {% if not notification.is_read %}unread{% endif %} 
+                            {% if notification.notification.priority == 'HIGH' %}priority-high{% endif %}
+                            {% if notification.notification.priority == 'URGENT' %}priority-urgent{% endif %}
+                            bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all"
+                     data-notification-id="{{ notification.id }}">
+                    
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start space-x-4 flex-1">
+                            <!-- Ícone -->
+                            <div class="flex-shrink-0">
+                                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <i class="{{ notification.notification.icon }} text-blue-600"></i>
+                                </div>
+                            </div>
+                            
+                            <!-- Conteúdo -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h3 class="text-lg font-semibold text-gray-900 truncate">
+                                        {{ notification.notification.title }}
+                                    </h3>
+                                    
+                                    <div class="flex items-center space-x-2 ml-4">
+                                        <!-- Categoria -->
+                                        {% if notification.notification.category %}
+                                        <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
+                                            {{ notification.notification.category.name }}
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Prioridade -->
+                                        {% if notification.notification.priority == 'HIGH' %}
+                                        <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                            <i class="fas fa-exclamation mr-1"></i>Alta
+                                        </span>
+                                        {% elif notification.notification.priority == 'URGENT' %}
+                                        <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
+                                            <i class="fas fa-exclamation-triangle mr-1"></i>Urgente
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Status não lida -->
+                                        {% if not notification.is_read %}
+                                        <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <p class="text-gray-600 mb-3">{{ notification.notification.message }}</p>
+                                
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center text-sm text-gray-500 space-x-4">
+                                        <span class="flex items-center">
+                                            <i class="fas fa-clock mr-1"></i>
+                                            {{ notification.created_at|date:"d/m/Y H:i" }}
+                                        </span>
+                                        
+                                        {% if notification.is_read %}
+                                        <span class="flex items-center text-green-600">
+                                            <i class="fas fa-check mr-1"></i>
+                                            Lida em {{ notification.read_at|date:"d/m H:i" }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="flex items-center space-x-2">
+                                        <!-- Botão de ação -->
+                                        {% if notification.notification.action_url %}
+                                        <a href="{{ notification.notification.action_url }}" 
+                                           onclick="markAsClicked({{ notification.id }})"
+                                           class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-blue-200 transition-colors">
+                                            {{ notification.notification.action_text|default:"Ver Mais" }}
+                                        </a>
+                                        {% endif %}
+                                        
+                                        <!-- Marcar como lida -->
+                                        {% if not notification.is_read %}
+                                        <button onclick="markAsRead({{ notification.id }})" 
+                                                class="text-gray-400 hover:text-blue-600 transition-colors"
+                                                title="Marcar como lida">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-bell-slash text-gray-300 text-6xl mb-4"></i>
+                <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhuma notificação</h3>
+                <p class="text-gray-400">Você não possui notificações no momento.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function markAsRead(notificationId) {
+    fetch(`/notifications/mark-read/${notificationId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erro ao marcar notificação como lida');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao marcar notificação como lida');
+    });
+}
+
+function markAllAsRead() {
+    if (confirm('Marcar todas as notificações como lidas?')) {
+        fetch('/notifications/mark-all-read/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao marcar notificações como lidas');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao marcar notificações como lidas');
+        });
+    }
+}
+
+function markAsClicked(notificationId) {
+    // Marcar como clicada (automaticamente marca como lida também)
+    fetch(`/notifications/mark-read/${notificationId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+// Atualizar contador de notificações na navbar
+function updateNotificationCount() {
+    fetch('/notifications/count/')
+    .then(response => response.json())
+    .then(data => {
+        const badge = document.querySelector('.notification-count-badge');
+        if (badge) {
+            if (data.unread_count > 0) {
+                badge.textContent = data.unread_count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    });
+}
+
+// Atualizar contador a cada 30 segundos
+setInterval(updateNotificationCount, 30000);
+</script>
+{% endblock %}

@@ -2694,12 +2694,26 @@ def sector_checklists_view(request):
 def checklist_detail_view(request, checklist_id):
     """Detalhes de um checklist específico"""
     from core.models import DailyChecklist
+    from django.db import models
     
-    checklist = get_object_or_404(
-        DailyChecklist, 
-        id=checklist_id,
-        user=request.user
-    )
+    user = request.user
+    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
+    
+    # Usuários comuns só podem ver seus próprios checklists
+    # Supervisores podem ver checklists que criaram para usuários do seu setor
+    if is_supervisor:
+        checklist_query = DailyChecklist.objects.filter(
+            id=checklist_id
+        ).filter(
+            models.Q(user=user) | models.Q(created_by=user, user__sector=user.sector)
+        )
+        checklist = get_object_or_404(checklist_query)
+    else:
+        checklist = get_object_or_404(
+            DailyChecklist, 
+            id=checklist_id,
+            user=user
+        )
     
     items = checklist.items.all().order_by('order', 'title')
     
@@ -3187,8 +3201,12 @@ def create_task_view(request):
         except Exception as e:
             messages.error(request, f'Erro ao criar tarefa: {str(e)}')
     
-    # Filtrar usuários por setor para SUPERVISOR e ADMINISTRATIVO
-    if request.user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
+    # Apenas SUPERADMINs podem atribuir tarefas para qualquer pessoa
+    if request.user.hierarchy == 'SUPERADMIN':
+        # SUPERADMIN pode criar para todos (exceto ele mesmo)
+        users = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
+    else:
+        # Outros usuários só podem criar para pessoas do seu setor
         # Pegar setores do usuário atual (tanto ManyToMany quanto ForeignKey)
         user_sectors = list(request.user.sectors.all())
         if request.user.sector:
@@ -3207,9 +3225,6 @@ def create_task_view(request):
         else:
             # Se não tem setor definido, não pode criar para ninguém
             users = User.objects.none()
-    else:
-        # ADMIN e SUPERADMIN podem criar para todos (exceto eles mesmos)
-        users = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
     
     context = {
         'users': users,
