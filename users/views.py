@@ -2871,10 +2871,16 @@ def manage_checklists_view(request):
         else:
             messages.error(request, 'Nome do template é obrigatório!')
     
-    # Se for supervisor/admin, mostra todos os templates
-    # Se for usuário comum, mostra apenas os que ele criou
-    if is_supervisor:
+    # SUPERADMIN vê todos os templates
+    # Supervisores/Admin veem apenas os templates do setor deles
+    # Usuários comuns veem apenas os que eles criaram
+    if request.user.hierarchy == 'SUPERADMIN' or request.user.is_staff:
         templates = ChecklistTemplate.objects.all().prefetch_related('items').order_by('-created_at')
+    elif is_supervisor:
+        # Supervisores veem templates do mesmo setor
+        templates = ChecklistTemplate.objects.filter(
+            created_by__sector=request.user.sector
+        ).prefetch_related('items').order_by('-created_at')
     else:
         templates = ChecklistTemplate.objects.filter(created_by=request.user).prefetch_related('items').order_by('-created_at')
     
@@ -3427,8 +3433,18 @@ def checklist_template_detail(request, template_id):
     
     # Verificar se o usuário pode ver este template
     is_supervisor = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff
+    is_superadmin = request.user.hierarchy == 'SUPERADMIN' or request.user.is_staff
     
-    if not (is_supervisor or template.created_by == request.user):
+    # SUPERADMIN pode ver todos os templates
+    # Supervisores podem ver templates do mesmo setor
+    # Usuários comuns apenas os próprios
+    can_view = (
+        is_superadmin or 
+        template.created_by == request.user or
+        (is_supervisor and template.created_by.sector == request.user.sector)
+    )
+    
+    if not can_view:
         messages.error(request, 'Você não tem permissão para ver este template.')
         return redirect('manage_checklists')
     
@@ -3444,6 +3460,110 @@ def checklist_template_detail(request, template_id):
     }
     
     return render(request, 'admin_panel/checklist_template_detail.html', context)
+
+
+@login_required
+def edit_checklist_template(request, template_id):
+    """Editar template de checklist"""
+    from core.models import ChecklistTemplate, ChecklistTemplateItem
+    
+    template = get_object_or_404(ChecklistTemplate, id=template_id)
+    
+    # Verificar se o usuário pode editar este template
+    is_supervisor = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff
+    is_superadmin = request.user.hierarchy == 'SUPERADMIN' or request.user.is_staff
+    
+    # SUPERADMIN pode editar todos os templates
+    # Supervisores podem editar templates do mesmo setor
+    # Usuários comuns apenas os próprios
+    can_edit = (
+        is_superadmin or 
+        template.created_by == request.user or
+        (is_supervisor and template.created_by.sector == request.user.sector)
+    )
+    
+    if not can_edit:
+        messages.error(request, 'Você não tem permissão para editar este template.')
+        return redirect('manage_checklists')
+    
+    if request.method == 'POST':
+        try:
+            # Atualizar dados básicos do template
+            template.title = request.POST.get('name', '').strip()
+            template.description = request.POST.get('description', '').strip()
+            template.is_active = request.POST.get('is_active') == 'on'
+            
+            if not template.title:
+                messages.error(request, 'Nome do template é obrigatório.')
+                return redirect('edit_checklist_template', template_id=template.id)
+            
+            template.save()
+            
+            # Processar itens do checklist
+            # Primeiro, marcar todos os itens existentes como "para deletar"
+            existing_items = list(template.items.all())
+            items_to_keep = []
+            
+            # Processar itens enviados no formulário
+            item_descriptions = request.POST.getlist('item_description[]')
+            item_observations = request.POST.getlist('item_observations[]')
+            item_required = request.POST.getlist('item_required[]')
+            item_ids = request.POST.getlist('item_id[]')
+            
+            for i, description in enumerate(item_descriptions):
+                description = description.strip()
+                if not description:
+                    continue
+                
+                observations = item_observations[i] if i < len(item_observations) else ''
+                is_required = str(i) in item_required
+                item_id = item_ids[i] if i < len(item_ids) else ''
+                
+                if item_id and item_id.isdigit():
+                    # Item existente - atualizar
+                    try:
+                        item = ChecklistTemplateItem.objects.get(id=int(item_id), template=template)
+                        item.title = description
+                        item.description = observations
+                        item.is_required = is_required
+                        item.order = i + 1
+                        item.save()
+                        items_to_keep.append(item.id)
+                    except ChecklistTemplateItem.DoesNotExist:
+                        # Item não encontrado, criar novo
+                        ChecklistTemplateItem.objects.create(
+                            template=template,
+                            title=description,
+                            description=observations,
+                            is_required=is_required,
+                            order=i + 1
+                        )
+                else:
+                    # Item novo - criar
+                    ChecklistTemplateItem.objects.create(
+                        template=template,
+                        title=description,
+                        description=observations,
+                        is_required=is_required,
+                        order=i + 1
+                    )
+            
+            # Deletar itens que não estão mais no formulário
+            template.items.exclude(id__in=items_to_keep).delete()
+            
+            messages.success(request, 'Template atualizado com sucesso!')
+            return redirect('checklist_template_detail', template_id=template.id)
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar template: {str(e)}')
+            return redirect('edit_checklist_template', template_id=template.id)
+    
+    context = {
+        'template': template,
+        'is_supervisor': is_supervisor,
+    }
+    
+    return render(request, 'admin_panel/edit_checklist_template.html', context)
 
 
 @login_required

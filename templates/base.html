@@ -1446,29 +1446,167 @@
         function openTaskChat(activityId) {
             // Create modal for task chat
             const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm';
             modal.innerHTML = `
-                <div class="bg-white rounded-lg w-full max-w-2xl h-3/4 flex flex-col">
-                    <div class="border-b border-gray-200 p-4 flex items-center justify-between">
-                        <h3 class="text-lg font-semibold">Chat da Tarefa</h3>
-                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
-                            <i class="fas fa-times"></i>
-                        </button>
+                <div class="bg-white rounded-2xl w-full max-w-3xl h-5/6 flex flex-col shadow-2xl transform transition-all duration-300 scale-95 opacity-0 animate-modal-in">
+                    <!-- Header with gradient -->
+                    <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-2xl">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold">Chat da Tarefa</h3>
+                                    <p class="text-white/80 text-sm">Discuta e colabore em tempo real</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="minimizeTaskChat()" class="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Minimizar">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                                    </svg>
+                                </button>
+                                <button onclick="this.closest('.fixed').remove()" class="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Fechar">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <div id="taskChatMessages" class="flex-1 overflow-y-auto p-4 space-y-3">
-                        <div class="text-center text-gray-500">Carregando mensagens...</div>
+                    
+                    <!-- Messages Area -->
+                    <div id="taskChatMessages" class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-4 chat-messages">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 animate-pulse">
+                                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                    </svg>
+                                </div>
+                                <p class="text-gray-500 font-medium">Carregando mensagens...</p>
+                            </div>
+                        </div>
                     </div>
-                    <div class="border-t border-gray-200 p-4">
-                        <form id="taskChatForm" class="flex space-x-2">
-                            <input type="text" id="taskMessageInput" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Digite sua mensagem...">
-                            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors">
-                                <i class="fas fa-paper-plane"></i>
+                    
+                    <!-- Input Area -->
+                    <div class="bg-white border-t border-gray-100 p-6 rounded-b-2xl">
+                        <form id="taskChatForm" class="flex items-end space-x-3">
+                            <div class="flex-1 relative">
+                                <textarea id="taskMessageInput" 
+                                          class="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all duration-200 bg-gray-50 focus:bg-white" 
+                                          placeholder="Digite sua mensagem..." 
+                                          rows="1"
+                                          maxlength="500"></textarea>
+                                <div class="absolute bottom-2 right-2 text-xs text-gray-400">
+                                    <span id="charCount">0</span>/500
+                                </div>
+                            </div>
+                            <button type="submit" 
+                                    class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-3 rounded-xl transition-all duration-200 transform hover:scale-105 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                    title="Enviar mensagem (Ctrl+Enter)">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                </svg>
                             </button>
                         </form>
+                        
+                        <!-- Quick Actions -->
+                        <div class="flex items-center justify-between mt-3 text-sm text-gray-500">
+                            <div class="flex items-center space-x-4">
+                                <button type="button" class="flex items-center space-x-1 hover:text-gray-700 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                                    </svg>
+                                    <span>Anexar</span>
+                                </button>
+                                <button type="button" class="flex items-center space-x-1 hover:text-gray-700 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span>Emoji</span>
+                                </button>
+                            </div>
+                            <div class="text-xs">
+                                <kbd class="px-1.5 py-0.5 bg-gray-100 rounded">Ctrl</kbd> + <kbd class="px-1.5 py-0.5 bg-gray-100 rounded">Enter</kbd> para enviar
+                            </div>
+                        </div>
                     </div>
                 </div>
+                
+                <style>
+                    .animate-modal-in {
+                        animation: modalIn 0.3s ease-out forwards;
+                    }
+                    
+                    @keyframes modalIn {
+                        from {
+                            opacity: 0;
+                            transform: scale(0.95) translateY(20px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: scale(1) translateY(0);
+                        }
+                    }
+                    
+                    .chat-messages::-webkit-scrollbar {
+                        width: 6px;
+                    }
+                    
+                    .chat-messages::-webkit-scrollbar-track {
+                        background: #f1f5f9;
+                        border-radius: 3px;
+                    }
+                    
+                    .chat-messages::-webkit-scrollbar-thumb {
+                        background: #cbd5e1;
+                        border-radius: 3px;
+                    }
+                    
+                    .chat-messages::-webkit-scrollbar-thumb:hover {
+                        background: #94a3b8;
+                    }
+                    
+                    .message-bubble {
+                        animation: messageIn 0.3s ease-out;
+                    }
+                    
+                    @keyframes messageIn {
+                        from {
+                            opacity: 0;
+                            transform: translateY(10px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                    }
+                </style>
             `;
             document.body.appendChild(modal);
+
+            // Setup character counter and textarea auto-resize
+            const messageInput = document.getElementById('taskMessageInput');
+            const charCount = document.getElementById('charCount');
+            
+            messageInput.addEventListener('input', function() {
+                charCount.textContent = this.value.length;
+                
+                // Auto-resize textarea
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+            
+            // Keyboard shortcuts
+            messageInput.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    document.getElementById('taskChatForm').dispatchEvent(new Event('submit'));
+                }
+            });
 
             // Load chat messages
             fetch(`/projects/task/${activityId}/chat/`)
@@ -1479,16 +1617,57 @@
                     messagesContainer.innerHTML = '';
                     
                     if (data.messages.length === 0) {
-                        messagesContainer.innerHTML = '<div class="text-center text-gray-500">Nenhuma mensagem ainda. Seja o primeiro a escrever!</div>';
+                        messagesContainer.innerHTML = `
+                            <div class="flex items-center justify-center h-full">
+                                <div class="text-center max-w-sm">
+                                    <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Nenhuma mensagem ainda</h3>
+                                    <p class="text-gray-500 mb-4">Seja o primeiro a iniciar a conversa sobre esta tarefa!</p>
+                                    <button onclick="document.getElementById('taskMessageInput').focus()" class="text-blue-600 hover:text-blue-700 font-medium">
+                                        Escrever primeira mensagem →
+                                    </button>
+                                </div>
+                            </div>
+                        `;
                     } else {
-                        data.messages.forEach(msg => {
+                        data.messages.forEach((msg, index) => {
                             const messageDiv = document.createElement('div');
-                            messageDiv.className = `flex ${msg.is_own ? 'justify-end' : 'justify-start'}`;
+                            messageDiv.className = `message-bubble flex ${msg.is_own ? 'justify-end' : 'justify-start'}`;
+                            
+                            const timeAgo = getTimeAgo(msg.created_at);
+                            const isConsecutive = index > 0 && data.messages[index - 1].user.id === msg.user.id;
+                            
                             messageDiv.innerHTML = `
-                                <div class="max-w-sm px-4 py-2 rounded-lg ${msg.is_own ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'}">
-                                    ${!msg.is_own ? `<div class="text-xs font-medium mb-1">${msg.user.name}</div>` : ''}
-                                    <div>${msg.message}</div>
-                                    <div class="text-xs ${msg.is_own ? 'text-blue-100' : 'text-gray-500'} mt-1">${msg.created_at}</div>
+                                <div class="max-w-md ${msg.is_own ? 'order-1' : 'order-2'}">
+                                    ${!msg.is_own && !isConsecutive ? `
+                                        <div class="flex items-center mb-1">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold mr-2">
+                                                ${msg.user.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <span class="text-xs font-medium text-gray-600">${msg.user.name}</span>
+                                        </div>
+                                    ` : ''}
+                                    
+                                    <div class="${msg.is_own ? 'ml-4' : 'ml-8'} ${isConsecutive && !msg.is_own ? 'mt-1' : ''}">
+                                        <div class="px-4 py-3 rounded-2xl ${msg.is_own 
+                                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md' 
+                                            : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md'} shadow-sm">
+                                            <div class="text-sm leading-relaxed">${msg.message.replace(/\n/g, '<br>')}</div>
+                                        </div>
+                                        
+                                        <div class="flex items-center mt-1 ${msg.is_own ? 'justify-end' : 'justify-start'}">
+                                            <span class="text-xs text-gray-400">${timeAgo}</span>
+                                            ${msg.is_own ? `
+                                                <svg class="w-3 h-3 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                </svg>
+                                            ` : ''}
+                                        </div>
+                                    </div>
                                 </div>
                             `;
                             messagesContainer.appendChild(messageDiv);
@@ -1504,8 +1683,17 @@
                 
                 const messageInput = document.getElementById('taskMessageInput');
                 const message = messageInput.value.trim();
+                const submitButton = this.querySelector('button[type="submit"]');
                 
                 if (!message) return;
+                
+                // Disable submit button
+                submitButton.disabled = true;
+                submitButton.innerHTML = `
+                    <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                    </svg>
+                `;
                 
                 const formData = new FormData();
                 formData.append('message', message);
@@ -1519,23 +1707,109 @@
                 .then(data => {
                     if (data.success) {
                         const messagesContainer = document.getElementById('taskChatMessages');
+                        
+                        // Check if this is the first message
+                        const isFirstMessage = messagesContainer.querySelector('.text-center') !== null;
+                        if (isFirstMessage) {
+                            messagesContainer.innerHTML = '';
+                        }
+                        
                         const messageDiv = document.createElement('div');
-                        messageDiv.className = 'flex justify-end';
+                        messageDiv.className = 'message-bubble flex justify-end';
                         messageDiv.innerHTML = `
-                            <div class="max-w-sm px-4 py-2 rounded-lg bg-blue-500 text-white">
-                                <div>${data.message.message}</div>
-                                <div class="text-xs text-blue-100 mt-1">${data.message.created_at}</div>
+                            <div class="max-w-md order-1">
+                                <div class="ml-4">
+                                    <div class="px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md shadow-sm">
+                                        <div class="text-sm leading-relaxed">${data.message.message.replace(/\n/g, '<br>')}</div>
+                                    </div>
+                                    
+                                    <div class="flex items-center mt-1 justify-end">
+                                        <span class="text-xs text-gray-400">Agora</span>
+                                        <svg class="w-3 h-3 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                    </div>
+                                </div>
                             </div>
                         `;
                         messagesContainer.appendChild(messageDiv);
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
                         
+                        // Clear and reset input
                         messageInput.value = '';
+                        messageInput.style.height = 'auto';
+                        document.getElementById('charCount').textContent = '0';
+                        messageInput.focus();
                     } else {
-                        alert('Erro ao enviar mensagem: ' + data.error);
+                        showToast('Erro ao enviar mensagem: ' + data.error, 'error');
                     }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('Erro ao enviar mensagem', 'error');
+                })
+                .finally(() => {
+                    // Re-enable submit button
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = `
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
+                    `;
                 });
             });
+            
+            // Focus input after modal opens
+            setTimeout(() => messageInput.focus(), 300);
+        }
+        
+        // Helper functions
+        function getTimeAgo(dateString) {
+            const now = new Date();
+            const date = new Date(dateString);
+            const diff = now - date;
+            
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            
+            if (minutes < 1) return 'Agora';
+            if (minutes < 60) return `${minutes}m`;
+            if (hours < 24) return `${hours}h`;
+            if (days < 7) return `${days}d`;
+            
+            return date.toLocaleDateString('pt-BR', { 
+                day: '2-digit', 
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function minimizeTaskChat() {
+            // Could implement minimization functionality here
+            const modal = document.querySelector('.fixed.inset-0');
+            if (modal) {
+                modal.style.display = 'none';
+                // Could add to a minimized chat list
+            }
+        }
+        
+        function showToast(message, type = 'info') {
+            // Simple toast implementation
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg text-white transition-all duration-300 ${
+                type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+            }`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(100%)';
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 3000);
+        }
         }
     </script>
 </body>

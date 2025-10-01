@@ -48,32 +48,57 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
     }
+    
+    /* Responsive improvements */
+    @media (max-width: 640px) {
+        .notification-item {
+            border-left-width: 3px;
+        }
+        
+        .notification-item:hover {
+            transform: none;
+        }
+        
+        .notification-badge {
+            width: 16px;
+            height: 16px;
+            font-size: 10px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .notification-item {
+            padding: 12px !important;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="p-6">
+<div class="p-4 sm:p-6">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-6 gap-4">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">
+            <h1 class="text-2xl lg:text-3xl font-bold text-gray-900">
                 <i class="fas fa-bell text-blue-500 mr-2"></i>
                 Notificações
             </h1>
             <p class="text-gray-600 mt-1">Central de notificações do sistema</p>
         </div>
         
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-3">
             {% if unread_count > 0 %}
             <button onclick="markAllAsRead()" 
-                    class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-                <i class="fas fa-check-double mr-2"></i>Marcar Todas como Lidas
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm lg:text-base">
+                <i class="fas fa-check-double mr-2"></i>
+                <span class="hidden sm:inline">Marcar Todas como Lidas</span>
+                <span class="sm:hidden">Marcar Lidas</span>
             </button>
             {% endif %}
             
             {% if user.hierarchy == 'SUPERADMIN' %}
-            <a href="{% url 'notifications:manage' %}" 
-               class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+            <a href="{% url 'notifications:settings' %}" 
+               class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm lg:text-base text-center">
                 <i class="fas fa-cogs mr-2"></i>Gerenciar
             </a>
             {% endif %}
@@ -81,7 +106,7 @@
     </div>
 
     <!-- Estatísticas -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
         <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6">
             <div class="flex items-center justify-between">
                 <div>
@@ -110,14 +135,14 @@
 
     <!-- Lista de Notificações -->
     <div class="bg-white rounded-lg shadow-lg">
-        <div class="px-6 py-4 border-b border-gray-200">
+        <div class="px-4 sm:px-6 py-4 border-b border-gray-200">
             <h2 class="text-xl font-semibold">
                 <i class="fas fa-list text-gray-500 mr-2"></i>
                 Suas Notificações
             </h2>
         </div>
         
-        <div class="p-6">
+        <div class="p-4 sm:p-6">
             {% if user_notifications %}
             <div class="space-y-4">
                 {% for notification in user_notifications %}
@@ -127,23 +152,23 @@
                             bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all"
                      data-notification-id="{{ notification.id }}">
                     
-                    <div class="flex items-start justify-between">
-                        <div class="flex items-start space-x-4 flex-1">
+                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div class="flex items-start space-x-3 sm:space-x-4 flex-1">
                             <!-- Ícone -->
                             <div class="flex-shrink-0">
-                                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <i class="{{ notification.notification.icon }} text-blue-600"></i>
+                                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <i class="{{ notification.notification.icon }} text-blue-600 text-sm sm:text-base"></i>
                                 </div>
                             </div>
                             
                             <!-- Conteúdo -->
                             <div class="flex-1 min-w-0">
-                                <div class="flex items-center justify-between mb-2">
-                                    <h3 class="text-lg font-semibold text-gray-900 truncate">
+                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
+                                    <h3 class="text-base sm:text-lg font-semibold text-gray-900">
                                         {{ notification.notification.title }}
                                     </h3>
                                     
-                                    <div class="flex items-center space-x-2 ml-4">
+                                    <div class="flex items-center space-x-2 sm:ml-4">
                                         <!-- Categoria -->
                                         {% if notification.notification.category %}
                                         <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">

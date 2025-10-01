@@ -76,6 +76,7 @@ urlpatterns = [
     path('manage/checklists/', views.manage_checklists_view, name='manage_checklists'),
     path('manage/checklists/create-daily/', views.create_daily_checklist, name='create_daily_checklist'),
     path('manage/checklists/template/<int:template_id>/', views.checklist_template_detail, name='checklist_template_detail'),
+    path('manage/checklists/template/<int:template_id>/edit/', views.edit_checklist_template, name='edit_checklist_template'),
     path('manage/checklists/template/<int:template_id>/delete/', views.delete_checklist_template, name='delete_checklist_template'),
     path('manage/tasks/', views.manage_tasks_view, name='manage_tasks'),
     path('manage/tasks/create/', views.create_task_view, name='create_task'),
