@@ -1,5 +1,6 @@
 from django.urls import path
-from . import views, api_views
+from . import views, api_views, views_chat
+from .views_chat import get_task_chat, send_task_message, support_chat_list, get_support_chat, create_support_chat, send_support_message
 
 app_name = 'projects'
 
@@ -27,6 +28,16 @@ urlpatterns = [
     path('subtask/<int:subtask_id>/toggle/', views.subtask_toggle, name='subtask_toggle'),
     path('activity/<int:activity_id>/duplicate/', views.activity_duplicate, name='activity_duplicate'),
     path('activity/<int:activity_id>/archive/', views.activity_archive, name='activity_archive'),
+    
+    # Chat URLs
+    path('task/<int:activity_id>/chat/', views_chat.get_task_chat, name='get_task_chat'),
+    path('task/<int:activity_id>/chat/send/', views_chat.send_task_message, name='send_task_message'),
+    
+    # Support Chat URLs
+    path('support/chats/', views_chat.support_chat_list, name='support_chat_list'),
+    path('support/chat/<int:chat_id>/', views_chat.get_support_chat, name='get_support_chat'),
+    path('support/chat/create/', views_chat.create_support_chat, name='create_support_chat'),
+    path('support/chat/<int:chat_id>/send/', views_chat.send_support_message, name='send_support_message'),
     
     # API
     path('api/sectors/<int:sector_id>/users/', api_views.sector_users_api, name='sector_users_api'),

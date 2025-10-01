@@ -462,3 +462,7 @@ class ActivityComment(models.Model):
     
     def __str__(self):
         return f"{self.activity.name} - {self.user.full_name}"
+
+
+# Modelos de Chat importados
+from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent

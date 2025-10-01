@@ -1066,6 +1066,477 @@
         </div>
     </div>
 
+    <!-- Support Chat Widget -->
+    <div id="supportChatWidget" class="fixed bottom-4 right-4 z-50">
+        <!-- Chat Button -->
+        <button id="supportChatToggle" 
+                class="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 group">
+            <i class="fas fa-comment-alt text-xl group-hover:scale-110 transition-transform"></i>
+            <span id="supportChatBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+        </button>
+
+        <!-- Chat Window -->
+        <div id="supportChatWindow" 
+             class="hidden absolute bottom-16 right-0 w-80 h-96 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+            
+            <!-- Chat Header -->
+            <div class="bg-blue-500 text-white p-4 flex items-center justify-between">
+                <div>
+                    <h3 class="font-semibold">Suporte</h3>
+                    <p class="text-xs text-blue-100">Como podemos ajudar?</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="supportChatMinimize" class="text-blue-100 hover:text-white transition-colors">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <button id="supportChatClose" class="text-blue-100 hover:text-white transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Tabs -->
+            <div class="bg-gray-50 border-b border-gray-200">
+                <div class="flex">
+                    <button id="newChatTab" class="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-white">
+                        Novo Chat
+                    </button>
+                    <button id="myChatTab" class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+                        Meus Chats
+                    </button>
+                </div>
+            </div>
+
+            <!-- New Chat Form -->
+            <div id="newChatForm" class="flex-1 p-4">
+                <form id="createSupportChatForm" class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Assunto</label>
+                        <input type="text" id="supportChatTitle" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="Descreva o problema brevemente">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                        <select id="supportChatPriority" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="BAIXA">Baixa</option>
+                            <option value="MEDIA" selected>Média</option>
+                            <option value="ALTA">Alta</option>
+                            <option value="URGENTE">Urgente</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
+                        <textarea id="supportChatMessage" rows="3" required
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Descreva detalhadamente o problema ou dúvida"></textarea>
+                    </div>
+                    <button type="submit" 
+                            class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium transition-colors">
+                        <i class="fas fa-paper-plane mr-2"></i>Iniciar Chat
+                    </button>
+                </form>
+            </div>
+
+            <!-- My Chats List -->
+            <div id="myChatsList" class="hidden flex-1 overflow-y-auto">
+                <div id="supportChatList" class="p-2">
+                    <!-- Chats will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Active Chat View -->
+            <div id="activeChatView" class="hidden flex-1 flex flex-col">
+                <!-- Chat Header -->
+                <div class="border-b border-gray-200 p-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 id="activeChatTitle" class="font-medium text-sm text-gray-900"></h4>
+                            <p id="activeChatStatus" class="text-xs text-gray-500"></p>
+                        </div>
+                        <button id="backToChatList" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <div id="activeChatMessages" class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <!-- Messages will be loaded here -->
+                </div>
+
+                <!-- Message Input -->
+                <div class="border-t border-gray-200 p-3">
+                    <form id="sendMessageForm" class="flex space-x-2">
+                        <input type="text" id="messageInput" required
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="Digite sua mensagem...">
+                        <button type="submit" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md transition-colors">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% block extra_js %}{% endblock %}
+    
+    <script>
+        // Support Chat Widget JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatToggle = document.getElementById('supportChatToggle');
+            const chatWindow = document.getElementById('supportChatWindow');
+            const chatClose = document.getElementById('supportChatClose');
+            const chatMinimize = document.getElementById('supportChatMinimize');
+            const newChatTab = document.getElementById('newChatTab');
+            const myChatTab = document.getElementById('myChatTab');
+            const newChatForm = document.getElementById('newChatForm');
+            const myChatsList = document.getElementById('myChatsList');
+            const activeChatView = document.getElementById('activeChatView');
+            const backToChatList = document.getElementById('backToChatList');
+
+            let currentChatId = null;
+            let isMinimized = false;
+
+            // Toggle chat window
+            chatToggle.addEventListener('click', function() {
+                if (isMinimized) {
+                    chatWindow.classList.remove('hidden');
+                    isMinimized = false;
+                } else {
+                    chatWindow.classList.toggle('hidden');
+                }
+            });
+
+            // Close chat
+            chatClose.addEventListener('click', function() {
+                chatWindow.classList.add('hidden');
+                isMinimized = false;
+            });
+
+            // Minimize chat
+            chatMinimize.addEventListener('click', function() {
+                chatWindow.classList.add('hidden');
+                isMinimized = true;
+            });
+
+            // Tab switching
+            newChatTab.addEventListener('click', function() {
+                switchTab('new');
+            });
+
+            myChatTab.addEventListener('click', function() {
+                switchTab('my');
+                loadMyChats();
+            });
+
+            function switchTab(tab) {
+                if (tab === 'new') {
+                    newChatTab.classList.add('text-blue-600', 'border-blue-600', 'bg-white');
+                    newChatTab.classList.remove('text-gray-600');
+                    myChatTab.classList.remove('text-blue-600', 'border-blue-600', 'bg-white');
+                    myChatTab.classList.add('text-gray-600');
+                    newChatForm.classList.remove('hidden');
+                    myChatsList.classList.add('hidden');
+                    activeChatView.classList.add('hidden');
+                } else {
+                    myChatTab.classList.add('text-blue-600', 'border-blue-600', 'bg-white');
+                    myChatTab.classList.remove('text-gray-600');
+                    newChatTab.classList.remove('text-blue-600', 'border-blue-600', 'bg-white');
+                    newChatTab.classList.add('text-gray-600');
+                    newChatForm.classList.add('hidden');
+                    myChatsList.classList.remove('hidden');
+                    activeChatView.classList.add('hidden');
+                }
+            }
+
+            // Create new support chat
+            document.getElementById('createSupportChatForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData();
+                formData.append('title', document.getElementById('supportChatTitle').value);
+                formData.append('priority', document.getElementById('supportChatPriority').value);
+                formData.append('message', document.getElementById('supportChatMessage').value);
+                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+                fetch('/projects/support/chat/create/', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Clear form
+                        this.reset();
+                        // Switch to my chats and load the new chat
+                        switchTab('my');
+                        loadMyChats();
+                        setTimeout(() => openChat(data.chat_id), 1000);
+                    } else {
+                        alert('Erro ao criar chat: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Erro ao criar chat de suporte');
+                });
+            });
+
+            // Load my chats
+            function loadMyChats() {
+                fetch('/projects/support/chats/')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const chatList = document.getElementById('supportChatList');
+                        chatList.innerHTML = '';
+                        
+                        if (data.chats.length === 0) {
+                            chatList.innerHTML = '<div class="text-center text-gray-500 text-sm py-4">Nenhum chat encontrado</div>';
+                            return;
+                        }
+
+                        data.chats.forEach(chat => {
+                            const chatItem = document.createElement('div');
+                            chatItem.className = 'p-2 border border-gray-200 rounded-md mb-2 cursor-pointer hover:bg-gray-50';
+                            chatItem.innerHTML = `
+                                <div class="flex items-center justify-between mb-1">
+                                    <h5 class="text-sm font-medium text-gray-900 truncate">${chat.title}</h5>
+                                    <span class="text-xs px-2 py-1 rounded-full ${getStatusColor(chat.status_code)}">${chat.status}</span>
+                                </div>
+                                <p class="text-xs text-gray-600 truncate">${chat.last_message}</p>
+                                <div class="flex items-center justify-between mt-1">
+                                    <span class="text-xs text-gray-500">${chat.updated_at}</span>
+                                    <span class="text-xs px-1 py-0.5 rounded ${getPriorityColor(chat.priority)}">${chat.priority}</span>
+                                </div>
+                            `;
+                            chatItem.addEventListener('click', () => openChat(chat.id));
+                            chatList.appendChild(chatItem);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            }
+
+            function getStatusColor(status) {
+                switch (status) {
+                    case 'ABERTO': return 'bg-blue-100 text-blue-800';
+                    case 'EM_ANDAMENTO': return 'bg-yellow-100 text-yellow-800';
+                    case 'RESOLVIDO': return 'bg-green-100 text-green-800';
+                    case 'FECHADO': return 'bg-gray-100 text-gray-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                }
+            }
+
+            function getPriorityColor(priority) {
+                switch (priority) {
+                    case 'Baixa': return 'bg-green-100 text-green-800';
+                    case 'Média': return 'bg-yellow-100 text-yellow-800';
+                    case 'Alta': return 'bg-orange-100 text-orange-800';
+                    case 'Urgente': return 'bg-red-100 text-red-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                }
+            }
+
+            // Open specific chat
+            function openChat(chatId) {
+                currentChatId = chatId;
+                
+                fetch(`/projects/support/chat/${chatId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update chat header
+                        document.getElementById('activeChatTitle').textContent = data.chat.title;
+                        document.getElementById('activeChatStatus').textContent = `Status: ${data.chat.status} | Prioridade: ${data.chat.priority}`;
+                        
+                        // Load messages
+                        const messagesContainer = document.getElementById('activeChatMessages');
+                        messagesContainer.innerHTML = '';
+                        
+                        data.messages.forEach(msg => {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.className = `flex ${msg.is_own ? 'justify-end' : 'justify-start'}`;
+                            messageDiv.innerHTML = `
+                                <div class="max-w-xs px-3 py-2 rounded-lg text-sm ${msg.is_own ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'}">
+                                    ${!msg.is_own ? `<div class="text-xs font-medium mb-1">${msg.user.name}</div>` : ''}
+                                    <div>${msg.message}</div>
+                                    <div class="text-xs ${msg.is_own ? 'text-blue-100' : 'text-gray-500'} mt-1">${msg.created_at}</div>
+                                    ${msg.is_internal ? '<div class="text-xs text-red-400 mt-1">Mensagem interna</div>' : ''}
+                                </div>
+                            `;
+                            messagesContainer.appendChild(messageDiv);
+                        });
+
+                        // Scroll to bottom
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        
+                        // Show chat view
+                        myChatsList.classList.add('hidden');
+                        activeChatView.classList.remove('hidden');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            }
+
+            // Back to chat list
+            backToChatList.addEventListener('click', function() {
+                activeChatView.classList.add('hidden');
+                myChatsList.classList.remove('hidden');
+                currentChatId = null;
+            });
+
+            // Send message
+            document.getElementById('sendMessageForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!currentChatId) return;
+                
+                const messageInput = document.getElementById('messageInput');
+                const message = messageInput.value.trim();
+                
+                if (!message) return;
+                
+                const formData = new FormData();
+                formData.append('message', message);
+                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+                fetch(`/projects/support/chat/${currentChatId}/send/`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Add message to chat
+                        const messagesContainer = document.getElementById('activeChatMessages');
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'flex justify-end';
+                        messageDiv.innerHTML = `
+                            <div class="max-w-xs px-3 py-2 rounded-lg text-sm bg-blue-500 text-white">
+                                <div>${data.message.message}</div>
+                                <div class="text-xs text-blue-100 mt-1">${data.message.created_at}</div>
+                            </div>
+                        `;
+                        messagesContainer.appendChild(messageDiv);
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        
+                        // Clear input
+                        messageInput.value = '';
+                    } else {
+                        alert('Erro ao enviar mensagem: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Erro ao enviar mensagem');
+                });
+            });
+        });
+
+        // Task Chat Functions
+        function openTaskChat(activityId) {
+            // Create modal for task chat
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg w-full max-w-2xl h-3/4 flex flex-col">
+                    <div class="border-b border-gray-200 p-4 flex items-center justify-between">
+                        <h3 class="text-lg font-semibold">Chat da Tarefa</h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="taskChatMessages" class="flex-1 overflow-y-auto p-4 space-y-3">
+                        <div class="text-center text-gray-500">Carregando mensagens...</div>
+                    </div>
+                    <div class="border-t border-gray-200 p-4">
+                        <form id="taskChatForm" class="flex space-x-2">
+                            <input type="text" id="taskMessageInput" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Digite sua mensagem...">
+                            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Load chat messages
+            fetch(`/projects/task/${activityId}/chat/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const messagesContainer = document.getElementById('taskChatMessages');
+                    messagesContainer.innerHTML = '';
+                    
+                    if (data.messages.length === 0) {
+                        messagesContainer.innerHTML = '<div class="text-center text-gray-500">Nenhuma mensagem ainda. Seja o primeiro a escrever!</div>';
+                    } else {
+                        data.messages.forEach(msg => {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.className = `flex ${msg.is_own ? 'justify-end' : 'justify-start'}`;
+                            messageDiv.innerHTML = `
+                                <div class="max-w-sm px-4 py-2 rounded-lg ${msg.is_own ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'}">
+                                    ${!msg.is_own ? `<div class="text-xs font-medium mb-1">${msg.user.name}</div>` : ''}
+                                    <div>${msg.message}</div>
+                                    <div class="text-xs ${msg.is_own ? 'text-blue-100' : 'text-gray-500'} mt-1">${msg.created_at}</div>
+                                </div>
+                            `;
+                            messagesContainer.appendChild(messageDiv);
+                        });
+                    }
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            });
+
+            // Handle message sending
+            document.getElementById('taskChatForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const messageInput = document.getElementById('taskMessageInput');
+                const message = messageInput.value.trim();
+                
+                if (!message) return;
+                
+                const formData = new FormData();
+                formData.append('message', message);
+                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+                fetch(`/projects/task/${activityId}/chat/send/`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const messagesContainer = document.getElementById('taskChatMessages');
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'flex justify-end';
+                        messageDiv.innerHTML = `
+                            <div class="max-w-sm px-4 py-2 rounded-lg bg-blue-500 text-white">
+                                <div>${data.message.message}</div>
+                                <div class="text-xs text-blue-100 mt-1">${data.message.created_at}</div>
+                            </div>
+                        `;
+                        messagesContainer.appendChild(messageDiv);
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        
+                        messageInput.value = '';
+                    } else {
+                        alert('Erro ao enviar mensagem: ' + data.error);
+                    }
+                });
+            });
+        }
+    </script>
 </body>
 </html>
