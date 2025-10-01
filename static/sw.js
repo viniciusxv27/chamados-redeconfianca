@@ -11,11 +11,20 @@ const urlsToCache = [
 
 // Install event
 self.addEventListener('install', event => {
+  console.log('Service Worker: Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Opened cache');
+        console.log('Service Worker: Cache opened');
         return cache.addAll(urlsToCache);
+      })
+      .then(() => {
+        console.log('Service Worker: Install complete');
+        // Forçar ativação imediata
+        return self.skipWaiting();
+      })
+      .catch(error => {
+        console.error('Service Worker: Install failed:', error);
       })
   );
 });
@@ -37,16 +46,21 @@ self.addEventListener('fetch', event => {
 
 // Activate event
 self.addEventListener('activate', event => {
+  console.log('Service Worker: Activating...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
+            console.log('Service Worker: Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
+    }).then(() => {
+      console.log('Service Worker: Activated');
+      // Assumir controle imediatamente
+      return self.clients.claim();
     })
   );
 });
@@ -60,18 +74,37 @@ self.addEventListener('sync', event => {
 
 // Push notifications
 self.addEventListener('push', event => {
+  console.log('Service Worker: Push event received', event);
+  
+  let notificationData = {};
+  
+  try {
+    // Tentar parsear os dados da notificação
+    notificationData = event.data ? event.data.json() : {};
+    console.log('Service Worker: Parsed notification data:', notificationData);
+  } catch (e) {
+    console.log('Service Worker: Failed to parse JSON, using text fallback');
+    // Fallback para texto simples
+    notificationData = {
+      title: 'Rede Confiança',
+      body: event.data ? event.data.text() : 'Nova notificação'
+    };
+  }
+  
   const options = {
-    body: event.data.text(),
-    icon: '/static/images/logo.png',
-    badge: '/static/images/logo.png',
-    vibrate: [100, 50, 100],
-    data: {
+    body: notificationData.body || 'Nova notificação',
+    icon: notificationData.icon || '/static/images/logo.png',
+    badge: notificationData.badge || '/static/images/logo.png',
+    vibrate: notificationData.vibrate || [100, 50, 100],
+    data: notificationData.data || {
       dateOfArrival: Date.now(),
-      primaryKey: 1
+      url: '/'
     },
-    actions: [
+    requireInteraction: notificationData.requireInteraction || false,
+    silent: notificationData.silent || false,
+    actions: notificationData.actions || [
       {
-        action: 'explore',
+        action: 'open',
         title: 'Ver mais',
         icon: '/static/images/logo.png'
       },
@@ -83,8 +116,16 @@ self.addEventListener('push', event => {
     ]
   };
 
+  console.log('Service Worker: Showing notification with options:', options);
+
   event.waitUntil(
-    self.registration.showNotification('Rede Confiança', options)
+    self.registration.showNotification(notificationData.title || 'Rede Confiança', options)
+      .then(() => {
+        console.log('Service Worker: Notification shown successfully');
+      })
+      .catch(error => {
+        console.error('Service Worker: Failed to show notification:', error);
+      })
   );
 });
 
@@ -92,9 +133,23 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
 
-  if (event.action === 'explore') {
+  const data = event.notification.data || {};
+  const url = data.url || '/';
+
+  if (event.action === 'open' || !event.action) {
     event.waitUntil(
-      clients.openWindow('/')
+      clients.matchAll().then(clientList => {
+        // Tentar focar uma aba existente
+        for (const client of clientList) {
+          if (client.url === url && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // Se não houver, abrir nova aba
+        if (clients.openWindow) {
+          return clients.openWindow(url);
+        }
+      })
     );
   }
 });

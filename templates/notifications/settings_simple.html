@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+
+{% block title %}Configurações de Notificações{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">
+                <i class="fas fa-bell mr-2"></i>
+                Configurações de Notificações
+            </h1>
+
+            <!-- Push Notifications Section -->
+            <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-mobile-alt mr-2"></i>
+                    Notificações Push
+                </h2>
+                
+                <div id="pushNotificationStatus">
+                    <div class="flex items-center justify-between p-4 bg-yellow-100 rounded-lg">
+                        <div>
+                            <h3 class="font-medium text-yellow-800">Status: Desabilitado</h3>
+                            <p class="text-sm text-yellow-700">Ative as notificações push para receber alertas em tempo real</p>
+                        </div>
+                        <button id="enablePushBtn" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-bell mr-2"></i>Ativar Notificações
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Device Tokens Section -->
+            <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-devices mr-2"></i>
+                    Dispositivos Registrados
+                </h2>
+                
+                <div id="deviceTokensList">
+                    {% if user_tokens %}
+                        {% for token in user_tokens %}
+                        <div class="flex items-center justify-between p-3 bg-white rounded border">
+                            <div>
+                                <div class="font-medium">{{ token.get_device_type_display }}</div>
+                                <div class="text-sm text-gray-500">
+                                    Último uso: {{ token.last_used|date:"d/m/Y H:i" }}
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full mr-2">
+                                    Ativo
+                                </span>
+                                <button class="text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-8 text-gray-500">
+                            <i class="fas fa-mobile-alt text-4xl mb-4"></i>
+                            <p>Nenhum dispositivo registrado</p>
+                            <p class="text-sm">Ative as notificações push para registrar este dispositivo</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Test Section -->
+            <div class="bg-gray-50 rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-vial mr-2"></i>
+                    Teste de Notificações
+                </h2>
+                
+                <p class="text-gray-600 mb-4">
+                    Teste se as notificações push estão funcionando corretamente neste dispositivo.
+                </p>
+                
+                <button id="testNotificationBtn" 
+                        class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-paper-plane mr-2"></i>Enviar Notificação de Teste
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const enablePushBtn = document.getElementById('enablePushBtn');
+    const testNotificationBtn = document.getElementById('testNotificationBtn');
+    const pushStatusDiv = document.getElementById('pushNotificationStatus');
+    
+    // Verificar status atual das notificações
+    checkNotificationStatus();
+    
+    // Ativar notificações push
+    enablePushBtn.addEventListener('click', enablePushNotifications);
+    
+    // Testar notificação
+    testNotificationBtn.addEventListener('click', testNotification);
+    
+    function checkNotificationStatus() {
+        if ('Notification' in window) {
+            if (Notification.permission === 'granted') {
+                updateStatus('granted');
+            } else if (Notification.permission === 'denied') {
+                updateStatus('denied');
+            } else {
+                updateStatus('default');
+            }
+        } else {
+            updateStatus('unsupported');
+        }
+    }
+    
+    function updateStatus(status) {
+        const statusMap = {
+            'granted': {
+                title: 'Status: Ativado',
+                description: 'Notificações push estão ativadas neste dispositivo',
+                color: 'green',
+                showButton: false
+            },
+            'denied': {
+                title: 'Status: Bloqueado',
+                description: 'Notificações foram bloqueadas. Ative nas configurações do navegador.',
+                color: 'red',
+                showButton: false
+            },
+            'default': {
+                title: 'Status: Desabilitado',
+                description: 'Ative as notificações push para receber alertas em tempo real',
+                color: 'yellow',
+                showButton: true
+            },
+            'unsupported': {
+                title: 'Status: Não Suportado',
+                description: 'Seu navegador não suporta notificações push',
+                color: 'gray',
+                showButton: false
+            }
+        };
+        
+        const config = statusMap[status];
+        const colorClasses = {
+            'green': 'bg-green-100 text-green-800',
+            'red': 'bg-red-100 text-red-800',
+            'yellow': 'bg-yellow-100 text-yellow-800',
+            'gray': 'bg-gray-100 text-gray-800'
+        };
+        
+        pushStatusDiv.innerHTML = `
+            <div class="flex items-center justify-between p-4 ${colorClasses[config.color]} rounded-lg">
+                <div>
+                    <h3 class="font-medium">${config.title}</h3>
+                    <p class="text-sm">${config.description}</p>
+                </div>
+                ${config.showButton ? `
+                    <button id="enablePushBtn" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-bell mr-2"></i>Ativar Notificações
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        
+        // Re-attach event listener if button was recreated
+        if (config.showButton) {
+            document.getElementById('enablePushBtn').addEventListener('click', enablePushNotifications);
+        }
+    }
+    
+    async function enablePushNotifications() {
+        try {
+            // Solicitar permissão primeiro
+            const permission = await Notification.requestPermission();
+            
+            if (permission === 'granted') {
+                // Verificar se service worker está disponível
+                if (!('serviceWorker' in navigator)) {
+                    throw new Error('Service Worker não é suportado neste navegador');
+                }
+                
+                if (!('PushManager' in window)) {
+                    throw new Error('Push messaging não é suportado neste navegador');
+                }
+                
+                console.log('Registrando service worker...');
+                
+                // Registrar service worker e aguardar que esteja ativo
+                const registration = await navigator.serviceWorker.register('/static/sw.js', {
+                    scope: '/'
+                });
+                
+                console.log('Service worker registrado:', registration);
+                
+                // Aguardar o service worker estar ativo
+                await waitForServiceWorker(registration);
+                
+                console.log('Service worker ativo, criando subscription...');
+                
+                // Obter subscription
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array('{{ vapid_public_key }}')
+                });
+                
+                console.log('Subscription criada:', subscription);
+                
+                // Obter CSRF token
+                const csrfToken = getCSRFToken();
+                if (!csrfToken) {
+                    throw new Error('Token CSRF não encontrado');
+                }
+                
+                // Enviar subscription para o servidor
+                const response = await fetch('/notifications/register-device/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        subscription: subscription,
+                        device_info: {
+                            userAgent: navigator.userAgent,
+                            platform: navigator.platform,
+                            timestamp: new Date().toISOString()
+                        }
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStatus('granted');
+                    alert('Notificações push ativadas com sucesso!');
+                    location.reload(); // Recarregar para mostrar o dispositivo registrado
+                } else {
+                    alert('Erro ao registrar dispositivo: ' + data.error);
+                }
+            } else {
+                updateStatus('denied');
+                alert('Permissão negada para notificações push');
+            }
+        } catch (error) {
+            console.error('Erro ao ativar push notifications:', error);
+            alert('Erro ao ativar notificações push: ' + error.message);
+        }
+    }
+    
+    async function waitForServiceWorker(registration) {
+        return new Promise((resolve) => {
+            if (registration.active) {
+                resolve();
+                return;
+            }
+            
+            const serviceWorker = registration.installing || registration.waiting;
+            if (serviceWorker) {
+                serviceWorker.addEventListener('statechange', function() {
+                    if (this.state === 'activated') {
+                        resolve();
+                    }
+                });
+            } else {
+                // Fallback: aguardar um pouco
+                setTimeout(resolve, 1000);
+            }
+        });
+    }
+    
+    function getCSRFToken() {
+        // Tentar diferentes formas de obter o CSRF token
+        let token = null;
+        
+        // 1. Input hidden
+        const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (csrfInput) {
+            token = csrfInput.value;
+        }
+        
+        // 2. Meta tag
+        if (!token) {
+            const csrfMeta = document.querySelector('meta[name=csrf-token]');
+            if (csrfMeta) {
+                token = csrfMeta.getAttribute('content');
+            }
+        }
+        
+        // 3. Cookie
+        if (!token) {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    token = value;
+                    break;
+                }
+            }
+        }
+        
+        return token;
+    }
+    
+    async function testNotification() {
+        if (Notification.permission !== 'granted') {
+            alert('Ative as notificações push primeiro!');
+            return;
+        }
+        
+        try {
+            testNotificationBtn.disabled = true;
+            testNotificationBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Enviando...';
+            
+            // Obter CSRF token
+            const csrfToken = getCSRFToken();
+            if (!csrfToken) {
+                throw new Error('Token CSRF não encontrado. Recarregue a página.');
+            }
+            
+            // Enviar solicitação de teste
+            const response = await fetch('/notifications/api/test-push/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    title: 'Teste de Notificação',
+                    message: 'Esta é uma notificação de teste do sistema!'
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('Notificação de teste enviada! Verifique se apareceu no seu dispositivo.');
+            } else {
+                alert('Erro ao enviar notificação de teste: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Erro ao testar notificação:', error);
+            alert('Erro ao testar notificação: ' + error.message);
+        } finally {
+            testNotificationBtn.disabled = false;
+            testNotificationBtn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>Enviar Notificação de Teste';
+        }
+    }
+    
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/\-/g, '+')
+            .replace(/_/g, '/');
+        
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+});
+</script>
+{% endblock %}

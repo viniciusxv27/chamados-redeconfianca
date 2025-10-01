@@ -1,0 +1,17 @@
+
+# VAPID Configuration for Web Push Notifications
+# Add these to your Django settings.py file
+
+VAPID_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg/JoLTjAHWVdb35iE
+0JgHEH2XugBodgfIhGolJuhMqqehRANCAAQJEqbYLLCvpQKfAazQb+H0XycqPSxq
+eh8fBMAZlRwQV5w26FC0pUEHdEZOu0A5s3PqhlxVMtvwJfwvkwd1au5X
+-----END PRIVATE KEY-----
+"""
+VAPID_PUBLIC_KEY = "BAkSptgssK-lAp8BrNBv4fRfJyo9LGp6Hx8EwBmVHBBXnDboULSlQQd0Rk67QDmzc-qGXFUy2_Al_C-TB3Vq7lc"
+VAPID_CLAIMS = {
+    "sub": "mailto:admin@redeconfianca.com"
+}
+
+# JavaScript code for frontend:
+# const vapidPublicKey = 'BAkSptgssK-lAp8BrNBv4fRfJyo9LGp6Hx8EwBmVHBBXnDboULSlQQd0Rk67QDmzc-qGXFUy2_Al_C-TB3Vq7lc';

@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+
+{% block title %}Teste Push Notification{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">
+                <i class="fas fa-vial mr-2"></i>
+                Teste de Push Notifications
+            </h1>
+
+            <div class="space-y-4">
+                <!-- Status -->
+                <div id="status" class="p-4 rounded-lg bg-gray-100">
+                    <div class="font-medium">Status: Verificando...</div>
+                    <div class="text-sm text-gray-600">Aguarde enquanto verificamos o suporte</div>
+                </div>
+
+                <!-- Botões -->
+                <div class="flex space-x-4">
+                    <button id="requestPermission" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-bell mr-2"></i>Solicitar Permissão
+                    </button>
+                    
+                    <button id="testLocal" 
+                            class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-test-tube mr-2"></i>Teste Local
+                    </button>
+                    
+                    <button id="registerSW" 
+                            class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-cog mr-2"></i>Registrar SW
+                    </button>
+                </div>
+
+                <!-- Log -->
+                <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-64 overflow-y-auto">
+                    <div id="log">Console de Debug:</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let logElement;
+
+document.addEventListener('DOMContentLoaded', function() {
+    logElement = document.getElementById('log');
+    
+    log('Página carregada');
+    checkSupport();
+    
+    document.getElementById('requestPermission').addEventListener('click', requestPermission);
+    document.getElementById('testLocal').addEventListener('click', testLocalNotification);
+    document.getElementById('registerSW').addEventListener('click', registerServiceWorker);
+});
+
+function log(message) {
+    const timestamp = new Date().toLocaleTimeString();
+    logElement.innerHTML += `<br>[${timestamp}] ${message}`;
+    logElement.scrollTop = logElement.scrollHeight;
+    console.log(message);
+}
+
+function updateStatus(title, description, color = 'gray') {
+    const statusDiv = document.getElementById('status');
+    const colorClasses = {
+        'green': 'bg-green-100 text-green-800',
+        'red': 'bg-red-100 text-red-800',
+        'yellow': 'bg-yellow-100 text-yellow-800',
+        'gray': 'bg-gray-100 text-gray-800'
+    };
+    
+    statusDiv.className = `p-4 rounded-lg ${colorClasses[color]}`;
+    statusDiv.innerHTML = `
+        <div class="font-medium">${title}</div>
+        <div class="text-sm">${description}</div>
+    `;
+}
+
+function checkSupport() {
+    log('Verificando suporte do navegador...');
+    
+    if (!('Notification' in window)) {
+        log('❌ Notification API não suportada');
+        updateStatus('Não Suportado', 'Seu navegador não suporta notificações', 'red');
+        return;
+    }
+    
+    if (!('serviceWorker' in navigator)) {
+        log('❌ Service Workers não suportados');
+        updateStatus('Não Suportado', 'Seu navegador não suporta Service Workers', 'red');
+        return;
+    }
+    
+    if (!('PushManager' in window)) {
+        log('❌ Push API não suportada');
+        updateStatus('Não Suportado', 'Seu navegador não suporta Push API', 'red');
+        return;
+    }
+    
+    log('✅ Todos os recursos suportados');
+    
+    // Verificar permissão atual
+    const permission = Notification.permission;
+    log(`Permissão atual: ${permission}`);
+    
+    if (permission === 'granted') {
+        updateStatus('Suportado e Permitido', 'Notificações estão habilitadas', 'green');
+    } else if (permission === 'denied') {
+        updateStatus('Bloqueado', 'Notificações foram bloqueadas pelo usuário', 'red');
+    } else {
+        updateStatus('Suportado', 'Permissão necessária para notificações', 'yellow');
+    }
+}
+
+async function requestPermission() {
+    log('Solicitando permissão para notificações...');
+    
+    try {
+        const permission = await Notification.requestPermission();
+        log(`Permissão: ${permission}`);
+        
+        if (permission === 'granted') {
+            updateStatus('Permitido', 'Notificações estão habilitadas', 'green');
+            log('✅ Permissão concedida');
+        } else {
+            updateStatus('Negado', 'Usuário negou permissão para notificações', 'red');
+            log('❌ Permissão negada');
+        }
+    } catch (error) {
+        log(`❌ Erro ao solicitar permissão: ${error.message}`);
+    }
+}
+
+function testLocalNotification() {
+    log('Testando notificação local...');
+    
+    if (Notification.permission !== 'granted') {
+        log('❌ Permissão necessária primeiro');
+        alert('Solicite permissão primeiro!');
+        return;
+    }
+    
+    try {
+        const notification = new Notification('Teste Local', {
+            body: 'Esta é uma notificação de teste criada localmente',
+            icon: '/static/images/logo.png',
+            badge: '/static/images/logo.png'
+        });
+        
+        notification.onclick = function() {
+            log('📱 Notificação clicada');
+            notification.close();
+        };
+        
+        log('✅ Notificação local criada');
+    } catch (error) {
+        log(`❌ Erro ao criar notificação local: ${error.message}`);
+    }
+}
+
+async function registerServiceWorker() {
+    log('Registrando Service Worker...');
+    
+    try {
+        const registration = await navigator.serviceWorker.register('/static/sw.js', {
+            scope: '/'
+        });
+        
+        log(`✅ Service Worker registrado: ${registration.scope}`);
+        
+        // Aguardar ativação
+        if (registration.active) {
+            log('Service Worker já está ativo');
+            await testPushSubscription(registration);
+        } else {
+            log('Aguardando ativação do Service Worker...');
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'activated') {
+                        log('Service Worker ativado');
+                        testPushSubscription(registration);
+                    }
+                });
+            });
+        }
+        
+    } catch (error) {
+        log(`❌ Erro ao registrar Service Worker: ${error.message}`);
+    }
+}
+
+async function testPushSubscription(registration) {
+    log('Testando Push Subscription...');
+    
+    try {
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array('{{ vapid_public_key }}')
+        });
+        
+        log('✅ Push Subscription criada');
+        log(`Endpoint: ${subscription.endpoint.substring(0, 50)}...`);
+        
+        // Mostrar dados da subscription
+        const subscriptionData = JSON.stringify(subscription.toJSON(), null, 2);
+        log('Dados da Subscription:');
+        log(subscriptionData.substring(0, 200) + '...');
+        
+    } catch (error) {
+        log(`❌ Erro ao criar Push Subscription: ${error.message}`);
+    }
+}
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+</script>
+{% endblock %}

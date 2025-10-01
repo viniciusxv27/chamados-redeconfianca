@@ -24,4 +24,7 @@ urlpatterns = [
     path('count/', views.get_notifications_count, name='count'),
     path('mark-all-read/', views.mark_all_notifications_read, name='mark_all_read'),
     path('register-device/', views.register_device_token, name='register_device'),
+    path('settings/', views.notification_settings, name='settings'),
+    path('test/', views.test_push_page, name='test_page'),
+    path('api/test-push/', views.test_push_notification, name='test_push'),
 ]

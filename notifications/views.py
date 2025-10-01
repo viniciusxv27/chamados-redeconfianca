@@ -363,22 +363,24 @@ def register_device_token(request):
     
     try:
         data = json.loads(request.body)
-        token = data.get('token')
-        device_type = data.get('device_type', 'WEB')
+        subscription = data.get('subscription')
         device_info = data.get('device_info', {})
         
-        if not token:
+        if not subscription:
             return JsonResponse({
                 'success': False,
-                'error': 'Token é obrigatório'
+                'error': 'Subscription é obrigatório'
             }, status=400)
+        
+        # Converter subscription para string JSON
+        token = json.dumps(subscription)
         
         # Criar ou atualizar token
         device_token, created = DeviceToken.objects.get_or_create(
             user=request.user,
             token=token,
             defaults={
-                'device_type': device_type,
+                'device_type': 'WEB',
                 'device_info': device_info,
                 'is_active': True
             }
@@ -394,6 +396,87 @@ def register_device_token(request):
             'message': 'Token registrado com sucesso'
         })
         
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+def notification_settings(request):
+    """Configurações de notificações do usuário"""
+    from django.conf import settings
+    
+    context = {
+        'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
+        'user_tokens': DeviceToken.objects.filter(user=request.user, is_active=True),
+        'user': request.user
+    }
+    
+    return render(request, 'notifications/settings_simple.html', context)
+
+
+@login_required
+def test_push_page(request):
+    """Página de teste para push notifications"""
+    from django.conf import settings
+    
+    context = {
+        'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
+    }
+    
+    return render(request, 'notifications/test_push.html', context)
+
+
+@login_required
+@require_POST
+def test_push_notification(request):
+    """Enviar notificação de teste para o usuário atual"""
+    try:
+        # Debug headers
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Test push request from user: {request.user.id}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        
+        data = json.loads(request.body)
+        title = data.get('title', 'Teste de Notificação')
+        message = data.get('message', 'Esta é uma notificação de teste!')
+        
+        # Verificar se o usuário tem tokens ativos
+        device_tokens = DeviceToken.objects.filter(user=request.user, is_active=True)
+        logger.info(f"Found {device_tokens.count()} device tokens for user {request.user.id}")
+        
+        if not device_tokens.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'Nenhum dispositivo registrado para notificações push'
+            }, status=400)
+        
+        # Enviar push notification diretamente
+        from .push_utils import send_push_notification_to_user
+        
+        result = send_push_notification_to_user(
+            request.user,
+            title,
+            message,
+            notification_id=None,
+            action_url='/',
+            icon='/static/images/logo.png'
+        )
+        
+        if result['success'] or result['sent_count'] > 0:
+            return JsonResponse({
+                'success': True,
+                'message': f'Notificação enviada para {result["sent_count"]} dispositivo(s)'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('message', 'Erro ao enviar notificação')
+            }, status=400)
+            
     except Exception as e:
         return JsonResponse({
             'success': False,

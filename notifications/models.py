@@ -157,9 +157,42 @@ class PushNotification(models.Model):
         # Bulk create para performance
         UserNotification.objects.bulk_create(notification_records)
         
+        # Enviar push notifications usando o serviço
+        try:
+            from .push_utils import send_push_notification_to_users
+            
+            # Preparar dados extras para o push
+            push_data = {
+                'notification_id': self.id,
+                'action_url': self.action_url if self.action_url else '/',
+                'action_text': self.action_text,
+                'icon': '/static/images/logo.png',
+                'extra_data': self.extra_data,
+                'timestamp': int(timezone.now().timestamp() * 1000)
+            }
+            
+            # Enviar push notification
+            push_result = send_push_notification_to_users(
+                list(target_users),
+                self.title,
+                self.message,
+                **push_data
+            )
+            
+            # Log do resultado
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Push notification {self.id}: {push_result['message']}")
+            
+        except Exception as e:
+            # Log do erro mas não falhar o processo
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error sending push notification {self.id}: {str(e)}")
+        
         # Marcar como enviada
         self.is_sent = True
-        self.sent_at = timezone.now()
+        self.sent_at = timezone.now()  
         self.save()
         
         return True

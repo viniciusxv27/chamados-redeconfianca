@@ -261,3 +261,15 @@ EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Sistema Rede Confiança <noreply@redeconfianca.com.br>')
+
+# VAPID Configuration for Web Push Notifications
+VAPID_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg/JoLTjAHWVdb35iE
+0JgHEH2XugBodgfIhGolJuhMqqehRANCAAQJEqbYLLCvpQKfAazQb+H0XycqPSxq
+eh8fBMAZlRwQV5w26FC0pUEHdEZOu0A5s3PqhlxVMtvwJfwvkwd1au5X
+-----END PRIVATE KEY-----
+"""
+VAPID_PUBLIC_KEY = "BAkSptgssK-lAp8BrNBv4fRfJyo9LGp6Hx8EwBmVHBBXnDboULSlQQd0Rk67QDmzc-qGXFUy2_Al_C-TB3Vq7lc"
+VAPID_CLAIMS = {
+    "sub": "mailto:admin@redeconfianca.com"
+}
