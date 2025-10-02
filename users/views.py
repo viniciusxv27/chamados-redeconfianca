@@ -2557,7 +2557,7 @@ def checklist_dashboard_view(request):
         date__lte=today
     ).prefetch_related('items').order_by('-date')
     
-    # Para supervisores: checklists que criaram para usuários do seu setor
+    # Para supervisores: checklists que criaram para usuários dos seus setores
     # Para SUPERADMIN: todos os checklists
     sector_checklists = []
     if is_supervisor:
@@ -2567,15 +2567,33 @@ def checklist_dashboard_view(request):
                 date__gte=week_ago,
                 date__lte=today
             ).select_related('user', 'template', 'user__sector').prefetch_related('items').order_by('-date')
-        elif user.sector:
-            # Outros supervisores veem apenas do seu setor
-            sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
-            sector_checklists = DailyChecklist.objects.filter(
-                created_by=user,
-                user__in=sector_users,
-                date__gte=week_ago,
-                date__lte=today
-            ).select_related('user', 'template').prefetch_related('items').order_by('-date')
+        else:
+            # Supervisores veem checklists de todos os seus setores
+            from django.db.models import Q
+            
+            # Obter setores do usuário
+            user_sectors = user.sectors.all()
+            
+            # Criar filtro para todos os setores do usuário
+            sector_filter = Q()
+            
+            # Adicionar setores múltiplos
+            if user_sectors.exists():
+                sector_filter |= Q(sectors__in=user_sectors)
+            
+            # Adicionar setor principal se existir
+            if user.sector:
+                sector_filter |= Q(sector=user.sector)
+            
+            if sector_filter:
+                # Buscar usuários dos setores
+                sector_users = User.objects.filter(sector_filter).exclude(id=user.id).distinct()
+                
+                sector_checklists = DailyChecklist.objects.filter(
+                    user__in=sector_users,
+                    date__gte=week_ago,
+                    date__lte=today
+                ).select_related('user', 'template', 'user__sector').prefetch_related('items').order_by('-date')
     
     # Estatísticas
     total_checklists = DailyChecklist.objects.filter(user=user).count()
@@ -2637,10 +2655,13 @@ def sector_checklists_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('checklist_dashboard')
 
-    # SUPERADMIN pode ver todos os setores, outros precisam estar vinculados a um setor
-    if not is_superadmin and not user.sector:
+    # SUPERADMIN pode ver todos os setores, outros precisam estar vinculados a pelo menos um setor
+    user_sectors = user.sectors.all()
+    if not is_superadmin and not user_sectors.exists() and not user.sector:
         messages.error(request, 'Você precisa estar vinculado a um setor para gerenciar checklists.')
-        return redirect('checklist_dashboard')    # Filtros
+        return redirect('checklist_dashboard')
+
+    # Filtros
     date_filter = request.GET.get('date', '')
     user_filter = request.GET.get('user', '')
     status_filter = request.GET.get('status', '')
@@ -2664,13 +2685,27 @@ def sector_checklists_view(request):
             date__gte=start_date
         ).select_related('user', 'template', 'user__sector').prefetch_related('items')
     else:
-        # Outros supervisores veem apenas do seu setor
-        sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
+        # Supervisores veem checklists de todos os seus setores (tanto sectors quanto sector principal)
+        from django.db.models import Q
+        
+        # Criar filtro para todos os setores do usuário
+        sector_filter = Q()
+        
+        # Adicionar setores múltiplos
+        if user_sectors.exists():
+            sector_filter |= Q(sectors__in=user_sectors)
+        
+        # Adicionar setor principal se existir
+        if user.sector:
+            sector_filter |= Q(sector=user.sector)
+        
+        # Buscar usuários dos setores
+        sector_users = User.objects.filter(sector_filter).exclude(id=user.id).distinct()
+        
         checklists_query = DailyChecklist.objects.filter(
-            created_by=user,
             user__in=sector_users,
             date__gte=start_date
-        ).select_related('user', 'template').prefetch_related('items')    # Aplicar filtros
+        ).select_related('user', 'template', 'user__sector').prefetch_related('items')    # Aplicar filtros
     if user_filter:
         checklists_query = checklists_query.filter(user_id=user_filter)
     
@@ -2688,11 +2723,21 @@ def sector_checklists_view(request):
     if total_checklists > 0:
         completion_rate = round((completed_checklists / total_checklists) * 100)
     
-    # Determinar nome do setor para o título
+    # Determinar nome dos setores para o título
     if is_superadmin:
         sector_name = 'Todos os Setores'
     else:
-        sector_name = user.sector.name if user.sector else 'Setor'
+        # Mostrar todos os setores do usuário
+        sector_names = []
+        if user_sectors.exists():
+            sector_names.extend([sector.name for sector in user_sectors])
+        if user.sector and user.sector.name not in sector_names:
+            sector_names.append(user.sector.name)
+        
+        if sector_names:
+            sector_name = ', '.join(sector_names)
+        else:
+            sector_name = 'Setor'
 
     context = {
         'checklists': checklists,
