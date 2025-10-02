@@ -2558,15 +2558,24 @@ def checklist_dashboard_view(request):
     ).prefetch_related('items').order_by('-date')
     
     # Para supervisores: checklists que criaram para usuários do seu setor
+    # Para SUPERADMIN: todos os checklists
     sector_checklists = []
-    if is_supervisor and user.sector:
-        sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
-        sector_checklists = DailyChecklist.objects.filter(
-            created_by=user,
-            user__in=sector_users,
-            date__gte=week_ago,
-            date__lte=today
-        ).select_related('user', 'template').prefetch_related('items').order_by('-date')
+    if is_supervisor:
+        if user.hierarchy == 'SUPERADMIN':
+            # SUPERADMIN vê todos os checklists de todos os setores
+            sector_checklists = DailyChecklist.objects.filter(
+                date__gte=week_ago,
+                date__lte=today
+            ).select_related('user', 'template', 'user__sector').prefetch_related('items').order_by('-date')
+        elif user.sector:
+            # Outros supervisores veem apenas do seu setor
+            sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
+            sector_checklists = DailyChecklist.objects.filter(
+                created_by=user,
+                user__in=sector_users,
+                date__gte=week_ago,
+                date__lte=today
+            ).select_related('user', 'template').prefetch_related('items').order_by('-date')
     
     # Estatísticas
     total_checklists = DailyChecklist.objects.filter(user=user).count()
@@ -2585,7 +2594,7 @@ def checklist_dashboard_view(request):
     
     # Estatísticas para supervisores
     sector_stats = {}
-    if is_supervisor and sector_checklists.exists():
+    if is_supervisor and hasattr(sector_checklists, 'exists') and sector_checklists.exists():
         total_sector_checklists = sector_checklists.count()
         completed_sector_checklists = sector_checklists.filter(completed_at__isnull=False).count()
         sector_completion_rate = 0
@@ -2622,16 +2631,16 @@ def sector_checklists_view(request):
     
     user = request.user
     is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
-    
+    is_superadmin = user.hierarchy == 'SUPERADMIN'
+
     if not is_supervisor:
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('checklist_dashboard')
-    
-    if not user.sector:
+
+    # SUPERADMIN pode ver todos os setores, outros precisam estar vinculados a um setor
+    if not is_superadmin and not user.sector:
         messages.error(request, 'Você precisa estar vinculado a um setor para gerenciar checklists.')
-        return redirect('checklist_dashboard')
-    
-    # Filtros
+        return redirect('checklist_dashboard')    # Filtros
     date_filter = request.GET.get('date', '')
     user_filter = request.GET.get('user', '')
     status_filter = request.GET.get('status', '')
@@ -2647,17 +2656,21 @@ def sector_checklists_view(request):
         except ValueError:
             pass
     
-    # Usuários do setor
-    sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
-    
-    # Query base: checklists criados pelo supervisor para usuários do setor
-    checklists_query = DailyChecklist.objects.filter(
-        created_by=user,
-        user__in=sector_users,
-        date__gte=start_date
-    ).select_related('user', 'template').prefetch_related('items')
-    
-    # Aplicar filtros
+    # Determinar usuários baseado na hierarquia
+    if is_superadmin:
+        # SUPERADMIN vê checklists de todos os setores
+        sector_users = User.objects.exclude(id=user.id)
+        checklists_query = DailyChecklist.objects.filter(
+            date__gte=start_date
+        ).select_related('user', 'template', 'user__sector').prefetch_related('items')
+    else:
+        # Outros supervisores veem apenas do seu setor
+        sector_users = User.objects.filter(sector=user.sector).exclude(id=user.id)
+        checklists_query = DailyChecklist.objects.filter(
+            created_by=user,
+            user__in=sector_users,
+            date__gte=start_date
+        ).select_related('user', 'template').prefetch_related('items')    # Aplicar filtros
     if user_filter:
         checklists_query = checklists_query.filter(user_id=user_filter)
     
@@ -2675,6 +2688,12 @@ def sector_checklists_view(request):
     if total_checklists > 0:
         completion_rate = round((completed_checklists / total_checklists) * 100)
     
+    # Determinar nome do setor para o título
+    if is_superadmin:
+        sector_name = 'Todos os Setores'
+    else:
+        sector_name = user.sector.name if user.sector else 'Setor'
+
     context = {
         'checklists': checklists,
         'sector_users': sector_users,
@@ -2684,7 +2703,8 @@ def sector_checklists_view(request):
         'date_filter': date_filter,
         'user_filter': user_filter,
         'status_filter': status_filter,
-        'sector_name': user.sector.name if user.sector else 'Setor',
+        'sector_name': sector_name,
+        'is_superadmin': is_superadmin,
     }
     
     return render(request, 'checklist/sector_management.html', context)
@@ -2843,6 +2863,7 @@ def manage_checklists_view(request):
     is_supervisor = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff
     """Gerenciar templates de checklist (apenas supervisores)"""
     from core.models import ChecklistTemplate, ChecklistTemplateItem
+    from django.db.models import Q
     
     if request.method == 'POST' and is_supervisor:
         # Criar novo template de checklist (apenas supervisores)
@@ -2872,17 +2893,21 @@ def manage_checklists_view(request):
             messages.error(request, 'Nome do template é obrigatório!')
     
     # SUPERADMIN vê todos os templates
-    # Supervisores/Admin veem apenas os templates do setor deles
-    # Usuários comuns veem apenas os que eles criaram
+    # Outros usuários veem templates de todos os setores onde participam
     if request.user.hierarchy == 'SUPERADMIN' or request.user.is_staff:
         templates = ChecklistTemplate.objects.all().prefetch_related('items').order_by('-created_at')
-    elif is_supervisor:
-        # Supervisores veem templates do mesmo setor
-        templates = ChecklistTemplate.objects.filter(
-            created_by__sector=request.user.sector
-        ).prefetch_related('items').order_by('-created_at')
     else:
-        templates = ChecklistTemplate.objects.filter(created_by=request.user).prefetch_related('items').order_by('-created_at')
+        # Usuários veem templates de todos os setores onde participam
+        user_sectors = []
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        user_sectors.extend(request.user.sectors.all())
+        
+        templates = ChecklistTemplate.objects.filter(
+            Q(created_by=request.user) | 
+            Q(created_by__sector__in=user_sectors) |
+            Q(created_by__sectors__in=user_sectors)
+        ).distinct().prefetch_related('items').order_by('-created_at')
     
     context = {
         'templates': templates,

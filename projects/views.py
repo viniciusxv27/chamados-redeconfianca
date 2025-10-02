@@ -442,6 +442,11 @@ def project_dashboard(request):
             'count': projects.filter(priority=priority).count()
         }
     
+    # Projetos por status específicos (cards principais)
+    standby_projects = projects.filter(status='STANDBY')
+    in_progress_projects = projects.filter(status='EM_ANDAMENTO')
+    completed_projects = projects.filter(status='CONCLUIDO')
+    
     # Projetos recentes
     recent_projects = projects.order_by('-created_at')[:5]
     
@@ -459,6 +464,9 @@ def project_dashboard(request):
         'total_projects': total_projects,
         'projects_by_status': projects_by_status,
         'projects_by_priority': projects_by_priority,
+        'standby_projects': standby_projects,
+        'in_progress_projects': in_progress_projects,
+        'completed_projects': completed_projects,
         'recent_projects': recent_projects,
         'upcoming_deadlines': upcoming_deadlines,
         'overdue_projects': overdue_projects,

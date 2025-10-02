@@ -101,8 +101,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const testNotificationBtn = document.getElementById('testNotificationBtn');
     const pushStatusDiv = document.getElementById('pushNotificationStatus');
     
-    // Verificar status atual das notificações
-    checkNotificationStatus();
+    // Verificar status atual das notificações apenas uma vez
+    if (!sessionStorage.getItem('notification_status_checked')) {
+        checkNotificationStatus();
+        sessionStorage.setItem('notification_status_checked', 'true');
+    } else {
+        // Se já foi verificado, apenas atualizar o status sem mensagens
+        checkNotificationStatusSilent();
+    }
     
     // Ativar notificações push
     enablePushBtn.addEventListener('click', enablePushNotifications);
@@ -154,6 +160,50 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    async function checkNotificationStatusSilent() {
+        if (!('Notification' in window)) {
+            updateStatusSilent('unsupported');
+            return;
+        }
+        
+        if (Notification.permission === 'denied') {
+            updateStatusSilent('denied');
+            return;
+        }
+        
+        if (Notification.permission !== 'granted') {
+            updateStatusSilent('default');
+            return;
+        }
+        
+        // Se a permissão está concedida, verificar se temos Service Worker e subscription
+        try {
+            if (!('serviceWorker' in navigator)) {
+                updateStatusSilent('error');
+                return;
+            }
+            
+            const registration = await navigator.serviceWorker.getRegistration('/');
+            if (!registration) {
+                updateStatusSilent('error');
+                return;
+            }
+            
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                updateStatusSilent('error');
+                return;
+            }
+            
+            // Tudo OK - notificações estão funcionando
+            updateStatusSilent('granted');
+            
+        } catch (error) {
+            console.log('Status das notificações verificado silenciosamente');
+            updateStatusSilent('error');
+        }
+    }
+    
     function updateStatus(status) {
         const statusMap = {
             'granted': {
@@ -177,6 +227,70 @@ document.addEventListener('DOMContentLoaded', function() {
             'error': {
                 title: 'Status: Erro de Configuração',
                 description: 'Service Worker não registrado corretamente. Clique para reativar.',
+                color: 'orange',
+                showButton: true
+            },
+            'unsupported': {
+                title: 'Status: Não Suportado',
+                description: 'Seu navegador não suporta notificações push',
+                color: 'gray',
+                showButton: false
+            }
+        };
+        
+        const config = statusMap[status];
+        const colorClasses = {
+            'green': 'bg-green-100 text-green-800',
+            'red': 'bg-red-100 text-red-800',
+            'yellow': 'bg-yellow-100 text-yellow-800',
+            'orange': 'bg-orange-100 text-orange-800',
+            'gray': 'bg-gray-100 text-gray-800'
+        };
+        
+        pushStatusDiv.innerHTML = `
+            <div class="flex items-center justify-between p-4 ${colorClasses[config.color]} rounded-lg">
+                <div>
+                    <h3 class="font-medium">${config.title}</h3>
+                    <p class="text-sm">${config.description}</p>
+                </div>
+                ${config.showButton ? `
+                    <button id="enablePushBtn" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-bell mr-2"></i>Ativar Notificações
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        
+        // Re-attach event listener if button was recreated
+        if (config.showButton) {
+            document.getElementById('enablePushBtn').addEventListener('click', enablePushNotifications);
+        }
+    }
+    
+    function updateStatusSilent(status) {
+        const statusMap = {
+            'granted': {
+                title: 'Status: Ativado',
+                description: 'Notificações push estão ativadas neste dispositivo',
+                color: 'green',
+                showButton: false
+            },
+            'denied': {
+                title: 'Status: Bloqueado',
+                description: 'Notificações foram bloqueadas. Ative nas configurações do navegador.',
+                color: 'red',
+                showButton: false
+            },
+            'default': {
+                title: 'Status: Desabilitado',
+                description: 'Ative as notificações push para receber alertas em tempo real',
+                color: 'yellow',
+                showButton: true
+            },
+            'error': {
+                title: 'Status: Requer Configuração',
+                description: 'Clique para configurar as notificações push',
                 color: 'orange',
                 showButton: true
             },
@@ -309,8 +423,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (data.success) {
                 updateStatus('granted');
-                alert('✅ Notificações push ativadas com sucesso!');
-                location.reload();
+                // Mostrar mensagem de sucesso sem alert
+                showSuccessMessage('Notificações push ativadas com sucesso!');
+                // Recarregar após 2 segundos
+                setTimeout(() => location.reload(), 2000);
             } else {
                 throw new Error(data.error || 'Erro desconhecido ao registrar dispositivo');
             }
@@ -318,7 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Erro ao ativar push notifications:', error);
             updateStatus('error');
-            alert('❌ Erro ao ativar notificações: ' + error.message);
+            showErrorMessage('Erro ao ativar notificações: ' + error.message);
         } finally {
             enableBtn.disabled = false;
             enableBtn.innerHTML = '<i class="fas fa-bell mr-2"></i>Ativar Notificações Push';
@@ -433,17 +549,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('Token CSRF não encontrado. Recarregue a página.');
             }
             
+            // Usar FormData em vez de JSON
+            const formData = new FormData();
+            formData.append('title', 'Teste de Notificação');
+            formData.append('message', 'Esta é uma notificação de teste do sistema!');
+            
             // Enviar solicitação de teste
             const response = await fetch('/notifications/api/test-push/', {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': csrfToken,
-                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    title: 'Teste de Notificação',
-                    message: 'Esta é uma notificação de teste do sistema!'
-                })
+                body: formData
             });
             
             if (!response.ok) {
@@ -453,13 +570,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             
             if (data.success) {
-                alert('Notificação de teste enviada! Verifique se apareceu no seu dispositivo.');
+                showSuccessMessage('Notificação de teste enviada! Verifique se apareceu no seu dispositivo.');
             } else {
-                alert('Erro ao enviar notificação de teste: ' + data.error);
+                showErrorMessage('Erro ao enviar notificação de teste: ' + data.error);
             }
         } catch (error) {
             console.error('Erro ao testar notificação:', error);
-            alert('Erro ao testar notificação: ' + error.message);
+            showErrorMessage('Erro ao testar notificação: ' + error.message);
         } finally {
             testNotificationBtn.disabled = false;
             testNotificationBtn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>Enviar Notificação de Teste';
@@ -479,6 +596,74 @@ document.addEventListener('DOMContentLoaded', function() {
             outputArray[i] = rawData.charCodeAt(i);
         }
         return outputArray;
+    }
+    
+    // Funções para mostrar mensagens
+    function showSuccessMessage(message) {
+        removeExistingMessages();
+        const messageDiv = createMessageDiv(message, 'success');
+        document.body.appendChild(messageDiv);
+        
+        // Auto-remover após 5 segundos
+        setTimeout(() => {
+            if (messageDiv.parentElement) {
+                messageDiv.remove();
+            }
+        }, 5000);
+    }
+    
+    function showErrorMessage(message) {
+        removeExistingMessages();
+        const messageDiv = createMessageDiv(message, 'error');
+        document.body.appendChild(messageDiv);
+        
+        // Auto-remover após 7 segundos
+        setTimeout(() => {
+            if (messageDiv.parentElement) {
+                messageDiv.remove();
+            }
+        }, 7000);
+    }
+    
+    function createMessageDiv(message, type) {
+        const div = document.createElement('div');
+        div.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transition-all duration-300 transform translate-x-full`;
+        
+        if (type === 'success') {
+            div.className += ' bg-green-500 text-white';
+            div.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    <span>${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-auto text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+        } else {
+            div.className += ' bg-red-500 text-white';
+            div.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    <span>${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-auto text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Animar entrada
+        setTimeout(() => {
+            div.classList.remove('translate-x-full');
+        }, 100);
+        
+        return div;
+    }
+    
+    function removeExistingMessages() {
+        const existingMessages = document.querySelectorAll('.fixed.top-4.right-4');
+        existingMessages.forEach(msg => msg.remove());
     }
 });
 

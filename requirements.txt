@@ -39,3 +39,6 @@ whitenoise==6.6.0
 # MinIO S3 Storage
 boto3==1.35.36
 django-storages==1.14.4
+
+# Push Notifications
+pywebpush==1.14.0

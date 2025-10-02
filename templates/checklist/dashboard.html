@@ -4,24 +4,24 @@
 {% block title %}Meus Checklists{% endblock %}
 
 {% block content %}
-<div class="p-6">
+<div class="p-2 sm:p-4 lg:p-6">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-6 space-y-4 lg:space-y-0">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">
+            <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
                 <i class="fas fa-tasks text-primary mr-2"></i>
                 Meus Checklists
             </h1>
-            <p class="text-gray-600 mt-1">Gerencie suas atividades diárias</p>
+            <p class="text-sm sm:text-base text-gray-600 mt-1">Gerencie suas atividades diárias</p>
         </div>
         {% if is_supervisor %}
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <a href="{% url 'sector_checklists' %}" 
-               class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+               class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base text-center">
                 <i class="fas fa-users-cog mr-2"></i>Gerenciar Setor
             </a>
             <a href="{% url 'manage_checklists' %}" 
-               class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+               class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base text-center">
                 <i class="fas fa-plus mr-2"></i>Criar Template
             </a>
         </div>
@@ -29,24 +29,24 @@
     </div>
 
     <!-- Estatísticas -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-4 sm:p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-2xl font-bold">{{ total_checklists }}</h3>
-                    <p class="opacity-90">Total de Checklists</p>
+                    <h3 class="text-xl sm:text-2xl font-bold">{{ total_checklists }}</h3>
+                    <p class="opacity-90 text-sm sm:text-base">Total de Checklists</p>
                 </div>
-                <i class="fas fa-list-alt text-3xl opacity-75"></i>
+                <i class="fas fa-list-alt text-2xl sm:text-3xl opacity-75"></i>
             </div>
         </div>
         
-        <div class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-6">
+        <div class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-4 sm:p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-2xl font-bold">{{ completed_checklists }}</h3>
-                    <p class="opacity-90">Concluídos</p>
+                    <h3 class="text-xl sm:text-2xl font-bold">{{ completed_checklists }}</h3>
+                    <p class="opacity-90 text-sm sm:text-base">Concluídos</p>
                 </div>
-                <i class="fas fa-check-circle text-3xl opacity-75"></i>
+                <i class="fas fa-check-circle text-2xl sm:text-3xl opacity-75"></i>
             </div>
         </div>
         

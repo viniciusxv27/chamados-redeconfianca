@@ -399,20 +399,20 @@ async function initializePushNotifications() {
         }
         
         // Verificar permissão atual
-        const permission = await Notification.requestPermission();
+        const permission = Notification.permission;
         
         if (permission === 'granted') {
-            console.log('Permissão de notificação concedida');
+            console.log('Permissão de notificação já foi concedida');
             
-            if (isIOS && window.iOSNotifications) {
-                // Usar o gestor específico do iOS
-                await window.iOSNotifications.enableNotifications();
+            if (isIOS) {
+                console.log('Sistema iOS detectado - aguardando ação do usuário para ativar notificações');
+                // Para iOS, não fazer nada automático - aguardar ação do usuário
             } else {
-                // Usar o sistema padrão para outros navegadores
-                await subscribeToNotifications(registration);
+                // Para outros navegadores, verificar se já existe subscription mas não criar automaticamente
+                console.log('Sistema não-iOS detectado - aguardando ação do usuário para ativar notificações');
             }
         } else {
-            console.log('Permissão de notificação negada');
+            console.log('Permissão de notificação não concedida - aguardando ação do usuário');
         }
         
     } catch (error) {
@@ -423,8 +423,15 @@ async function initializePushNotifications() {
 // Subscrever às notificações push (para navegadores não-iOS)
 async function subscribeToNotifications(registration) {
     try {
+        // Verificar se já existe uma subscrição ativa
+        const existingSubscription = await registration.pushManager.getSubscription();
+        if (existingSubscription) {
+            console.log('Já existe uma subscrição ativa para push notifications');
+            return;
+        }
+        
         // Obter chave VAPID pública
-        const response = await fetch('/api/notifications/vapid-key/');
+        const response = await fetch('/notifications/api/vapid-key/');
         const data = await response.json();
         
         if (!data.success) {
@@ -438,7 +445,7 @@ async function subscribeToNotifications(registration) {
         });
         
         // Enviar subscrição para o servidor
-        const subscribeResponse = await fetch('/api/notifications/subscribe/', {
+        const subscribeResponse = await fetch('/notifications/api/subscribe/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

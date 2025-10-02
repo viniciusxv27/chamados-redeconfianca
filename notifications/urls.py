@@ -28,4 +28,6 @@ urlpatterns = [
     path('settings/', views.notification_settings, name='settings'),
     path('test/', views.test_push_page, name='test_page'),
     path('api/test-push/', views.test_push_notification, name='test_push'),
+    path('api/vapid-key/', views.api_vapid_key, name='api_vapid_key'),
+    path('api/subscribe/', views.api_subscribe_push, name='api_subscribe'),
 ]

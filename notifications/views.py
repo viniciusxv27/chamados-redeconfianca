@@ -479,20 +479,11 @@ def test_push_notification(request):
         logger = logging.getLogger(__name__)
         logger.info(f"Test push request from user: {request.user.id}")
         logger.info(f"Request method: {request.method}")
-        logger.info(f"Request body: {request.body}")
+        logger.info(f"Content type: {request.content_type}")
         
-        # Tentar parsear o JSON
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            logger.error("Failed to decode JSON")
-            return JsonResponse({
-                'success': False,
-                'error': 'Dados JSON inválidos'
-            }, status=400)
-            
-        title = data.get('title', 'Teste de Notificação')
-        message = data.get('message', 'Esta é uma notificação de teste!')
+        # Handle FormData from the frontend
+        title = request.POST.get('title', 'Teste de Notificação')
+        message = request.POST.get('message', 'Esta é uma notificação de teste!')
         
         # Verificar se o usuário tem tokens ativos
         device_tokens = DeviceToken.objects.filter(user=request.user, is_active=True)
@@ -572,3 +563,81 @@ def send_notification_now(request, notification_id):
             'success': False,
             'error': str(e)
         }, status=400)
+
+@csrf_exempt
+def api_vapid_key(request):
+    """API endpoint para obter chave VAPID pública"""
+    try:
+        from django.conf import settings
+        vapid_public_key = getattr(settings, 'VAPID_PUBLIC_KEY', 'BP8QQHATvKzPC7VGShrzb6BPdroXgHj_TGJHo7jqr-hOQn5xg6q0VkQyajx7wEwHvBaS7kYiwF4oDm7X5VjFgSg')
+        
+        return JsonResponse({
+            'success': True,
+            'vapid_public_key': vapid_public_key
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@csrf_exempt
+def api_subscribe_push(request):
+    """API endpoint para subscrever às notificações push"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'User not authenticated'}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        subscription = data.get('subscription', {})
+        device_type = data.get('device_type', 'WEB')
+        
+        if not subscription:
+            return JsonResponse({
+                'success': False,
+                'error': 'Subscription data required'
+            }, status=400)
+        
+        if not subscription.get('endpoint'):
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid subscription format - missing endpoint'
+            }, status=400)
+        
+        token_str = json.dumps(subscription)
+        
+        device_token, created = DeviceToken.objects.get_or_create(
+            user=request.user,
+            token=token_str,
+            defaults={
+                'device_type': device_type,
+                'is_active': True,
+                'device_info': data.get('device_info', {})
+            }
+        )
+        
+        if not created:
+            device_token.device_type = device_type
+            device_token.is_active = True
+            device_token.device_info = data.get('device_info', {})
+            device_token.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Push notifications enabled successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

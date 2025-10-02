@@ -564,6 +564,8 @@ class CommunicationViewSet(viewsets.ModelViewSet):
 
 @login_required
 @require_POST
+@login_required
+@require_POST
 def add_comment(request, communication_id):
     """Adicionar comentário a um comunicado"""
     communication = get_object_or_404(Communication, id=communication_id)

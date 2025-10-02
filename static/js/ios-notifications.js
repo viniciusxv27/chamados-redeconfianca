@@ -148,7 +148,7 @@ class iOSNotificationManager {
             });
             
             // Send subscription to server
-            const subscribeResponse = await fetch('/api/notifications/subscribe/', {
+            const subscribeResponse = await fetch('/notifications/api/subscribe/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -156,7 +156,7 @@ class iOSNotificationManager {
                 },
                 body: JSON.stringify({
                     subscription: subscription.toJSON(),
-                    platform: 'ios'
+                    device_type: 'IOS'
                 })
             });
             

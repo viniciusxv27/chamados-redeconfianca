@@ -409,7 +409,7 @@ document.getElementById('comment-form').addEventListener('submit', function(e) {
     formData.append('content', content);
     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
     
-    fetch('{% url "add_comment" communication.id %}', {
+    fetch('{% url "communications:add_comment" communication.id %}', {
         method: 'POST',
         body: formData,
         headers: {
