@@ -403,6 +403,40 @@ def register_device_token(request):
         }, status=400)
 
 
+@csrf_exempt
+@require_POST
+def delete_device_token(request, token_id):
+    """Deletar token do dispositivo"""
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            'success': False,
+            'error': 'Usuário não autenticado'
+        }, status=401)
+    
+    try:
+        device_token = DeviceToken.objects.get(
+            id=token_id,
+            user=request.user
+        )
+        device_token.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Dispositivo removido com sucesso'
+        })
+        
+    except DeviceToken.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Dispositivo não encontrado'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
 @login_required
 def notification_settings(request):
     """Configurações de notificações do usuário"""
@@ -429,18 +463,34 @@ def test_push_page(request):
     return render(request, 'notifications/test_push.html', context)
 
 
+@csrf_exempt
 @login_required
-@require_POST
 def test_push_notification(request):
     """Enviar notificação de teste para o usuário atual"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'error': 'Método não permitido'
+        }, status=405)
+        
     try:
         # Debug headers
         import logging
         logger = logging.getLogger(__name__)
         logger.info(f"Test push request from user: {request.user.id}")
-        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Request body: {request.body}")
         
-        data = json.loads(request.body)
+        # Tentar parsear o JSON
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            logger.error("Failed to decode JSON")
+            return JsonResponse({
+                'success': False,
+                'error': 'Dados JSON inválidos'
+            }, status=400)
+            
         title = data.get('title', 'Teste de Notificação')
         message = data.get('message', 'Esta é uma notificação de teste!')
         
@@ -451,8 +501,9 @@ def test_push_notification(request):
         if not device_tokens.exists():
             return JsonResponse({
                 'success': False,
-                'error': 'Nenhum dispositivo registrado para notificações push'
-            }, status=400)
+                'error': 'Nenhum dispositivo registrado para notificações push. Registre um dispositivo primeiro clicando em "Ativar Notificações Push".',
+                'need_registration': True
+            }, status=200)  # Retornar 200 em vez de 400 para melhor UX
         
         # Enviar push notification diretamente
         from .push_utils import send_push_notification_to_user

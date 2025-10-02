@@ -3,8 +3,11 @@
 {% block title %}Configurações de Notificações{% endblock %}
 
 {% block content %}
-{% csrf_token %}
 <div class="container mx-auto px-4 py-8">
+    <!-- Hidden form for CSRF token -->
+    <form style="display: none;">
+        {% csrf_token %}
+    </form>
     <div class="max-w-4xl mx-auto">
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h1 class="text-2xl font-bold text-gray-900 mb-6">
@@ -54,7 +57,9 @@
                                 <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full mr-2">
                                     Ativo
                                 </span>
-                                <button class="text-red-600 hover:text-red-800">
+                                <button onclick="deleteDevice({{ token.id }})" 
+                                        class="text-red-600 hover:text-red-800 p-1 rounded transition-colors"
+                                        title="Remover dispositivo">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -105,17 +110,47 @@ document.addEventListener('DOMContentLoaded', function() {
     // Testar notificação
     testNotificationBtn.addEventListener('click', testNotification);
     
-    function checkNotificationStatus() {
-        if ('Notification' in window) {
-            if (Notification.permission === 'granted') {
-                updateStatus('granted');
-            } else if (Notification.permission === 'denied') {
-                updateStatus('denied');
-            } else {
-                updateStatus('default');
-            }
-        } else {
+    async function checkNotificationStatus() {
+        if (!('Notification' in window)) {
             updateStatus('unsupported');
+            return;
+        }
+        
+        if (Notification.permission === 'denied') {
+            updateStatus('denied');
+            return;
+        }
+        
+        if (Notification.permission !== 'granted') {
+            updateStatus('default');
+            return;
+        }
+        
+        // Se a permissão está concedida, verificar se temos Service Worker e subscription
+        try {
+            if (!('serviceWorker' in navigator)) {
+                updateStatus('error');
+                return;
+            }
+            
+            const registration = await navigator.serviceWorker.getRegistration('/');
+            if (!registration) {
+                updateStatus('error');
+                return;
+            }
+            
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                updateStatus('error');
+                return;
+            }
+            
+            // Tudo OK - notificações estão funcionando
+            updateStatus('granted');
+            
+        } catch (error) {
+            console.error('Erro ao verificar status:', error);
+            updateStatus('error');
         }
     }
     
@@ -139,6 +174,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 color: 'yellow',
                 showButton: true
             },
+            'error': {
+                title: 'Status: Erro de Configuração',
+                description: 'Service Worker não registrado corretamente. Clique para reativar.',
+                color: 'orange',
+                showButton: true
+            },
             'unsupported': {
                 title: 'Status: Não Suportado',
                 description: 'Seu navegador não suporta notificações push',
@@ -152,6 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'green': 'bg-green-100 text-green-800',
             'red': 'bg-red-100 text-red-800',
             'yellow': 'bg-yellow-100 text-yellow-800',
+            'orange': 'bg-orange-100 text-orange-800',
             'gray': 'bg-gray-100 text-gray-800'
         };
         
@@ -177,87 +219,128 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     async function enablePushNotifications() {
+        const enableBtn = document.getElementById('enablePushBtn');
+        
         try {
-            // Solicitar permissão primeiro
-            const permission = await Notification.requestPermission();
+            enableBtn.disabled = true;
+            enableBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Ativando...';
             
-            if (permission === 'granted') {
-                // Verificar se service worker está disponível
-                if (!('serviceWorker' in navigator)) {
-                    throw new Error('Service Worker não é suportado neste navegador');
+            // Verificar suporte primeiro
+            if (!('serviceWorker' in navigator)) {
+                throw new Error('Service Worker não é suportado neste navegador');
+            }
+            
+            if (!('PushManager' in window)) {
+                throw new Error('Push messaging não é suportado neste navegador');
+            }
+            
+            if (!('Notification' in window)) {
+                throw new Error('Notificações não são suportadas neste navegador');
+            }
+            
+            // Solicitar permissão
+            console.log('Solicitando permissão...');
+            const permission = await Notification.requestPermission();
+            console.log('Permissão:', permission);
+            
+            if (permission !== 'granted') {
+                if (permission === 'denied') {
+                    throw new Error('Permissão para notificações foi negada. Ative nas configurações do navegador.');
+                } else {
+                    throw new Error('Permissão para notificações não foi concedida.');
                 }
-                
-                if (!('PushManager' in window)) {
-                    throw new Error('Push messaging não é suportado neste navegador');
-                }
-                
-                console.log('Registrando service worker...');
-                
-                // Registrar service worker e aguardar que esteja ativo
-                const registration = await navigator.serviceWorker.register('/static/sw.js', {
-                    scope: '/'
-                });
-                
-                console.log('Service worker registrado:', registration);
-                
-                // Aguardar o service worker estar ativo
-                await waitForServiceWorker(registration);
-                
-                console.log('Service worker ativo, criando subscription...');
-                
-                // Obter subscription
-                const subscription = await registration.pushManager.subscribe({
+            }
+            
+            console.log('Registrando service worker...');
+            
+            // Registrar service worker
+            const registration = await navigator.serviceWorker.register('/sw.js', {
+                scope: '/'
+            });
+            
+            console.log('Service worker registrado:', registration);
+            
+            // Aguardar o service worker estar ativo
+            await waitForServiceWorker(registration);
+            
+            console.log('Service worker ativo, criando subscription...');
+            
+            // Verificar se já existe uma subscription
+            let subscription = await registration.pushManager.getSubscription();
+            
+            if (!subscription) {
+                // Criar nova subscription
+                subscription = await registration.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: urlBase64ToUint8Array('{{ vapid_public_key }}')
                 });
-                
-                console.log('Subscription criada:', subscription);
-                
-                // Obter CSRF token
-                const csrfToken = getCSRFToken();
-                if (!csrfToken) {
-                    throw new Error('Token CSRF não encontrado');
-                }
-                
-                // Enviar subscription para o servidor
-                const response = await fetch('/notifications/register-device/', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        subscription: subscription,
-                        device_info: {
-                            userAgent: navigator.userAgent,
-                            platform: navigator.platform,
-                            timestamp: new Date().toISOString()
-                        }
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    updateStatus('granted');
-                    alert('Notificações push ativadas com sucesso!');
-                    location.reload(); // Recarregar para mostrar o dispositivo registrado
-                } else {
-                    alert('Erro ao registrar dispositivo: ' + data.error);
-                }
-            } else {
-                updateStatus('denied');
-                alert('Permissão negada para notificações push');
             }
+            
+            console.log('Subscription obtida:', subscription);
+            
+            // Obter CSRF token
+            const csrfToken = getCSRFToken();
+            if (!csrfToken) {
+                throw new Error('Token CSRF não encontrado');
+            }
+            
+            // Enviar subscription para o servidor
+            const response = await fetch('/notifications/register-device/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    subscription: subscription,
+                    device_info: {
+                        userAgent: navigator.userAgent,
+                        platform: navigator.platform,
+                        timestamp: new Date().toISOString()
+                    }
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Erro HTTP: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                updateStatus('granted');
+                alert('✅ Notificações push ativadas com sucesso!');
+                location.reload();
+            } else {
+                throw new Error(data.error || 'Erro desconhecido ao registrar dispositivo');
+            }
+            
         } catch (error) {
             console.error('Erro ao ativar push notifications:', error);
-            alert('Erro ao ativar notificações push: ' + error.message);
+            updateStatus('error');
+            alert('❌ Erro ao ativar notificações: ' + error.message);
+        } finally {
+            enableBtn.disabled = false;
+            enableBtn.innerHTML = '<i class="fas fa-bell mr-2"></i>Ativar Notificações Push';
         }
     }
     
     async function waitForServiceWorker(registration) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
+            let timeout;
+            
+            function cleanup() {
+                if (timeout) clearTimeout(timeout);
+            }
+            
+            // Timeout de 10 segundos
+            timeout = setTimeout(() => {
+                cleanup();
+                reject(new Error('Timeout ao aguardar Service Worker'));
+            }, 10000);
+            
             if (registration.active) {
+                cleanup();
                 resolve();
                 return;
             }
@@ -266,12 +349,37 @@ document.addEventListener('DOMContentLoaded', function() {
             if (serviceWorker) {
                 serviceWorker.addEventListener('statechange', function() {
                     if (this.state === 'activated') {
+                        cleanup();
                         resolve();
+                    } else if (this.state === 'redundant') {
+                        cleanup();
+                        reject(new Error('Service Worker falhou ao ativar'));
                     }
                 });
             } else {
-                // Fallback: aguardar um pouco
-                setTimeout(resolve, 1000);
+                // Tentar aguardar por um novo service worker
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'activated') {
+                                cleanup();
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Fallback: aguardar 2 segundos
+                setTimeout(() => {
+                    if (registration.active) {
+                        cleanup();
+                        resolve();
+                    } else {
+                        cleanup();
+                        reject(new Error('Service Worker não foi ativado'));
+                    }
+                }, 2000);
             }
         });
     }
@@ -373,5 +481,34 @@ document.addEventListener('DOMContentLoaded', function() {
         return outputArray;
     }
 });
+
+// Função para deletar dispositivo
+async function deleteDevice(tokenId) {
+    if (!confirm('Tem certeza que deseja remover este dispositivo? Você não receberá mais notificações nele.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/notifications/delete-device/${tokenId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Recarregar a página para atualizar a lista
+            window.location.reload();
+        } else {
+            alert('Erro ao remover dispositivo: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Erro ao remover dispositivo:', error);
+        alert('Erro ao remover dispositivo: ' + error.message);
+    }
+}
 </script>
 {% endblock %}

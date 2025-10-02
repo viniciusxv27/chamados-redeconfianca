@@ -358,6 +358,173 @@ function initializeNotificationSystem() {
         // Atualizar contador a cada 30 segundos
         setInterval(updateUnreadCount, 30000);
     }
+    
+    // Inicializar suporte a notificações push (incluindo iOS)
+    initializePushNotifications();
+}
+
+// Inicializar sistema de push notifications com suporte ao iOS
+async function initializePushNotifications() {
+    // Verificar se o serviço está disponível
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.log('Push notifications não suportadas neste navegador');
+        return;
+    }
+    
+    try {
+        // Registrar service worker
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        console.log('Service Worker registrado com sucesso');
+        
+        // Aguardar o service worker estar pronto
+        await navigator.serviceWorker.ready;
+        
+        // Verificar se é iOS e se tem suporte
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        if (isIOS) {
+            console.log('iOS detectado - usando gestor específico para iOS');
+            // O iOSNotificationManager será inicializado automaticamente
+            
+            // Verificar se o app está em standalone mode (adicionado à tela inicial)
+            const isStandalone = window.navigator.standalone || 
+                               window.matchMedia('(display-mode: standalone)').matches;
+            
+            if (!isStandalone) {
+                console.log('App não está em modo standalone - funcionalidades limitadas');
+                showIOSInstallPrompt();
+                return;
+            }
+        }
+        
+        // Verificar permissão atual
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+            console.log('Permissão de notificação concedida');
+            
+            if (isIOS && window.iOSNotifications) {
+                // Usar o gestor específico do iOS
+                await window.iOSNotifications.enableNotifications();
+            } else {
+                // Usar o sistema padrão para outros navegadores
+                await subscribeToNotifications(registration);
+            }
+        } else {
+            console.log('Permissão de notificação negada');
+        }
+        
+    } catch (error) {
+        console.error('Erro ao inicializar push notifications:', error);
+    }
+}
+
+// Subscrever às notificações push (para navegadores não-iOS)
+async function subscribeToNotifications(registration) {
+    try {
+        // Obter chave VAPID pública
+        const response = await fetch('/api/notifications/vapid-key/');
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error('Falha ao obter chave VAPID');
+        }
+        
+        // Subscrever
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlB64ToUint8Array(data.vapid_public_key)
+        });
+        
+        // Enviar subscrição para o servidor
+        const subscribeResponse = await fetch('/api/notifications/subscribe/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                subscription: subscription.toJSON(),
+                platform: 'web'
+            })
+        });
+        
+        const subscribeData = await subscribeResponse.json();
+        
+        if (subscribeData.success) {
+            console.log('Subscrição realizada com sucesso');
+            showNotificationSuccess();
+        } else {
+            throw new Error(subscribeData.error);
+        }
+        
+    } catch (error) {
+        console.error('Erro ao subscrever às notificações:', error);
+        showNotificationError();
+    }
+}
+
+// Mostrar prompt para adicionar à tela inicial no iOS
+function showIOSInstallPrompt() {
+    const prompt = document.createElement('div');
+    prompt.className = 'fixed bottom-4 left-4 right-4 bg-blue-500 text-white p-4 rounded-lg shadow-lg z-50';
+    prompt.innerHTML = `
+        <div class="flex items-start space-x-3">
+            <div class="flex-shrink-0">
+                <i class="fas fa-mobile-alt text-xl"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="font-medium mb-1">Instalar App</h4>
+                <p class="text-sm opacity-90 mb-2">
+                    Para receber notificações, adicione o app à sua tela de início:
+                </p>
+                <div class="text-xs opacity-80 space-y-1">
+                    <div>1. Toque no botão de compartilhar <i class="fas fa-share"></i></div>
+                    <div>2. Selecione "Adicionar à Tela de Início"</div>
+                </div>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" 
+                    class="flex-shrink-0 text-white hover:text-gray-200">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(prompt);
+    
+    // Auto-remove após 20 segundos
+    setTimeout(() => {
+        if (prompt.parentElement) {
+            prompt.parentElement.removeChild(prompt);
+        }
+    }, 20000);
+}
+
+// Mostrar mensagem de sucesso
+function showNotificationSuccess() {
+    showNotification('Notificações ativadas com sucesso!', 'success');
+}
+
+// Mostrar mensagem de erro
+function showNotificationError() {
+    showNotification('Erro ao ativar notificações. Tente novamente.', 'error');
+}
+
+// Converter chave VAPID
+function urlB64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
 }
 
 // Toggle do dropdown de notificações

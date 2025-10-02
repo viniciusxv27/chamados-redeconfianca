@@ -611,6 +611,7 @@
     {% endif %}
     
     <script src="{% static 'js/app.js' %}"></script>
+    <script src="{% static 'js/ios-notifications.js' %}"></script>
     <script>
         // Mobile Menu Toggle Functionality
         document.addEventListener('DOMContentLoaded', function() {
@@ -1010,7 +1011,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/static/sw.js')
+                navigator.serviceWorker.register('/sw.js')
                     .then(function(registration) {
                         console.log('ServiceWorker registration successful with scope: ', registration.scope);
                     }, function(err) {

@@ -82,27 +82,53 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                 <!-- Filtro por categoria -->
                 <div>
-                    <label for="categoria" class="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
+                    <label for="categoria" class="block text-sm font-medium text-gray-700 mb-2">
+                        Categoria
+                        {% if user.hierarchy == 'SUPERADMIN' %}
+                            <span class="text-xs text-blue-600 font-normal">(Superadmin - Todas)</span>
+                        {% endif %}
+                    </label>
                     <select id="categoria" name="categoria" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                         <option value="">Todas as Categorias</option>
-                        {% for category in user_categories %}
-                            <option value="{{ category.id }}" {% if categoria == category.id|stringformat:"s" %}selected{% endif %}>
-                                {{ category.name }} ({{ category.sector.name }})
-                            </option>
-                        {% endfor %}
+                        {% if user.hierarchy == 'SUPERADMIN' %}
+                            {% for category in all_categories %}
+                                <option value="{{ category.id }}" {% if categoria == category.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ category.name }} ({{ category.sector.name }})
+                                </option>
+                            {% endfor %}
+                        {% else %}
+                            {% for category in user_categories %}
+                                <option value="{{ category.id }}" {% if categoria == category.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ category.name }} ({{ category.sector.name }})
+                                </option>
+                            {% endfor %}
+                        {% endif %}
                     </select>
                 </div>
                 
                 <!-- Filtro por setor -->
                 <div>
-                    <label for="setor" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                    <label for="setor" class="block text-sm font-medium text-gray-700 mb-2">
+                        Setor
+                        {% if user.hierarchy == 'SUPERADMIN' %}
+                            <span class="text-xs text-blue-600 font-normal">(Superadmin - Todos)</span>
+                        {% endif %}
+                    </label>
                     <select id="setor" name="setor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                         <option value="">Todos os Setores</option>
-                        {% for sector in user_sectors %}
-                            <option value="{{ sector.id }}" {% if setor == sector.id|stringformat:"s" %}selected{% endif %}>
-                                {{ sector.name }}
-                            </option>
-                        {% endfor %}
+                        {% if user.hierarchy == 'SUPERADMIN' %}
+                            {% for sector in all_sectors %}
+                                <option value="{{ sector.id }}" {% if setor == sector.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ sector.name }}
+                                </option>
+                            {% endfor %}
+                        {% else %}
+                            {% for sector in user_sectors %}
+                                <option value="{{ sector.id }}" {% if setor == sector.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ sector.name }}
+                                </option>
+                            {% endfor %}
+                        {% endif %}
                     </select>
                 </div>
                 
@@ -118,6 +144,107 @@
                     </select>
                 </div>
             </div>
+            
+            <!-- Filtros Avançados para Superadmin -->
+            {% if user.hierarchy == 'SUPERADMIN' %}
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-sm font-semibold text-blue-800 flex items-center">
+                        <i class="fas fa-crown mr-2"></i>
+                        Filtros Avançados (Superadmin)
+                    </h4>
+                    <button type="button" id="toggleAdvancedFilters" class="text-blue-600 hover:text-blue-800 text-sm">
+                        <i class="fas fa-chevron-down"></i>
+                        <span>Mostrar</span>
+                    </button>
+                </div>
+                
+                <div id="advancedFilters" class="hidden grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <!-- Filtro por usuário solicitante -->
+                    <div>
+                        <label for="created_by" class="block text-sm font-medium text-gray-700 mb-2">Solicitante</label>
+                        <select id="created_by" name="created_by" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos os Usuários</option>
+                            {% for user_option in all_users %}
+                                <option value="{{ user_option.id }}" {% if created_by == user_option.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ user_option.get_full_name }} ({{ user_option.email }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Filtro por responsável -->
+                    <div>
+                        <label for="assigned_to" class="block text-sm font-medium text-gray-700 mb-2">Responsável</label>
+                        <select id="assigned_to" name="assigned_to" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos os Responsáveis</option>
+                            <option value="unassigned" {% if assigned_to == 'unassigned' %}selected{% endif %}>Não Atribuído</option>
+                            {% for user_option in all_users %}
+                                <option value="{{ user_option.id }}" {% if assigned_to == user_option.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ user_option.get_full_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Filtro por data -->
+                    <div>
+                        <label for="date_from" class="block text-sm font-medium text-gray-700 mb-2">Data Inicial</label>
+                        <input type="date" id="date_from" name="date_from" value="{{ date_from }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <div>
+                        <label for="date_to" class="block text-sm font-medium text-gray-700 mb-2">Data Final</label>
+                        <input type="date" id="date_to" name="date_to" value="{{ date_to }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <!-- Filtro por hierarquia do solicitante -->
+                    <div>
+                        <label for="user_hierarchy" class="block text-sm font-medium text-gray-700 mb-2">Hierarquia do Solicitante</label>
+                        <select id="user_hierarchy" name="user_hierarchy" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todas as Hierarquias</option>
+                            <option value="PADRAO" {% if user_hierarchy == 'PADRAO' %}selected{% endif %}>Padrão</option>
+                            <option value="SUPERVISOR" {% if user_hierarchy == 'SUPERVISOR' %}selected{% endif %}>Supervisor</option>
+                            <option value="ADMINISTRATIVO" {% if user_hierarchy == 'ADMINISTRATIVO' %}selected{% endif %}>Administrativo</option>
+                            <option value="ADMIN" {% if user_hierarchy == 'ADMIN' %}selected{% endif %}>Admin</option>
+                            <option value="SUPERADMIN" {% if user_hierarchy == 'SUPERADMIN' %}selected{% endif %}>Superadmin</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Filtro por tickets com/sem anexos -->
+                    <div>
+                        <label for="has_attachments" class="block text-sm font-medium text-gray-700 mb-2">Anexos</label>
+                        <select id="has_attachments" name="has_attachments" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos</option>
+                            <option value="yes" {% if has_attachments == 'yes' %}selected{% endif %}>Com Anexos</option>
+                            <option value="no" {% if has_attachments == 'no' %}selected{% endif %}>Sem Anexos</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Filtro por tickets com comentários -->
+                    <div>
+                        <label for="has_comments" class="block text-sm font-medium text-gray-700 mb-2">Comentários</label>
+                        <select id="has_comments" name="has_comments" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos</option>
+                            <option value="yes" {% if has_comments == 'yes' %}selected{% endif %}>Com Comentários</option>
+                            <option value="no" {% if has_comments == 'no' %}selected{% endif %}>Sem Comentários</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Filtro por tempo de resolução -->
+                    <div>
+                        <label for="overdue" class="block text-sm font-medium text-gray-700 mb-2">Prazo</label>
+                        <select id="overdue" name="overdue" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos</option>
+                            <option value="yes" {% if overdue == 'yes' %}selected{% endif %}>Em Atraso</option>
+                            <option value="no" {% if overdue == 'no' %}selected{% endif %}>No Prazo</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             
             <div class="flex justify-between items-center">
                 <div class="flex space-x-3">
@@ -477,6 +604,150 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Advanced filters toggle for Superadmin
+    const toggleBtn = document.getElementById('toggleAdvancedFilters');
+    const advancedFilters = document.getElementById('advancedFilters');
+    
+    if (toggleBtn && advancedFilters) {
+        toggleBtn.addEventListener('click', function() {
+            const isHidden = advancedFilters.classList.contains('hidden');
+            const icon = this.querySelector('i');
+            const text = this.querySelector('span');
+            
+            if (isHidden) {
+                advancedFilters.classList.remove('hidden');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+                text.textContent = 'Ocultar';
+            } else {
+                advancedFilters.classList.add('hidden');
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+                text.textContent = 'Mostrar';
+            }
+        });
+        
+        // Auto-expand if any advanced filter is set
+        const advancedInputs = advancedFilters.querySelectorAll('input, select');
+        let hasActiveFilter = false;
+        
+        advancedInputs.forEach(input => {
+            if (input.value && input.value !== '') {
+                hasActiveFilter = true;
+            }
+        });
+        
+        if (hasActiveFilter) {
+            setTimeout(() => toggleBtn.click(), 100); // Auto-expand if filters are active
+        }
+    }
+    
+    // Date validation
+    const dateFrom = document.getElementById('date_from');
+    const dateTo = document.getElementById('date_to');
+    
+    if (dateFrom && dateTo) {
+        dateFrom.addEventListener('change', function() {
+            dateTo.min = this.value;
+        });
+        
+        dateTo.addEventListener('change', function() {
+            dateFrom.max = this.value;
+        });
+    }
 });
+
+// Quick filter functions
+function applyQuickFilter(filterType) {
+    const form = document.querySelector('form');
+    
+    // Clear existing filters except search
+    const searchValue = document.getElementById('search').value;
+    form.querySelectorAll('input, select').forEach(input => {
+        if (input.name !== 'csrfmiddlewaretoken' && input.name !== 'search') {
+            input.value = '';
+        }
+    });
+    document.getElementById('search').value = searchValue;
+    
+    // Apply specific filter
+    switch(filterType) {
+        case 'urgent':
+            document.getElementById('prioridade').value = 'URGENTE';
+            break;
+        case 'open':
+            document.getElementById('status').value = 'ABERTO';
+            break;
+        case 'my_tickets':
+            document.getElementById('origem').value = 'meus';
+            break;
+        case 'unresolved':
+            document.getElementById('status').value = 'nao_resolvidos';
+            break;
+    }
+    
+    form.submit();
+}
+
+// Export functionality for Superadmin
+function exportTickets(format) {
+    const form = document.querySelector('form');
+    const formData = new FormData(form);
+    
+    // Create download link with current filters
+    const params = new URLSearchParams();
+    for (let [key, value] of formData.entries()) {
+        if (value) params.append(key, value);
+    }
+    params.append('export', format);
+    
+    // Redirect to export URL
+    window.location.href = '{% url "tickets_list" %}?' + params.toString();
+}
 </script>
+
+<!-- Quick Action Buttons for Superadmin -->
+{% if user.hierarchy == 'SUPERADMIN' %}
+<div class="fixed bottom-6 right-6 flex flex-col space-y-2 z-40">
+    <div class="bg-white rounded-lg shadow-xl p-2 border border-gray-200">
+        <div class="flex flex-col space-y-1">
+            <div class="text-xs text-gray-500 px-2 py-1 font-semibold border-b">Filtros Rápidos</div>
+            <button onclick="applyQuickFilter('urgent')" 
+                    class="px-3 py-2 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center"
+                    title="Chamados Urgentes">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Urgentes
+            </button>
+            <button onclick="applyQuickFilter('open')" 
+                    class="px-3 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
+                    title="Chamados Abertos">
+                <i class="fas fa-folder-open mr-2"></i>
+                Abertos
+            </button>
+            <button onclick="applyQuickFilter('unresolved')" 
+                    class="px-3 py-2 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center"
+                    title="Não Resolvidos">
+                <i class="fas fa-clock mr-2"></i>
+                Pendentes
+            </button>
+            <div class="border-t pt-1 mt-1">
+                <div class="text-xs text-gray-500 px-2 py-1 font-semibold">Exportar</div>
+                <button onclick="exportTickets('csv')" 
+                        class="px-3 py-2 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors w-full flex items-center justify-center"
+                        title="Exportar para CSV">
+                    <i class="fas fa-download mr-2"></i>
+                    CSV
+                </button>
+                <button onclick="exportTickets('xlsx')" 
+                        class="px-3 py-2 text-xs bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors w-full flex items-center justify-center mt-1"
+                        title="Exportar para Excel">
+                    <i class="fas fa-file-excel mr-2"></i>
+                    Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

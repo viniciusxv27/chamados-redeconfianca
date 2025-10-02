@@ -19,10 +19,12 @@ from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.static import serve
+from django.http import HttpResponse, Http404
 from rest_framework.routers import DefaultRouter
 from users.views import UserViewSet, SectorViewSet, login_view, logout_view
 from tickets.views import TicketViewSet, CategoryViewSet
 from communications.views import home_feed
+import os
 
 # Router para API REST
 router = DefaultRouter()
@@ -43,8 +45,24 @@ try:
 except ImportError:
     pass
 
+# View para servir o service worker da raiz
+def service_worker_view(request):
+    """Serve the service worker from the root directory"""
+    sw_path = os.path.join(settings.BASE_DIR, 'sw.js')
+    
+    if os.path.exists(sw_path):
+        with open(sw_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        response = HttpResponse(content, content_type='application/javascript')
+        response['Service-Worker-Allowed'] = '/'
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+    else:
+        raise Http404("Service worker not found")
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('sw.js', service_worker_view, name='service_worker'),  # Service Worker na raiz
     path('', home_feed, name='home'),  # Home feed como página inicial
     path('login/', login_view, name='login'),  # Login na raiz
     path('logout/', logout_view, name='logout'),  # Logout na raiz

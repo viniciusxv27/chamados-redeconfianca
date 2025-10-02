@@ -134,12 +134,94 @@ def tickets_list_view(request):
     # Remover duplicatas
     user_sectors = list(set(user_sectors))
     
-    # Obter categorias dos setores do usuário
-    user_categories = Category.objects.filter(sector__in=user_sectors).order_by('sector__name', 'name')
+    # Filtros avançados para SUPERADMIN
+    created_by_filter = request.GET.get('created_by', '')
+    assigned_to_filter = request.GET.get('assigned_to', '')
+    date_from_filter = request.GET.get('date_from', '')
+    date_to_filter = request.GET.get('date_to', '')
+    user_hierarchy_filter = request.GET.get('user_hierarchy', '')
+    has_attachments_filter = request.GET.get('has_attachments', '')
+    has_comments_filter = request.GET.get('has_comments', '')
+    overdue_filter = request.GET.get('overdue', '')
+    
+    # Aplicar filtros avançados apenas para SUPERADMIN
+    if user.hierarchy == 'SUPERADMIN':
+        # Filtro por usuário que criou
+        if created_by_filter:
+            tickets = tickets.filter(created_by_id=created_by_filter)
+        
+        # Filtro por responsável
+        if assigned_to_filter:
+            if assigned_to_filter == 'unassigned':
+                tickets = tickets.filter(assigned_to__isnull=True)
+            else:
+                tickets = tickets.filter(assigned_to_id=assigned_to_filter)
+        
+        # Filtro por data
+        if date_from_filter:
+            from django.utils.dateparse import parse_date
+            date_from = parse_date(date_from_filter)
+            if date_from:
+                tickets = tickets.filter(created_at__date__gte=date_from)
+        
+        if date_to_filter:
+            from django.utils.dateparse import parse_date
+            date_to = parse_date(date_to_filter)
+            if date_to:
+                tickets = tickets.filter(created_at__date__lte=date_to)
+        
+        # Filtro por hierarquia do usuário
+        if user_hierarchy_filter:
+            tickets = tickets.filter(created_by__hierarchy=user_hierarchy_filter)
+        
+        # Filtro por anexos
+        if has_attachments_filter == 'yes':
+            tickets = tickets.filter(attachments__isnull=False).distinct()
+        elif has_attachments_filter == 'no':
+            tickets = tickets.filter(attachments__isnull=True)
+        
+        # Filtro por comentários
+        if has_comments_filter == 'yes':
+            tickets = tickets.filter(comments__isnull=False).distinct()
+        elif has_comments_filter == 'no':
+            tickets = tickets.filter(comments__isnull=True)
+        
+        # Filtro por prazo (em atraso)
+        if overdue_filter:
+            from django.utils import timezone
+            now = timezone.now()
+            if overdue_filter == 'yes':
+                # Tickets em atraso (não resolvidos e com data de vencimento passada)
+                tickets = tickets.filter(
+                    models.Q(due_date__lt=now) & 
+                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                )
+            elif overdue_filter == 'no':
+                # Tickets no prazo
+                tickets = tickets.filter(
+                    models.Q(due_date__gte=now) | 
+                    models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                )
+
+    # Obter categorias e setores baseado na hierarquia do usuário
+    if user.hierarchy == 'SUPERADMIN':
+        # SUPERADMIN pode ver todas as categorias e setores
+        user_categories = Category.objects.all().order_by('sector__name', 'name')
+        all_categories = Category.objects.all().order_by('sector__name', 'name')
+        all_sectors = Sector.objects.all().order_by('name')
+        all_users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    else:
+        # Usuários normais veem apenas as categorias dos seus setores
+        user_categories = Category.objects.filter(sector__in=user_sectors).order_by('sector__name', 'name')
+        all_categories = user_categories  # Mesma coisa para usuários normais
+        all_sectors = user_sectors
+        all_users = []  # Usuários normais não precisam desta lista
     
     # Obter nomes para exibição dos filtros aplicados
     categoria_name = ''
     setor_name = ''
+    created_by_name = ''
+    assigned_to_name = ''
     
     if categoria_filter:
         try:
@@ -154,6 +236,23 @@ def tickets_list_view(request):
             setor_name = setor_obj.name
         except Sector.DoesNotExist:
             pass
+    
+    if created_by_filter and user.hierarchy == 'SUPERADMIN':
+        try:
+            created_by_obj = User.objects.get(id=created_by_filter)
+            created_by_name = created_by_obj.get_full_name()
+        except User.DoesNotExist:
+            pass
+    
+    if assigned_to_filter and user.hierarchy == 'SUPERADMIN':
+        if assigned_to_filter == 'unassigned':
+            assigned_to_name = 'Não Atribuído'
+        else:
+            try:
+                assigned_to_obj = User.objects.get(id=assigned_to_filter)
+                assigned_to_name = assigned_to_obj.get_full_name()
+            except User.DoesNotExist:
+                pass
     
     context = {
         'tickets': tickets_page,
@@ -170,6 +269,21 @@ def tickets_list_view(request):
         'user_sectors': user_sectors,
         'paginator': paginator,
         'page_obj': tickets_page,
+        # Filtros avançados para SUPERADMIN
+        'created_by': created_by_filter,
+        'assigned_to': assigned_to_filter,
+        'date_from': date_from_filter,
+        'date_to': date_to_filter,
+        'user_hierarchy': user_hierarchy_filter,
+        'has_attachments': has_attachments_filter,
+        'has_comments': has_comments_filter,
+        'overdue': overdue_filter,
+        'created_by_name': created_by_name,
+        'assigned_to_name': assigned_to_name,
+        # Dados completos para SUPERADMIN
+        'all_categories': all_categories if user.hierarchy == 'SUPERADMIN' else user_categories,
+        'all_sectors': all_sectors if user.hierarchy == 'SUPERADMIN' else user_sectors,
+        'all_users': all_users if user.hierarchy == 'SUPERADMIN' else [],
     }
     return render(request, 'tickets/list.html', context)
 
