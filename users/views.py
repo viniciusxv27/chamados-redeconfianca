@@ -2760,25 +2760,51 @@ def checklist_detail_view(request, checklist_id):
     """Detalhes de um checklist específico"""
     from core.models import DailyChecklist
     from django.db import models
+    from django.http import Http404
+    from django.contrib import messages
     
     user = request.user
-    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
     
-    # Usuários comuns só podem ver seus próprios checklists
-    # Supervisores podem ver checklists que criaram para usuários do seu setor
-    if is_supervisor:
-        checklist_query = DailyChecklist.objects.filter(
-            id=checklist_id
-        ).filter(
-            models.Q(user=user) | models.Q(created_by=user, user__sector=user.sector)
-        )
-        checklist = get_object_or_404(checklist_query)
-    else:
-        checklist = get_object_or_404(
-            DailyChecklist, 
-            id=checklist_id,
-            user=user
-        )
+    try:
+        # Primeiro verifica se o checklist existe
+        checklist_exists = DailyChecklist.objects.filter(id=checklist_id).exists()
+        if not checklist_exists:
+            raise Http404("Checklist não encontrado")
+        
+        # Lógica de permissões por hierarquia
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
+            # SuperAdmins e Admins podem ver qualquer checklist
+            checklist = DailyChecklist.objects.get(id=checklist_id)
+        
+        elif user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO'] or user.is_staff:
+            # Supervisores podem ver:
+            # 1. Seus próprios checklists
+            # 2. Checklists que criaram
+            # 3. Checklists de usuários do seu setor
+            checklist_query = DailyChecklist.objects.filter(
+                id=checklist_id
+            ).filter(
+                models.Q(user=user) |                          # Próprios checklists
+                models.Q(created_by=user) |                    # Checklists que criou
+                models.Q(user__sector=user.sector)             # Checklists do seu setor
+            )
+            
+            if not checklist_query.exists():
+                messages.error(request, 'Você não tem permissão para visualizar este checklist.')
+                return redirect('checklist_dashboard')
+            
+            checklist = checklist_query.first()
+        
+        else:
+            # Usuários comuns só veem seus próprios checklists
+            try:
+                checklist = DailyChecklist.objects.get(id=checklist_id, user=user)
+            except DailyChecklist.DoesNotExist:
+                messages.error(request, 'Você só pode visualizar seus próprios checklists.')
+                return redirect('checklist_dashboard')
+                
+    except DailyChecklist.DoesNotExist:
+        raise Http404("Checklist não encontrado")
     
     items = checklist.items.all().order_by('order', 'title')
     

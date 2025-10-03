@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Checklist - {{ checklist.template.title }}{% endblock %}
+{% block title %}Checklist - {{ checklist.title }}{% endblock %}
 
 {% block content %}
 <div class="p-6">
@@ -15,14 +15,18 @@
                     </a>
                 </li>
                 <li><i class="fas fa-chevron-right mx-2"></i></li>
-                <li class="text-white">{{ checklist.template.title }}</li>
+                <li class="text-white">{{ checklist.title }}</li>
             </ol>
         </nav>
         
         <div class="flex items-center justify-between">
             <div class="flex-1">
-                <h1 class="text-3xl font-bold mb-2">{{ checklist.template.title }}</h1>
-                <p class="text-blue-100 mb-2">{{ checklist.template.description }}</p>
+                <h1 class="text-3xl font-bold mb-2">{{ checklist.title }}</h1>
+                {% if checklist.template %}
+                    <p class="text-blue-100 mb-2">{{ checklist.template.description }}</p>
+                {% elif checklist.description %}
+                    <p class="text-blue-100 mb-2">{{ checklist.description }}</p>
+                {% endif %}
                 <div class="text-sm text-blue-200">
                     <i class="fas fa-calendar mr-2"></i>{{ checklist.date|date:"d/m/Y" }}
                     {% if checklist.completed_at %}
