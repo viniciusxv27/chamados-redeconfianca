@@ -28,14 +28,14 @@ def home_feed(request):
         is_pinned=True
     ).filter(
         Q(send_to_all=True) | Q(recipients=request.user)
-    ).distinct().order_by('-created_at')[:3]
+    ).distinct().prefetch_related('images').order_by('-created_at')[:3]
     
     # Feed de comunicados (não fixados)
     communications_list = Communication.objects.filter(
         is_pinned=False
     ).filter(
         Q(send_to_all=True) | Q(recipients=request.user)
-    ).distinct().order_by('-created_at')
+    ).distinct().prefetch_related('images').order_by('-created_at')
     
     # Paginação
     paginator = Paginator(communications_list, 10)
@@ -102,7 +102,7 @@ def communication_list(request):
     """Lista todos os comunicados do usuário"""
     if request.user.hierarchy == 'SUPERADMIN':
         communications = Communication.objects.all().select_related('sender').prefetch_related(
-            'viewed_by', 'liked_by', 'comments'
+            'viewed_by', 'liked_by', 'comments', 'images'
         ).order_by('-created_at')
     else:
         # Para outros usuários, mostrar apenas comunicados gerais e destinados a ele que estão ativos
@@ -116,7 +116,7 @@ def communication_list(request):
         ).filter(
             Q(active_until__isnull=True) | Q(active_until__gte=now)
         ).select_related('sender').prefetch_related(
-            'viewed_by', 'liked_by', 'comments'
+            'viewed_by', 'liked_by', 'comments', 'images'
         ).distinct().order_by('-created_at')
     
     # Verificar quais comunicados foram lidos
@@ -258,8 +258,28 @@ def create_communication_view(request):
                 active_until=active_until if active_until else None
             )
             
-            # Processar upload de imagem
-            if 'photo' in request.FILES:
+            # Processar upload de imagens múltiplas
+            if 'photos' in request.FILES:
+                from .models import CommunicationImage
+                photos = request.FILES.getlist('photos')
+                
+                if photos:
+                    # Se tem imagens, forçar is_popup para False
+                    communication.is_popup = False
+                    communication.save()
+                    
+                    # Processar cada imagem
+                    for index, photo in enumerate(photos):
+                        caption = request.POST.get(f'caption-{index}', '')
+                        CommunicationImage.objects.create(
+                            communication=communication,
+                            image=photo,
+                            caption=caption,
+                            order=index
+                        )
+            
+            # Manter compatibilidade com imagem única
+            elif 'photo' in request.FILES:
                 communication.image = request.FILES['photo']
                 # Se tem imagem, forçar is_popup para False
                 communication.is_popup = False

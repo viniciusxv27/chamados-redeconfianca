@@ -219,6 +219,31 @@ class CommunicationRead(models.Model):
         return f"{self.communication.title} - {self.user.full_name} - {self.get_status_display()}"
 
 
+class CommunicationImage(models.Model):
+    communication = models.ForeignKey(
+        Communication,
+        on_delete=models.CASCADE,
+        related_name='images',
+        verbose_name="Comunicado"
+    )
+    image = models.ImageField(
+        upload_to=upload_communication_attachment,
+        storage=get_media_storage(),
+        verbose_name="Imagem"
+    )
+    caption = models.CharField(max_length=200, blank=True, verbose_name="Legenda")
+    order = models.PositiveIntegerField(default=0, verbose_name="Ordem")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
+    
+    class Meta:
+        verbose_name = "Imagem do Comunicado"
+        verbose_name_plural = "Imagens do Comunicado"
+        ordering = ['order', 'created_at']
+    
+    def __str__(self):
+        return f"Imagem {self.order + 1} - {self.communication.title}"
+
+
 class CommunicationComment(models.Model):
     communication = models.ForeignKey(
         Communication, 

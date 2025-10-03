@@ -162,14 +162,106 @@
                 <div class="p-4 sm:p-6">
                     <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3">{{ comm.title }}</h2>
                     
-                    {% if comm.image %}
+                    {% if comm.image or comm.images.exists %}
                     <div class="mb-4">
-                        <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full h-auto max-w-full object-contain rounded-lg bg-gray-50">
+                        {% if comm.images.exists %}
+                            <!-- Carrossel de múltiplas imagens -->
+                            <div class="relative" id="carousel-home-{{ comm.id }}">
+                                <div class="overflow-hidden rounded-lg shadow-sm">
+                                    <div class="flex transition-transform duration-300 ease-in-out" id="carousel-inner-home-{{ comm.id }}" data-current="0">
+                                        {% for image in comm.images.all %}
+                                        <div class="w-full flex-shrink-0 relative">
+                                            <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Imagem do comunicado' }}" class="w-full h-auto max-w-full object-contain bg-gray-50 rounded-lg">
+                                            {% if image.caption %}
+                                            <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2">
+                                                <p class="text-xs">{{ image.caption }}</p>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                
+                                {% if comm.images.count > 1 %}
+                                <!-- Botões de navegação -->
+                                <button onclick="
+                                    var inner = document.getElementById('carousel-inner-home-{{ comm.id }}');
+                                    var total = inner.children.length;
+                                    var current = parseInt(inner.getAttribute('data-current') || '0');
+                                    current = (current - 1 + total) % total;
+                                    inner.setAttribute('data-current', current);
+                                    inner.style.transform = 'translateX(-' + (current * 100) + '%)';
+                                    var counter = document.getElementById('image-counter-home-{{ comm.id }}');
+                                    if(counter) counter.textContent = (current + 1);
+                                    var indicators = document.querySelectorAll('[id^=indicator-home-{{ comm.id }}-]');
+                                    for(var i = 0; i < indicators.length; i++) {
+                                        if(i === current) {
+                                            indicators[i].className = indicators[i].className.replace('bg-opacity-60', 'bg-opacity-100');
+                                        } else {
+                                            indicators[i].className = indicators[i].className.replace('bg-opacity-100', 'bg-opacity-60');
+                                        }
+                                    }
+                                " class="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-60 hover:bg-opacity-80 text-white p-2 rounded-full transition-all">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <button onclick="
+                                    var inner = document.getElementById('carousel-inner-home-{{ comm.id }}');
+                                    var total = inner.children.length;
+                                    var current = parseInt(inner.getAttribute('data-current') || '0');
+                                    current = (current + 1) % total;
+                                    inner.setAttribute('data-current', current);
+                                    inner.style.transform = 'translateX(-' + (current * 100) + '%)';
+                                    var counter = document.getElementById('image-counter-home-{{ comm.id }}');
+                                    if(counter) counter.textContent = (current + 1);
+                                    var indicators = document.querySelectorAll('[id^=indicator-home-{{ comm.id }}-]');
+                                    for(var i = 0; i < indicators.length; i++) {
+                                        if(i === current) {
+                                            indicators[i].className = indicators[i].className.replace('bg-opacity-60', 'bg-opacity-100');
+                                        } else {
+                                            indicators[i].className = indicators[i].className.replace('bg-opacity-100', 'bg-opacity-60');
+                                        }
+                                    }
+                                " class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-60 hover:bg-opacity-80 text-white p-2 rounded-full transition-all">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                                
+                                <!-- Contador de imagens -->
+                                <div class="absolute top-2 right-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded-full text-xs">
+                                    <span id="image-counter-home-{{ comm.id }}">1</span> / {{ comm.images.count }}
+                                </div>
+                                
+                                <!-- Indicadores -->
+                                <div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
+                                    {% for image in comm.images.all %}
+                                    <button onclick="
+                                        var inner = document.getElementById('carousel-inner-home-{{ comm.id }}');
+                                        var current = {{ forloop.counter0 }};
+                                        inner.setAttribute('data-current', current);
+                                        inner.style.transform = 'translateX(-' + (current * 100) + '%)';
+                                        var counter = document.getElementById('image-counter-home-{{ comm.id }}');
+                                        if(counter) counter.textContent = (current + 1);
+                                        var indicators = document.querySelectorAll('[id^=indicator-home-{{ comm.id }}-]');
+                                        for(var i = 0; i < indicators.length; i++) {
+                                            if(i === current) {
+                                                indicators[i].className = indicators[i].className.replace('bg-opacity-60', 'bg-opacity-100');
+                                            } else {
+                                                indicators[i].className = indicators[i].className.replace('bg-opacity-100', 'bg-opacity-60');
+                                            }
+                                        }
+                                    " class="w-2 h-2 rounded-full bg-white bg-opacity-60 hover:bg-opacity-100 transition-opacity {% if forloop.first %}bg-opacity-100{% endif %}" id="indicator-home-{{ comm.id }}-{{ forloop.counter0 }}"></button>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        {% elif comm.image %}
+                            <!-- Imagem única (legacy) -->
+                            <img src="{{ comm.image.url }}" alt="Imagem do comunicado" class="w-full h-auto max-w-full object-contain rounded-lg bg-gray-50">
+                        {% endif %}
                     </div>
                     {% endif %}
                     
                     <div class="prose prose-sm sm:prose max-w-none">
-                        {{ comm.message|linebreaks }}
+                        {{ comm.message|safe }}
                     </div>
                 </div>
 
@@ -289,6 +381,8 @@ function getCsrfToken() {
     console.error('No valid CSRF token found!');
     return '';
 }
+
+
 
 document.addEventListener('DOMContentLoaded', function() {
     // Status buttons functionality
@@ -457,5 +551,7 @@ setInterval(() => {
         location.reload();
     }
 }, 5 * 60 * 1000);
+
+
 </script>
 {% endblock %}

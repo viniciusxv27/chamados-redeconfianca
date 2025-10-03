@@ -213,34 +213,26 @@
                                     </p>
                                     <p class="text-xs text-gray-500">PNG, JPG ou JPEG (MAX. 5MB)</p>
                                 </div>
-                                <input id="photo" name="photo" type="file" class="hidden" accept="image/*" onchange="previewImage(this)">
+                                <input id="photo" name="photos" type="file" class="hidden" accept="image/*" multiple onchange="previewImages(this)">
                             </label>
                         </div>
                         
-                        <!-- Preview da nova imagem -->
-                        <div id="photo-preview" class="hidden mt-4">
+                        <!-- Preview das imagens -->
+                        <div id="photos-preview" class="hidden mt-4">
                             <div class="bg-gray-100 rounded-lg p-4">
                                 <div class="flex items-center justify-between mb-3">
-                                    <p class="text-sm text-gray-600">Imagem selecionada:</p>
-                                    <div class="flex gap-2">
-                                        <button type="button" onclick="openCropModal()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600 transition-colors">
-                                            <i class="fas fa-crop mr-1"></i>
-                                            Recortar
-                                        </button>
-                                        <button type="button" onclick="removePhoto()" class="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600 transition-colors">
-                                            <i class="fas fa-trash mr-1"></i>
-                                            Remover
-                                        </button>
-                                    </div>
+                                    <p class="text-sm text-gray-600">Imagens selecionadas: <span id="images-count">0</span></p>
+                                    <button type="button" onclick="removeAllPhotos()" class="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600 transition-colors">
+                                        <i class="fas fa-trash mr-1"></i>
+                                        Remover Todas
+                                    </button>
                                 </div>
-                                <div class="bg-white rounded border">
-                                    <img id="preview-img" src="" alt="Preview" class="w-full h-auto object-contain rounded bg-gray-50">
+                                <div id="images-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    <!-- Imagens serão inseridas aqui via JavaScript -->
                                 </div>
                             </div>
-                            <!-- Input hidden para enviar a imagem processada -->
-                            <input type="hidden" id="cropped-image-data" name="cropped_image_data">
                         </div>
-                        <p class="text-sm text-gray-500 mt-1">A foto será exibida como destaque no feed de comunicados. Use a ferramenta de corte para ajustar a posição.</p>
+                        <p class="text-sm text-gray-500 mt-1">Você pode selecionar múltiplas fotos. Elas serão exibidas como carrossel no comunicado. Máximo: 10 imagens.</p>
                     </div>
 
                     <!-- Mensagem -->
@@ -655,42 +647,117 @@ function toggleGroupRecipients() {
     }
 }
 
-function previewImage(input) {
-    const preview = document.getElementById('photo-preview');
-    const previewImg = document.getElementById('preview-img');
+let selectedFiles = [];
+let imageDataArray = [];
+
+function previewImages(input) {
+    const preview = document.getElementById('photos-preview');
+    const imagesGrid = document.getElementById('images-grid');
+    const imagesCount = document.getElementById('images-count');
     const popupCheckbox = document.getElementById('is_popup');
     const uploadAreaLabel = document.getElementById('upload-area-label');
     
-    if (input.files && input.files[0]) {
-        const file = input.files[0];
+    if (input.files && input.files.length > 0) {
+        const files = Array.from(input.files);
         
-        // Validar tamanho do arquivo (5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            alert('Arquivo muito grande. Máximo 5MB.');
+        // Limitar a 10 imagens
+        if (files.length > 10) {
+            alert('Máximo de 10 imagens permitidas.');
             return;
         }
         
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            originalImageData = e.target.result;
-            
-            // Mostrar preview simples
-            previewImg.src = e.target.result;
-            preview.classList.remove('hidden');
-            uploadAreaLabel.classList.add('hidden');
-            
-            // Desabilitar pop-up se tem imagem
-            if (popupCheckbox) {
-                popupCheckbox.disabled = true;
-                popupCheckbox.checked = false;
+        // Validar tamanho dos arquivos
+        for (let file of files) {
+            if (file.size > 5 * 1024 * 1024) {
+                alert(`Arquivo "${file.name}" muito grande. Máximo 5MB por imagem.`);
+                return;
             }
-            
-            // Limpar dados de crop anterior
-            document.getElementById('cropped-image-data').value = '';
         }
         
-        reader.readAsDataURL(file);
+        selectedFiles = files;
+        imageDataArray = [];
+        imagesGrid.innerHTML = '';
+        
+        let loadedCount = 0;
+        
+        files.forEach((file, index) => {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                imageDataArray[index] = e.target.result;
+                
+                // Criar preview da imagem
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'relative bg-white rounded border p-2';
+                imageContainer.innerHTML = `
+                    <div class="aspect-w-16 aspect-h-9 mb-2">
+                        <img src="${e.target.result}" alt="Preview ${index + 1}" class="w-full h-32 object-cover rounded">
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-600 truncate">${file.name}</span>
+                        <button type="button" onclick="removeImage(${index})" class="text-red-500 hover:text-red-700">
+                            <i class="fas fa-trash text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="mt-1">
+                        <input type="text" placeholder="Legenda (opcional)" class="w-full text-xs border border-gray-200 rounded px-2 py-1" id="caption-${index}">
+                    </div>
+                `;
+                
+                imagesGrid.appendChild(imageContainer);
+                loadedCount++;
+                
+                if (loadedCount === files.length) {
+                    // Todas as imagens foram carregadas
+                    preview.classList.remove('hidden');
+                    uploadAreaLabel.classList.add('hidden');
+                    imagesCount.textContent = files.length;
+                    
+                    // Desabilitar pop-up se tem imagens
+                    if (popupCheckbox) {
+                        popupCheckbox.disabled = true;
+                        popupCheckbox.checked = false;
+                    }
+                }
+            };
+            
+            reader.readAsDataURL(file);
+        });
+    }
+}
+
+function removeImage(index) {
+    selectedFiles.splice(index, 1);
+    imageDataArray.splice(index, 1);
+    
+    if (selectedFiles.length === 0) {
+        removeAllPhotos();
+    } else {
+        // Recriar o preview
+        const input = document.getElementById('photo');
+        const dt = new DataTransfer();
+        selectedFiles.forEach(file => dt.items.add(file));
+        input.files = dt.files;
+        previewImages(input);
+    }
+}
+
+function removeAllPhotos() {
+    const preview = document.getElementById('photos-preview');
+    const uploadAreaLabel = document.getElementById('upload-area-label');
+    const popupCheckbox = document.getElementById('is_popup');
+    const input = document.getElementById('photo');
+    
+    selectedFiles = [];
+    imageDataArray = [];
+    input.value = '';
+    
+    preview.classList.add('hidden');
+    uploadAreaLabel.classList.remove('hidden');
+    
+    // Reabilitar pop-up
+    if (popupCheckbox) {
+        popupCheckbox.disabled = false;
     }
 }
 
@@ -1049,6 +1116,20 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', function(e) {
         // Sincronizar conteúdo do editor antes de enviar
         syncContent();
+        
+        // Adicionar legendas das imagens ao formulário
+        if (selectedFiles.length > 0) {
+            selectedFiles.forEach((file, index) => {
+                const captionInput = document.getElementById(`caption-${index}`);
+                if (captionInput && captionInput.value.trim()) {
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = `caption-${index}`;
+                    hiddenInput.value = captionInput.value.trim();
+                    form.appendChild(hiddenInput);
+                }
+            });
+        }
         
         const sendToAll = document.getElementById('send_to_all');
         const recipientCheckboxes = document.querySelectorAll('input[name="recipients"]:checked');
