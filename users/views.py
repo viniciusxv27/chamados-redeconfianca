@@ -565,21 +565,54 @@ def manage_cs_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('dashboard')
     
-    users = User.objects.all().select_related('sector')
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    
+    # Obter parâmetros de filtro
+    search_query = request.GET.get('search', '')
+    sector_filter = request.GET.get('sector', '')
+    
+    # Filtrar usuários
+    users_queryset = User.objects.all().select_related('sector')
+    
+    if search_query:
+        users_queryset = users_queryset.filter(
+            Q(first_name__icontains=search_query) |
+            Q(last_name__icontains=search_query) |
+            Q(email__icontains=search_query)
+        )
+    
+    if sector_filter:
+        users_queryset = users_queryset.filter(sector_id=sector_filter)
+    
+    # Ordenar por nome
+    users_queryset = users_queryset.order_by('first_name', 'last_name')
+    
+    # Paginação
+    paginator = Paginator(users_queryset, 25)  # 25 usuários por página
+    page_number = request.GET.get('page')
+    users = paginator.get_page(page_number)
+    
     # Calcular total em circulação corretamente
     total_circulation = User.objects.aggregate(
         total=Sum('balance_cs')
     )['total'] or Decimal('0')
     
     # Calcular média por usuário
-    user_count = users.count()
+    user_count = User.objects.count()
     average_per_user = total_circulation / user_count if user_count > 0 else Decimal('0')
+    
+    # Obter setores para filtro
+    sectors = Sector.objects.all().order_by('name')
     
     context = {
         'users': users,
         'user': request.user,
         'total_circulation': total_circulation,
         'average_per_user': average_per_user,
+        'sectors': sectors,
+        'search_query': search_query,
+        'sector_filter': sector_filter,
     }
     return render(request, 'admin/manage_cs.html', context)
 
@@ -709,6 +742,169 @@ def add_cs_view(request, user_id):
             messages.error(request, 'Valor inválido.')
         except Exception as e:
             messages.error(request, f'Erro: {str(e)}')
+    
+    return redirect('manage_cs')
+
+
+@login_required
+def remove_cs_view(request, user_id):
+    """Remover Confianças C$ (não precisa de aprovação)"""
+    if not request.user.can_manage_cs():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        try:
+            target_user = User.objects.get(id=user_id)
+            amount = Decimal(request.POST.get('amount', '0'))
+            description = request.POST.get('description', '')
+            
+            if amount <= 0:
+                messages.error(request, 'Valor deve ser maior que zero.')
+                return redirect('manage_cs')
+            
+            if target_user.balance_cs < amount:
+                messages.error(request, f'Saldo insuficiente. Saldo atual: C$ {target_user.balance_cs}')
+                return redirect('manage_cs')
+            
+            # Remover diretamente do saldo (sem aprovação)
+            target_user.balance_cs -= amount
+            target_user.save()
+            
+            # Registrar transação como concluída
+            from prizes.models import CSTransaction
+            transaction = CSTransaction.objects.create(
+                user=target_user,
+                amount=-amount,  # Valor negativo para indicar remoção
+                transaction_type='DEBIT',
+                description=description or f'Remoção manual de C$',
+                status='COMPLETED',
+                created_by=request.user
+            )
+            
+            log_action(
+                request.user, 
+                'CS_REMOVE', 
+                f'Removido C$ {amount} de {target_user.full_name}',
+                request
+            )
+            
+            messages.success(request, f'C$ {amount} removido com sucesso de {target_user.full_name}!')
+            
+        except User.DoesNotExist:
+            messages.error(request, 'Usuário não encontrado.')
+        except ValueError:
+            messages.error(request, 'Valor inválido.')
+        except Exception as e:
+            messages.error(request, f'Erro: {str(e)}')
+    
+    return redirect('manage_cs')
+
+
+@login_required
+def import_cs_excel_view(request):
+    """Importar planilha de confianças (com aprovação)"""
+    if not request.user.can_manage_cs():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST' and request.FILES.get('excel_file'):
+        try:
+            excel_file = request.FILES['excel_file']
+            
+            # Verificar se é um arquivo Excel
+            if not excel_file.name.endswith(('.xlsx', '.xls')):
+                messages.error(request, 'Por favor, envie um arquivo Excel (.xlsx ou .xls)')
+                return redirect('manage_cs')
+            
+            # Ler o arquivo Excel
+            wb = openpyxl.load_workbook(excel_file)
+            ws = wb.active
+            
+            updates_requested = []
+            errors = []
+            
+            # Pular o cabeçalho (linha 1)
+            for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                try:
+                    if not any(row):  # Pular linhas vazias
+                        continue
+                        
+                    # Esperado: Nome, Email, Setor, Saldo C$
+                    if len(row) < 4:
+                        errors.append(f'Linha {row_num}: Dados insuficientes')
+                        continue
+                        
+                    nome, email, setor, novo_saldo = row[:4]
+                    
+                    if not email or not novo_saldo:
+                        errors.append(f'Linha {row_num}: Email ou saldo não informado')
+                        continue
+                    
+                    # Encontrar usuário pelo email
+                    try:
+                        user = User.objects.get(email=email)
+                        novo_saldo = Decimal(str(novo_saldo))
+                        diferenca = novo_saldo - user.balance_cs
+                        
+                        if diferenca != 0:
+                            updates_requested.append({
+                                'user': user,
+                                'saldo_atual': user.balance_cs,
+                                'novo_saldo': novo_saldo,
+                                'diferenca': diferenca,
+                                'linha': row_num
+                            })
+                            
+                    except User.DoesNotExist:
+                        errors.append(f'Linha {row_num}: Usuário com email {email} não encontrado')
+                    except (ValueError, TypeError):
+                        errors.append(f'Linha {row_num}: Saldo inválido ({novo_saldo})')
+                        
+                except Exception as e:
+                    errors.append(f'Linha {row_num}: Erro ao processar ({str(e)})')
+            
+            if not updates_requested and not errors:
+                messages.info(request, 'Nenhuma atualização necessária. Todos os saldos já estão corretos.')
+                return redirect('manage_cs')
+            
+            if errors:
+                error_msg = 'Erros encontrados:\n' + '\n'.join(errors[:10])  # Mostrar apenas 10 primeiros erros
+                if len(errors) > 10:
+                    error_msg += f'\n... e mais {len(errors) - 10} erros'
+                messages.error(request, error_msg)
+            
+            if updates_requested:
+                # Criar transações pendentes para as atualizações
+                from prizes.models import CSTransaction
+                
+                for update in updates_requested:
+                    user = update['user']
+                    diferenca = update['diferenca']
+                    
+                    transaction_type = 'CREDIT' if diferenca > 0 else 'DEBIT'
+                    
+                    CSTransaction.objects.create(
+                        user=user,
+                        amount=abs(diferenca),
+                        transaction_type=transaction_type,
+                        description=f'Importação de planilha - Linha {update["linha"]} - Saldo: C$ {update["saldo_atual"]} → C$ {update["novo_saldo"]}',
+                        status='PENDING',
+                        created_by=request.user
+                    )
+                
+                log_action(
+                    request.user, 
+                    'CS_IMPORT_REQUEST', 
+                    f'Solicitada importação de planilha com {len(updates_requested)} atualizações',
+                    request
+                )
+                
+                messages.success(request, 
+                    f'Planilha processada! {len(updates_requested)} atualizações solicitadas e enviadas para aprovação.')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao processar planilha: {str(e)}')
     
     return redirect('manage_cs')
 

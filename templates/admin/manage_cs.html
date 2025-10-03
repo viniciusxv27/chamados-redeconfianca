@@ -16,6 +16,10 @@
                     <p class="text-gray-600 mt-1">Gerencie o saldo de confiança dos usuários</p>
                 </div>
                 <div class="flex items-center space-x-3">
+                    <button onclick="openImportModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                        <i class="fas fa-file-upload mr-2"></i>
+                        Importar Excel
+                    </button>
                     <a href="{% url 'export_cs_excel' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center">
                         <i class="fas fa-file-excel mr-2"></i>
                         Exportar Excel
@@ -68,10 +72,47 @@
         </div>
     </div>
 
+    <!-- Filters -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="search" class="block text-sm font-medium text-gray-700 mb-2">Buscar usuário</label>
+                <input type="text" 
+                       id="search" 
+                       name="search" 
+                       value="{{ search_query }}"
+                       placeholder="Nome, email..."
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            <div>
+                <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                <select id="sector" name="sector" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Todos os setores</option>
+                    {% for sector in sectors %}
+                    <option value="{{ sector.id }}" {% if sector_filter == sector.id|stringformat:"s" %}selected{% endif %}>
+                        {{ sector.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors mr-2">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+                <a href="{% url 'manage_cs' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-times mr-2"></i>Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+
     <!-- Users Table -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">Saldos de Usuários</h3>
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">
+                Saldos de Usuários 
+                <span class="text-sm font-normal text-gray-500">({{ users.paginator.count }} usuários)</span>
+            </h3>
         </div>
         
         <div class="overflow-x-auto">
@@ -115,11 +156,20 @@
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <button type="button" 
-                                    class="bg-primary text-white px-3 py-1 rounded-lg hover:bg-orange-600 transition-colors text-sm"
-                                    onclick="openAddCSModal({{ u.id }}, '{{ u.full_name }}')">
-                                <i class="fas fa-plus mr-1"></i> Adicionar C$
-                            </button>
+                            <div class="flex items-center space-x-2">
+                                <button type="button" 
+                                        class="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                                        onclick="openAddCSModal({{ u.id }}, '{{ u.full_name }}')">
+                                    <i class="fas fa-plus mr-1"></i> Adicionar
+                                </button>
+                                {% if u.balance_cs > 0 %}
+                                <button type="button" 
+                                        class="bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 transition-colors text-sm"
+                                        onclick="openRemoveCSModal({{ u.id }}, '{{ u.full_name }}', {{ u.balance_cs }})">
+                                    <i class="fas fa-minus mr-1"></i> Remover
+                                </button>
+                                {% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -136,6 +186,171 @@
                 </tbody>
             </table>
         </div>
+        
+        <!-- Pagination -->
+        {% if users.has_other_pages %}
+        <div class="px-6 py-4 border-t border-gray-200">
+            <div class="flex items-center justify-between">
+                <div class="text-sm text-gray-700">
+                    Mostrando {{ users.start_index }} a {{ users.end_index }} de {{ users.paginator.count }} usuários
+                </div>
+                
+                <nav class="flex items-center space-x-1">
+                    {% if users.has_previous %}
+                        <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                        <a href="?page={{ users.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    {% endif %}
+                    
+                    {% for num in users.paginator.page_range %}
+                        {% if users.number == num %}
+                            <span class="px-3 py-2 text-sm bg-blue-600 text-white rounded-md">{{ num }}</span>
+                        {% elif num > users.number|add:'-3' and num < users.number|add:'3' %}
+                            <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+                               class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md">{{ num }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if users.has_next %}
+                        <a href="?page={{ users.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                        <a href="?page={{ users.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal para remover C$ -->
+<div id="removeCSModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900" id="removeModalTitle">Remover C$</h3>
+                <button type="button" onclick="closeRemoveCSModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <form id="removeCSForm" method="post">
+            {% csrf_token %}
+            <div class="px-6 py-4 space-y-4">
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div class="flex items-center">
+                        <i class="fas fa-exclamation-triangle text-red-600 mr-2"></i>
+                        <span class="text-red-800 font-medium">Atenção: Esta ação não requer aprovação!</span>
+                    </div>
+                    <p class="text-red-700 text-sm mt-1">O valor será removido imediatamente do saldo do usuário.</p>
+                    <p class="text-red-700 text-sm mt-1">Saldo atual: <span id="currentBalance" class="font-bold">C$ 0</span></p>
+                </div>
+                
+                <div>
+                    <label for="removeAmount" class="block text-sm font-medium text-gray-700 mb-1">Valor a remover C$ *</label>
+                    <input type="number" 
+                           id="removeAmount" 
+                           name="amount" 
+                           step="0.01" 
+                           min="0.01" 
+                           required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label for="removeDescription" class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                    <textarea id="removeDescription" 
+                              name="description" 
+                              rows="3" 
+                              placeholder="Motivo da remoção de C$"
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"></textarea>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button type="button" 
+                        onclick="closeRemoveCSModal()"
+                        class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                    <i class="fas fa-minus mr-2"></i>Remover C$
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para importar planilha -->
+<div id="importModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">Importar Planilha de Confianças</h3>
+                <button type="button" onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <form id="importForm" method="post" enctype="multipart/form-data" action="{% url 'import_cs_excel' %}">
+            {% csrf_token %}
+            <div class="px-6 py-4 space-y-4">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                        <span class="text-blue-800 font-medium">Instruções</span>
+                    </div>
+                    <ul class="text-blue-700 text-sm space-y-1">
+                        <li>• Use a planilha exportada como base</li>
+                        <li>• Modifique apenas os valores na coluna "Saldo C$"</li>
+                        <li>• As atualizações precisarão de aprovação</li>
+                        <li>• Formatos aceitos: .xlsx, .xls</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <label for="excel_file" class="block text-sm font-medium text-gray-700 mb-2">Arquivo Excel *</label>
+                    <input type="file" 
+                           id="excel_file" 
+                           name="excel_file" 
+                           accept=".xlsx,.xls"
+                           required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div class="flex items-center">
+                        <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                        <span class="text-yellow-800 text-sm font-medium">As atualizações solicitadas precisarão de aprovação antes de serem aplicadas.</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button type="button" 
+                        onclick="closeImportModal()"
+                        class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-file-upload mr-2"></i>Importar
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -204,10 +419,78 @@ function closeAddCSModal() {
     document.getElementById('addCSForm').reset();
 }
 
-// Close modal when clicking outside
+function openRemoveCSModal(userId, userName, currentBalance) {
+    document.getElementById('removeModalTitle').textContent = `Remover C$ - ${userName}`;
+    document.getElementById('removeCSForm').action = `/users/manage/cs/${userId}/remove/`;
+    document.getElementById('currentBalance').textContent = `C$ ${currentBalance}`;
+    document.getElementById('removeAmount').setAttribute('max', currentBalance);
+    document.getElementById('removeCSModal').classList.remove('hidden');
+    document.getElementById('removeCSModal').classList.add('flex');
+}
+
+function closeRemoveCSModal() {
+    document.getElementById('removeCSModal').classList.add('hidden');
+    document.getElementById('removeCSModal').classList.remove('flex');
+    document.getElementById('removeCSForm').reset();
+}
+
+function openImportModal() {
+    document.getElementById('importModal').classList.remove('hidden');
+    document.getElementById('importModal').classList.add('flex');
+}
+
+function closeImportModal() {
+    document.getElementById('importModal').classList.add('hidden');
+    document.getElementById('importModal').classList.remove('flex');
+    document.getElementById('importForm').reset();
+}
+
+// Validation for remove amount
+document.getElementById('removeAmount').addEventListener('input', function() {
+    const maxAmount = parseFloat(this.getAttribute('max'));
+    const currentAmount = parseFloat(this.value);
+    
+    if (currentAmount > maxAmount) {
+        this.setCustomValidity(`Valor não pode ser maior que C$ ${maxAmount}`);
+    } else {
+        this.setCustomValidity('');
+    }
+});
+
+// Close modals when clicking outside
 document.getElementById('addCSModal').addEventListener('click', function(e) {
     if (e.target === this) {
         closeAddCSModal();
+    }
+});
+
+document.getElementById('removeCSModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeRemoveCSModal();
+    }
+});
+
+document.getElementById('importModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeImportModal();
+    }
+});
+
+// File input validation
+document.getElementById('excel_file').addEventListener('change', function() {
+    const file = this.files[0];
+    if (file) {
+        const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                           'application/vnd.ms-excel'];
+        const validExtensions = ['.xlsx', '.xls'];
+        
+        const isValidType = validTypes.includes(file.type);
+        const isValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+        
+        if (!isValidType && !isValidExtension) {
+            alert('Por favor, selecione um arquivo Excel válido (.xlsx ou .xls)');
+            this.value = '';
+        }
     }
 });
 </script>
