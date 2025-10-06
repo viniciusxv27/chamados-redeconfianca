@@ -86,4 +86,10 @@ urlpatterns = [
     path('tasks/<int:task_id>/detail/', views.task_detail_view, name='task_detail'),
     path('tasks/<int:task_id>/messages/', views.task_messages_api, name='task_messages_api'),
     path('tasks/<int:task_id>/send-message/', views.send_task_message, name='send_task_message'),
+    
+    # API Endpoints
+    path('api/daily-automation/', views.daily_automation_api, name='daily_automation_api'),
+    
+    # Debug & Test Endpoints
+    path('debug/webhooks/', views.debug_webhooks_view, name='debug_webhooks'),
 ]

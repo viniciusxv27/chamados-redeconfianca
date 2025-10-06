@@ -485,6 +485,8 @@ class Webhook(models.Model):
     
     def trigger(self, instance, user=None):
         """Dispara o webhook com os dados da instância"""
+        import requests
+        
         try:
             if not self.is_active:
                 return
@@ -500,10 +502,14 @@ class Webhook(models.Model):
             if self.headers:
                 headers.update(self.headers)
             
-            requests.post(self.url, json=payload, headers=headers, timeout=10)
+            response = requests.post(self.url, json=payload, headers=headers, timeout=10)
+            response.raise_for_status()
+            
         except Exception as e:
-            # Log do erro (implementar logging posteriormente)
-            pass
+            # Log do erro silenciosamente
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro no webhook {self.name}: {e}')
     
     def _send_webhook(self, payload):
         """Envia webhook com payload customizado"""
@@ -579,15 +585,11 @@ class Webhook(models.Model):
                 # Se é para todos, buscar todos os usuários ativos
                 recipients_data = list(User.objects.filter(is_active=True).values(
                     'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
-                ).annotate(
-                    name=models.Concat('first_name', models.Value(' '), 'last_name', output_field=models.CharField())
                 ))
             else:
                 # Se é para usuários específicos, buscar os recipients
                 recipients_data = list(instance.recipients.values(
                     'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
-                ).annotate(
-                    name=models.Concat('first_name', models.Value(' '), 'last_name', output_field=models.CharField())
                 ))
             
             # Formatar dados dos recipients

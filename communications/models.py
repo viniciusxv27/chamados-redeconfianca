@@ -121,13 +121,15 @@ class Communication(models.Model):
             self.is_popup = False
             
         is_new = self.pk is None
+        skip_webhooks = kwargs.pop('skip_webhooks', False)
         super().save(*args, **kwargs)
         
-        if is_new:
-            self.trigger_notification()
-            self.trigger_webhooks('COMMUNICATION_CREATED')
-        else:
-            self.trigger_webhooks('COMMUNICATION_UPDATED')
+        if not skip_webhooks:
+            if is_new:
+                self.trigger_notification()
+                self.trigger_webhooks('COMMUNICATION_CREATED')
+            else:
+                self.trigger_webhooks('COMMUNICATION_UPDATED')
     
     def trigger_notification(self):
         """Dispara notificação via webhook para WhatsApp"""
@@ -176,7 +178,21 @@ class Communication(models.Model):
             )
             
             for webhook in webhooks:
-                webhook.trigger(self, user=self.sender)
+                try:
+                    webhook.trigger(self, user=self.sender)
+                    
+                    # Log individual de sucesso
+                    log_action(
+                        user=self.sender,
+                        action_type='WEBHOOK_SUCCESS',
+                        description=f'Webhook {webhook.name} disparado com sucesso para comunicado: {self.title}'
+                    )
+                except Exception as webhook_error:
+                    log_action(
+                        user=self.sender,
+                        action_type='WEBHOOK_ERROR',
+                        description=f'Erro no webhook {webhook.name} para comunicado {self.title}: {str(webhook_error)}'
+                    )
                 
         except Exception as e:
             # Log do erro
@@ -190,7 +206,7 @@ class Communication(models.Model):
                 log_action(
                     user=self.sender,
                     action_type='WEBHOOK_ERROR',
-                    description=f'Erro ao disparar webhook para comunicado {self.title}: {str(e)}'
+                    description=f'Erro geral ao disparar webhook para comunicado {self.title}: {str(e)}'
                 )
             except:
                 pass

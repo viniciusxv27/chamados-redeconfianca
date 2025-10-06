@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.utils import timezone
 from django.db.models import Sum
 from django.db import transaction
@@ -3907,3 +3907,297 @@ def delete_task(request, task_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+
+@require_http_methods(["GET"])
+@csrf_exempt
+def daily_automation_api(request):
+    """
+    API para automação diária - retorna dados do usuário e chamados
+    Usado para sistemas externos de automação
+    """
+    try:
+        # Verificar parâmetros
+        user_id = request.GET.get('user_id')
+        api_token = request.GET.get('token')
+        
+        if not user_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'user_id é obrigatório'
+            }, status=400)
+        
+        # Verificar se existe um token válido (implementação básica)
+        # Por enquanto, aceitar qualquer token não vazio para teste
+        if not api_token:
+            return JsonResponse({
+                'success': False,
+                'error': 'token é obrigatório'
+            }, status=401)
+        
+        # Buscar usuário
+        user = get_object_or_404(User, id=user_id)
+        
+        # Importar models necessários
+        from tickets.models import Ticket
+        
+        # Chamados abertos do usuário
+        user_open_tickets = Ticket.objects.filter(
+            assigned_to=user,
+            status__in=['open', 'in_progress', 'waiting']
+        ).select_related('category', 'sector', 'created_by')
+        
+        # Chamados abertos do setor do usuário
+        sector_open_tickets = Ticket.objects.filter(
+            sector=user.sector,
+            status__in=['open', 'in_progress', 'waiting']
+        ).exclude(
+            assigned_to=user  # Excluir os que já estão na lista do usuário
+        ).select_related('category', 'sector', 'created_by', 'assigned_to')
+        
+        # Preparar dados dos chamados do usuário
+        user_tickets_data = []
+        for ticket in user_open_tickets:
+            user_tickets_data.append({
+                'id': ticket.id,
+                'title': ticket.title,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'category': ticket.category.name if ticket.category else None,
+                'created_by': {
+                    'id': ticket.created_by.id,
+                    'name': ticket.created_by.get_full_name() or ticket.created_by.username,
+                    'email': ticket.created_by.email
+                },
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat()
+            })
+        
+        # Preparar dados dos chamados do setor
+        sector_tickets_data = []
+        for ticket in sector_open_tickets:
+            assigned_to_data = None
+            if ticket.assigned_to:
+                assigned_to_data = {
+                    'id': ticket.assigned_to.id,
+                    'name': ticket.assigned_to.get_full_name() or ticket.assigned_to.username,
+                    'email': ticket.assigned_to.email
+                }
+            
+            sector_tickets_data.append({
+                'id': ticket.id,
+                'title': ticket.title,
+                'description': ticket.description,
+                'status': ticket.status,
+                'priority': ticket.priority,
+                'category': ticket.category.name if ticket.category else None,
+                'created_by': {
+                    'id': ticket.created_by.id,
+                    'name': ticket.created_by.get_full_name() or ticket.created_by.username,
+                    'email': ticket.created_by.email
+                },
+                'assigned_to': assigned_to_data,
+                'created_at': ticket.created_at.isoformat(),
+                'updated_at': ticket.updated_at.isoformat()
+            })
+        
+        # Dados do usuário
+        user_data = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'full_name': user.get_full_name(),
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'hierarchy': user.hierarchy,
+            'is_active': user.is_active,
+            'sector': {
+                'id': user.sector.id,
+                'name': user.sector.name
+            } if user.sector else None,
+            'last_login': user.last_login.isoformat() if user.last_login else None
+        }
+        
+        # Resposta da API
+        response_data = {
+            'success': True,
+            'timestamp': timezone.now().isoformat(),
+            'user': user_data,
+            'user_open_tickets': {
+                'count': len(user_tickets_data),
+                'tickets': user_tickets_data
+            },
+            'sector_open_tickets': {
+                'count': len(sector_tickets_data),
+                'tickets': sector_tickets_data
+            },
+            'summary': {
+                'total_user_tickets': len(user_tickets_data),
+                'total_sector_tickets': len(sector_tickets_data),
+                'total_tickets': len(user_tickets_data) + len(sector_tickets_data)
+            }
+        }
+        
+        return JsonResponse(response_data)
+        
+    except User.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Usuário não encontrado'
+        }, status=404)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Erro interno: {str(e)}'
+        }, status=500)
+
+
+@login_required
+def debug_webhooks_view(request):
+    """View de debug para testar webhooks"""
+    if not request.user.can_manage_users():
+        return JsonResponse({'error': 'Permissão negada'}, status=403)
+    
+    from tickets.models import Webhook
+    from communications.models import Communication
+    
+    # Buscar webhooks configurados
+    webhooks = Webhook.objects.all()
+    
+    # Estatísticas
+    stats = {
+        'total_webhooks': webhooks.count(),
+        'active_webhooks': webhooks.filter(is_active=True).count(),
+        'communication_webhooks': webhooks.filter(
+            event__in=['COMMUNICATION_CREATED', 'COMMUNICATION_UPDATED'],
+            is_active=True
+        ).count(),
+        'approval_webhooks': webhooks.filter(
+            event='APPROVAL_REQUEST',
+            is_active=True
+        ).count()
+    }
+    
+    # Últimos comunicados
+    recent_communications = Communication.objects.all()[:5]
+    
+    # Se é um POST, testar disparar um webhook
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'test_communication':
+            # Criar comunicado de teste
+            test_comm = Communication(
+                id=9999,  # ID fictício
+                title="[TESTE] Comunicado de Teste - Debug",
+                message="Este é um teste de webhook para comunicados.",
+                sender=request.user,
+                send_to_all=True
+            )
+            
+            # Disparar webhooks manualmente
+            try:
+                test_comm.trigger_webhooks('COMMUNICATION_CREATED')
+                result = {'success': True, 'message': 'Webhook testado com sucesso'}
+            except Exception as e:
+                result = {'success': False, 'error': str(e)}
+            
+            return JsonResponse(result)
+        
+        elif action == 'test_approval':
+            # Testar webhook de aprovação
+            from tickets.models import PurchaseOrderApproval
+            
+            # Simulação de aprovação de teste
+            try:
+                webhooks_approval = Webhook.objects.filter(
+                    event='APPROVAL_REQUEST',
+                    is_active=True
+                )
+                
+                for webhook in webhooks_approval:
+                    test_payload = {
+                        'event': 'approval_request',
+                        'test': True,
+                        'purchase_approval': {
+                            'id': 9999,
+                            'ticket_id': 9999,
+                            'amount': 100.00,
+                            'approval_step': 1,
+                            'status': 'PENDING',
+                            'created_at': timezone.now().isoformat()
+                        },
+                        'approver_user': {
+                            'id': request.user.id,
+                            'name': request.user.get_full_name(),
+                            'email': request.user.email,
+                            'phone': getattr(request.user, 'phone', '') or ''
+                        }
+                    }
+                    
+                    webhook._send_webhook(test_payload)
+                
+                result = {'success': True, 'message': f'{webhooks_approval.count()} webhook(s) testado(s)'}
+            except Exception as e:
+                result = {'success': False, 'error': str(e)}
+        
+        elif action == 'test_communication_real':
+            # Criar um comunicado real de teste
+            try:
+                from communications.models import Communication
+                
+                # Criar comunicado de teste
+                test_communication = Communication.objects.create(
+                    title="[TESTE DEBUG] Comunicado de Teste",
+                    message="Este é um comunicado de teste criado pela funcionalidade de debug de webhooks. Pode ser ignorado.",
+                    sender=request.user,
+                    send_to_all=False  # Não enviar para todos para evitar spam
+                )
+                
+                # Adicionar apenas o usuário atual como destinatário
+                test_communication.recipients.add(request.user)
+                
+                result = {
+                    'success': True, 
+                    'message': f'Comunicado de teste criado (ID: {test_communication.id}). Verifique os logs no console do servidor para detalhes dos webhooks.'
+                }
+            except Exception as e:
+                result = {'success': False, 'error': str(e)}
+            
+            return JsonResponse(result)
+        
+        elif action == 'list_webhooks':
+            # Listar todos os webhooks detalhadamente
+            try:
+                all_webhooks = []
+                for webhook in webhooks:
+                    all_webhooks.append({
+                        'id': webhook.id,
+                        'name': webhook.name,
+                        'url': webhook.url,
+                        'event': webhook.event,
+                        'is_active': webhook.is_active,
+                        'category': webhook.category.name if webhook.category else None,
+                        'sector': webhook.sector.name if webhook.sector else None
+                    })
+                
+                result = {
+                    'success': True, 
+                    'webhooks': all_webhooks,
+                    'count': len(all_webhooks)
+                }
+            except Exception as e:
+                result = {'success': False, 'error': str(e)}
+            
+            return JsonResponse(result)
+    
+    context = {
+        'webhooks': webhooks,
+        'stats': stats,
+        'recent_communications': recent_communications,
+        'user': request.user,
+    }
+    
+    return render(request, 'admin/debug_webhooks.html', context)

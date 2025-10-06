@@ -266,7 +266,7 @@ def create_communication_view(request):
                 if photos:
                     # Se tem imagens, forçar is_popup para False
                     communication.is_popup = False
-                    communication.save()
+                    communication.save(skip_webhooks=True)
                     
                     # Processar cada imagem
                     for index, photo in enumerate(photos):
