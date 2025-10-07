@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'projects',
     'suppliers',
     'purchases',
+    'webpush',  # Django WebPush
 ]
 
 MIDDLEWARE = [

@@ -42,3 +42,4 @@ django-storages==1.14.4
 
 # Push Notifications
 pywebpush==1.14.0
+django-webpush==0.3.6
