@@ -25,10 +25,12 @@ urlpatterns = [
     path('activity/<int:activity_id>/detail/', views.activity_detail_api, name='activity_detail_api'),
     path('activity/<int:activity_id>/comment/', views.activity_add_comment, name='activity_add_comment'),
     path('activity/<int:activity_id>/subtask/', views.activity_add_subtask, name='activity_add_subtask'),
+    path('project/<int:project_id>/users/', views.get_project_users, name='get_project_users'),
     path('subtask/<int:subtask_id>/toggle/', views.subtask_toggle, name='subtask_toggle'),
     path('subtask/<int:subtask_id>/delete/', views.subtask_delete, name='subtask_delete'),
     path('activity/<int:activity_id>/duplicate/', views.activity_duplicate, name='activity_duplicate'),
     path('activity/<int:activity_id>/archive/', views.activity_archive, name='activity_archive'),
+    path('activity/<int:activity_id>/details/', views.subtask_detail_api, name='subtask_detail_api'),
     
     # Chat URLs
     path('task/<int:activity_id>/chat/', views_chat.get_task_chat, name='get_task_chat'),

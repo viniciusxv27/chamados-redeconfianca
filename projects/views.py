@@ -679,6 +679,7 @@ def activity_add_subtask(request, activity_id):
         title = data.get('title', '').strip()
         description = data.get('description', '').strip()
         deadline = data.get('deadline', '')
+        responsible_id = data.get('responsible_id', '')
         
         if not title:
             return JsonResponse({'error': 'Título da subtarefa não pode estar vazio'}, status=400)
@@ -692,6 +693,18 @@ def activity_add_subtask(request, activity_id):
                 return JsonResponse({'error': 'Formato de data inválido. Use YYYY-MM-DD'}, status=400)
         else:
             deadline_date = activity.deadline
+
+        # Definir responsável da subtarefa
+        responsible_user = activity.responsible_user  # Por padrão, mesmo da atividade pai
+        if responsible_id:
+            try:
+                responsible_user = User.objects.get(id=responsible_id)
+                # Verificar se o usuário pertence ao setor do projeto
+                if not user_can_manage_all_projects(request.user):
+                    if responsible_user.sector != activity.project.sector:
+                        return JsonResponse({'error': 'Usuário não pertence ao setor do projeto'}, status=400)
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'Usuário responsável não encontrado'}, status=400)
         
         # Criar uma nova atividade como sub-atividade
         subtask = Activity.objects.create(
@@ -700,7 +713,7 @@ def activity_add_subtask(request, activity_id):
             description=description if description else f'Subtarefa de: {activity.name}',
             deadline=deadline_date,
             parent_activity=activity,
-            responsible_user=activity.responsible_user,
+            responsible_user=responsible_user,
             created_by=request.user,
             priority=data.get('priority', 'MEDIA'),
             status='NAO_INICIADA'
@@ -712,7 +725,15 @@ def activity_add_subtask(request, activity_id):
             'subtask': {
                 'id': subtask.id,
                 'title': subtask.name,
-                'completed': False
+                'description': subtask.description,
+                'deadline': subtask.deadline.strftime('%Y-%m-%d'),
+                'responsible': {
+                    'id': subtask.responsible_user.id if subtask.responsible_user else None,
+                    'name': subtask.responsible_user.get_full_name() if subtask.responsible_user else None
+                },
+                'priority': subtask.get_priority_display(),
+                'status': subtask.get_status_display(),
+                'completed': subtask.status == 'CONCLUIDA'
             }
         })
         
@@ -720,6 +741,102 @@ def activity_add_subtask(request, activity_id):
         return JsonResponse({'error': 'JSON inválido'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def get_project_users(request, project_id):
+    """Buscar usuários disponíveis para atribuir como responsável"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    try:
+        project = get_object_or_404(Project, id=project_id)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Buscar usuários do setor do projeto
+        users = User.objects.filter(
+            sector=project.sector,
+            is_active=True
+        ).order_by('first_name', 'last_name')
+        
+        users_data = [
+            {
+                'id': user.id,
+                'name': user.get_full_name(),
+                'username': user.username,
+                'hierarchy': user.get_hierarchy_display()
+            }
+            for user in users
+        ]
+        
+        return JsonResponse({
+            'success': True,
+            'users': users_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def subtask_detail_api(request, activity_id):
+    """Buscar detalhes completos de uma subtarefa"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    try:
+        subtask = get_object_or_404(Activity, id=activity_id)
+        
+        # Verificar se é realmente uma subtarefa
+        if not subtask.parent_activity:
+            return JsonResponse({'error': 'Atividade não é uma subtarefa'}, status=400)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if subtask.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Montar dados da subtarefa
+        subtask_data = {
+            'id': subtask.id,
+            'title': subtask.name,
+            'description': subtask.description,
+            'priority': subtask.priority,
+            'status': subtask.status,
+            'status_display': subtask.get_status_display(),
+            'deadline': subtask.deadline.isoformat() if subtask.deadline else None,
+            'parent_activity': subtask.parent_activity.name,
+            'created_at': subtask.created_at.isoformat(),
+            'updated_at': subtask.updated_at.isoformat(),
+            'responsible': None
+        }
+        
+        # Adicionar dados do responsável se existir
+        if subtask.responsible_user:
+            subtask_data['responsible'] = {
+                'id': subtask.responsible_user.id,
+                'first_name': subtask.responsible_user.first_name,
+                'last_name': subtask.responsible_user.last_name,
+                'email': subtask.responsible_user.email,
+                'username': subtask.responsible_user.username
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'subtask': subtask_data
+        })
+        
+    except Activity.DoesNotExist:
+        return JsonResponse({'error': 'Subtarefa não encontrada'}, status=404)
+    except Exception as e:
+        import traceback
+        print(f"Erro na view subtask_detail_api: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500)
 
 
 @login_required

@@ -964,6 +964,28 @@
     </div>
 </div>
 
+<!-- Modal de Detalhes da Subtarefa -->
+<div id="subtaskDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-semibold text-gray-900">Detalhes da Subtarefa</h3>
+            <button onclick="closeSubtaskDetailModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div id="subtaskDetailContent" class="space-y-6">
+            <!-- Conteúdo será preenchido dinamicamente -->
+        </div>
+        
+        <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+            <button onclick="closeSubtaskDetailModal()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
+                Fechar
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -1362,6 +1384,9 @@ function handleCardClick(event, activityId) {
 function addSubtaskHierarchy(parentActivityId) {
     window.currentParentActivityId = parentActivityId;
     
+    // Carregar usuários do projeto
+    loadProjectUsers();
+    
     // Mostrar modal de subtarefa
     const modal = document.getElementById('subtaskModal');
     if (modal) {
@@ -1379,12 +1404,222 @@ function addSubtaskHierarchy(parentActivityId) {
     }
 }
 
+// Função para carregar usuários do projeto
+function loadProjectUsers() {
+    const projectId = {{ project.id }};
+    
+    fetch(`/projects/project/${projectId}/users/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('subtaskAssignedToGlobal');
+                if (select) {
+                    select.innerHTML = '<option value="">Não atribuído</option>';
+                    data.users.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = `${user.name} (${user.hierarchy})`;
+                        select.appendChild(option);
+                    });
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar usuários:', error);
+        });
+}
+
 function closeSubtaskModalGlobal() {
     const modal = document.getElementById('subtaskModal');
     if (modal) {
         modal.classList.add('hidden');
         document.body.style.overflow = '';
     }
+}
+
+function openSubtaskModal(subtaskId) {
+    console.log('Abrindo modal da subtarefa:', subtaskId);
+    
+    // Fazer requisição para obter os detalhes da subtarefa
+    fetch(`/projects/activity/${subtaskId}/details/`)
+        .then(response => {
+            console.log('Resposta recebida:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados recebidos:', data);
+            if (data.success) {
+                const subtask = data.subtask;
+                displaySubtaskDetails(subtask);
+                document.getElementById('subtaskDetailModal').classList.remove('hidden');
+            } else {
+                console.error('Erro ao carregar detalhes da subtarefa:', data.error);
+                alert('Erro ao carregar detalhes da subtarefa: ' + (data.error || 'Erro desconhecido'));
+            }
+        })
+        .catch(error => {
+            console.error('Erro na requisição:', error);
+            alert('Erro ao conectar com o servidor: ' + error.message);
+        });
+}
+
+function displaySubtaskDetails(subtask) {
+    const content = document.getElementById('subtaskDetailContent');
+    if (!content) {
+        console.error('Elemento subtaskDetailContent não encontrado');
+        return;
+    }
+    
+    console.log('Exibindo detalhes da subtarefa:', subtask);
+    
+    // Formatar data
+    let deadlineFormatted = 'Não definido';
+    if (subtask.deadline) {
+        try {
+            const deadline = new Date(subtask.deadline);
+            deadlineFormatted = deadline.toLocaleString('pt-BR');
+        } catch (e) {
+            console.error('Erro ao formatar data:', e);
+            deadlineFormatted = subtask.deadline;
+        }
+    }
+    
+    // Badge de prioridade
+    let priorityBadge = '';
+    const priorityColors = {
+        'BAIXA': 'bg-green-100 text-green-800',
+        'MEDIA': 'bg-yellow-100 text-yellow-800',
+        'ALTA': 'bg-orange-100 text-orange-800',
+        'URGENTE': 'bg-red-100 text-red-800'
+    };
+    priorityBadge = `<span class="px-2 py-1 text-xs rounded-full ${priorityColors[subtask.priority] || 'bg-gray-100 text-gray-800'}">${subtask.priority || 'Não definida'}</span>`;
+    
+    // Badge de status
+    let statusBadge = '';
+    const statusColors = {
+        'PENDENTE': 'bg-gray-100 text-gray-800',
+        'EM_PROGRESSO': 'bg-blue-100 text-blue-800',
+        'CONCLUIDA': 'bg-green-100 text-green-800',
+        'CANCELADA': 'bg-red-100 text-red-800'
+    };
+    statusBadge = `<span class="px-2 py-1 text-xs rounded-full ${statusColors[subtask.status] || 'bg-gray-100 text-gray-800'}">${subtask.status_display || 'Pendente'}</span>`;
+    
+    // Avatar do responsável
+    let responsibleSection = '<span class="text-gray-500 italic">Não atribuído</span>';
+    if (subtask.responsible && subtask.responsible.first_name) {
+        const firstName = subtask.responsible.first_name || '';
+        const lastName = subtask.responsible.last_name || '';
+        const email = subtask.responsible.email || '';
+        const initials = firstName.charAt(0) + (lastName ? lastName.charAt(0) : '');
+        
+        responsibleSection = `
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+                    ${initials}
+                </div>
+                <div>
+                    <div class="font-medium text-gray-900">${firstName} ${lastName}</div>
+                    ${email ? `<div class="text-sm text-gray-500">${email}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // Garantir que dados essenciais existam
+    const safeSubtask = {
+        title: subtask.title || 'Subtarefa sem título',
+        description: subtask.description || 'Sem descrição',
+        parent_activity: subtask.parent_activity || 'Atividade não informada',
+        created_at: subtask.created_at || new Date().toISOString(),
+        updated_at: subtask.updated_at
+    };
+    
+    content.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+                <div>
+                    <h4 class="text-lg font-semibold text-gray-900 mb-2">${safeSubtask.title}</h4>
+                    <div class="flex space-x-2">
+                        ${priorityBadge}
+                        ${statusBadge}
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                    <div class="p-3 bg-gray-50 rounded-lg text-gray-800">
+                        ${safeSubtask.description}
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Prazo</label>
+                    <div class="text-gray-800">
+                        <i class="fas fa-calendar-alt mr-2 text-gray-500"></i>
+                        ${deadlineFormatted}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Responsável</label>
+                    ${responsibleSection}
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Atividade Pai</label>
+                    <div class="p-3 bg-blue-50 rounded-lg">
+                        <div class="font-medium text-blue-900">${safeSubtask.parent_activity}</div>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Data de Criação</label>
+                    <div class="text-gray-600">
+                        <i class="fas fa-clock mr-2"></i>
+                        ${new Date(safeSubtask.created_at).toLocaleString('pt-BR')}
+                    </div>
+                </div>
+                
+                ${safeSubtask.updated_at && safeSubtask.updated_at !== safeSubtask.created_at ? `
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Última Atualização</label>
+                    <div class="text-gray-600">
+                        <i class="fas fa-clock mr-2"></i>
+                        ${new Date(safeSubtask.updated_at).toLocaleString('pt-BR')}
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function closeSubtaskDetailModal() {
+    document.getElementById('subtaskDetailModal').classList.add('hidden');
+}
+
+// Função de teste para verificar se o modal abre
+function testSubtaskModal() {
+    console.log('Testando modal...');
+    const mockSubtask = {
+        title: 'Teste de Subtarefa',
+        description: 'Esta é uma subtarefa de teste',
+        priority: 'MEDIA',
+        status: 'EM_PROGRESSO', 
+        status_display: 'Em Progresso',
+        deadline: null,
+        parent_activity: 'Atividade de Teste',
+        created_at: new Date().toISOString(),
+        responsible: null
+    };
+    
+    displaySubtaskDetails(mockSubtask);
+    document.getElementById('subtaskDetailModal').classList.remove('hidden');
 }
 
 function saveSubtaskFromModalGlobal(event) {
@@ -1401,7 +1636,7 @@ function saveSubtaskFromModalGlobal(event) {
         description: document.getElementById('subtaskDescriptionGlobal').value.trim(),
         priority: document.getElementById('subtaskPriorityGlobal').value,
         deadline: document.getElementById('subtaskDeadlineGlobal').value,
-        assigned_to: document.getElementById('subtaskAssignedToGlobal') ? document.getElementById('subtaskAssignedToGlobal').value || null : null
+        responsible_id: document.getElementById('subtaskAssignedToGlobal') ? document.getElementById('subtaskAssignedToGlobal').value || null : null
     };
     
     // Validação
