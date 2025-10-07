@@ -156,24 +156,24 @@ def project_detail(request, project_id):
     view_mode = request.GET.get('view', 'hierarchy')
     
     if view_mode == 'kanban':
-        # Organizar atividades por status para visão Kanban
+        # Organizar atividades por status para visão Kanban (apenas atividades raiz, sem subtarefas)
         kanban_activities = {
-            'NAO_INICIADA': project.activities.filter(status='NAO_INICIADA').select_related('responsible_user'),
-            'EM_ANDAMENTO': project.activities.filter(status='EM_ANDAMENTO').select_related('responsible_user'),
-            'CONCLUIDA': project.activities.filter(status='CONCLUIDA').select_related('responsible_user'),
-            'CANCELADA': project.activities.filter(status='CANCELADA').select_related('responsible_user'),
+            'NAO_INICIADA': project.activities.filter(status='NAO_INICIADA', parent_activity__isnull=True).select_related('responsible_user'),
+            'EM_ANDAMENTO': project.activities.filter(status='EM_ANDAMENTO', parent_activity__isnull=True).select_related('responsible_user'),
+            'CONCLUIDA': project.activities.filter(status='CONCLUIDA', parent_activity__isnull=True).select_related('responsible_user'),
+            'CANCELADA': project.activities.filter(status='CANCELADA', parent_activity__isnull=True).select_related('responsible_user'),
         }
         
-        # Organizar também por categoria se tiver
-        categories = project.activities.exclude(category='').values_list('category', flat=True).distinct()
+        # Organizar também por categoria se tiver (apenas atividades raiz)
+        categories = project.activities.filter(parent_activity__isnull=True).exclude(category='').values_list('category', flat=True).distinct()
         activities_by_category = {}
         for category in categories:
             if category:
                 activities_by_category[category] = {
-                    'NAO_INICIADA': project.activities.filter(category=category, status='NAO_INICIADA').select_related('responsible_user'),
-                    'EM_ANDAMENTO': project.activities.filter(category=category, status='EM_ANDAMENTO').select_related('responsible_user'),
-                    'CONCLUIDA': project.activities.filter(category=category, status='CONCLUIDA').select_related('responsible_user'),
-                    'CANCELADA': project.activities.filter(category=category, status='CANCELADA').select_related('responsible_user'),
+                    'NAO_INICIADA': project.activities.filter(category=category, status='NAO_INICIADA', parent_activity__isnull=True).select_related('responsible_user'),
+                    'EM_ANDAMENTO': project.activities.filter(category=category, status='EM_ANDAMENTO', parent_activity__isnull=True).select_related('responsible_user'),
+                    'CONCLUIDA': project.activities.filter(category=category, status='CONCLUIDA', parent_activity__isnull=True).select_related('responsible_user'),
+                    'CANCELADA': project.activities.filter(category=category, status='CANCELADA', parent_activity__isnull=True).select_related('responsible_user'),
                 }
     
     # Atividades organizadas hierarquicamente - apenas as atividades raiz
@@ -677,19 +677,32 @@ def activity_add_subtask(request, activity_id):
         
         data = json.loads(request.body)
         title = data.get('title', '').strip()
+        description = data.get('description', '').strip()
+        deadline = data.get('deadline', '')
         
         if not title:
             return JsonResponse({'error': 'Título da subtarefa não pode estar vazio'}, status=400)
+        
+        # Se não informou deadline, usar o deadline da atividade pai
+        if deadline:
+            from datetime import datetime
+            try:
+                deadline_date = datetime.strptime(deadline, '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({'error': 'Formato de data inválido. Use YYYY-MM-DD'}, status=400)
+        else:
+            deadline_date = activity.deadline
         
         # Criar uma nova atividade como sub-atividade
         subtask = Activity.objects.create(
             project=activity.project,
             name=title,
-            description=f'Subtarefa de: {activity.name}',
+            description=description if description else f'Subtarefa de: {activity.name}',
+            deadline=deadline_date,
             parent_activity=activity,
             responsible_user=activity.responsible_user,
             created_by=request.user,
-            priority='MEDIA',
+            priority=data.get('priority', 'MEDIA'),
             status='NAO_INICIADA'
         )
         
@@ -901,3 +914,43 @@ def activity_edit(request, activity_id):
     }
     
     return render(request, 'projects/activity_edit.html', context)
+
+
+@login_required
+def subtask_delete(request, subtask_id):
+    """Deletar subtarefa definitivamente"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    try:
+        subtask = get_object_or_404(Activity, id=subtask_id)
+        
+        # Verificar se é realmente uma subtarefa
+        if not subtask.parent_activity:
+            return JsonResponse({'error': 'Esta não é uma subtarefa'}, status=400)
+        
+        # Verificar permissão de acesso
+        if not user_can_manage_all_projects(request.user):
+            if subtask.project.sector != request.user.sector:
+                return JsonResponse({'error': 'Acesso negado'}, status=403)
+        
+        # Armazenar informações antes de deletar
+        parent_activity_id = subtask.parent_activity.id
+        subtask_name = subtask.name
+        
+        # Deletar a subtarefa
+        subtask.delete()
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'Subtarefa "{subtask_name}" foi excluída definitivamente',
+            'parent_activity_id': parent_activity_id
+        })
+    
+    except Activity.DoesNotExist:
+        return JsonResponse({'error': 'Subtarefa não encontrada'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

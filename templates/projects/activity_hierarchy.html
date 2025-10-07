@@ -58,6 +58,14 @@
                     <h4 class="font-medium text-gray-900 text-sm mb-1">{{ activity.name }}</h4>
                     <p class="text-xs text-gray-500 line-clamp-2">{{ activity.description|truncatechars:80 }}</p>
                 </div>
+                
+                {% if can_edit %}
+                    <button onclick="addSubtaskHierarchy({{ activity.id }})" 
+                            class="add-subtask-btn opacity-0 group-hover:opacity-100 ml-2 w-6 h-6 bg-green-100 hover:bg-green-200 text-green-600 rounded flex items-center justify-center transition-all text-xs"
+                            title="Adicionar subtarefa">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                {% endif %}
             </div>
             
             <!-- Responsável -->
@@ -191,4 +199,14 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
+
+.monday-row .add-subtask-btn {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.monday-row:hover .add-subtask-btn {
+    opacity: 1;
+}
 </style>
+

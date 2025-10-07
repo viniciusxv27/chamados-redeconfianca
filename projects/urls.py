@@ -26,6 +26,7 @@ urlpatterns = [
     path('activity/<int:activity_id>/comment/', views.activity_add_comment, name='activity_add_comment'),
     path('activity/<int:activity_id>/subtask/', views.activity_add_subtask, name='activity_add_subtask'),
     path('subtask/<int:subtask_id>/toggle/', views.subtask_toggle, name='subtask_toggle'),
+    path('subtask/<int:subtask_id>/delete/', views.subtask_delete, name='subtask_delete'),
     path('activity/<int:activity_id>/duplicate/', views.activity_duplicate, name='activity_duplicate'),
     path('activity/<int:activity_id>/archive/', views.activity_archive, name='activity_archive'),
     

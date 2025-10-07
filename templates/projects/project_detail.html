@@ -758,7 +758,7 @@
                     <!-- Hierarchy View -->
                     {% if activities or root_activities %}
                         <div class="space-y-3">
-                            {% include 'projects/activity_hierarchy.html' with activities=activities|default:root_activities can_edit=can_edit %}
+                            {% include 'projects/activity_hierarchy.html' with activities=activities|default:root_activities can_edit=can_edit project=project %}
                         </div>
                     {% else %}
                         <div class="text-center py-16">
@@ -939,6 +939,76 @@
 
 <!-- Incluir Modal de Detalhes da Atividade -->
 {% include 'projects/activity_modal.html' %}
+
+<!-- Modal de Subtarefa Global -->
+<div id="subtaskModal" class="fixed inset-0 bg-black bg-opacity-50 z-[9999] hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Criar Subtarefa</h3>
+            <button onclick="closeSubtaskModalGlobal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <form id="subtaskFormGlobal" onsubmit="saveSubtaskFromModalGlobal(event)">
+            <div class="space-y-4">
+                <div>
+                    <label for="subtaskNameGlobal" class="block text-sm font-medium text-gray-700 mb-1">Nome da Subtarefa*</label>
+                    <input type="text" id="subtaskNameGlobal" required 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label for="subtaskDescriptionGlobal" class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                    <textarea id="subtaskDescriptionGlobal" rows="3" 
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                </div>
+                
+                <div>
+                    <label for="subtaskPriorityGlobal" class="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                    <select id="subtaskPriorityGlobal" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="BAIXA">Baixa</option>
+                        <option value="MEDIA" selected>Média</option>
+                        <option value="ALTA">Alta</option>
+                        <option value="URGENTE">Urgente</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="subtaskDeadlineGlobal" class="block text-sm font-medium text-gray-700 mb-1">Prazo</label>
+                    <input type="datetime-local" id="subtaskDeadlineGlobal" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                
+                {% if project.members.exists %}
+                <div>
+                    <label for="subtaskAssignedToGlobal" class="block text-sm font-medium text-gray-700 mb-1">Responsável</label>
+                    <select id="subtaskAssignedToGlobal" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">Não atribuído</option>
+                        {% for member in project.members.all %}
+                        <option value="{{ member.id }}">{{ member.get_full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeSubtaskModalGlobal()" 
+                        class="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors">
+                    Criar Subtarefa
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -1332,5 +1402,99 @@ function handleCardClick(event, activityId) {
     // Open activity modal
     openActivityModal(activityId);
 }
+
+// Função para adicionar subtarefa na view hierárquica
+function addSubtaskHierarchy(parentActivityId) {
+    window.currentParentActivityId = parentActivityId;
+    
+    // Mostrar modal de subtarefa
+    const modal = document.getElementById('subtaskModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        
+        // Limpar formulário
+        document.getElementById('subtaskNameGlobal').value = '';
+        document.getElementById('subtaskDescriptionGlobal').value = '';
+        document.getElementById('subtaskPriorityGlobal').value = 'MEDIA';
+        document.getElementById('subtaskDeadlineGlobal').value = '';
+        if (document.getElementById('subtaskAssignedToGlobal')) {
+            document.getElementById('subtaskAssignedToGlobal').value = '';
+        }
+    }
+}
+
+function closeSubtaskModalGlobal() {
+    const modal = document.getElementById('subtaskModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+}
+
+function saveSubtaskFromModalGlobal(event) {
+    event.preventDefault();
+    
+    const parentActivityId = window.currentParentActivityId;
+    if (!parentActivityId) {
+        alert('Erro: ID da atividade pai não encontrado');
+        return;
+    }
+    
+    const formData = {
+        title: document.getElementById('subtaskNameGlobal').value.trim(),
+        description: document.getElementById('subtaskDescriptionGlobal').value.trim(),
+        priority: document.getElementById('subtaskPriorityGlobal').value,
+        deadline: document.getElementById('subtaskDeadlineGlobal').value,
+        assigned_to: document.getElementById('subtaskAssignedToGlobal') ? document.getElementById('subtaskAssignedToGlobal').value || null : null
+    };
+    
+    // Validação
+    if (!formData.title) {
+        alert('Nome da subtarefa é obrigatório');
+        return;
+    }
+    
+    // Loading state
+    const submitBtn = event.target.querySelector('[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Criando...';
+    submitBtn.disabled = true;
+    
+    // Fazer requisição
+    fetch(`/projects/activity/${parentActivityId}/subtask/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeSubtaskModalGlobal();
+            // Recarregar a página para mostrar a nova subtarefa
+            location.reload();
+        } else {
+            alert('Erro ao criar subtarefa: ' + (data.error || 'Erro desconhecido'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao criar subtarefa');
+    })
+    .finally(() => {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    });
+}
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeSubtaskModalGlobal();
+    }
+});
 </script>
 {% endblock %}
