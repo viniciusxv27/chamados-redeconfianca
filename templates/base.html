@@ -1179,6 +1179,13 @@
     <div id="supportChatWidget" class="fixed bottom-4 right-4 z-50">
         <!-- Chat Button -->
         <button id="supportChatToggle" 
+                onclick="
+                    var chatWindow = document.getElementById('supportChatWindow');
+                    if (chatWindow) {
+                        var currentDisplay = chatWindow.style.display;
+                        chatWindow.style.display = (currentDisplay === 'flex') ? 'none' : 'flex';
+                    }
+                "
                 class="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 group">
             <i class="fas fa-comment-alt text-xl group-hover:scale-110 transition-transform"></i>
             <span id="supportChatBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
@@ -1186,7 +1193,8 @@
 
         <!-- Chat Window -->
         <div id="supportChatWindow" 
-             class="hidden absolute bottom-16 right-0 w-80 h-96 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+             class="absolute bottom-16 right-0 w-80 h-96 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50"
+             style="display: none;">
             
             <!-- Chat Header -->
             <div class="bg-blue-500 text-white p-4 flex items-center justify-between">
@@ -1195,10 +1203,10 @@
                     <p class="text-xs text-blue-100">Como podemos ajudar?</p>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <button id="supportChatMinimize" class="text-blue-100 hover:text-white transition-colors">
+                    <button id="supportChatMinimize" onclick="document.getElementById('supportChatWindow').style.display = 'none';" class="text-blue-100 hover:text-white transition-colors">
                         <i class="fas fa-minus"></i>
                     </button>
-                    <button id="supportChatClose" class="text-blue-100 hover:text-white transition-colors">
+                    <button id="supportChatClose" onclick="document.getElementById('supportChatWindow').style.display = 'none';" class="text-blue-100 hover:text-white transition-colors">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -1294,6 +1302,92 @@
     {% block extra_js %}{% endblock %}
     
     <script>
+        // Global functions for support chat (called from onclick)
+        window.toggleSupportChat = function() {
+            console.log('toggleSupportChat called'); // Debug log
+            
+            // Força buscar o elemento na hora da execução
+            const chatWindow = document.getElementById('supportChatWindow');
+            console.log('Chat window element:', chatWindow); // Debug log
+            
+            if (chatWindow) {
+                console.log('Chat window found'); // Debug log
+                console.log('Current display:', chatWindow.style.display); // Debug log
+                
+                // Usar apenas display ao invés de classes
+                if (chatWindow.style.display === 'none' || chatWindow.style.display === '') {
+                    chatWindow.style.display = 'flex';
+                    console.log('Chat window opened'); // Debug log
+                } else {
+                    chatWindow.style.display = 'none';
+                    console.log('Chat window closed'); // Debug log
+                }
+            } else {
+                console.error('Chat window not found - element is null'); // Debug log
+                
+                // Debug: mostrar todos os elementos com ID
+                const allIds = Array.from(document.querySelectorAll('[id]')).map(el => el.id);
+                console.log('All IDs on page:', allIds.filter(id => id.includes('Chat') || id.includes('chat')));
+            }
+        };
+
+        window.closeSupportChat = function() {
+            console.log('closeSupportChat called'); // Debug log
+            const chatWindow = document.getElementById('supportChatWindow');
+            if (chatWindow) {
+                chatWindow.style.display = 'none';
+                console.log('Chat window closed'); // Debug log
+            } else {
+                console.error('Chat window not found'); // Debug log
+            }
+        };
+
+        window.minimizeSupportChat = function() {
+            console.log('minimizeSupportChat called'); // Debug log
+            const chatWindow = document.getElementById('supportChatWindow');
+            if (chatWindow) {
+                chatWindow.style.display = 'none';
+                console.log('Chat window minimized'); // Debug log
+                // Aqui poderíamos adicionar lógica para mostrar um indicador de minimizado
+            } else {
+                console.error('Chat window not found'); // Debug log
+            }
+        };
+
+        // Debug function to test chat functionality
+        window.testSupportChat = function() {
+            console.log('Testing support chat functions...');
+            const chatToggle = document.getElementById('supportChatToggle');
+            const chatWindow = document.getElementById('supportChatWindow');
+            
+            console.log('Chat toggle button:', chatToggle);
+            console.log('Chat window:', chatWindow);
+            console.log('toggleSupportChat function:', typeof window.toggleSupportChat);
+            
+            if (chatToggle && chatWindow) {
+                console.log('All elements found - chat should work!');
+                // Testar diretamente
+                chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
+                console.log('Toggled display to:', chatWindow.style.display);
+            } else {
+                console.error('Missing elements - check HTML structure');
+                if (!chatToggle) console.error('Chat toggle button not found');
+                if (!chatWindow) console.error('Chat window not found');
+            }
+        };
+        
+        // Função alternativa mais direta
+        window.forceToggleChat = function() {
+            const chatWindow = document.getElementById('supportChatWindow');
+            if (chatWindow) {
+                const isVisible = chatWindow.style.display === 'flex';
+                chatWindow.style.display = isVisible ? 'none' : 'flex';
+                console.log('Force toggled to:', chatWindow.style.display);
+            } else {
+                alert('Chat window not found!');
+            }
+        };
+
         // Support Chat Widget JavaScript
         document.addEventListener('DOMContentLoaded', function() {
             const chatToggle = document.getElementById('supportChatToggle');
@@ -1310,15 +1404,20 @@
             let currentChatId = null;
             let isMinimized = false;
 
-            // Toggle chat window
-            chatToggle.addEventListener('click', function() {
-                if (isMinimized) {
-                    chatWindow.classList.remove('hidden');
-                    isMinimized = false;
-                } else {
-                    chatWindow.classList.toggle('hidden');
-                }
-            });
+            // Toggle chat window (backup event listener)
+            if (chatToggle) {
+                chatToggle.addEventListener('click', function(e) {
+                    // Prevent double triggering if onclick is also defined
+                    if (e.target.onclick) return;
+                    
+                    if (isMinimized) {
+                        chatWindow.classList.remove('hidden');
+                        isMinimized = false;
+                    } else {
+                        chatWindow.classList.toggle('hidden');
+                    }
+                });
+            }
 
             // Close chat
             chatClose.addEventListener('click', function() {
