@@ -3204,6 +3204,117 @@ def manage_checklists_view(request):
     return render(request, 'admin_panel/manage_checklists.html', context)
 
 
+def create_recurring_checklists(parent_checklist, template=None):
+    """Cria checklists recorrentes baseado no tipo de repetição"""
+    from core.models import ChecklistItem, DailyChecklist
+    from datetime import date, timedelta
+    
+    created_count = 0
+    start_date = parent_checklist.date + timedelta(days=1)  # Começa no dia seguinte
+    
+    if parent_checklist.repeat_type == 'DAILY':
+        # Repetir todos os dias por 30 dias
+        end_date = parent_checklist.repeat_end_date or (start_date + timedelta(days=29))
+        current_date = start_date
+        
+        while current_date <= end_date:
+            recurring_checklist = DailyChecklist.objects.create(
+                user=parent_checklist.user,
+                template=parent_checklist.template,
+                title=parent_checklist.title,
+                date=current_date,
+                repeat_type='NONE',  # Instâncias não repetem
+                is_recurring_instance=True,
+                parent_checklist=parent_checklist,
+                created_by=parent_checklist.created_by
+            )
+            
+            # Copiar itens
+            for item in parent_checklist.items.all():
+                ChecklistItem.objects.create(
+                    checklist=recurring_checklist,
+                    title=item.title,
+                    description=item.description,
+                    order=item.order,
+                    is_required=item.is_required
+                )
+            
+            created_count += 1
+            current_date += timedelta(days=1)
+    
+    elif parent_checklist.repeat_type == 'WEEKDAYS':
+        # Repetir por 30 dias exceto finais de semana
+        end_date = parent_checklist.repeat_end_date or (start_date + timedelta(days=42))  # Mais dias para compensar fins de semana
+        current_date = start_date
+        weekdays_created = 0
+        
+        while current_date <= end_date and weekdays_created < 30:
+            # Pular fins de semana (5=sábado, 6=domingo)
+            if current_date.weekday() < 5:
+                recurring_checklist = DailyChecklist.objects.create(
+                    user=parent_checklist.user,
+                    template=parent_checklist.template,
+                    title=parent_checklist.title,
+                    date=current_date,
+                    repeat_type='NONE',
+                    is_recurring_instance=True,
+                    parent_checklist=parent_checklist,
+                    created_by=parent_checklist.created_by
+                )
+                
+                # Copiar itens
+                for item in parent_checklist.items.all():
+                    ChecklistItem.objects.create(
+                        checklist=recurring_checklist,
+                        title=item.title,
+                        description=item.description,
+                        order=item.order,
+                        is_required=item.is_required
+                    )
+                
+                created_count += 1
+                weekdays_created += 1
+            
+            current_date += timedelta(days=1)
+    
+    elif parent_checklist.repeat_type == 'CUSTOM_DAYS':
+        # Repetir em dias específicos da semana
+        end_date = parent_checklist.repeat_end_date or (start_date + timedelta(days=90))  # 3 meses por padrão
+        current_date = start_date
+        
+        # Converter dias selecionados para inteiros
+        selected_days = [int(day) for day in parent_checklist.repeat_days if day.isdigit()]
+        
+        while current_date <= end_date:
+            if current_date.weekday() in selected_days:
+                recurring_checklist = DailyChecklist.objects.create(
+                    user=parent_checklist.user,
+                    template=parent_checklist.template,
+                    title=parent_checklist.title,
+                    date=current_date,
+                    repeat_type='NONE',
+                    is_recurring_instance=True,
+                    parent_checklist=parent_checklist,
+                    created_by=parent_checklist.created_by
+                )
+                
+                # Copiar itens
+                for item in parent_checklist.items.all():
+                    ChecklistItem.objects.create(
+                        checklist=recurring_checklist,
+                        title=item.title,
+                        description=item.description,
+                        order=item.order,
+                        is_required=item.is_required
+                    )
+                
+                created_count += 1
+            
+            current_date += timedelta(days=1)
+    
+    return created_count
+
+
 @login_required
 def create_daily_checklist(request):
     """Criar checklist diário para usuários"""
@@ -3219,7 +3330,9 @@ def create_daily_checklist(request):
         creation_type = request.POST.get('creation_type', 'template')
         user_ids = request.POST.getlist('user_ids')
         checklist_date = request.POST.get('date', date.today().isoformat())
-        repeat_type = request.POST.get('repeat_type', 'none')
+        repeat_type = request.POST.get('repeat_type', 'NONE')
+        repeat_days = request.POST.getlist('repeat_days[]')  # Dias da semana selecionados
+        repeat_end_date = request.POST.get('repeat_end_date')
         
         if not user_ids:
             messages.error(request, 'Selecione pelo menos um usuário!')
@@ -3244,13 +3357,16 @@ def create_daily_checklist(request):
                     if DailyChecklist.objects.filter(user=user, template=template, date=target_date).exists():
                         continue
                     
-                    # Criar checklist
+                    # Criar checklist principal
                     daily_checklist = DailyChecklist.objects.create(
                         user=user,
                         template=template,
                         title=template.title,
                         date=target_date,
-                        repeat_daily=(repeat_type != 'none'),
+                        repeat_daily=(repeat_type != 'NONE'),
+                        repeat_type=repeat_type,
+                        repeat_days=repeat_days if repeat_type == 'CUSTOM_DAYS' else [],
+                        repeat_end_date=date.fromisoformat(repeat_end_date) if repeat_end_date else None,
                         created_by=request.user
                     )
                     
@@ -3263,7 +3379,11 @@ def create_daily_checklist(request):
                             order=template_item.order
                         )
                     
-                    created_count += 1
+                    # Criar checklists recorrentes se necessário
+                    if repeat_type != 'NONE':
+                        created_count += create_recurring_checklists(daily_checklist, template)
+                    else:
+                        created_count += 1
             
             else:  # creation_type == 'custom'
                 custom_title = request.POST.get('custom_title')
@@ -3285,7 +3405,10 @@ def create_daily_checklist(request):
                         user=user,
                         title=custom_title,
                         date=target_date,
-                        repeat_daily=(repeat_type != 'none'),
+                        repeat_daily=(repeat_type != 'NONE'),
+                        repeat_type=repeat_type,
+                        repeat_days=repeat_days if repeat_type == 'CUSTOM_DAYS' else [],
+                        repeat_end_date=date.fromisoformat(repeat_end_date) if repeat_end_date else None,
                         created_by=request.user
                     )
                     
@@ -3298,7 +3421,11 @@ def create_daily_checklist(request):
                                 order=i + 1
                             )
                     
-                    created_count += 1
+                    # Criar checklists recorrentes se necessário
+                    if repeat_type != 'NONE':
+                        created_count += create_recurring_checklists(daily_checklist)
+                    else:
+                        created_count += 1
             
             # Implementar lógica de repetição
             if repeat_type != 'none' and created_count > 0:

@@ -397,6 +397,14 @@ class ChecklistTemplateItem(models.Model):
 
 class DailyChecklist(models.Model):
     """Checklist diário para um usuário específico"""
+    
+    REPEAT_TYPE_CHOICES = [
+        ('NONE', 'Não repetir'),
+        ('DAILY', 'Todos os dias'),
+        ('WEEKDAYS', '30 dias (exceto finais de semana)'),
+        ('CUSTOM_DAYS', 'Dias específicos'),
+    ]
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='daily_checklists')
     template = models.ForeignKey(ChecklistTemplate, on_delete=models.CASCADE, related_name='daily_checklists', verbose_name="Template", null=True, blank=True)
     date = models.DateField(verbose_name="Data")
@@ -405,6 +413,13 @@ class DailyChecklist(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
     repeat_daily = models.BooleanField(default=False, verbose_name="Repetir todos os dias")
+    
+    # Novos campos para recorrência
+    repeat_type = models.CharField(max_length=20, choices=REPEAT_TYPE_CHOICES, default='NONE', verbose_name="Tipo de Repetição")
+    repeat_days = models.JSONField(default=list, blank=True, verbose_name="Dias da Semana", help_text="Lista de dias: 0=Segunda, 1=Terça, ..., 6=Domingo")
+    repeat_end_date = models.DateField(null=True, blank=True, verbose_name="Data Final da Repetição")
+    is_recurring_instance = models.BooleanField(default=False, verbose_name="Instância de Recorrência")
+    parent_checklist = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='recurring_instances')
     
     class Meta:
         verbose_name = "Checklist Diário"

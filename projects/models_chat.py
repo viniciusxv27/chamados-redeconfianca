@@ -147,3 +147,105 @@ class SupportAgent(models.Model):
 
     def __str__(self):
         return f"Agente: {self.user.get_full_name()}"
+
+
+class SupportCategory(models.Model):
+    """Categorias de suporte por setor"""
+    name = models.CharField(max_length=100, verbose_name="Nome da Categoria")
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.CASCADE,
+        related_name='support_categories',
+        verbose_name="Setor"
+    )
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Categoria de Suporte"
+        verbose_name_plural = "Categorias de Suporte"
+        unique_together = ['name', 'sector']
+
+    def __str__(self):
+        return f"{self.sector.name} - {self.name}"
+
+
+class SupportChatFile(models.Model):
+    """Arquivos enviados no chat de suporte"""
+    MESSAGE_TYPES = [
+        ('IMAGE', 'Imagem'),
+        ('VIDEO', 'Vídeo'),
+        ('AUDIO', 'Áudio'),
+        ('DOCUMENT', 'Documento'),
+    ]
+    
+    chat = models.ForeignKey(
+        SupportChat,
+        on_delete=models.CASCADE,
+        related_name='files'
+    )
+    message = models.ForeignKey(
+        SupportChatMessage,
+        on_delete=models.CASCADE,
+        related_name='files'
+    )
+    file = models.FileField(upload_to='support_chat_files/%Y/%m/')
+    file_type = models.CharField(max_length=20, choices=MESSAGE_TYPES)
+    original_name = models.CharField(max_length=255)
+    file_size = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Arquivo do Chat"
+        verbose_name_plural = "Arquivos do Chat"
+
+    def __str__(self):
+        return f"{self.original_name} - {self.chat.title}"
+
+
+class SupportChatRating(models.Model):
+    """Avaliação do atendimento"""
+    RATING_CHOICES = [
+        (1, 'Muito Insatisfeito'),
+        (2, 'Insatisfeito'),
+        (3, 'Neutro'),
+        (4, 'Satisfeito'),
+        (5, 'Muito Satisfeito'),
+    ]
+    
+    chat = models.OneToOneField(
+        SupportChat,
+        on_delete=models.CASCADE,
+        related_name='rating'
+    )
+    rating = models.IntegerField(choices=RATING_CHOICES)
+    feedback = models.TextField(blank=True, verbose_name="Comentário")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Avaliação do Atendimento"
+        verbose_name_plural = "Avaliações do Atendimento"
+
+    def __str__(self):
+        return f"Avaliação {self.rating}/5 - {self.chat.title}"
+
+
+# Atualizar o modelo SupportChat para incluir setor e categoria
+SupportChat.add_to_class('sector', models.ForeignKey(
+    'users.Sector',
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name='support_chats',
+    verbose_name="Setor"
+))
+
+SupportChat.add_to_class('category', models.ForeignKey(
+    SupportCategory,
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name='support_chats',
+    verbose_name="Categoria"
+))

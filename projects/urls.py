@@ -39,6 +39,19 @@ urlpatterns = [
     path('support/chat/<int:chat_id>/', views_chat.get_support_chat, name='get_support_chat'),
     path('support/chat/create/', views_chat.create_support_chat, name='create_support_chat'),
     path('support/chat/<int:chat_id>/send/', views_chat.send_support_message, name='send_support_message'),
+    path('support/sectors/', views_chat.get_sectors, name='get_sectors'),
+    path('support/sectors/<int:sector_id>/categories/', views_chat.get_sector_categories, name='get_sector_categories'),
+    path('support/chat/<int:chat_id>/files/upload/', views_chat.upload_chat_file, name='upload_chat_file'),
+    path('support/chat/<int:chat_id>/rate/', views_chat.rate_support_chat, name='rate_support_chat'),
+    
+    # Support Admin URLs
+    path('support/admin/', views_chat.support_admin_dashboard, name='support_admin_dashboard'),
+    path('support/admin/template/', views_chat.support_admin_template, name='support_admin_template'),
+    path('support/chat/<int:chat_id>/assign/', views_chat.assign_chat_to_agent, name='assign_chat_to_agent'),
+    path('support/metrics/', views_chat.support_metrics, name='support_metrics'),
+    path('support/metrics/export/', views_chat.export_metrics_report, name='export_metrics_report'),
+    path('support/admin/categories/', views_chat.manage_support_categories, name='manage_support_categories'),
+    path('support/admin/agents/', views_chat.manage_support_agents, name='manage_support_agents'),
     
     # API
     path('api/sectors/<int:sector_id>/users/', api_views.sector_users_api, name='sector_users_api'),

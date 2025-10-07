@@ -1451,5 +1451,41 @@ document.addEventListener('keydown', function(e) {
         closeSubtaskModalGlobal();
     }
 });
+
+// Função para expandir/recolher subtarefas no Kanban
+function toggleSubtasks(activityId) {
+    const subtasksDiv = document.getElementById('subtasks-' + activityId);
+    const toggleBtn = document.getElementById('toggle-' + activityId);
+    
+    if (subtasksDiv.classList.contains('hidden')) {
+        subtasksDiv.classList.remove('hidden');
+        toggleBtn.innerHTML = '<i class="fas fa-chevron-up"></i>';
+    } else {
+        subtasksDiv.classList.add('hidden');
+        toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
+    }
+}
+
+// Função para alterar status da subtarefa
+function toggleSubtaskStatus(subtaskId) {
+    fetch(`/projects/subtask/${subtaskId}/toggle/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            alert('Erro ao atualizar subtarefa');
+            location.reload(); // Recarregar para reverter mudança
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atualizar subtarefa');
+        location.reload();
+    });
+}
 </script>
 {% endblock %}

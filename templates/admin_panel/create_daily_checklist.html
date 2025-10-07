@@ -147,73 +147,95 @@
                         <!-- Repeat Options -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-3">Opções de Repetição</label>
-                            <div class="space-y-2">
+                            <div class="space-y-3">
                                 <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="none" id="repeat_none" 
+                                    <input type="radio" name="repeat_type" value="NONE" id="repeat_none" 
                                            class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3" checked>
                                     <label for="repeat_none" class="text-sm text-gray-700">
-                                        Apenas uma vez
+                                        <i class="fas fa-calendar-day mr-2 text-gray-500"></i>Apenas uma vez
                                     </label>
                                 </div>
                                 <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="daily" id="repeat_daily" 
+                                    <input type="radio" name="repeat_type" value="DAILY" id="repeat_daily" 
                                            class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
                                     <label for="repeat_daily" class="text-sm text-gray-700">
-                                        Repetir todos os dias (30 dias)
+                                        <i class="fas fa-calendar-alt mr-2 text-blue-500"></i>Repetir todos os dias (30 dias)
                                     </label>
                                 </div>
                                 <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="monday" id="repeat_monday" 
+                                    <input type="radio" name="repeat_type" value="WEEKDAYS" id="repeat_weekdays" 
                                            class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_monday" class="text-sm text-gray-700">
-                                        Repetir toda segunda-feira
+                                    <label for="repeat_weekdays" class="text-sm text-gray-700">
+                                        <i class="fas fa-business-time mr-2 text-green-500"></i>30 dias (exceto finais de semana)
                                     </label>
                                 </div>
                                 <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="tuesday" id="repeat_tuesday" 
-                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_tuesday" class="text-sm text-gray-700">
-                                        Repetir toda terça-feira
+                                    <input type="radio" name="repeat_type" value="CUSTOM_DAYS" id="repeat_custom" 
+                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3"
+                                           onchange="toggleCustomDays()">
+                                    <label for="repeat_custom" class="text-sm text-gray-700">
+                                        <i class="fas fa-calendar-check mr-2 text-purple-500"></i>Dias específicos da semana
                                     </label>
                                 </div>
-                                <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="wednesday" id="repeat_wednesday" 
-                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_wednesday" class="text-sm text-gray-700">
-                                        Repetir toda quarta-feira
-                                    </label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="thursday" id="repeat_thursday" 
-                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_thursday" class="text-sm text-gray-700">
-                                        Repetir toda quinta-feira
-                                    </label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="friday" id="repeat_friday" 
-                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_friday" class="text-sm text-gray-700">
-                                        Repetir toda sexta-feira
-                                    </label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="saturday" id="repeat_saturday" 
-                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_saturday" class="text-sm text-gray-700">
-                                        Repetir todo sábado
-                                    </label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input type="radio" name="repeat_type" value="sunday" id="repeat_sunday" 
-                                           class="h-4 w-4 text-primary border-gray-300 focus:ring-primary mr-3">
-                                    <label for="repeat_sunday" class="text-sm text-gray-700">
-                                        Repetir todo domingo
-                                    </label>
+                                
+                                <!-- Custom Days Selection -->
+                                <div id="customDaysSelection" class="hidden ml-7 mt-3 p-4 bg-gray-50 rounded-lg border">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Selecione os dias:</label>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" name="repeat_days[]" value="0" id="day_monday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_monday" class="text-sm text-gray-700">Segunda-feira</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" name="repeat_days[]" value="1" id="day_tuesday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_tuesday" class="text-sm text-gray-700">Terça-feira</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" name="repeat_days[]" value="2" id="day_wednesday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_wednesday" class="text-sm text-gray-700">Quarta-feira</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" name="repeat_days[]" value="3" id="day_thursday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_thursday" class="text-sm text-gray-700">Quinta-feira</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" name="repeat_days[]" value="4" id="day_friday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_friday" class="text-sm text-gray-700">Sexta-feira</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" name="repeat_days[]" value="5" id="day_saturday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_saturday" class="text-sm text-gray-700">Sábado</label>
+                                        </div>
+                                        <div class="flex items-center col-span-2">
+                                            <input type="checkbox" name="repeat_days[]" value="6" id="day_sunday" 
+                                                   class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary mr-2">
+                                            <label for="day_sunday" class="text-sm text-gray-700">Domingo</label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                            
+                            <!-- End Date Selection -->
+                            <div id="endDateSelection" class="hidden mt-4 p-4 bg-blue-50 rounded-lg border">
+                                <label for="repeat_end_date" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Data final da repetição (opcional):
+                                </label>
+                                <input type="date" name="repeat_end_date" id="repeat_end_date"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Se não especificado, será usado um período padrão baseado no tipo de repetição.
+                                </p>
+                            </div>
+                            
                             <p class="text-sm text-gray-500 mt-2">
-                                Opções de repetição criarão checklists automaticamente pelos próximos 30 dias nos dias selecionados
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Opções de repetição criarão checklists automaticamente conforme a configuração selecionada
                             </p>
                         </div>
 
@@ -540,29 +562,54 @@ function updateDate() {
 
 function getRepeatLabel(value) {
     const repeatLabels = {
-        'none': 'Apenas uma vez',
-        'daily': 'Repetir por 30 dias',
-        'monday': 'Repetir toda segunda-feira',
-        'tuesday': 'Repetir toda terça-feira',
-        'wednesday': 'Repetir toda quarta-feira',
-        'thursday': 'Repetir toda quinta-feira',
-        'friday': 'Repetir toda sexta-feira',
-        'saturday': 'Repetir todo sábado',
-        'sunday': 'Repetir todo domingo'
+        'NONE': 'Apenas uma vez',
+        'DAILY': 'Repetir todos os dias (30 dias)',
+        'WEEKDAYS': '30 dias (exceto finais de semana)',
+        'CUSTOM_DAYS': 'Dias específicos da semana'
     };
     return repeatLabels[value] || 'Apenas uma vez';
+}
+
+function toggleCustomDays() {
+    const customRadio = document.getElementById('repeat_custom');
+    const customDaysDiv = document.getElementById('customDaysSelection');
+    const endDateDiv = document.getElementById('endDateSelection');
+    
+    if (customRadio.checked) {
+        customDaysDiv.classList.remove('hidden');
+        endDateDiv.classList.remove('hidden');
+    } else {
+        customDaysDiv.classList.add('hidden');
+    }
 }
 
 function updateRepeat() {
     const repeatRadios = document.querySelectorAll('input[name="repeat_type"]');
     const selectedRepeat = document.getElementById('selected-repeat');
+    const endDateDiv = document.getElementById('endDateSelection');
     
-    let selectedValue = 'none';
+    let selectedValue = 'NONE';
     repeatRadios.forEach(radio => {
         if (radio.checked) {
             selectedValue = radio.value;
         }
     });
+    
+    // Mostrar/esconder opções condicionais
+    const customDaysDiv = document.getElementById('customDaysSelection');
+    if (selectedValue === 'CUSTOM_DAYS') {
+        customDaysDiv.classList.remove('hidden');
+        endDateDiv.classList.remove('hidden');
+    } else {
+        customDaysDiv.classList.add('hidden');
+    }
+    
+    // Mostrar campo de data final para todas as opções de repetição exceto 'NONE'
+    if (selectedValue !== 'NONE') {
+        endDateDiv.classList.remove('hidden');
+    } else {
+        endDateDiv.classList.add('hidden');
+    }
     
     selectedRepeat.textContent = getRepeatLabel(selectedValue);
 }
