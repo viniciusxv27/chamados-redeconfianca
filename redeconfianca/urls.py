@@ -26,12 +26,23 @@ from tickets.views import TicketViewSet, CategoryViewSet
 from communications.views import home_feed
 import os
 
-# Router para API REST
+# Router para API REST (com autenticação)
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
 router.register(r'sectors', SectorViewSet)
 router.register(r'tickets', TicketViewSet)
 router.register(r'categories', CategoryViewSet)
+
+# Router para API pública (sem autenticação - para produção)
+from rest_framework import permissions
+from users.views import PublicUserViewSet, PublicSectorViewSet
+from tickets.views import PublicTicketViewSet, PublicCategoryViewSet
+
+public_router = DefaultRouter()
+public_router.register(r'users', PublicUserViewSet, basename='public-users')
+public_router.register(r'sectors', PublicSectorViewSet, basename='public-sectors')
+public_router.register(r'tickets', PublicTicketViewSet, basename='public-tickets')
+public_router.register(r'categories', PublicCategoryViewSet, basename='public-categories')
 
 try:
     from tickets.views import WebhookViewSet
@@ -81,6 +92,7 @@ urlpatterns = [
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training
     path('api/', include(router.urls)),
+    path('api/public/', include(public_router.urls)),  # APIs públicas para produção
     path('api-auth/', include('rest_framework.urls')),
 ]
 

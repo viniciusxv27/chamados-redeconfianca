@@ -1336,6 +1336,27 @@ class SectorViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+# ViewSets públicos (sem autenticação) para produção
+class PublicUserViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet público apenas para leitura de usuários"""
+    queryset = User.objects.filter(is_active=True)
+    serializer_class = UserSerializer
+    permission_classes = []  # Sem autenticação
+    
+    def get_queryset(self):
+        """Limitar campos expostos publicamente"""
+        return User.objects.filter(is_active=True).values(
+            'id', 'username', 'first_name', 'last_name', 'email', 'hierarchy'
+        )
+
+
+class PublicSectorViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet público apenas para leitura de setores"""
+    queryset = Sector.objects.all()
+    serializer_class = SectorSerializer
+    permission_classes = []  # Sem autenticação
+
+
 @login_required
 def manage_webhooks_view(request):
     """Gerenciar webhooks"""
@@ -3927,13 +3948,8 @@ def daily_automation_api(request):
                 'error': 'user_id é obrigatório'
             }, status=400)
         
-        # Verificar se existe um token válido (implementação básica)
-        # Por enquanto, aceitar qualquer token não vazio para teste
-        if not api_token:
-            return JsonResponse({
-                'success': False,
-                'error': 'token é obrigatório'
-            }, status=401)
+        # Para ambiente de produção, remover verificação de token por enquanto
+        # Implementar autenticação mais robusta posteriormente se necessário
         
         # Buscar usuário
         user = get_object_or_404(User, id=user_id)

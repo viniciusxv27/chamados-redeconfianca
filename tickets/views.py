@@ -870,6 +870,27 @@ class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+# ViewSets públicos (sem autenticação) para produção
+class PublicTicketViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet público apenas para leitura de tickets"""
+    queryset = Ticket.objects.all()
+    serializer_class = TicketSerializer
+    permission_classes = []  # Sem autenticação
+    
+    def get_queryset(self):
+        """Retorna apenas informações básicas dos tickets"""
+        return Ticket.objects.filter(
+            status__in=['open', 'in_progress', 'waiting']
+        ).select_related('category', 'sector', 'created_by')
+
+
+class PublicCategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet público apenas para leitura de categorias"""
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = []  # Sem autenticação
+
+
 @login_required
 def manage_webhooks_view(request):
     """Gerenciar webhooks"""

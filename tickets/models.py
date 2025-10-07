@@ -604,6 +604,9 @@ class Webhook(models.Model):
                 for user in recipients_data
             ]
             
+            # Lista apenas dos números de telefone válidos
+            phone_numbers = [user['phone'] for user in recipients_data if user['phone']]
+            
             payload['communication'] = {
                 'id': instance.id,
                 'title': instance.title,
@@ -622,9 +625,11 @@ class Webhook(models.Model):
                 'active_from': instance.active_from.isoformat() if instance.active_from else None,
                 'active_until': instance.active_until.isoformat() if instance.active_until else None,
                 'recipients_count': len(recipients_users),
+                'phone_numbers_count': len(phone_numbers),
                 'has_image': bool(instance.image)
             }
             payload['recipients_users'] = recipients_users
+            payload['phone_numbers'] = phone_numbers
         
         if user:
             payload['user'] = {
