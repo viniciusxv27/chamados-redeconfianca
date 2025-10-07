@@ -12,37 +12,41 @@
     </div>
     
     <!-- User Info Section -->
-    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-4">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+            <div class="flex items-center space-x-3 sm:space-x-4">
                 {% if user.profile_picture %}
-                    <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-16 h-16 rounded-full object-cover border-2 border-primary/20">
+                    <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-primary/20 flex-shrink-0">
                 {% elif user.avatar %}
-                    <img src="{{ user.avatar.url }}" alt="{{ user.full_name }}" class="w-16 h-16 rounded-full object-cover border-2 border-primary/20">
+                    <img src="{{ user.avatar.url }}" alt="{{ user.full_name }}" class="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-primary/20 flex-shrink-0">
                 {% else %}
-                    <div class="w-16 h-16 bg-gradient-to-br from-primary to-orange-500 rounded-full flex items-center justify-center border-2 border-primary/20">
-                        <span class="text-white font-bold text-xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                    <div class="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-orange-500 rounded-full flex items-center justify-center border-2 border-primary/20 flex-shrink-0">
+                        <span class="text-white font-bold text-lg sm:text-xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
                     </div>
                 {% endif %}
-                <div>
-                    <h2 class="text-xl font-semibold text-gray-900">{{ user.full_name }}</h2>
-                    <p class="text-gray-600">{{ user.get_hierarchy_display }}{% if user.sector %} - {{ user.sector.name }}{% endif %}</p>
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.full_name }}</h2>
+                    <p class="text-sm sm:text-base text-gray-600 truncate">{{ user.get_hierarchy_display }}{% if user.sector %} - {{ user.sector.name }}{% endif %}</p>
                     {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
-                    <p class="text-sm text-gray-500">
+                    <p class="text-xs sm:text-sm text-gray-500">
                         <i class="fas fa-coins text-primary mr-1"></i>
                         Saldo: <span class="font-semibold text-primary">C$ {{ user.balance_cs }}</span>
                     </p>
                     {% endif %}
                 </div>
             </div>
-            <div class="flex space-x-3">
-                <a href="{% url 'ticket_create' %}" class="bg-secondary text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors">
-                    Novo Chamado
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <a href="{% url 'ticket_create' %}" class="bg-secondary text-white px-4 py-2 text-sm rounded-lg hover:bg-gray-800 transition-colors text-center">
+                    <i class="fas fa-plus mr-2 sm:mr-1"></i>
+                    <span class="sm:hidden">Novo Chamado</span>
+                    <span class="hidden sm:inline">Novo</span>
                 </a>
-                <a href="{% url 'communications:communications_list' %}" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                    Comunicados
+                <a href="{% url 'communications:communications_list' %}" class="bg-blue-600 text-white px-4 py-2 text-sm rounded-lg hover:bg-blue-700 transition-colors text-center relative">
+                    <i class="fas fa-bullhorn mr-2 sm:mr-1"></i>
+                    <span class="sm:hidden">Comunicados</span>
+                    <span class="hidden sm:inline">Comunicados</span>
                     {% if unread_communications %}
-                    <span class="ml-2 bg-red-500 text-white rounded-full px-2 py-1 text-xs">{{ unread_communications|length }}</span>
+                    <span class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full px-2 py-1 text-xs min-w-[1.25rem] h-5 flex items-center justify-center">{{ unread_communications|length }}</span>
                     {% endif %}
                 </a>
             </div>
@@ -71,63 +75,63 @@
     {% endif %}
     
     <!-- Quick Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow-sm p-6">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-blue-100">
-                    <i class="fas fa-ticket-alt text-blue-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-blue-100 flex-shrink-0">
+                    <i class="fas fa-ticket-alt text-blue-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Total Chamados</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ stats.total_tickets }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Total</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.total_tickets }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-green-100">
-                    <i class="fas fa-play text-green-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-green-100 flex-shrink-0">
+                    <i class="fas fa-play text-green-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Abertos</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ stats.open_tickets }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Abertos</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.open_tickets }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-yellow-100">
-                    <i class="fas fa-clock text-yellow-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-yellow-100 flex-shrink-0">
+                    <i class="fas fa-clock text-yellow-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Em Andamento</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ stats.pending_tickets }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Andamento</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.pending_tickets }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-green-100">
-                    <i class="fas fa-check text-green-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-green-100 flex-shrink-0">
+                    <i class="fas fa-check text-green-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Fechados</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ stats.closed_tickets }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Fechados</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.closed_tickets }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 col-span-2 sm:col-span-1">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-purple-100">
-                    <i class="fas fa-users text-purple-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-purple-100 flex-shrink-0">
+                    <i class="fas fa-users text-purple-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Usuários Ativos</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ stats.active_users }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Usuários</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.active_users }}</p>
                 </div>
             </div>
         </div>
@@ -200,55 +204,60 @@
         <div class="p-6">
             <div class="space-y-4">
                 {% for ticket in recent_tickets %}
-                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                    <div class="flex items-center space-x-4">
-                        <!-- Foto do usuário que criou o chamado -->
-                        <div class="flex-shrink-0">
-                            {% if ticket.created_by.profile_picture %}
-                                <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-10 h-10 rounded-full object-cover">
-                            {% else %}
-                                <div class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center">
-                                    <span class="text-white font-medium text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
+                <div class="p-4 border border-gray-200 rounded-lg">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0">
+                        <div class="flex items-start space-x-3 flex-1 min-w-0">
+                            <!-- Foto do usuário que criou o chamado -->
+                            <div class="flex-shrink-0">
+                                {% if ticket.created_by.profile_picture %}
+                                    <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover">
+                                {% else %}
+                                    <div class="w-8 h-8 sm:w-10 sm:h-10 bg-gray-500 rounded-full flex items-center justify-center">
+                                        <span class="text-white font-medium text-xs sm:text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center gap-2 mb-2">
+                                    {% if ticket.status == 'ABERTO' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            Aberto
+                                        </span>
+                                    {% elif ticket.status == 'EM_ANDAMENTO' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            Em Andamento
+                                        </span>
+                                    {% elif ticket.status == 'RESOLVIDO' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            Resolvido
+                                        </span>
+                                    {% elif ticket.status == 'FECHADO' %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                            Fechado
+                                        </span>
+                                    {% endif %}
+                                    {% if ticket.is_overdue %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            Atrasado
+                                        </span>
+                                    {% endif %}
                                 </div>
-                            {% endif %}
+                                <p class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{{ ticket.title }}</p>
+                                <div class="text-xs text-gray-500 space-y-1">
+                                    <p>ID: #{{ ticket.id }} - {{ ticket.category.name }}</p>
+                                    <p>Por {{ ticket.created_by.full_name }} em {{ ticket.created_at|date:"d/m/Y H:i" }}</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex-shrink-0">
-                            {% if ticket.status == 'ABERTO' %}
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    Aberto
-                                </span>
-                            {% elif ticket.status == 'EM_ANDAMENTO' %}
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                    Em Andamento
-                                </span>
-                            {% elif ticket.status == 'RESOLVIDO' %}
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    Resolvido
-                                </span>
-                            {% elif ticket.status == 'FECHADO' %}
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                    Fechado
-                                </span>
-                            {% endif %}
-                            {% if ticket.is_overdue %}
-                                <span class="ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                    Atrasado
-                                </span>
-                            {% endif %}
+                        <div class="flex items-center justify-between sm:justify-end space-x-3 sm:space-x-4">
+                            <div class="text-right hidden sm:block">
+                                <p class="text-xs text-gray-500">Criado por</p>
+                                <p class="text-sm font-medium text-gray-900 truncate max-w-24">{{ ticket.created_by.full_name }}</p>
+                            </div>
+                            <a href="{% url 'ticket_detail' ticket.id %}" class="text-secondary hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                <i class="fas fa-eye"></i>
+                            </a>
                         </div>
-                        <div>
-                            <p class="text-sm font-medium text-gray-900">{{ ticket.title }}</p>
-                            <p class="text-sm text-gray-500">ID: #{{ ticket.id }} - {{ ticket.category.name }} - Criado em {{ ticket.created_at|date:"d/m/Y H:i" }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <div class="text-right">
-                            <p class="text-sm text-gray-500">Criado por</p>
-                            <p class="text-sm font-medium text-gray-900">{{ ticket.created_by.full_name }}</p>
-                        </div>
-                        <a href="{% url 'ticket_detail' ticket.id %}" class="text-secondary hover:text-gray-800">
-                            <i class="fas fa-eye"></i>
-                        </a>
                     </div>
                 </div>
                 {% empty %}

@@ -4,77 +4,77 @@
 {% block title %}Painel Administrativo - Rede Confiança{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto">
+<div class="max-w-7xl mx-auto px-4 sm:px-0">
     <!-- Page Header -->
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Painel Administrativo</h1>
-        <p class="text-gray-600 mt-2">Gerenciar usuários, setores e configurações do sistema</p>
+    <div class="mb-6 sm:mb-8">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Painel Administrativo</h1>
+        <p class="text-gray-600 mt-2 text-sm sm:text-base">Gerenciar usuários, setores e configurações do sistema</p>
     </div>
     
     <!-- Quick Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow-sm p-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-blue-100">
-                    <i class="fas fa-users text-blue-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-blue-100 flex-shrink-0">
+                    <i class="fas fa-users text-blue-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Total de Usuários</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ total_users }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600">Total de Usuários</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ total_users }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-green-100">
-                    <i class="fas fa-building text-green-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-green-100 flex-shrink-0">
+                    <i class="fas fa-building text-green-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Setores</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ total_sectors }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600">Setores</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ total_sectors }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-yellow-100">
-                    <i class="fas fa-ticket-alt text-yellow-600"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-yellow-100 flex-shrink-0">
+                    <i class="fas fa-ticket-alt text-yellow-600 text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">Chamados Abertos</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ open_tickets_count|default:"0" }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Chamados Abertos</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ open_tickets_count|default:"0" }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
             <div class="flex items-center">
-                <div class="p-3 rounded-full bg-primary/10">
-                    <i class="fas fa-coins text-primary"></i>
+                <div class="p-2 sm:p-3 rounded-full bg-primary/10 flex-shrink-0">
+                    <i class="fas fa-coins text-primary text-sm sm:text-base"></i>
                 </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600">C$ em Circulação</p>
-                    <p class="text-2xl font-semibold text-primary">{{ total_cs_circulation|floatformat:0|default:"0" }}</p>
+                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">C$ em Circulação</p>
+                    <p class="text-lg sm:text-2xl font-semibold text-primary">{{ total_cs_circulation|floatformat:0|default:"0" }}</p>
                 </div>
             </div>
         </div>
     </div>
     
     <!-- Quick Actions -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
                 <i class="fas fa-users text-blue-600 mr-2"></i>
                 Usuários
             </h3>
-            <p class="text-gray-600 mb-4 text-sm">Criar, editar e gerenciar usuários</p>
+            <p class="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm">Criar, editar e gerenciar usuários</p>
             <div class="space-y-2">
-                <a href="{% url 'manage_users' %}" class="block bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-center text-sm">
+                <a href="{% url 'manage_users' %}" class="block bg-primary text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-center text-xs sm:text-sm">
                     Gerenciar Usuários
                 </a>
-                <a href="{% url 'create_user' %}" class="block bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-center text-sm">
+                <a href="{% url 'create_user' %}" class="block bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-center text-xs sm:text-sm">
                     Criar Usuário
                 </a>
             </div>

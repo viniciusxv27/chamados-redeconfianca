@@ -6,31 +6,31 @@
 {% block content %}
 <div class="max-w-4xl mx-auto">
     <!-- Page Header -->
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Chamados</h1>
-        <p class="text-gray-600 mt-2">Criar novo chamado</p>
+    <div class="mb-6 sm:mb-8 px-4 sm:px-0">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Chamados</h1>
+        <p class="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Criar novo chamado</p>
     </div>
     
     <!-- User Info Section -->
-    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div class="flex items-center space-x-4">
-            <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 mx-4 sm:mx-0">
+        <div class="flex items-center space-x-3 sm:space-x-4">
+            <div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
                 {% if user.profile_picture %}
                     <img src="{{ user.profile_picture.url }}" alt="{{ user.get_full_name }}" class="w-full h-full object-cover">
                 {% else %}
-                    <i class="fas fa-user text-2xl text-gray-600"></i>
+                    <i class="fas fa-user text-lg sm:text-2xl text-gray-600"></i>
                 {% endif %}
             </div>
-            <div>
-                <h2 class="text-xl font-semibold text-gray-900">{{ user.first_name }} {{ user.last_name }}</h2>
-                <p class="text-gray-600">{{ user.sector.name }}</p>
+            <div class="min-w-0 flex-1">
+                <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.first_name }} {{ user.last_name }}</h2>
+                <p class="text-sm sm:text-base text-gray-600 truncate">{{ user.sector.name }}</p>
             </div>
         </div>
     </div>
     
     <!-- Tabs Navigation -->
-    <div class="mb-6">
-        <nav class="flex space-x-8 border-b border-gray-200">
+    <div class="mb-6 mx-4 sm:mx-0">
+        <nav class="flex space-x-4 sm:space-x-8 border-b border-gray-200">
             <a href="#" class="border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium">
                 Novo Chamado
             </a>
@@ -38,11 +38,11 @@
     </div>
     
     <!-- Form -->
-    <div class="bg-white rounded-lg shadow-sm p-6">
-        <form method="post" enctype="multipart/form-data" class="space-y-6">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mx-4 sm:mx-0">
+        <form method="post" enctype="multipart/form-data" class="space-y-4 sm:space-y-6">
             {% csrf_token %}
             
-            <div class="text-right text-sm text-gray-500 mb-4">
+            <div class="text-right text-xs sm:text-sm text-gray-500 mb-4">
                 ID: #0004
             </div>
             

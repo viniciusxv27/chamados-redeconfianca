@@ -40,78 +40,78 @@
 {% endblock %}
 
 {% block content %}
-<div class="p-6">
+<div class="p-4 sm:p-6">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 space-y-4 sm:space-y-0">
+        <div class="min-w-0 flex-1">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">
                 <i class="fas fa-cogs text-blue-500 mr-2"></i>
                 Gerenciar Notificações
             </h1>
-            <p class="text-gray-600 mt-1">Painel administrativo do sistema de notificações</p>
+            <p class="text-gray-600 mt-1 text-sm sm:text-base">Painel administrativo do sistema de notificações</p>
         </div>
         
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button onclick="showCreateModal()" 
-                    class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-                <i class="fas fa-plus mr-2"></i>Nova Notificação
+                    class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base">
+                <i class="fas fa-plus mr-1 sm:mr-2"></i>Nova Notificação
             </button>
             
             <a href="{% url 'notifications:dashboard' %}" 
-               class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-                <i class="fas fa-arrow-left mr-2"></i>Voltar
+               class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base text-center">
+                <i class="fas fa-arrow-left mr-1 sm:mr-2"></i>Voltar
             </a>
         </div>
     </div>
 
     <!-- Estatísticas -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div class="stats-card text-white rounded-lg p-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="stats-card text-white rounded-lg p-4 sm:p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-2xl font-bold">{{ total_notifications }}</h3>
-                    <p class="opacity-90">Total Criadas</p>
+                    <h3 class="text-xl sm:text-2xl font-bold">{{ total_notifications }}</h3>
+                    <p class="opacity-90 text-sm sm:text-base">Total Criadas</p>
                 </div>
-                <i class="fas fa-bell text-3xl opacity-75"></i>
+                <i class="fas fa-bell text-2xl sm:text-3xl opacity-75"></i>
             </div>
         </div>
         
-        <div class="bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-lg p-6">
+        <div class="bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-lg p-4 sm:p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-2xl font-bold">{{ active_notifications }}</h3>
-                    <p class="opacity-90">Ativas</p>
+                    <h3 class="text-xl sm:text-2xl font-bold">{{ active_notifications }}</h3>
+                    <p class="opacity-90 text-sm sm:text-base">Ativas</p>
                 </div>
-                <i class="fas fa-check-circle text-3xl opacity-75"></i>
+                <i class="fas fa-check-circle text-2xl sm:text-3xl opacity-75"></i>
             </div>
         </div>
         
-        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg p-6">
+        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg p-4 sm:p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-2xl font-bold">{{ pending_notifications }}</h3>
-                    <p class="opacity-90">Pendentes</p>
+                    <h3 class="text-xl sm:text-2xl font-bold">{{ pending_notifications }}</h3>
+                    <p class="opacity-90 text-sm sm:text-base">Pendentes</p>
                 </div>
-                <i class="fas fa-clock text-3xl opacity-75"></i>
+                <i class="fas fa-clock text-2xl sm:text-3xl opacity-75"></i>
             </div>
         </div>
         
-        <div class="bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg p-6">
+        <div class="bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg p-4 sm:p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-2xl font-bold">{{ total_users_notified }}</h3>
-                    <p class="opacity-90">Usuários Notificados</p>
+                    <h3 class="text-xl sm:text-2xl font-bold">{{ total_users_notified }}</h3>
+                    <p class="opacity-90 text-sm sm:text-base truncate">Usuários Notificados</p>
                 </div>
-                <i class="fas fa-users text-3xl opacity-75"></i>
+                <i class="fas fa-users text-2xl sm:text-3xl opacity-75"></i>
             </div>
         </div>
     </div>
 
     <!-- Lista de Notificações -->
     <div class="bg-white rounded-lg shadow-lg">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold">
+        <div class="px-4 sm:px-6 py-4 border-b border-gray-200">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
+                <h2 class="text-lg sm:text-xl font-semibold">
                     <i class="fas fa-list text-gray-500 mr-2"></i>
                     Todas as Notificações
                 </h2>

@@ -7,28 +7,28 @@
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
-        <div class="px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
-                        <i class="fas fa-bullhorn text-primary mr-3"></i>
+        <div class="px-4 sm:px-6 py-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+                <div class="min-w-0 flex-1">
+                    <h1 class="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-bullhorn text-primary mr-2 sm:mr-3"></i>
                         Comunicado
                     </h1>
-                    <p class="text-gray-600 mt-1">{{ communication.title }}</p>
+                    <p class="text-gray-600 mt-1 text-sm sm:text-base truncate">{{ communication.title }}</p>
                 </div>
-                <div class="flex items-center space-x-3">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
                     {% if communication.sender == user or user.hierarchy == 'SUPERADMIN' %}
-                        <a href="{% url 'communications:edit_communication' communication.id %}" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center">
-                            <i class="fas fa-edit mr-2"></i>
+                        <a href="{% url 'communications:edit_communication' communication.id %}" class="bg-blue-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center text-sm sm:text-base">
+                            <i class="fas fa-edit mr-1 sm:mr-2"></i>
                             Editar
                         </a>
-                        <a href="{% url 'communications:delete_communication' communication.id %}" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center">
-                            <i class="fas fa-trash mr-2"></i>
+                        <a href="{% url 'communications:delete_communication' communication.id %}" class="bg-red-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center text-sm sm:text-base">
+                            <i class="fas fa-trash mr-1 sm:mr-2"></i>
                             Excluir
                         </a>
                     {% endif %}
-                    <a href="{% url 'communications:communications_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
-                        <i class="fas fa-arrow-left mr-2"></i>
+                    <a href="{% url 'communications:communications_list' %}" class="bg-gray-100 text-gray-700 px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-sm sm:text-base">
+                        <i class="fas fa-arrow-left mr-1 sm:mr-2"></i>
                         Voltar
                     </a>
                 </div>
@@ -37,17 +37,17 @@
     </div>
 
     <!-- Communication Content -->
-    <div class="max-w-4xl mx-auto">
+    <div class="max-w-4xl mx-auto px-4 sm:px-0">
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <!-- Header Info -->
-            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="text-xl font-semibold text-gray-900">{{ communication.title }}</h2>
-                        <div class="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+                    <div class="min-w-0 flex-1">
+                        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 leading-tight">{{ communication.title }}</h2>
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 text-xs sm:text-sm text-gray-600 space-y-1 sm:space-y-0">
                             <div class="flex items-center">
                                 <i class="fas fa-user mr-1"></i>
-                                <span>{{ communication.sender.full_name }}</span>
+                                <span class="truncate">{{ communication.sender.full_name }}</span>
                             </div>
                             <div class="flex items-center">
                                 <i class="fas fa-clock mr-1"></i>
@@ -56,7 +56,8 @@
                             {% if communication.send_to_all %}
                             <div class="flex items-center">
                                 <i class="fas fa-globe mr-1"></i>
-                                <span>Enviado para todos os usuários</span>
+                                <span class="hidden sm:inline">Enviado para todos os usuários</span>
+                                <span class="sm:hidden">Para todos</span>
                             </div>
                             {% endif %}
                         </div>
@@ -65,9 +66,9 @@
             </div>
             
             <!-- Message Content -->
-            <div class="px-6 py-6">
+            <div class="px-4 sm:px-6 py-4 sm:py-6">
                 {% if communication.image or communication.images.exists %}
-                <div class="mb-6">
+                <div class="mb-4 sm:mb-6">
                     {% if communication.images.exists %}
                         <!-- Carrossel de múltiplas imagens -->
                         <div class="relative" id="carousel-detail-{{ communication.id }}">
@@ -75,10 +76,10 @@
                                 <div class="flex transition-transform duration-300 ease-in-out" id="carousel-inner-detail-{{ communication.id }}">
                                     {% for image in communication.images.all %}
                                     <div class="w-full flex-shrink-0 relative">
-                                        <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Imagem do comunicado' }}" class="w-full h-auto max-w-full object-contain bg-gray-50">
+                                        <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Imagem do comunicado' }}" class="w-full h-auto max-h-64 sm:max-h-96 object-contain bg-gray-50">
                                         {% if image.caption %}
-                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-3">
-                                            <p class="text-sm">{{ image.caption }}</p>
+                                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2 sm:p-3">
+                                            <p class="text-xs sm:text-sm">{{ image.caption }}</p>
                                         </div>
                                         {% endif %}
                                     </div>

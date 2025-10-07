@@ -6,40 +6,42 @@
 {% block content %}
 <div class="max-w-6xl mx-auto">
     <!-- Page Header -->
-    <div class="mb-8 flex items-center justify-between">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900">Chamados</h1>
-            <p class="text-gray-600 mt-2">Visualizar e responder chamado</p>
-        </div>
-        <div class="flex space-x-3">
-            {% if ticket.created_by == user and ticket.status == 'RESOLVIDO' %}
-                <button class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
-                    Concluir e Fechar
-                </button>
-            {% endif %}
+    <div class="mb-6 sm:mb-8 px-4 sm:px-0">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Chamados</h1>
+                <p class="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Visualizar e responder chamado</p>
+            </div>
+            <div class="flex space-x-3">
+                {% if ticket.created_by == user and ticket.status == 'RESOLVIDO' %}
+                    <button class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm sm:text-base">
+                        Concluir e Fechar
+                    </button>
+                {% endif %}
+            </div>
         </div>
     </div>
     
     <!-- User Info Section -->
-    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div class="flex items-center space-x-4">
-            <div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 mx-4 sm:mx-0">
+        <div class="flex items-center space-x-3 sm:space-x-4">
+            <div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
                 {% if user.profile_picture %}
                     <img src="{{ user.profile_picture.url }}" alt="{{ user.get_full_name }}" class="w-full h-full object-cover">
                 {% else %}
-                    <i class="fas fa-user text-2xl text-gray-600"></i>
+                    <i class="fas fa-user text-lg sm:text-2xl text-gray-600"></i>
                 {% endif %}
             </div>
-            <div>
-                <h2 class="text-xl font-semibold text-gray-900">{{ user.first_name }} {{ user.last_name }}</h2>
-                <p class="text-gray-600">{{ user.sector.name }}</p>
+            <div class="min-w-0 flex-1">
+                <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.first_name }} {{ user.last_name }}</h2>
+                <p class="text-sm sm:text-base text-gray-600 truncate">{{ user.sector.name }}</p>
             </div>
         </div>
     </div>
     
     <!-- Tabs Navigation -->
-    <div class="mb-6">
-        <nav class="flex space-x-8 border-b border-gray-200">
+    <div class="mb-6 mx-4 sm:mx-0">
+        <nav class="flex space-x-4 sm:space-x-8 border-b border-gray-200">
             <a href="#" class="border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium">
                 Ver/Responder
             </a>
@@ -47,16 +49,16 @@
     </div>
     
     <!-- Ticket Details -->
-    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 mx-4 sm:mx-0">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <!-- Ticket Info -->
             <div class="lg:col-span-2">
                 <div class="flex items-start justify-between mb-4">
                     <div>
-                        <h3 class="text-xl font-semibold text-gray-900">{{ ticket.title }}</h3>
-                        <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                            <span>ID: #{{ ticket.id|stringformat:"04d" }}</span>
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                        <h3 class="text-lg sm:text-xl font-semibold text-gray-900 leading-tight">{{ ticket.title }}</h3>
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 text-xs sm:text-sm text-gray-500 space-y-1 sm:space-y-0">
+                            <span class="font-medium">ID: #{{ ticket.id|stringformat:"04d" }}</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit
                                 {% if ticket.status == 'ABERTO' %}bg-primary text-white
                                 {% elif ticket.status == 'EM_ANDAMENTO' %}bg-blue-500 text-white
                                 {% elif ticket.status == 'RESOLVIDO' %}bg-success text-white
@@ -64,8 +66,9 @@
                                 {% endif %}">
                                 {{ ticket.get_status_display }}
                             </span>
-                            <span>Data da solicitação: {{ ticket.created_at|date:"d/m/Y" }}</span>
-                            <span>Última Resposta: 
+                            <span class="hidden sm:inline">Data da solicitação: {{ ticket.created_at|date:"d/m/Y" }}</span>
+                            <span class="sm:hidden">{{ ticket.created_at|date:"d/m/Y" }}</span>
+                            <span class="truncate text-xs">Última Resposta: 
                                 {% if ticket.comments.last %}
                                     {{ ticket.comments.last.user.first_name|upper }} {{ ticket.comments.last.user.last_name|upper }}
                                 {% else %}
@@ -80,33 +83,33 @@
                 <div class="mb-6">
                     <div class="flex items-center space-x-3 mb-3">
                         {% if ticket.created_by.profile_picture %}
-                            <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-10 h-10 rounded-full object-cover">
+                            <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover flex-shrink-0">
                         {% else %}
-                            <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                                <span class="text-white font-medium text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
+                            <div class="w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-white font-medium text-xs sm:text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
                             </div>
                         {% endif %}
-                        <div>
-                            <p class="font-medium text-gray-900">{{ ticket.created_by.first_name }} {{ ticket.created_by.last_name }}</p>
-                            <p class="text-sm text-gray-500">{{ ticket.created_at|date:"d/m/Y \à\s H:i" }}</p>
+                        <div class="min-w-0">
+                            <p class="font-medium text-gray-900 text-sm sm:text-base truncate">{{ ticket.created_by.first_name }} {{ ticket.created_by.last_name }}</p>
+                            <p class="text-xs sm:text-sm text-gray-500">{{ ticket.created_at|date:"d/m/Y \à\s H:i" }}</p>
                         </div>
                     </div>
                     
-                    <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                        <div class="text-gray-700">{{ ticket.description|linebreaks }}</div>
+                    <div class="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
+                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed">{{ ticket.description|linebreaks }}</div>
                     </div>
                     
                     <!-- Attachments Section -->
                     {% if ticket.attachments.exists %}
                         <div class="mb-6">
-                            <h4 class="font-medium text-gray-900 mb-3 flex items-center">
+                            <h4 class="font-medium text-gray-900 mb-3 flex items-center text-sm sm:text-base">
                                 <i class="fas fa-paperclip mr-2 text-gray-600"></i>
                                 Arquivos Anexados ({{ ticket.attachments.count }})
                             </h4>
                             <div class="space-y-2">
                                 {% for attachment in ticket.attachments.all %}
-                                    <div class="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                                        <div class="flex items-center space-x-3">
+                                    <div class="flex items-center justify-between p-2 sm:p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                        <div class="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
                                             <!-- File Icon -->
                                             <div class="flex-shrink-0">
                                                 {% if attachment.is_image %}
@@ -123,25 +126,25 @@
                                             </div>
                                             
                                             <!-- File Info -->
-                                            <div>
-                                                <p class="text-sm font-medium text-gray-900">{{ attachment.original_filename }}</p>
-                                                <div class="flex items-center space-x-2 text-xs text-gray-500">
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs sm:text-sm font-medium text-gray-900 truncate">{{ attachment.original_filename }}</p>
+                                                <div class="flex items-center space-x-2 text-xs text-gray-500 flex-wrap">
                                                     <span>{{ attachment.file_size_formatted }}</span>
-                                                    <span>•</span>
-                                                    <span>{{ attachment.uploaded_by.full_name }}</span>
-                                                    <span>•</span>
+                                                    <span class="hidden sm:inline">•</span>
+                                                    <span class="hidden sm:inline">{{ attachment.uploaded_by.full_name }}</span>
+                                                    <span class="hidden sm:inline">•</span>
                                                     <span>{{ attachment.uploaded_at|date:"d/m/Y H:i" }}</span>
                                                 </div>
                                             </div>
                                         </div>
                                         
                                         <!-- Download Button -->
-                                        <div class="flex-shrink-0">
+                                        <div class="flex-shrink-0 ml-2">
                                             <a href="{{ attachment.file.url }}" 
                                                target="_blank" 
-                                               class="inline-flex items-center px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                                               class="inline-flex items-center px-2 sm:px-3 py-1 text-xs sm:text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
                                                 <i class="fas fa-download mr-1"></i>
-                                                Baixar
+                                                <span class="hidden sm:inline">Baixar</span>
                                             </a>
                                         </div>
                                     </div>
@@ -153,8 +156,8 @@
                     <!-- Upload New Files Section -->
                     {% if can_upload and ticket.status != 'FECHADO' %}
                         <div class="mb-6">
-                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                <h4 class="font-medium text-blue-900 mb-3 flex items-center">
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+                                <h4 class="font-medium text-blue-900 mb-3 flex items-center text-sm sm:text-base">
                                     <i class="fas fa-plus mr-2"></i>
                                     Adicionar Arquivos
                                 </h4>
