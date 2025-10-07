@@ -695,51 +695,6 @@
                             </div>
                         </div>
                         
-                        <!-- Kanban por Categoria -->
-                        {% if activities_by_category %}
-                            <div class="mt-8">
-                                <h4 class="text-lg font-semibold text-gray-900 mb-4">Atividades por Categoria</h4>
-                                {% for category, category_activities in activities_by_category.items %}
-                                    <div class="mb-8">
-                                        <h5 class="text-md font-medium text-gray-700 mb-3">{{ category }}</h5>
-                                        <div class="kanban-board grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                            <div class="kanban-column">
-                                                <div class="kanban-header bg-gray-50 text-gray-700 text-sm">Não Iniciada</div>
-                                                <div class="kanban-content space-y-2">
-                                                    {% for activity in category_activities.NAO_INICIADA %}
-                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-                                            <div class="kanban-column">
-                                                <div class="kanban-header bg-blue-50 text-blue-700 text-sm">Em Andamento</div>
-                                                <div class="kanban-content space-y-2">
-                                                    {% for activity in category_activities.EM_ANDAMENTO %}
-                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-                                            <div class="kanban-column">
-                                                <div class="kanban-header bg-green-50 text-green-700 text-sm">Concluída</div>
-                                                <div class="kanban-content space-y-2">
-                                                    {% for activity in category_activities.CONCLUIDA %}
-                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-                                            <div class="kanban-column">
-                                                <div class="kanban-header bg-red-50 text-red-700 text-sm">Cancelada</div>
-                                                <div class="kanban-content space-y-2">
-                                                    {% for activity in category_activities.CANCELADA %}
-                                                        {% include 'projects/kanban_card.html' with activity=activity compact=True %}
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
                     {% else %}
                         <div class="text-center py-16">
                             <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
