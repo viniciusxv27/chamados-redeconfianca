@@ -215,6 +215,23 @@ h6 { font-size: 1rem; font-weight: 500; }
         padding-left: 1rem;
         padding-right: 1rem;
     }
+    
+    /* Garantir visibilidade do botão hambúrguer */
+    #headerMobileMenuToggle {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* Melhorar área de toque */
+    #headerMobileMenuToggle i {
+        pointer-events: none;
+        font-size: 1.125rem;
+    }
 }
 
 @media (max-width: 768px) {
@@ -256,6 +273,14 @@ h6 { font-size: 1rem; font-weight: 500; }
     /* Smaller text in sidebar */
     .sidebar {
         font-size: 0.9rem;
+    }
+    
+    /* Garantir que o botão do menu hambúrguer seja sempre visível */
+    #headerMobileMenuToggle {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 1000 !important;
     }
 }
 

@@ -502,9 +502,9 @@
                 <!-- Top Header -->
                 <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
                     <div class="flex items-center justify-between px-2 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4">
-                        <!-- Mobile menu button for header -->
-                        <button id="headerMobileMenuToggle" class="lg:hidden text-gray-600 hover:text-primary focus:outline-none mr-2 p-2 rounded-lg hover:bg-gray-100">
-                            <i class="fas fa-bars text-lg"></i>
+                        <!-- Mobile menu button for header - mais visível -->
+                        <button id="headerMobileMenuToggle" class="block lg:hidden text-gray-600 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary mr-2 p-2 rounded-lg hover:bg-gray-100 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                            <i class="fas fa-bars text-lg md:text-xl"></i>
                         </button>
                         
                         <div class="flex items-center space-x-4 flex-1 lg:flex-initial">
@@ -520,6 +520,19 @@
                         
                         <div class="flex items-center space-x-1 sm:space-x-2 lg:space-x-4">
                             {% if user.hierarchy == 'SUPERADMIN' %}
+                            <!-- Push Notifications Enable Button (hidden by default) -->
+                            <div id="pushNotificationPrompt" class="relative hidden">
+                                <button id="enablePushNotificationsBtn" class="p-2 text-orange-600 hover:text-orange-700 focus:outline-none transition-colors rounded-lg hover:bg-orange-50 animate-pulse">
+                                    <i class="fas fa-bell-slash text-base sm:text-lg"></i>
+                                </button>
+                                <div class="absolute right-0 mt-2 w-72 bg-orange-50 border border-orange-200 rounded-lg shadow-lg z-50 p-3 hidden" id="pushPromptTooltip">
+                                    <p class="text-sm text-orange-800 mb-2">Ative as notificações push para receber alertas em tempo real!</p>
+                                    <button onclick="window.location.href='/notifications/settings/'" class="text-xs bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600">
+                                        Ativar agora
+                                    </button>
+                                </div>
+                            </div>
+
                             <!-- Notifications -->
                             <div class="relative">
                                 <button id="notification-bell" class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors rounded-lg hover:bg-gray-100">
@@ -670,15 +683,34 @@
             if (mobileMenuToggle) {
                 mobileMenuToggle.addEventListener('click', function(e) {
                     e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Mobile menu toggle clicked (sidebar button)');
                     openMobileMenu();
                 });
             }
 
             if (headerMobileMenuToggle) {
+                // Múltiplos event listeners para garantir funcionalidade
                 headerMobileMenuToggle.addEventListener('click', function(e) {
                     e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Mobile menu toggle clicked (header button)');
                     openMobileMenu();
                 });
+                
+                // Adicionar suporte para touch em dispositivos móveis
+                headerMobileMenuToggle.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
+                    console.log('Mobile menu toggle touched');
+                    openMobileMenu();
+                });
+                
+                // Verificar se o botão está visível
+                console.log('Header mobile toggle button found and configured:', headerMobileMenuToggle);
+                console.log('Button visibility:', getComputedStyle(headerMobileMenuToggle).display);
+                console.log('Button dimensions:', headerMobileMenuToggle.getBoundingClientRect());
+            } else {
+                console.warn('Header mobile menu toggle button not found!');
             }
 
             // Mobile overlay click to close
@@ -733,9 +765,85 @@
             // Initialize on page load
             initializeSidebar();
             
+            // Debug function para verificar elementos do menu
+            function debugMobileMenu() {
+                console.log('=== Mobile Menu Debug ===');
+                console.log('Screen width:', window.innerWidth);
+                console.log('Is mobile:', isMobile());
+                console.log('Sidebar element:', sidebar);
+                console.log('Mobile overlay element:', mobileOverlay);
+                console.log('Header mobile toggle element:', headerMobileMenuToggle);
+                console.log('Main content element:', mainContent);
+                
+                if (headerMobileMenuToggle) {
+                    const styles = getComputedStyle(headerMobileMenuToggle);
+                    console.log('Header toggle display:', styles.display);
+                    console.log('Header toggle visibility:', styles.visibility);
+                    console.log('Header toggle opacity:', styles.opacity);
+                    console.log('Header toggle position:', headerMobileMenuToggle.getBoundingClientRect());
+                }
+                console.log('========================');
+            }
+            
+            // Executar debug após um breve delay
+            setTimeout(debugMobileMenu, 1000);
+            
+            // Adicionar debug no resize
+            let resizeTimeout;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(debugMobileMenu, 500);
+            });
+            
             // Inicializar sistema de notificações
             if (typeof initializeNotificationSystem === 'function') {
                 initializeNotificationSystem();
+            }
+            
+            // Verificar status de push notifications e mostrar prompt se necessário
+            checkPushNotificationStatus();
+            
+            // Função para verificar status das push notifications
+            function checkPushNotificationStatus() {
+                const pushPrompt = document.getElementById('pushNotificationPrompt');
+                const pushBtn = document.getElementById('enablePushNotificationsBtn');
+                const pushTooltip = document.getElementById('pushPromptTooltip');
+                
+                if (!pushPrompt || !('Notification' in window)) {
+                    return; // Navegador não suporta
+                }
+                
+                // Verificar se já foi perguntado antes (evitar spam)
+                if (sessionStorage.getItem('pushPromptShown') === 'true') {
+                    return;
+                }
+                
+                // Verificar permissão atual
+                if (Notification.permission === 'default') {
+                    // Mostrar prompt após 5 segundos
+                    setTimeout(() => {
+                        pushPrompt.classList.remove('hidden');
+                        
+                        // Mostrar tooltip ao passar o mouse
+                        if (pushBtn && pushTooltip) {
+                            pushBtn.addEventListener('mouseenter', () => {
+                                pushTooltip.classList.remove('hidden');
+                            });
+                            
+                            pushBtn.addEventListener('mouseleave', () => {
+                                pushTooltip.classList.add('hidden');
+                            });
+                        }
+                        
+                        // Auto-esconder após 30 segundos
+                        setTimeout(() => {
+                            pushPrompt.classList.add('hidden');
+                            sessionStorage.setItem('pushPromptShown', 'true');
+                        }, 30000);
+                        
+                    }, 5000);
+                }
+                // Se permission === 'denied' ou 'granted', não mostrar nada
             }
             
             // Fechar dropdown ao clicar fora

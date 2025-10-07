@@ -128,6 +128,8 @@ class Communication(models.Model):
             if is_new:
                 self.trigger_notification()
                 self.trigger_webhooks('COMMUNICATION_CREATED')
+                # Enviar notificação push para nova comunicação
+                self._send_push_notification_new_communication()
             else:
                 self.trigger_webhooks('COMMUNICATION_UPDATED')
     
@@ -210,6 +212,41 @@ class Communication(models.Model):
                 )
             except:
                 pass
+    
+    def _send_push_notification_new_communication(self):
+        """Envia notificação push quando um novo comunicado é criado"""
+        try:
+            # Importar aqui para evitar import circular
+            from notifications.push_utils import send_push_notification_to_users
+            from users.models import User
+            
+            # Determinar usuários alvo
+            if self.send_to_all:
+                target_users = User.objects.filter(is_active=True).exclude(id=self.sender.id)
+            else:
+                target_users = self.recipients.filter(is_active=True).exclude(id=self.sender.id)
+            
+            if target_users.exists():
+                title = "Novo Comunicado"
+                message = self.title
+                
+                # Truncar mensagem se muito longa
+                if len(message) > 100:
+                    message = message[:97] + "..."
+                
+                send_push_notification_to_users(
+                    users=list(target_users),
+                    title=title,
+                    message=message,
+                    action_url="/communications/",
+                    icon='/static/images/logo.png',
+                    badge='/static/images/logo.png'
+                )
+        except Exception as e:
+            # Log do erro sem interromper o fluxo
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao enviar push notification para comunicado {self.id}: {e}")
 
 
 class CommunicationRead(models.Model):

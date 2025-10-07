@@ -134,16 +134,22 @@ class Ticket(models.Model):
             if self.category.webhook_url:
                 self.trigger_webhook()
             
+            # Enviar notificação push para novo ticket
+            self._send_push_notification_new_ticket()
+            
             # Verificar se é ordem de compra e iniciar fluxo de aprovação
             if self.category.name.lower() == 'ordem de compra':
                 self._start_purchase_approval_flow()
         elif old_status != self.status:
             if self.status == 'RESOLVIDO':
                 self.trigger_webhooks('TICKET_RESOLVED')
+                self._send_push_notification_status_change('resolvido')
             elif self.status == 'FECHADO':
                 self.trigger_webhooks('TICKET_CLOSED')
+                self._send_push_notification_status_change('fechado')
             else:
                 self.trigger_webhooks('TICKET_UPDATED')
+                self._send_push_notification_status_change('atualizado')
     
     def trigger_webhooks(self, event_type, user=None):
         """Dispara todos os webhooks configurados para o evento"""
@@ -352,6 +358,87 @@ class Ticket(models.Model):
                 comment=f"Ordem de compra criada com valor R$ {amount:.2f}. Aguardando aprovação.",
                 comment_type='COMMENT'
             )
+    
+    def _send_push_notification_new_ticket(self):
+        """Envia notificação push quando um novo ticket é criado"""
+        try:
+            # Importar aqui para evitar import circular
+            from notifications.push_utils import send_push_notification_to_users
+            from users.models import User
+            
+            # Notificar usuários do setor e administradores
+            target_users = []
+            
+            # Usuários do setor que podem ver tickets
+            if self.sector:
+                sector_users = User.objects.filter(
+                    sector=self.sector,
+                    is_active=True,
+                    hierarchy__in=['ADMIN', 'SUPERVISOR', 'MANAGER']
+                )
+                target_users.extend(sector_users)
+            
+            # Administradores gerais
+            admin_users = User.objects.filter(
+                is_active=True,
+                hierarchy='SUPERADMIN'
+            ).exclude(id=self.created_by.id)  # Não notificar quem criou
+            target_users.extend(admin_users)
+            
+            if target_users:
+                title = f"Novo Chamado #{self.id}"
+                message = f"{self.title} - Setor: {self.sector.name if self.sector else 'N/A'}"
+                
+                send_push_notification_to_users(
+                    users=list(set(target_users)),  # Remove duplicatas
+                    title=title,
+                    message=message,
+                    action_url=f"/tickets/{self.id}/",
+                    icon='/static/images/logo.png',
+                    badge='/static/images/logo.png'
+                )
+        except Exception as e:
+            # Log do erro sem interromper o fluxo
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao enviar push notification para novo ticket {self.id}: {e}")
+    
+    def _send_push_notification_status_change(self, status_name):
+        """Envia notificação push quando o status do ticket muda"""
+        try:
+            # Importar aqui para evitar import circular
+            from notifications.push_utils import send_push_notification_to_user
+            
+            # Notificar o criador do ticket
+            if self.created_by and self.created_by.is_active:
+                title = f"Chamado #{self.id} {status_name}"
+                message = f"Seu chamado '{self.title}' foi {status_name}."
+                
+                send_push_notification_to_user(
+                    user=self.created_by,
+                    title=title,
+                    message=message,
+                    action_url=f"/tickets/{self.id}/",
+                    icon='/static/images/logo.png'
+                )
+                
+            # Se há um responsável atribuído, também notificar
+            if self.assigned_to and self.assigned_to != self.created_by and self.assigned_to.is_active:
+                title = f"Chamado #{self.id} {status_name}"
+                message = f"Chamado '{self.title}' que você é responsável foi {status_name}."
+                
+                send_push_notification_to_user(
+                    user=self.assigned_to,
+                    title=title,
+                    message=message,
+                    action_url=f"/tickets/{self.id}/",
+                    icon='/static/images/logo.png'
+                )
+        except Exception as e:
+            # Log do erro sem interromper o fluxo
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao enviar push notification para status change do ticket {self.id}: {e}")
 
 
 class TicketLog(models.Model):
@@ -401,6 +488,59 @@ class TicketComment(models.Model):
     
     def __str__(self):
         return f"#{self.ticket.id} - {self.user.full_name} - {self.get_comment_type_display()}"
+    
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        # Enviar notificação push para novos comentários
+        if is_new:
+            self._send_push_notification_new_comment()
+    
+    def _send_push_notification_new_comment(self):
+        """Envia notificação push quando um novo comentário é adicionado"""
+        try:
+            # Importar aqui para evitar import circular
+            from notifications.push_utils import send_push_notification_to_user
+            
+            # Notificar o criador do ticket (se não for quem comentou)
+            if self.ticket.created_by and self.ticket.created_by != self.user and self.ticket.created_by.is_active:
+                title = f"Novo comentário no chamado #{self.ticket.id}"
+                message = f"{self.user.get_full_name()}: {self.comment[:100]}"
+                if len(self.comment) > 100:
+                    message += "..."
+                
+                send_push_notification_to_user(
+                    user=self.ticket.created_by,
+                    title=title,
+                    message=message,
+                    action_url=f"/tickets/{self.ticket.id}/",
+                    icon='/static/images/logo.png'
+                )
+            
+            # Notificar o responsável pelo ticket (se existir e não for quem comentou)
+            if (self.ticket.assigned_to and 
+                self.ticket.assigned_to != self.user and 
+                self.ticket.assigned_to != self.ticket.created_by and
+                self.ticket.assigned_to.is_active):
+                
+                title = f"Novo comentário no chamado #{self.ticket.id}"
+                message = f"{self.user.get_full_name()}: {self.comment[:100]}"
+                if len(self.comment) > 100:
+                    message += "..."
+                
+                send_push_notification_to_user(
+                    user=self.ticket.assigned_to,
+                    title=title,
+                    message=message,
+                    action_url=f"/tickets/{self.ticket.id}/",
+                    icon='/static/images/logo.png'
+                )
+        except Exception as e:
+            # Log do erro sem interromper o fluxo
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao enviar push notification para comentário no ticket {self.ticket.id}: {e}")
 
 
 class TicketView(models.Model):
