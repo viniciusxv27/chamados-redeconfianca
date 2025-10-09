@@ -114,7 +114,7 @@ def tickets_list_view(request):
     tickets = tickets.order_by('-created_at')
     
     # Configurar paginação
-    paginator = Paginator(tickets, 10)  # 15 tickets por página
+    paginator = Paginator(tickets, 10)  # 10 tickets por página
     page = request.GET.get('page')
     
     try:
@@ -125,6 +125,44 @@ def tickets_list_view(request):
     except EmptyPage:
         # Se a página estiver fora do range, mostrar a última página
         tickets_page = paginator.page(paginator.num_pages)
+    
+    # Preservar parâmetros de filtro para a paginação
+    filter_params = {}
+    if search:
+        filter_params['search'] = search
+    if status_filter:
+        filter_params['status'] = status_filter
+    if origem_filter:
+        filter_params['origem'] = origem_filter
+    if categoria_filter:
+        filter_params['categoria'] = categoria_filter
+    if setor_filter:
+        filter_params['setor'] = setor_filter
+    if prioridade_filter:
+        filter_params['prioridade'] = prioridade_filter
+    
+    # Filtros avançados para SUPERADMIN
+    if user.hierarchy == 'SUPERADMIN':
+        if created_by_filter:
+            filter_params['created_by'] = created_by_filter
+        if assigned_to_filter:
+            filter_params['assigned_to'] = assigned_to_filter
+        if date_from_filter:
+            filter_params['date_from'] = date_from_filter
+        if date_to_filter:
+            filter_params['date_to'] = date_to_filter
+        if user_hierarchy_filter:
+            filter_params['user_hierarchy'] = user_hierarchy_filter
+        if has_attachments_filter:
+            filter_params['has_attachments'] = has_attachments_filter
+        if has_comments_filter:
+            filter_params['has_comments'] = has_comments_filter
+        if overdue_filter:
+            filter_params['overdue'] = overdue_filter
+    
+    # Converter parâmetros para query string
+    from urllib.parse import urlencode
+    filter_query_string = urlencode(filter_params)
     
     # Obter categorias e setores do usuário para os filtros
     user_sectors = list(user.sectors.all())
@@ -284,6 +322,9 @@ def tickets_list_view(request):
         'all_categories': all_categories if user.hierarchy == 'SUPERADMIN' else user_categories,
         'all_sectors': all_sectors if user.hierarchy == 'SUPERADMIN' else user_sectors,
         'all_users': all_users if user.hierarchy == 'SUPERADMIN' else [],
+        # Parâmetros de filtro para preservar na paginação
+        'filter_query_string': filter_query_string,
+        'filter_params': filter_params,
     }
     return render(request, 'tickets/list.html', context)
 

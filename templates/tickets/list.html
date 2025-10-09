@@ -414,7 +414,7 @@
         <div class="flex-1 flex justify-between sm:hidden">
             <!-- Mobile pagination -->
             {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if origem %}&origem={{ origem }}{% endif %}{% if categoria %}&categoria={{ categoria }}{% endif %}{% if setor %}&setor={{ setor }}{% endif %}{% if prioridade %}&prioridade={{ prioridade }}{% endif %}" 
+                <a href="?page={{ page_obj.previous_page_number }}{% if filter_query_string %}&{{ filter_query_string }}{% endif %}" 
                    class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                     Anterior
                 </a>
@@ -425,7 +425,7 @@
             {% endif %}
             
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if origem %}&origem={{ origem }}{% endif %}{% if categoria %}&categoria={{ categoria }}{% endif %}{% if setor %}&setor={{ setor }}{% endif %}{% if prioridade %}&prioridade={{ prioridade }}{% endif %}" 
+                <a href="?page={{ page_obj.next_page_number }}{% if filter_query_string %}&{{ filter_query_string }}{% endif %}" 
                    class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                     Próximo
                 </a>
@@ -452,7 +452,7 @@
                 <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                     <!-- Previous -->
                     {% if page_obj.has_previous %}
-                        <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if origem %}&origem={{ origem }}{% endif %}{% if categoria %}&categoria={{ categoria }}{% endif %}{% if setor %}&setor={{ setor }}{% endif %}{% if prioridade %}&prioridade={{ prioridade }}{% endif %}" 
+                        <a href="?page={{ page_obj.previous_page_number }}{% if filter_query_string %}&{{ filter_query_string }}{% endif %}" 
                            class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
                             <span class="sr-only">Anterior</span>
                             <i class="fas fa-chevron-left h-5 w-5" aria-hidden="true"></i>
@@ -471,7 +471,7 @@
                                 {{ num }}
                             </span>
                         {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-                            <a href="?page={{ num }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if origem %}&origem={{ origem }}{% endif %}{% if categoria %}&categoria={{ categoria }}{% endif %}{% if setor %}&setor={{ setor }}{% endif %}{% if prioridade %}&prioridade={{ prioridade }}{% endif %}" 
+                            <a href="?page={{ num }}{% if filter_query_string %}&{{ filter_query_string }}{% endif %}" 
                                class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                                 {{ num }}
                             </a>
@@ -480,7 +480,7 @@
 
                     <!-- Next -->
                     {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if origem %}&origem={{ origem }}{% endif %}{% if categoria %}&categoria={{ categoria }}{% endif %}{% if setor %}&setor={{ setor }}{% endif %}{% if prioridade %}&prioridade={{ prioridade }}{% endif %}" 
+                        <a href="?page={{ page_obj.next_page_number }}{% if filter_query_string %}&{{ filter_query_string }}{% endif %}" 
                            class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
                             <span class="sr-only">Próximo</span>
                             <i class="fas fa-chevron-right h-5 w-5" aria-hidden="true"></i>
