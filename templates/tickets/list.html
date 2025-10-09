@@ -9,7 +9,12 @@
     <div class="mb-6 sm:mb-8">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
             <div>
-                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Chamados</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">
+                    Chamados
+                    {% if origem == 'meus' %}
+                        <span class="text-lg sm:text-xl text-primary font-medium">- Meus Chamados</span>
+                    {% endif %}
+                </h1>
                 <p class="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Gerencie seus chamados e solicitações</p>
             </div>
             <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
@@ -266,7 +271,7 @@
                     Mostrando {{ tickets|length }} chamado{{ tickets|length|pluralize:",s" }}
                     {% if search %} com "{{ search }}"{% endif %}
                     {% if status %} - Status: {{ status }}{% endif %}
-                    {% if origem %} - Origem: {{ origem }}{% endif %}
+                    {% if origem == 'meus' %} - Apenas seus chamados{% elif origem == 'setor' %} - Chamados do setor{% endif %}
                     {% if categoria %} - Categoria: {{ categoria_name }}{% endif %}
                     {% if setor %} - Setor: {{ setor_name }}{% endif %}
                     {% if prioridade %} - Prioridade: {{ prioridade }}{% endif %}
@@ -279,12 +284,12 @@
     <!-- Tabs Navigation -->
     <div class="mb-6">
         <nav class="flex space-x-8 border-b border-gray-200">
-            <a href="#" onclick="showTab('todos')" id="tab-todos" class="border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium">
+            <button type="button" onclick="showTab('todos')" id="tab-todos" class="border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium focus:outline-none">
                 Todos
-            </a>
-            <a href="#" onclick="showTab('meus')" id="tab-meus" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-2 px-1 text-sm font-medium">
+            </button>
+            <button type="button" onclick="showTab('meus')" id="tab-meus" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-2 px-1 text-sm font-medium focus:outline-none">
                 Meus Chamados
-            </a>
+            </button>
         </nav>
     </div>
     
@@ -500,68 +505,39 @@
 
 <script>
 function showTab(tabName) {
-    // Remove active classes from all tabs
-    document.getElementById('tab-todos').className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-2 px-1 text-sm font-medium';
-    document.getElementById('tab-meus').className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-2 px-1 text-sm font-medium';
-    
-    // Add active class to selected tab
-    document.getElementById('tab-' + tabName).className = 'border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium';
-    
-    // Get all ticket rows
-    const ticketRows = document.querySelectorAll('.ticket-row');
-    const noTicketsRow = document.getElementById('no-tickets-row');
-    let visibleCount = 0;
+    // Get current URL parameters
+    const currentUrl = new URL(window.location);
+    const params = currentUrl.searchParams;
     
     if (tabName === 'todos') {
-        // Show all tickets
-        ticketRows.forEach(row => {
-            row.style.display = '';
-            visibleCount++;
-        });
+        // Remove origem filter to show all tickets
+        params.delete('origem');
     } else if (tabName === 'meus') {
-        // Show only tickets created by current user
-        ticketRows.forEach(row => {
-            const createdBy = row.getAttribute('data-created-by');
-            const currentUser = row.getAttribute('data-current-user');
-            
-            if (createdBy === currentUser) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
-        });
+        // Set origem filter to 'meus' to show only user's tickets
+        params.set('origem', 'meus');
     }
     
-    // Show/hide "no tickets" message
-    if (noTicketsRow) {
-        if (visibleCount === 0 && ticketRows.length > 0) {
-            // Create a temporary "no tickets found" message for filtered view
-            if (!document.getElementById('no-filtered-tickets')) {
-                const newRow = noTicketsRow.cloneNode(true);
-                newRow.id = 'no-filtered-tickets';
-                newRow.querySelector('td').textContent = 'Nenhum chamado encontrado para este filtro.';
-                noTicketsRow.parentNode.appendChild(newRow);
-            }
-            document.getElementById('no-filtered-tickets').style.display = '';
-            if (noTicketsRow) noTicketsRow.style.display = 'none';
-        } else {
-            // Hide temporary message and show/hide original based on total tickets
-            const filteredRow = document.getElementById('no-filtered-tickets');
-            if (filteredRow) filteredRow.style.display = 'none';
-            
-            if (ticketRows.length === 0) {
-                noTicketsRow.style.display = '';
-            } else {
-                noTicketsRow.style.display = 'none';
-            }
-        }
-    }
+    // Reset to page 1 when changing tabs
+    params.delete('page');
+    
+    // Redirect to filtered URL
+    currentUrl.search = params.toString();
+    window.location.href = currentUrl.toString();
 }
 
-// Initialize with "Todos" tab active
+// Initialize tab based on current filter
 document.addEventListener('DOMContentLoaded', function() {
-    showTab('todos');
+    // Set active tab based on origem filter
+    const currentOrigem = '{{ origem }}';
+    if (currentOrigem === 'meus') {
+        // Set "Meus Chamados" as active
+        document.getElementById('tab-meus').className = 'border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium';
+        document.getElementById('tab-todos').className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-2 px-1 text-sm font-medium';
+    } else {
+        // Set "Todos" as active (default)
+        document.getElementById('tab-todos').className = 'border-b-2 border-primary text-primary py-2 px-1 text-sm font-medium';
+        document.getElementById('tab-meus').className = 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-2 px-1 text-sm font-medium';
+    }
     
     // Configurar filtro dinâmico de categorias por setor
     const setorSelect = document.getElementById('setor');
