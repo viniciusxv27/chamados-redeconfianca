@@ -1,0 +1,510 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklist Administrativo - Relatórios{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+    .chart-container {
+        position: relative;
+        height: 400px;
+    }
+    .metric-card {
+        transition: all 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between">
+            <div>
+                <nav class="flex mb-2" aria-label="Breadcrumb">
+                    <ol class="flex items-center space-x-2 text-sm">
+                        <li><a href="{% url 'admin_checklist:dashboard' %}" class="text-gray-500 hover:text-gray-700">Dashboard</a></li>
+                        <li class="text-gray-400">/</li>
+                        <li class="text-gray-900">Relatórios</li>
+                    </ol>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">Relatórios e Analytics</h1>
+                <p class="mt-2 text-gray-600">Análise detalhada do desempenho dos checklists administrativos</p>
+            </div>
+            
+            <div class="flex space-x-3">
+                <button onclick="exportReport('excel')" 
+                        class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    <i class="fas fa-file-excel mr-2"></i>Exportar Excel
+                </button>
+                <button onclick="exportReport('csv')" 
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-file-csv mr-2"></i>Exportar CSV
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros de Período -->
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+        <form id="filterForm" method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <!-- Período Pré-definido -->
+            <div>
+                <label for="period" class="block text-sm font-medium text-gray-700 mb-2">Período</label>
+                <select id="period" name="period" onchange="updateDateRange()" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="today" {% if period == 'today' %}selected{% endif %}>Hoje</option>
+                    <option value="yesterday" {% if period == 'yesterday' %}selected{% endif %}>Ontem</option>
+                    <option value="last_7_days" {% if period == 'last_7_days' %}selected{% endif %}>Últimos 7 dias</option>
+                    <option value="last_30_days" {% if period == 'last_30_days' %}selected{% endif %}>Últimos 30 dias</option>
+                    <option value="this_month" {% if period == 'this_month' %}selected{% endif %}>Este mês</option>
+                    <option value="last_month" {% if period == 'last_month' %}selected{% endif %}>Mês passado</option>
+                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>Personalizado</option>
+                </select>
+            </div>
+            
+            <!-- Data Inicial -->
+            <div>
+                <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">Data Inicial</label>
+                <input type="date" id="start_date" name="start_date" value="{{ start_date }}"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <!-- Data Final -->
+            <div>
+                <label for="end_date" class="block text-sm font-medium text-gray-700 mb-2">Data Final</label>
+                <input type="date" id="end_date" name="end_date" value="{{ end_date }}"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <!-- Setor -->
+            <div>
+                <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                <select id="sector" name="sector" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Todos os Setores</option>
+                    {% for sector in sectors %}
+                    <option value="{{ sector.id }}" {% if sector_filter == sector.id|stringformat:"s" %}selected{% endif %}>
+                        {{ sector.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Botão Aplicar -->
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-chart-bar mr-2"></i>Aplicar Filtros
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Métricas Principais -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-tasks text-blue-600"></i>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">Total de Tarefas</dt>
+                        <dd class="text-3xl font-bold text-gray-900">{{ metrics.total_tasks }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-check-circle text-green-600"></i>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">Tarefas Concluídas</dt>
+                        <dd class="text-3xl font-bold text-gray-900">{{ metrics.completed_tasks }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-percentage text-yellow-600"></i>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">Taxa de Conclusão</dt>
+                        <dd class="text-3xl font-bold text-gray-900">{{ metrics.completion_rate }}%</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-clock text-purple-600"></i>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">Tempo Médio</dt>
+                        <dd class="text-3xl font-bold text-gray-900">{{ metrics.avg_completion_time }}h</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Gráfico de Conclusões por Dia -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Tarefas Concluídas por Dia</h3>
+            <div class="chart-container">
+                <canvas id="completionChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Gráfico de Performance por Setor -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Performance por Setor</h3>
+            <div class="chart-container">
+                <canvas id="sectorChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Gráfico de Status das Tarefas -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Distribuição por Status</h3>
+            <div class="chart-container">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Gráfico de Prioridades -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Distribuição por Prioridade</h3>
+            <div class="chart-container">
+                <canvas id="priorityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Detalhes por Setor -->
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Detalhes por Setor</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Concluídas</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aprovadas</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rejeitadas</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Taxa de Sucesso</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tempo Médio</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for sector_data in sector_details %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ sector_data.sector_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ sector_data.total_tasks }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ sector_data.completed_tasks }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                            {{ sector_data.approved_tasks }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                            {{ sector_data.rejected_tasks }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-full bg-gray-200 rounded-full h-2 mr-2">
+                                    <div class="bg-green-600 h-2 rounded-full" style="width: {{ sector_data.success_rate }}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ sector_data.success_rate }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ sector_data.avg_time }}h
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Top Performers -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Usuários Mais Produtivos -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Top Executores</h3>
+            </div>
+            <div class="p-6">
+                {% for user_data in top_executors %}
+                <div class="flex items-center justify-between py-3">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium text-blue-600">{{ forloop.counter }}</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-900">{{ user_data.user_name }}</p>
+                            <p class="text-sm text-gray-500">{{ user_data.sector_name }}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-gray-900">{{ user_data.tasks_completed }} tarefas</p>
+                        <p class="text-sm text-gray-500">{{ user_data.success_rate }}% sucesso</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Tarefas Mais Problemáticas -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Tarefas Mais Rejeitadas</h3>
+            </div>
+            <div class="p-6">
+                {% for task_data in problematic_tasks %}
+                <div class="flex items-center justify-between py-3">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">{{ task_data.task_title }}</p>
+                        <p class="text-sm text-gray-500">{{ task_data.sector_name }}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-red-600">{{ task_data.rejection_count }} rejeições</p>
+                        <p class="text-sm text-gray-500">{{ task_data.rejection_rate }}% taxa</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+// Dados dos gráficos vindos do backend
+const chartData = {{ chart_data|safe }};
+
+// Configuração dos gráficos
+const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            position: 'top',
+        }
+    }
+};
+
+// Gráfico de Conclusões por Dia
+const completionCtx = document.getElementById('completionChart').getContext('2d');
+new Chart(completionCtx, {
+    type: 'line',
+    data: {
+        labels: chartData.completion_dates,
+        datasets: [{
+            label: 'Tarefas Concluídas',
+            data: chartData.completion_counts,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.1,
+            fill: true
+        }]
+    },
+    options: {
+        ...chartOptions,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        }
+    }
+});
+
+// Gráfico de Performance por Setor
+const sectorCtx = document.getElementById('sectorChart').getContext('2d');
+new Chart(sectorCtx, {
+    type: 'bar',
+    data: {
+        labels: chartData.sector_names,
+        datasets: [{
+            label: 'Taxa de Conclusão (%)',
+            data: chartData.sector_completion_rates,
+            backgroundColor: [
+                'rgba(34, 197, 94, 0.8)',
+                'rgba(59, 130, 246, 0.8)',
+                'rgba(249, 115, 22, 0.8)',
+                'rgba(168, 85, 247, 0.8)',
+                'rgba(236, 72, 153, 0.8)'
+            ]
+        }]
+    },
+    options: {
+        ...chartOptions,
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                    callback: function(value) {
+                        return value + '%';
+                    }
+                }
+            }
+        }
+    }
+});
+
+// Gráfico de Status
+const statusCtx = document.getElementById('statusChart').getContext('2d');
+new Chart(statusCtx, {
+    type: 'doughnut',
+    data: {
+        labels: chartData.status_labels,
+        datasets: [{
+            data: chartData.status_counts,
+            backgroundColor: [
+                '#6B7280', // Pendente - Cinza
+                '#3B82F6', // Em Andamento - Azul
+                '#F59E0B', // Concluída - Amarelo
+                '#10B981', // Aprovada - Verde
+                '#EF4444'  // Rejeitada - Vermelho
+            ]
+        }]
+    },
+    options: chartOptions
+});
+
+// Gráfico de Prioridades
+const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+new Chart(priorityCtx, {
+    type: 'pie',
+    data: {
+        labels: chartData.priority_labels,
+        datasets: [{
+            data: chartData.priority_counts,
+            backgroundColor: [
+                '#10B981', // Baixa - Verde
+                '#F59E0B', // Média - Amarelo
+                '#F97316', // Alta - Laranja
+                '#EF4444'  // Urgente - Vermelho
+            ]
+        }]
+    },
+    options: chartOptions
+});
+
+// Função para atualizar datas baseado no período selecionado
+function updateDateRange() {
+    const period = document.getElementById('period').value;
+    const startDate = document.getElementById('start_date');
+    const endDate = document.getElementById('end_date');
+    const today = new Date();
+    
+    let start, end;
+    
+    switch(period) {
+        case 'today':
+            start = end = today.toISOString().split('T')[0];
+            break;
+        case 'yesterday':
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            start = end = yesterday.toISOString().split('T')[0];
+            break;
+        case 'last_7_days':
+            end = today.toISOString().split('T')[0];
+            start = new Date(today.setDate(today.getDate() - 6)).toISOString().split('T')[0];
+            break;
+        case 'last_30_days':
+            end = today.toISOString().split('T')[0];
+            start = new Date(today.setDate(today.getDate() - 29)).toISOString().split('T')[0];
+            break;
+        case 'this_month':
+            start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+            end = today.toISOString().split('T')[0];
+            break;
+        case 'last_month':
+            const firstLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const lastLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+            start = firstLastMonth.toISOString().split('T')[0];
+            end = lastLastMonth.toISOString().split('T')[0];
+            break;
+        case 'custom':
+            return; // Não altera as datas para período personalizado
+    }
+    
+    if (start && end) {
+        startDate.value = start;
+        endDate.value = end;
+    }
+}
+
+// Função para exportar relatórios
+function exportReport(format) {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    formData.append('export', format);
+    
+    // Criar link temporário para download
+    const url = new URL(window.location.href);
+    url.searchParams.set('export', format);
+    for (let [key, value] of formData.entries()) {
+        if (key !== 'export') {
+            url.searchParams.set(key, value);
+        }
+    }
+    
+    window.open(url.toString(), '_blank');
+}
+
+// Inicializar com período padrão
+document.addEventListener('DOMContentLoaded', function() {
+    updateDateRange();
+});
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+{% endblock %}

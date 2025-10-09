@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Atribuições - Checklist ADM{% endblock %}
+
+<!-- CSRF Token para AJAX -->
+{% csrf_token %}
+
+{% block extra_head %}
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.4);
+    }
+    
+    .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: none;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 600px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    
+    .close:hover,
+    .close:focus {
+        color: black;
+        text-decoration: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <!-- Header -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Gerenciar Atribuições</h1>
+                    <p class="text-gray-600">Gerencie as atribuições de templates para usuários</p>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <a href="{% url 'admin_checklist:create_assignment' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Nova Atribuição
+                    </a>
+                    <a href="{% url 'admin_checklist:dashboard' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                </div>
+            </div>
+
+            <!-- Estatísticas -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white border rounded-lg p-4">
+                    <div class="text-2xl font-bold text-green-600">{{ stats.active }}</div>
+                    <div class="text-sm text-gray-600">Atribuições Ativas</div>
+                </div>
+                <div class="bg-white border rounded-lg p-4">
+                    <div class="text-2xl font-bold text-red-600">{{ stats.inactive }}</div>
+                    <div class="text-sm text-gray-600">Atribuições Inativas</div>
+                </div>
+                <div class="bg-white border rounded-lg p-4">
+                    <div class="text-2xl font-bold text-blue-600">{{ stats.total }}</div>
+                    <div class="text-sm text-gray-600">Total de Atribuições</div>
+                </div>
+            </div>
+        
+            <!-- Filtros -->
+            <form method="GET" class="flex flex-wrap items-end gap-4">
+                <div class="flex-1 min-w-48">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Todos</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Ativas</option>
+                        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inativas</option>
+                    </select>
+                </div>
+                
+                <div class="flex-1 min-w-48">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                    <select name="sector" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Todos os setores</option>
+                        {% for sector in sectors %}
+                            <option value="{{ sector.id }}" {% if sector_filter == sector.id|stringformat:"s" %}selected{% endif %}>
+                                {{ sector.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-search mr-2"></i>Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Lista de Atribuições -->
+        <div class="bg-white rounded-lg shadow">
+            {% if assignments %}
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        Atribuições de Templates ({{ assignments|length }} encontrada{{ assignments|length|pluralize }})
+                    </h3>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Atribuído por</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for assignment in assignments %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4">
+                                    <div>
+                                        <div class="text-sm font-medium text-gray-900">{{ assignment.task_template.title }}</div>
+                                        <div class="text-sm text-gray-500">{{ assignment.task_template.description|truncatechars:50 }}</div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="text-sm text-gray-900">{{ assignment.task_template.sector.name }}</div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center">
+                                        {% if assignment.user.profile_picture %}
+                                            <img class="h-8 w-8 rounded-full mr-3" src="{{ assignment.user.profile_picture.url }}" alt="">
+                                        {% else %}
+                                            <div class="h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center mr-3">
+                                                <i class="fas fa-user text-white text-sm"></i>
+                                            </div>
+                                        {% endif %}
+                                        <div>
+                                            <div class="text-sm font-medium text-gray-900">{{ assignment.user.get_full_name }}</div>
+                                            <div class="text-sm text-gray-500">{{ assignment.user.email }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    {% if assignment.is_active %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <svg class="w-1.5 h-1.5 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3"/>
+                                            </svg>
+                                            Ativa
+                                        </span>
+                                    {% else %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            <svg class="w-1.5 h-1.5 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3"/>
+                                            </svg>
+                                            Inativa
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="text-sm text-gray-900">{{ assignment.assigned_by.get_full_name }}</div>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-gray-500">
+                                    {{ assignment.assigned_at|date:"d/m/Y H:i" }}
+                                </td>
+                                <td class="px-6 py-4 text-sm font-medium">
+                                    <div class="flex space-x-2">
+                                        <button onclick="viewAssignmentDetails('{{ assignment.id }}')" class="text-blue-600 hover:text-blue-900" title="Ver detalhes">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button onclick="toggleAssignmentStatus('{{ assignment.id }}', {{ assignment.is_active|yesno:'false,true' }})" 
+                                                class="{% if assignment.is_active %}text-red-600 hover:text-red-900{% else %}text-green-600 hover:text-green-900{% endif %}" 
+                                                title="{% if assignment.is_active %}Desativar{% else %}Ativar{% endif %}">
+                                            <i class="fas fa-{% if assignment.is_active %}toggle-off{% else %}toggle-on{% endif %}"></i>
+                                        </button>
+                                        {% if assignment.notes %}
+                                        <button onclick="viewNotes('{{ assignment.id }}')" class="text-yellow-600 hover:text-yellow-900" title="Ver observações">
+                                            <i class="fas fa-sticky-note"></i>
+                                        </button>
+                                        {% endif %}
+                                        <button onclick="deleteAssignment('{{ assignment.id }}', '{{ assignment.user.get_full_name }}', '{{ assignment.task_template.title }}')" 
+                                                class="text-red-600 hover:text-red-900" title="Remover atribuição">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginação -->
+                {% if assignments.has_other_pages %}
+                <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                    <div class="flex-1 flex justify-between sm:hidden">
+                        {% if assignments.has_previous %}
+                            <a href="?page={{ assignments.previous_page_number }}&status={{ status_filter }}&sector={{ sector_filter }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                Anterior
+                            </a>
+                        {% endif %}
+                        {% if assignments.has_next %}
+                            <a href="?page={{ assignments.next_page_number }}&status={{ status_filter }}&sector={{ sector_filter }}" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                Próximo
+                            </a>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-sm text-gray-700">
+                                Mostrando
+                                <span class="font-medium">{{ assignments.start_index }}</span>
+                                até
+                                <span class="font-medium">{{ assignments.end_index }}</span>
+                                de
+                                <span class="font-medium">{{ assignments.paginator.count }}</span>
+                                resultados
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                {% if assignments.has_previous %}
+                                    <a href="?page={{ assignments.previous_page_number }}&status={{ status_filter }}&sector={{ sector_filter }}" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </a>
+                                {% endif %}
+                                
+                                {% for num in assignments.paginator.page_range %}
+                                    {% if num == assignments.number %}
+                                        <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">
+                                            {{ num }}
+                                        </span>
+                                    {% elif num > assignments.number|add:'-3' and num < assignments.number|add:'3' %}
+                                        <a href="?page={{ num }}&status={{ status_filter }}&sector={{ sector_filter }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                            {{ num }}
+                                        </a>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if assignments.has_next %}
+                                    <a href="?page={{ assignments.next_page_number }}&status={{ status_filter }}&sector={{ sector_filter }}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                {% endif %}
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+            {% else %}
+                <div class="text-center py-12">
+                    <div class="text-gray-400 mb-4">
+                        <i class="fas fa-clipboard-list text-4xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma atribuição encontrada</h3>
+                    <p class="text-gray-500 mb-4">Não há atribuições correspondentes aos filtros selecionados.</p>
+                    <a href="{% url 'admin_checklist:templates' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Gerenciar Templates
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Detalhes da Atribuição -->
+<div id="assignmentModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('assignmentModal')">&times;</span>
+        <div id="assignmentDetails">
+            <!-- Conteúdo será carregado via JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Observações -->
+<div id="notesModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('notesModal')">&times;</span>
+        <div id="notesContent">
+            <!-- Conteúdo será carregado via JavaScript -->
+        </div>
+    </div>
+</div>
+
+<script>
+    function viewAssignmentDetails(assignmentId) {
+        // TODO: Implementar carregamento dos detalhes da atribuição
+        document.getElementById('assignmentDetails').innerHTML = `
+            <h2 class="text-xl font-bold mb-4">Detalhes da Atribuição</h2>
+            <p class="text-gray-600">Carregando detalhes da atribuição ${assignmentId}...</p>
+        `;
+        document.getElementById('assignmentModal').style.display = 'block';
+    }
+    
+    function viewNotes(assignmentId) {
+        // TODO: Implementar carregamento das observações
+        document.getElementById('notesContent').innerHTML = `
+            <h2 class="text-xl font-bold mb-4">Observações</h2>
+            <p class="text-gray-600">Carregando observações da atribuição ${assignmentId}...</p>
+        `;
+        document.getElementById('notesModal').style.display = 'block';
+    }
+    
+    function toggleAssignmentStatus(assignmentId, newStatus) {
+        const action = newStatus ? 'ativar' : 'desativar';
+        if (confirm(`Tem certeza que deseja ${action} esta atribuição?`)) {
+            fetch(`/admin-checklist/assignments/${assignmentId}/toggle/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao alterar status da atribuição.');
+            });
+        }
+    }
+    
+    function deleteAssignment(assignmentId, userName, templateTitle) {
+        if (confirm(`Tem certeza que deseja remover a atribuição de "${templateTitle}" para ${userName}?\n\nEsta ação não pode ser desfeita.`)) {
+            fetch(`/admin-checklist/assignments/${assignmentId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao remover atribuição.');
+            });
+        }
+    }
+    
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+    }
+    
+    // Fechar modal ao clicar fora dele
+    window.onclick = function(event) {
+        const assignmentModal = document.getElementById('assignmentModal');
+        const notesModal = document.getElementById('notesModal');
+        
+        if (event.target == assignmentModal) {
+            assignmentModal.style.display = 'none';
+        }
+        if (event.target == notesModal) {
+            notesModal.style.display = 'none';
+        }
+    }
+</script>
+
+{% endblock %}

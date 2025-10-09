@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklist Administrativo - Nova Atividade{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <nav class="flex mb-2" aria-label="Breadcrumb">
+            <ol class="flex items-center space-x-2 text-sm">
+                <li><a href="{% url 'admin_checklist:dashboard' %}" class="text-gray-500 hover:text-gray-700">Dashboard</a></li>
+                <li class="text-gray-400">/</li>
+                <li><a href="{% url 'admin_checklist:templates' %}" class="text-gray-500 hover:text-gray-700">Templates</a></li>
+                <li class="text-gray-400">/</li>
+                <li class="text-gray-900">Nova Atividade</li>
+            </ol>
+        </nav>
+        <h1 class="text-3xl font-bold text-gray-900">Adicionar Nova Atividade</h1>
+        <p class="mt-2 text-gray-600">Criar um novo template de atividade para o checklist administrativo</p>
+    </div>
+
+    <!-- Formulário -->
+    <div class="bg-white rounded-lg shadow">
+        <form id="activityForm" method="POST">
+            {% csrf_token %}
+            
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Informações da Atividade</h3>
+            </div>
+            
+            <div class="p-6 space-y-6">
+                <!-- Título -->
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                        Título da Atividade *
+                    </label>
+                    <input type="text" id="title" name="title" required
+                           placeholder="Ex: Verificação de Backup do Sistema"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <p class="mt-1 text-sm text-gray-500">Nome descritivo e claro da atividade</p>
+                </div>
+
+                <!-- Descrição -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Descrição Detalhada *
+                    </label>
+                    <textarea id="description" name="description" rows="4" required
+                              placeholder="Descreva detalhadamente o que deve ser feito nesta atividade..."
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                    <p class="mt-1 text-sm text-gray-500">Explicação completa do objetivo e escopo da atividade</p>
+                </div>
+
+                <!-- Setor e Configurações -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Setor -->
+                    <div>
+                        <label for="sector_id" class="block text-sm font-medium text-gray-700 mb-2">
+                            Setor Responsável *
+                        </label>
+                        <select id="sector_id" name="sector_id" required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Selecione o setor</option>
+                            {% for sector in sectors %}
+                            <option value="{{ sector.id }}">{{ sector.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Prioridade -->
+                    <div>
+                        <label for="priority" class="block text-sm font-medium text-gray-700 mb-2">
+                            Prioridade *
+                        </label>
+                        <select id="priority" name="priority" required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="LOW">🟢 Baixa</option>
+                            <option value="MEDIUM" selected>🟡 Média</option>
+                            <option value="HIGH">🟠 Alta</option>
+                            <option value="URGENT">🔴 Urgente</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Tempo Estimado -->
+                <div>
+                    <label for="estimated_time_minutes" class="block text-sm font-medium text-gray-700 mb-2">
+                        Tempo Estimado (minutos) *
+                    </label>
+                    <div class="flex items-center space-x-4">
+                        <input type="number" id="estimated_time_minutes" name="estimated_time_minutes" 
+                               min="1" max="480" required value="30"
+                               class="w-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="setTime(15)" class="px-3 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">15min</button>
+                            <button type="button" onclick="setTime(30)" class="px-3 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">30min</button>
+                            <button type="button" onclick="setTime(60)" class="px-3 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">1h</button>
+                            <button type="button" onclick="setTime(120)" class="px-3 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">2h</button>
+                        </div>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-500">Tempo estimado para execução da atividade</p>
+                </div>
+
+                <!-- Instruções -->
+                <div>
+                    <label for="instructions" class="block text-sm font-medium text-gray-700 mb-2">
+                        Instruções de Execução
+                    </label>
+                    <textarea id="instructions" name="instructions" rows="6"
+                              placeholder="Instruções passo a passo:&#10;1. Primeiro passo...&#10;2. Segundo passo...&#10;3. Terceiro passo..."
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                    <p class="mt-1 text-sm text-gray-500">Instruções detalhadas sobre como executar esta atividade (opcional)</p>
+                </div>
+
+                <!-- Configurações Adicionais -->
+                <div class="border-t border-gray-200 pt-6">
+                    <h4 class="text-md font-medium text-gray-900 mb-4">Configurações</h4>
+                    
+                    <div class="space-y-4">
+                        <!-- Atividade Ativa -->
+                        <div class="flex items-center">
+                            <input type="checkbox" id="is_active" name="is_active" checked
+                                   class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                            <label for="is_active" class="ml-2 text-sm text-gray-700">
+                                <span class="font-medium">Atividade ativa</span>
+                                <div class="text-gray-500">A atividade será incluída nos checklists diários futuros</div>
+                            </label>
+                        </div>
+
+                        <!-- Adicionar ao Checklist de Hoje -->
+                        <div class="flex items-center">
+                            <input type="checkbox" id="add_to_today" name="add_to_today"
+                                   class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                            <label for="add_to_today" class="ml-2 text-sm text-gray-700">
+                                <span class="font-medium">Adicionar ao checklist de hoje</span>
+                                <div class="text-gray-500">Se existir checklist para hoje, adicionar esta atividade imediatamente</div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botões de Ação -->
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                <a href="{% url 'admin_checklist:templates' %}" 
+                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <i class="fas fa-save mr-2"></i>Criar Atividade
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Dicas -->
+    <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h3 class="text-lg font-medium text-blue-900 mb-4">
+            <i class="fas fa-lightbulb mr-2"></i>Dicas para criar uma boa atividade
+        </h3>
+        <ul class="space-y-2 text-sm text-blue-800">
+            <li class="flex items-start">
+                <i class="fas fa-check-circle text-blue-600 mr-2 mt-0.5 flex-shrink-0"></i>
+                <span><strong>Título claro:</strong> Use nomes descritivos que expliquem rapidamente o que deve ser feito</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check-circle text-blue-600 mr-2 mt-0.5 flex-shrink-0"></i>
+                <span><strong>Descrição completa:</strong> Inclua o contexto, objetivo e resultados esperados</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check-circle text-blue-600 mr-2 mt-0.5 flex-shrink-0"></i>
+                <span><strong>Instruções detalhadas:</strong> Forneça passos específicos para facilitar a execução</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check-circle text-blue-600 mr-2 mt-0.5 flex-shrink-0"></i>
+                <span><strong>Tempo realista:</strong> Estime um tempo que permita executar a atividade com qualidade</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check-circle text-blue-600 mr-2 mt-0.5 flex-shrink-0"></i>
+                <span><strong>Prioridade adequada:</strong> Urgente apenas para atividades críticas que não podem atrasar</span>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<script>
+// Função para definir tempo rapidamente
+function setTime(minutes) {
+    document.getElementById('estimated_time_minutes').value = minutes;
+}
+
+// Submissão do formulário
+document.getElementById('activityForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Validar campos obrigatórios
+    const title = document.getElementById('title').value.trim();
+    const description = document.getElementById('description').value.trim();
+    const sectorId = document.getElementById('sector_id').value;
+    const estimatedTime = document.getElementById('estimated_time_minutes').value;
+    
+    if (!title || !description || !sectorId || !estimatedTime) {
+        alert('Preencha todos os campos obrigatórios (*)');
+        return;
+    }
+    
+    if (parseInt(estimatedTime) < 1) {
+        alert('O tempo estimado deve ser pelo menos 1 minuto');
+        return;
+    }
+    
+    // Confirmar criação
+    const confirmMessage = `Confirma a criação da atividade "${title}" para o setor selecionado?`;
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Submeter formulário
+    const formData = new FormData(this);
+    
+    // Mostrar loading
+    const submitButton = this.querySelector('button[type="submit"]');
+    const originalText = submitButton.innerHTML;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Criando...';
+    submitButton.disabled = true;
+    
+    fetch('{% url "admin_checklist:add_activity" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Redirecionar para a lista de templates
+            window.location.href = '{% url "admin_checklist:templates" %}';
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao criar atividade. Tente novamente.');
+    })
+    .finally(() => {
+        // Restaurar botão
+        submitButton.innerHTML = originalText;
+        submitButton.disabled = false;
+    });
+});
+
+// Preview do tempo estimado
+document.getElementById('estimated_time_minutes').addEventListener('input', function() {
+    const minutes = parseInt(this.value);
+    let timeText = '';
+    
+    if (minutes >= 60) {
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        timeText = hours + 'h';
+        if (remainingMinutes > 0) {
+            timeText += ' ' + remainingMinutes + 'min';
+        }
+    } else {
+        timeText = minutes + ' minutos';
+    }
+    
+    // Atualizar placeholder ou criar elemento de preview se necessário
+    const existingPreview = document.getElementById('time-preview');
+    if (existingPreview) {
+        existingPreview.textContent = `≈ ${timeText}`;
+    } else if (minutes > 0) {
+        const preview = document.createElement('span');
+        preview.id = 'time-preview';
+        preview.className = 'text-sm text-gray-500 ml-2';
+        preview.textContent = `≈ ${timeText}`;
+        this.parentNode.appendChild(preview);
+    }
+});
+</script>
+{% endblock %}

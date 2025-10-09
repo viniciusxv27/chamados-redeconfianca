@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Criar Tarefa de Setor - Checklist ADM{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center">
+            <a href="{% url 'admin_checklist:sector_tasks' %}" 
+               class="mr-4 text-gray-400 hover:text-gray-600">
+                <i class="fas fa-arrow-left text-xl"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Nova Tarefa de Setor</h1>
+                <p class="mt-2 text-gray-600">Crie uma nova tarefa para ser incluída no Checklist ADM</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Informações da Tarefa</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                A tarefa será enviada para aprovação do superadmin antes de ser incluída no checklist.
+            </p>
+        </div>
+
+        <form method="POST" class="px-6 py-4 space-y-6">
+            {% csrf_token %}
+            
+            <!-- Título -->
+            <div>
+                <label for="title" class="block text-sm font-medium text-gray-700">
+                    Título da Tarefa <span class="text-red-500">*</span>
+                </label>
+                <input type="text" id="title" name="title" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       placeholder="Ex: Verificar sistema de backup">
+            </div>
+
+            <!-- Setor -->
+            <div>
+                <label for="sector" class="block text-sm font-medium text-gray-700">
+                    Setor Responsável <span class="text-red-500">*</span>
+                </label>
+                <select id="sector" name="sector" required
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Selecione o setor...</option>
+                    {% for sector in available_sectors %}
+                        <option value="{{ sector.id }}">{{ sector.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Descrição -->
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700">
+                    Descrição <span class="text-red-500">*</span>
+                </label>
+                <textarea id="description" name="description" rows="4" required
+                          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Descreva o que precisa ser feito..."></textarea>
+            </div>
+
+            <!-- Instruções -->
+            <div>
+                <label for="instructions" class="block text-sm font-medium text-gray-700">
+                    Instruções de Execução
+                </label>
+                <textarea id="instructions" name="instructions" rows="6"
+                          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Instruções detalhadas sobre como executar esta tarefa..."></textarea>
+                <p class="mt-2 text-sm text-gray-500">
+                    Forneça instruções claras e específicas para facilitar a execução da tarefa.
+                </p>
+            </div>
+
+            <!-- Configurações -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Prioridade -->
+                <div>
+                    <label for="priority" class="block text-sm font-medium text-gray-700">
+                        Prioridade
+                    </label>
+                    <select id="priority" name="priority"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        {% for value, label in priorities %}
+                            <option value="{{ value }}" {% if value == 'MEDIUM' %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Tempo Estimado -->
+                <div>
+                    <label for="estimated_time" class="block text-sm font-medium text-gray-700">
+                        Tempo Estimado (minutos)
+                    </label>
+                    <input type="number" id="estimated_time" name="estimated_time" value="30" min="1" max="480"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <!-- Data Solicitada -->
+                <div>
+                    <label for="date_requested" class="block text-sm font-medium text-gray-700">
+                        Data Solicitada <span class="text-red-500">*</span>
+                    </label>
+                    <input type="date" id="date_requested" name="date_requested" required
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                <a href="{% url 'admin_checklist:sector_tasks' %}" 
+                   class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-paper-plane mr-2"></i>Enviar para Aprovação
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Info Box -->
+    <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-400"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Processo de Aprovação</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <p>1. Sua tarefa será enviada para análise do superadmin</p>
+                    <p>2. Após aprovação, será automaticamente incluída no checklist da data solicitada</p>
+                    <p>3. Você será notificado sobre o status da aprovação</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Definir data mínima como hoje
+document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('date_requested');
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.min = today;
+    
+    // Definir data padrão como amanhã
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    dateInput.value = tomorrow.toISOString().split('T')[0];
+});
+
+// Validação do formulário
+document.querySelector('form').addEventListener('submit', function(e) {
+    const title = document.getElementById('title').value.trim();
+    const sector = document.getElementById('sector').value;
+    const description = document.getElementById('description').value.trim();
+    const dateRequested = document.getElementById('date_requested').value;
+    
+    let errors = [];
+    
+    if (!title) {
+        errors.push('Título é obrigatório');
+    }
+    if (!sector) {
+        errors.push('Setor é obrigatório');
+    }
+    if (!description) {
+        errors.push('Descrição é obrigatória');
+    }
+    if (!dateRequested) {
+        errors.push('Data solicitada é obrigatória');
+    }
+    
+    if (errors.length > 0) {
+        e.preventDefault();
+        alert('Por favor, corrija os seguintes erros:\n' + errors.join('\n'));
+    }
+});
+</script>
+{% endblock %}

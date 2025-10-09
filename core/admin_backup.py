@@ -110,13 +110,13 @@ class DailyAdminChecklistAdmin(admin.ModelAdmin):
 @admin.register(AdminChecklistTask)
 class AdminChecklistTaskAdmin(admin.ModelAdmin):
     list_display = ('get_task_title', 'get_checklist_date', 'get_sector', 'status', 'assigned_to', 'completed_at')
-    list_filter = ('status', 'checklist__date', 'completed_at')
-    search_fields = ('title', 'description', 'assigned_to__first_name', 'assigned_to__last_name')
-    readonly_fields = ('checklist', 'template', 'sector_task', 'completed_at', 'reviewed_at', 'reviewed_by')
-    ordering = ('-checklist__date', 'title')
+    list_filter = ('status', 'template__sector', 'template__priority', 'checklist__date', 'completed_at')
+    search_fields = ('template__title', 'template__description', 'assigned_to__first_name', 'assigned_to__last_name')
+    readonly_fields = ('checklist', 'template', 'completed_at', 'reviewed_at', 'reviewed_by')
+    ordering = ('-checklist__date', 'template__sector', 'template__title')
     
     def get_task_title(self, obj):
-        return obj.get_task_title()
+        return obj.template.title
     get_task_title.short_description = 'Tarefa'
     
     def get_checklist_date(self, obj):
@@ -124,8 +124,7 @@ class AdminChecklistTaskAdmin(admin.ModelAdmin):
     get_checklist_date.short_description = 'Data'
     
     def get_sector(self, obj):
-        sector = obj.get_task_sector()
-        return sector.name if sector else 'N/A'
+        return obj.template.sector.name
     get_sector.short_description = 'Setor'
 
 
@@ -133,12 +132,12 @@ class AdminChecklistTaskAdmin(admin.ModelAdmin):
 class AdminChecklistAssignmentAdmin(admin.ModelAdmin):
     list_display = ('user', 'get_task_title', 'get_checklist_date', 'assigned_at', 'assigned_by')
     list_filter = ('assigned_at', 'assigned_by')
-    search_fields = ('user__first_name', 'user__last_name', 'task__title')
+    search_fields = ('user__first_name', 'user__last_name', 'task__template__title')
     readonly_fields = ('assigned_at',)
     ordering = ('-assigned_at',)
     
     def get_task_title(self, obj):
-        return obj.task.get_task_title()
+        return obj.task.template.title
     get_task_title.short_description = 'Tarefa'
     
     def get_checklist_date(self, obj):
@@ -161,20 +160,16 @@ class AdminChecklistSectorTaskAdmin(admin.ModelAdmin):
         ('Configurações', {
             'fields': ('sector', 'priority', 'estimated_time_minutes', 'date_requested')
         }),
-        ('Aprovação', {
-            'fields': ('is_approved', 'approved_by', 'approved_at'),
-            'classes': ('collapse',)
+        ('Controle', {
+            'fields': ('created_by', 'is_approved', 'approved_by', 'approved_at')
         }),
-        ('Metadados', {
-            'fields': ('created_by', 'created_at'),
+        ('Timestamps', {
+            'fields': ('created_at',),
             'classes': ('collapse',)
         }),
     )
     
     def save_model(self, request, obj, form, change):
-        if not change:  # Novo objeto
+        if not change:  # Se é um novo objeto
             obj.created_by = request.user
-        if obj.is_approved and not obj.approved_by:
-            obj.approved_by = request.user
-            obj.approved_at = timezone.now()
         super().save_model(request, obj, form, change)

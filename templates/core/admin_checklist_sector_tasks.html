@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tarefas do Setor - Checklist ADM{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Tarefas do Setor</h1>
+                <p class="mt-2 text-gray-600">Gerencie tarefas criadas pelos setores para o Checklist ADM</p>
+            </div>
+            <div class="mt-4 sm:mt-0 flex flex-wrap gap-3">
+                <a href="{% url 'admin_checklist:dashboard' %}" 
+                   class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Voltar ao Dashboard
+                </a>
+                {% if can_create %}
+                <a href="{% url 'admin_checklist:create_sector_task' %}" 
+                   class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Nova Tarefa
+                </a>
+                {% endif %}
+                {% if user.hierarchy == 'SUPERADMIN' %}
+                <a href="{% url 'admin_checklist:approve_sector_tasks' %}" 
+                   class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    <i class="fas fa-check-circle mr-2"></i>Aprovar Tarefas
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <form method="GET" class="flex flex-wrap items-end gap-4">
+            <div class="flex-1 min-w-48">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Todos</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pendente Aprovação</option>
+                    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Aprovado</option>
+                </select>
+            </div>
+            
+            <div class="flex-1 min-w-48">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Data Solicitada</label>
+                <input type="date" name="date" value="{{ date_filter }}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            
+            <div>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Tarefas -->
+    <div class="bg-white rounded-lg shadow">
+        {% if sector_tasks %}
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    {{ sector_tasks.count }} tarefa{{ sector_tasks.count|pluralize }}
+                </h3>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarefa</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Solicitada</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criado por</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for task in sector_tasks %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4">
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">{{ task.title }}</div>
+                                    <div class="text-sm text-gray-500 truncate max-w-xs">{{ task.description }}</div>
+                                    {% if task.priority != 'MEDIUM' %}
+                                        <div class="mt-1">
+                                            {% if task.priority == 'URGENT' %}
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                    <i class="fas fa-exclamation-triangle mr-1"></i>Urgente
+                                                </span>
+                                            {% elif task.priority == 'HIGH' %}
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                                    <i class="fas fa-arrow-up mr-1"></i>Alta
+                                                </span>
+                                            {% elif task.priority == 'LOW' %}
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                    <i class="fas fa-arrow-down mr-1"></i>Baixa
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ task.sector.name }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ task.date_requested|date:"d/m/Y" }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if task.is_approved %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <i class="fas fa-check mr-1"></i>Aprovado
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                        <i class="fas fa-clock mr-1"></i>Pendente
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ task.created_by.get_full_name }}</div>
+                                <div class="text-xs text-gray-500">{{ task.created_at|date:"d/m/Y H:i" }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button onclick="viewTaskDetails({{ task.id }})" 
+                                        class="text-blue-600 hover:text-blue-900 mr-3">
+                                    <i class="fas fa-eye mr-1"></i>Ver
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="px-6 py-12 text-center">
+                <i class="fas fa-tasks text-6xl text-gray-300 mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma tarefa encontrada</h3>
+                <p class="text-gray-500 mb-4">
+                    {% if can_create %}
+                        Comece criando uma nova tarefa para o seu setor.
+                    {% else %}
+                        Aguarde que seu setor crie tarefas ou entre em contato com seu supervisor.
+                    {% endif %}
+                </p>
+                {% if can_create %}
+                <a href="{% url 'admin_checklist:create_sector_task' %}" 
+                   class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Criar Primeira Tarefa
+                </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal para visualizar detalhes da tarefa -->
+<div id="taskModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 class="text-lg font-medium text-gray-900">Detalhes da Tarefa</h3>
+            <button onclick="closeTaskModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <div id="taskModalContent" class="px-6 py-4">
+            <!-- Conteúdo será carregado dinamicamente -->
+        </div>
+    </div>
+</div>
+
+<script>
+function viewTaskDetails(taskId) {
+    // Aqui você pode implementar uma requisição AJAX para buscar detalhes da tarefa
+    // Por simplicidade, vou mostrar um modal básico
+    const modal = document.getElementById('taskModal');
+    const content = document.getElementById('taskModalContent');
+    
+    content.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-gray-400 text-2xl"></i></div>';
+    modal.classList.remove('hidden');
+    
+    // Simular carregamento
+    setTimeout(() => {
+        content.innerHTML = `
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Título</label>
+                    <p class="mt-1 text-sm text-gray-900">Título da tarefa aqui...</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Descrição</label>
+                    <p class="mt-1 text-sm text-gray-900">Descrição detalhada da tarefa...</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Instruções</label>
+                    <p class="mt-1 text-sm text-gray-900">Instruções específicas para execução...</p>
+                </div>
+            </div>
+        `;
+    }, 500);
+}
+
+function closeTaskModal() {
+    document.getElementById('taskModal').classList.add('hidden');
+}
+
+// Fechar modal ao clicar fora
+document.getElementById('taskModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeTaskModal();
+    }
+});
+</script>
+{% endblock %}

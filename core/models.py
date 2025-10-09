@@ -678,3 +678,415 @@ class TaskCategory(models.Model):
         
         # Se pode gerenciar, pode visualizar
         return self.can_be_managed_by(user)
+
+
+# ===== CHECKLIST ADMINISTRATIVO MODELS =====
+class AdminChecklistTemplate(models.Model):
+    """Template de tarefa para checklist administrativo"""
+    
+    title = models.CharField(max_length=200, verbose_name="Título da Tarefa")
+    description = models.TextField(verbose_name="Descrição")
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.CASCADE,
+        related_name='admin_checklist_templates',
+        verbose_name="Setor Responsável"
+    )
+    
+    # Configurações de prioridade e tempo
+    priority = models.CharField(
+        max_length=20,
+        choices=[
+            ('LOW', 'Baixa'),
+            ('MEDIUM', 'Média'),
+            ('HIGH', 'Alta'),
+            ('URGENT', 'Urgente'),
+        ],
+        default='MEDIUM',
+        verbose_name="Prioridade"
+    )
+    
+    estimated_time_minutes = models.PositiveIntegerField(
+        default=30,
+        verbose_name="Tempo Estimado (minutos)"
+    )
+    
+    # Instruções detalhadas
+    instructions = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Instruções de Execução",
+        help_text="Instruções detalhadas sobre como executar esta tarefa"
+    )
+    
+    # Configurações de recorrência
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    requires_approval = models.BooleanField(default=True, verbose_name="Requer Aprovação")
+    
+    # Metadados
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_admin_templates',
+        verbose_name="Criado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Template de Checklist Administrativo"
+        verbose_name_plural = "Templates de Checklist Administrativo"
+        ordering = ['sector__name', 'title']
+    
+    def __str__(self):
+        return f"{self.sector.name} - {self.title}"
+
+
+class AdminChecklistSectorTask(models.Model):
+    """Tarefa específica adicionada por um setor para ser incluída no checklist administrativo"""
+    
+    title = models.CharField(max_length=200, verbose_name="Título da Tarefa")
+    description = models.TextField(verbose_name="Descrição")
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.CASCADE,
+        related_name='admin_sector_tasks',
+        verbose_name="Setor que Criou"
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=[
+            ('LOW', 'Baixa'),
+            ('MEDIUM', 'Média'),
+            ('HIGH', 'Alta'),
+            ('URGENT', 'Urgente'),
+        ],
+        default='MEDIUM',
+        verbose_name="Prioridade"
+    )
+    estimated_time_minutes = models.PositiveIntegerField(
+        default=30,
+        verbose_name="Tempo Estimado (minutos)"
+    )
+    instructions = models.TextField(
+        blank=True,
+        verbose_name="Instruções de Execução"
+    )
+    date_requested = models.DateField(verbose_name="Data Solicitada")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sector_admin_tasks',
+        verbose_name="Criado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_approved = models.BooleanField(default=False, verbose_name="Aprovado pelo Superadmin")
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_sector_tasks',
+        verbose_name="Aprovado por"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Aprovado em")
+    
+    class Meta:
+        verbose_name = "Tarefa de Setor - Checklist ADM"
+        verbose_name_plural = "Tarefas de Setor - Checklist ADM"
+        ordering = ['-created_at', 'priority']
+    
+    def __str__(self):
+        return f"{self.sector.name} - {self.title} ({self.date_requested})"
+
+
+class DailyAdminChecklist(models.Model):
+    """Checklist administrativo diário - instância consolidada de todas as tarefas"""
+    
+    date = models.DateField(verbose_name="Data")
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_daily_admin_checklists',
+        verbose_name="Criado por"
+    )
+    
+    # Status geral do checklist
+    is_completed = models.BooleanField(default=False, verbose_name="Completado")
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Completado em")
+    
+    class Meta:
+        verbose_name = "Checklist Administrativo Diário"
+        verbose_name_plural = "Checklists Administrativos Diários"
+        unique_together = ['date']
+        ordering = ['-date']
+    
+    def __str__(self):
+        return f"Checklist Administrativo - {self.date}"
+    
+    def get_completion_stats(self):
+        """Retorna estatísticas de conclusão"""
+        tasks = self.tasks.all()
+        total_tasks = tasks.count()
+        completed_tasks = tasks.filter(status='COMPLETED').count()
+        approved_tasks = tasks.filter(status='APPROVED').count()
+        rejected_tasks = tasks.filter(status='REJECTED').count()
+        
+        return {
+            'total': total_tasks,
+            'completed': completed_tasks,
+            'approved': approved_tasks,
+            'rejected': rejected_tasks,
+            'pending': total_tasks - completed_tasks,
+            'completion_percentage': round((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0,
+            'approval_percentage': round((approved_tasks / total_tasks) * 100) if total_tasks > 0 else 0,
+        }
+    
+    def get_sector_stats(self):
+        """Retorna estatísticas por setor"""
+        from django.db.models import Count, Q
+        
+        sector_stats = {}
+        sectors = self.tasks.values_list('template__sector', flat=True).distinct()
+        
+        for sector_id in sectors:
+            if sector_id:
+                from users.models import Sector
+                sector = Sector.objects.get(id=sector_id)
+                sector_tasks = self.tasks.filter(template__sector=sector)
+                
+                total = sector_tasks.count()
+                completed = sector_tasks.filter(status='COMPLETED').count()
+                approved = sector_tasks.filter(status='APPROVED').count()
+                rejected = sector_tasks.filter(status='REJECTED').count()
+                
+                sector_stats[sector.name] = {
+                    'sector_id': sector.id,
+                    'total': total,
+                    'completed': completed,
+                    'approved': approved,
+                    'rejected': rejected,
+                    'pending': total - completed,
+                    'completion_percentage': round((completed / total) * 100) if total > 0 else 0,
+                    'approval_percentage': round((approved / total) * 100) if total > 0 else 0,
+                }
+        
+        return sector_stats
+
+
+class AdminChecklistTask(models.Model):
+    """Tarefa individual do checklist administrativo diário"""
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente'),
+        ('IN_PROGRESS', 'Em Andamento'),
+        ('COMPLETED', 'Concluída'),
+        ('APPROVED', 'Aprovada'),
+        ('REJECTED', 'Rejeitada'),
+    ]
+    
+    checklist = models.ForeignKey(
+        DailyAdminChecklist,
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        verbose_name="Checklist"
+    )
+    template = models.ForeignKey(
+        AdminChecklistTemplate,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='daily_tasks',
+        verbose_name="Template"
+    )
+    
+    # Para tarefas criadas por setores específicos
+    sector_task = models.ForeignKey(
+        AdminChecklistSectorTask,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='daily_tasks',
+        verbose_name="Tarefa do Setor"
+    )
+    
+    # Título e descrição (para tarefas avulsas ou copiadas de sector_task)
+    title = models.CharField(max_length=200, blank=True, verbose_name="Título")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    instructions = models.TextField(blank=True, verbose_name="Instruções")
+    
+    # Atribuição e responsabilidade
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_admin_tasks',
+        verbose_name="Atribuído para"
+    )
+    
+    # Status e controle
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+        verbose_name="Status"
+    )
+    
+    # Timestamps de execução
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name="Iniciado em")
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
+    
+    # Aprovação/Rejeição
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_admin_tasks',
+        verbose_name="Revisado por"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name="Revisado em")
+    review_notes = models.TextField(blank=True, verbose_name="Notas da Revisão")
+    
+    # Observações da execução
+    execution_notes = models.TextField(blank=True, verbose_name="Observações da Execução")
+    
+    class Meta:
+        verbose_name = "Tarefa do Checklist Administrativo"
+        verbose_name_plural = "Tarefas do Checklist Administrativo"
+        ordering = ['checklist__date', 'title']
+    
+    def __str__(self):
+        task_title = self.title or (self.template.title if self.template else self.sector_task.title if self.sector_task else "Tarefa sem título")
+        return f"{self.checklist.date} - {task_title} ({self.get_status_display()})"
+    
+    def get_task_title(self):
+        """Retorna o título da tarefa"""
+        return self.title or (self.template.title if self.template else self.sector_task.title if self.sector_task else "Tarefa sem título")
+    
+    def get_task_description(self):
+        """Retorna a descrição da tarefa"""
+        return self.description or (self.template.description if self.template else self.sector_task.description if self.sector_task else "")
+    
+    def get_task_instructions(self):
+        """Retorna as instruções da tarefa"""
+        return self.instructions or (self.template.instructions if self.template else self.sector_task.instructions if self.sector_task else "")
+    
+    def get_task_sector(self):
+        """Retorna o setor da tarefa"""
+        return (self.template.sector if self.template else self.sector_task.sector if self.sector_task else None)
+    
+    def can_be_executed_by(self, user):
+        """Verifica se o usuário pode executar esta tarefa"""
+        # Se atribuído especificamente
+        if self.assigned_to:
+            return user == self.assigned_to
+        
+        # Superadmin pode executar qualquer tarefa
+        if user.hierarchy == 'SUPERADMIN':
+            return True
+        
+        # Qualquer usuário do setor pode executar
+        task_sector = self.get_task_sector()
+        if task_sector:
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            return task_sector in user_sectors
+        
+        return False
+    
+    def can_be_reviewed_by(self, user):
+        """Verifica se o usuário pode aprovar/reprovar esta tarefa"""
+        # Superadmin pode revisar tudo
+        if user.hierarchy == 'SUPERADMIN':
+            return True
+        
+        # Supervisores e administrativos do setor podem revisar
+        if user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            return self.template.sector in user_sectors
+        
+        return False
+    
+    def mark_completed(self, user, notes=''):
+        """Marca a tarefa como concluída"""
+        if self.can_be_executed_by(user):
+            self.status = 'COMPLETED'
+            self.completed_at = timezone.now()
+            self.execution_notes = notes
+            if not self.assigned_to:
+                self.assigned_to = user
+            if not self.started_at:
+                self.started_at = self.completed_at
+            self.save()
+            return True
+        return False
+    
+    def approve(self, user, notes=''):
+        """Aprova a tarefa"""
+        if self.can_be_reviewed_by(user) and self.status == 'COMPLETED':
+            self.status = 'APPROVED'
+            self.reviewed_by = user
+            self.reviewed_at = timezone.now()
+            self.review_notes = notes
+            self.save()
+            return True
+        return False
+    
+    def reject(self, user, notes=''):
+        """Rejeita a tarefa (volta para pendente)"""
+        if self.can_be_reviewed_by(user) and self.status == 'COMPLETED':
+            self.status = 'PENDING'
+            self.reviewed_by = user
+            self.reviewed_at = timezone.now()
+            self.review_notes = notes
+            # Limpar dados de conclusão
+            self.completed_at = None
+            self.execution_notes = ''
+            self.save()
+            return True
+        return False
+
+
+class AdminChecklistAssignment(models.Model):
+    """Atribuições específicas de tarefas para usuários"""
+    
+    task_template = models.ForeignKey(
+        AdminChecklistTemplate,
+        on_delete=models.CASCADE,
+        related_name='assignments',
+        verbose_name="Template da Tarefa"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='admin_task_assignments',
+        verbose_name="Usuário"
+    )
+    
+    # Configurações da atribuição
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='made_admin_assignments',
+        verbose_name="Atribuído por"
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    
+    # Observações
+    notes = models.TextField(blank=True, verbose_name="Observações")
+    
+    class Meta:
+        verbose_name = "Atribuição de Tarefa Administrativa"
+        verbose_name_plural = "Atribuições de Tarefas Administrativas"
+        unique_together = ['task_template', 'user']
+        ordering = ['task_template__sector__name', 'task_template__title']
+    
+    def __str__(self):
+        return f"{self.task_template.title} → {self.user.get_full_name()}"

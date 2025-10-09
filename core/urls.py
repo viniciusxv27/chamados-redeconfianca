@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
 from .test_views import test_upload_view
 
@@ -13,4 +13,7 @@ urlpatterns = [
     path('api/notifications/count/', views.notifications_count_api_view, name='notifications_count_api'),
     path('api/notifications/<int:notification_id>/mark-read/', views.notification_mark_read_api_view, name='notification_mark_read_api'),
     path('api/notifications/mark-all-read/', views.notifications_mark_all_read_api_view, name='notifications_mark_all_read_api'),
+    
+    # Checklist Administrativo
+    path('admin-checklist/', include('core.admin_checklist_urls')),
 ]

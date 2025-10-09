@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Nova Atribuição - Checklist ADM{% endblock %}
+
+{% block extra_head %}
+<style>
+    .select2-container {
+        width: 100% !important;
+    }
+    
+    .form-section {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .preview-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    
+    .template-info {
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+</style>
+
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Header -->
+        <div class="mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Nova Atribuição</h1>
+                    <p class="text-gray-600">Atribua um template de checklist para um usuário</p>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <a href="{% url 'admin_checklist:assignments' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulário -->
+        <form method="POST" id="assignmentForm">
+            {% csrf_token %}
+            
+            <!-- Seleção de Template -->
+            <div class="form-section">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-clipboard-list mr-2 text-blue-600"></i>
+                    Selecionar Template
+                </h2>
+                
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label for="template_id" class="block text-sm font-medium text-gray-700 mb-2">
+                            Template de Checklist *
+                        </label>
+                        <select name="template_id" id="template_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                            <option value="">Selecione um template...</option>
+                            {% for template in templates %}
+                                <option value="{{ template.id }}" 
+                                        data-sector="{{ template.sector.name }}"
+                                        data-description="{{ template.description }}"
+                                        data-instructions="{{ template.instructions|default:'' }}">
+                                    [{{ template.sector.name }}] {{ template.title }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Preview do Template -->
+                <div id="templatePreview" class="template-info" style="display: none;">
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-blue-600 text-white p-2 rounded">
+                            <i class="fas fa-clipboard-list"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-900" id="previewTitle"></h3>
+                            <p class="text-sm text-gray-600 mb-2">
+                                <i class="fas fa-building mr-1"></i>
+                                Setor: <span id="previewSector"></span>
+                            </p>
+                            <p class="text-sm text-gray-700" id="previewDescription"></p>
+                            <div id="previewInstructions" style="display: none;">
+                                <p class="text-sm text-gray-600 mt-2">
+                                    <strong>Instruções:</strong> <span id="previewInstructionsText"></span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seleção de Usuário -->
+            <div class="form-section">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-user mr-2 text-green-600"></i>
+                    Selecionar Usuário
+                </h2>
+                
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label for="user_id" class="block text-sm font-medium text-gray-700 mb-2">
+                            Usuário *
+                        </label>
+                        <select name="user_id" id="user_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                            <option value="">Selecione um usuário...</option>
+                            {% for user_obj in users %}
+                                <option value="{{ user_obj.id }}" 
+                                        data-name="{{ user_obj.get_full_name }}"
+                                        data-email="{{ user_obj.email }}"
+                                        data-sector="{{ user_obj.sector.name|default:'Sem setor' }}"
+                                        data-hierarchy="{{ user_obj.get_hierarchy_display }}"
+                                        data-avatar="{% if user_obj.profile_picture %}{{ user_obj.profile_picture.url }}{% endif %}">
+                                    {{ user_obj.get_full_name }} ({{ user_obj.email }}) - {{ user_obj.get_hierarchy_display }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Preview do Usuário -->
+                <div id="userPreview" class="preview-card" style="display: none;">
+                    <div class="flex items-center space-x-3">
+                        <img id="previewAvatar" class="user-avatar" src="" alt="Avatar" style="display: none;">
+                        <div class="w-10 h-10 bg-gray-400 rounded-full flex items-center justify-center" id="previewAvatarDefault">
+                            <i class="fas fa-user text-white"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-medium text-gray-900" id="previewUserName"></h3>
+                            <p class="text-sm text-gray-600" id="previewUserEmail"></p>
+                            <p class="text-xs text-gray-500">
+                                <span id="previewUserSector"></span> • <span id="previewUserHierarchy"></span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Observações -->
+            <div class="form-section">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-sticky-note mr-2 text-yellow-600"></i>
+                    Observações (Opcional)
+                </h2>
+                
+                <div>
+                    <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">
+                        Observações adicionais
+                    </label>
+                    <textarea name="notes" id="notes" rows="3" 
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Adicione observações sobre esta atribuição (opcional)..."></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Estas observações serão visíveis para outros administradores.</p>
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="form-section">
+                <div class="flex justify-end space-x-3">
+                    <a href="{% url 'admin_checklist:assignments' %}" 
+                       class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                        Cancelar
+                    </a>
+                    <button type="submit" 
+                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            id="submitBtn">
+                        <i class="fas fa-plus mr-2"></i>Criar Atribuição
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar Select2
+    $('#template_id').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Selecione um template...',
+        allowClear: true
+    });
+    
+    $('#user_id').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Selecione um usuário...',
+        allowClear: true
+    });
+    
+    // Preview do template
+    $('#template_id').on('change', function() {
+        const selectedOption = $(this).find('option:selected');
+        const templatePreview = $('#templatePreview');
+        
+        if (selectedOption.val()) {
+            $('#previewTitle').text(selectedOption.text().replace(/^\[.*?\]\s*/, ''));
+            $('#previewSector').text(selectedOption.data('sector'));
+            $('#previewDescription').text(selectedOption.data('description'));
+            
+            const instructions = selectedOption.data('instructions');
+            if (instructions) {
+                $('#previewInstructionsText').text(instructions);
+                $('#previewInstructions').show();
+            } else {
+                $('#previewInstructions').hide();
+            }
+            
+            templatePreview.slideDown();
+        } else {
+            templatePreview.slideUp();
+        }
+    });
+    
+    // Preview do usuário
+    $('#user_id').on('change', function() {
+        const selectedOption = $(this).find('option:selected');
+        const userPreview = $('#userPreview');
+        
+        if (selectedOption.val()) {
+            $('#previewUserName').text(selectedOption.data('name'));
+            $('#previewUserEmail').text(selectedOption.data('email'));
+            $('#previewUserSector').text(selectedOption.data('sector'));
+            $('#previewUserHierarchy').text(selectedOption.data('hierarchy'));
+            
+            const avatar = selectedOption.data('avatar');
+            if (avatar) {
+                $('#previewAvatar').attr('src', avatar).show();
+                $('#previewAvatarDefault').hide();
+            } else {
+                $('#previewAvatar').hide();
+                $('#previewAvatarDefault').show();
+            }
+            
+            userPreview.slideDown();
+        } else {
+            userPreview.slideUp();
+        }
+    });
+    
+    // Validação do formulário
+    $('#assignmentForm').on('submit', function(e) {
+        const templateId = $('#template_id').val();
+        const userId = $('#user_id').val();
+        
+        if (!templateId || !userId) {
+            e.preventDefault();
+            alert('Por favor, selecione um template e um usuário.');
+            return false;
+        }
+        
+        // Desabilitar botão durante submissão
+        $('#submitBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i>Criando...');
+    });
+});
+</script>
+
+{% endblock %}

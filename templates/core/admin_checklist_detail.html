@@ -1,0 +1,474 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklist Administrativo - {{ checklist.date|date:"d/m/Y" }}{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between">
+            <div>
+                <nav class="flex mb-2" aria-label="Breadcrumb">
+                    <ol class="flex items-center space-x-2 text-sm">
+                        <li><a href="{% url 'admin_checklist:dashboard' %}" class="text-gray-500 hover:text-gray-700">Dashboard</a></li>
+                        <li class="text-gray-400">/</li>
+                        <li class="text-gray-900">Checklist {{ checklist.date|date:"d/m/Y" }}</li>
+                    </ol>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">Checklist Administrativo</h1>
+                <p class="mt-2 text-gray-600">{{ checklist.date|date:"d/m/Y" }} - {{ stats.completion_percentage }}% concluído</p>
+            </div>
+            
+            <div class="flex space-x-3">
+                {% if can_assign %}
+                <button onclick="openBulkAssignModal()" 
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-users mr-2"></i>Atribuir em Lote
+                </button>
+                <a href="{% url 'admin_checklist:add_activity' %}" 
+                   class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Nova Atividade
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-tasks text-gray-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Total</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ stats.total }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-clock text-gray-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Pendentes</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ stats.pending }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-play text-blue-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Em Andamento</p>
+                    <p class="text-2xl font-bold text-blue-900">{{ stats.in_progress }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-check text-yellow-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Concluídas</p>
+                    <p class="text-2xl font-bold text-yellow-900">{{ stats.completed }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-thumbs-up text-green-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Aprovadas</p>
+                    <p class="text-2xl font-bold text-green-900">{{ stats.approved }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-thumbs-down text-red-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Rejeitadas</p>
+                    <p class="text-2xl font-bold text-red-900">{{ stats.rejected }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barra de Progresso -->
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Progresso Geral</h3>
+        <div class="w-full bg-gray-200 rounded-full h-4">
+            <div class="bg-green-600 h-4 rounded-full transition-all duration-300" style="width: {{ stats.completion_percentage }}%"></div>
+        </div>
+        <p class="text-sm text-gray-600 mt-2">{{ stats.completion_percentage }}% concluído</p>
+    </div>
+
+    <!-- Tarefas por Setor -->
+    {% for sector_name, sector_tasks in tasks_by_sector.items %}
+    <div class="bg-white rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-gray-900">
+                {{ sector_name }}
+                <span class="ml-2 text-sm text-gray-500">({{ sector_tasks|length }} tarefa{{ sector_tasks|length|pluralize:",s" }})</span>
+            </h3>
+            
+            {% if can_assign %}
+            <button onclick="selectSectorTasks('{{ sector_name }}')" 
+                    class="text-blue-600 hover:text-blue-800 text-sm">
+                <i class="fas fa-check-square mr-1"></i>Selecionar Todas
+            </button>
+            {% endif %}
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        {% if can_assign %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <input type="checkbox" class="sector-checkbox" data-sector="{{ sector_name }}" onchange="toggleSectorTasks(this, '{{ sector_name }}')">
+                        </th>
+                        {% endif %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarefa</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for task in sector_tasks %}
+                    <tr class="hover:bg-gray-50">
+                        {% if can_assign %}
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <input type="checkbox" class="task-checkbox" data-sector="{{ sector_name }}" value="{{ task.id }}">
+                        </td>
+                        {% endif %}
+                        <td class="px-6 py-4">
+                            <div>
+                                <div class="text-sm font-medium text-gray-900">{{ task.template.title }}</div>
+                                <div class="text-sm text-gray-500">{{ task.template.description|truncatechars:100 }}</div>
+                                <div class="flex items-center mt-1 space-x-2">
+                                    <span class="px-2 py-1 text-xs rounded-full 
+                                        {% if task.template.priority == 'URGENT' %}bg-red-100 text-red-800
+                                        {% elif task.template.priority == 'HIGH' %}bg-orange-100 text-orange-800
+                                        {% elif task.template.priority == 'MEDIUM' %}bg-yellow-100 text-yellow-800
+                                        {% else %}bg-green-100 text-green-800{% endif %}">
+                                        {{ task.template.get_priority_display }}
+                                    </span>
+                                    <span class="text-xs text-gray-500">{{ task.template.estimated_time_minutes }}min</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if task.status == 'PENDING' %}bg-gray-100 text-gray-800
+                                {% elif task.status == 'IN_PROGRESS' %}bg-blue-100 text-blue-800
+                                {% elif task.status == 'COMPLETED' %}bg-yellow-100 text-yellow-800
+                                {% elif task.status == 'APPROVED' %}bg-green-100 text-green-800
+                                {% elif task.status == 'REJECTED' %}bg-red-100 text-red-800{% endif %}">
+                                {{ task.get_status_display }}
+                            </span>
+                            {% if task.completed_at %}
+                            <div class="text-xs text-gray-500 mt-1">
+                                {{ task.completed_at|date:"d/m H:i" }}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div id="assigned-user-{{ task.id }}">
+                                {% if task.assigned_to %}
+                                    <div class="text-sm text-gray-900">{{ task.assigned_to.get_full_name }}</div>
+                                    <div class="text-xs text-gray-500">{{ task.assigned_to.get_hierarchy_display }}</div>
+                                {% else %}
+                                    <span class="text-sm text-gray-400">Não atribuído</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div class="flex space-x-2">
+                                {% if can_assign and not task.assigned_to %}
+                                    <select class="text-xs border border-gray-300 rounded px-2 py-1" 
+                                            onchange="assignTask({{ task.id }}, this.value, '{{ task.template.sector.id }}')">
+                                        <option value="">Atribuir a...</option>
+                                        {% for user in sector_users %}
+                                            {% if user.sector.id == task.template.sector.id %}
+                                                <option value="{{ user.id }}">{{ user.get_full_name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                {% endif %}
+                                
+                                {% if task.status == 'PENDING' and task.assigned_to == request.user %}
+                                    <button onclick="taskAction({{ task.id }}, 'complete')" 
+                                            class="text-blue-600 hover:text-blue-900 text-xs">
+                                        <i class="fas fa-play mr-1"></i>Iniciar
+                                    </button>
+                                {% endif %}
+                                
+                                {% if task.status == 'IN_PROGRESS' and task.assigned_to == request.user %}
+                                    <button onclick="taskAction({{ task.id }}, 'complete')" 
+                                            class="text-green-600 hover:text-green-900 text-xs">
+                                        <i class="fas fa-check mr-1"></i>Concluir
+                                    </button>
+                                {% endif %}
+                                
+                                {% if task.status == 'COMPLETED' and can_review %}
+                                    <button onclick="taskAction({{ task.id }}, 'approve')" 
+                                            class="text-green-600 hover:text-green-900 text-xs">
+                                        <i class="fas fa-thumbs-up mr-1"></i>Aprovar
+                                    </button>
+                                    <button onclick="taskAction({{ task.id }}, 'reject')" 
+                                            class="text-red-600 hover:text-red-900 text-xs">
+                                        <i class="fas fa-thumbs-down mr-1"></i>Rejeitar
+                                    </button>
+                                {% endif %}
+                                
+                                <button onclick="viewTaskDetails({{ task.id }})" 
+                                        class="text-gray-600 hover:text-gray-900 text-xs">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% empty %}
+    <div class="bg-white rounded-lg shadow p-8 text-center">
+        <i class="fas fa-clipboard-list text-gray-400 text-4xl mb-4"></i>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma tarefa encontrada</h3>
+        <p class="text-gray-600">Não há tarefas para este checklist ou você não tem permissão para visualizá-las.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal de Atribuição em Lote -->
+{% if can_assign %}
+<div id="bulkAssignModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Atribuir Tarefas Selecionadas</h3>
+            <button onclick="closeBulkAssignModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <form id="bulkAssignForm">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label for="bulkAssignUser" class="block text-sm font-medium text-gray-700 mb-2">Selecionar Usuário:</label>
+                <select id="bulkAssignUser" name="user_id" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Escolha um usuário...</option>
+                    {% for user in sector_users %}
+                        <option value="{{ user.id }}" data-sector="{{ user.sector.id }}">
+                            {{ user.get_full_name }} - {{ user.sector.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="mb-4">
+                <p class="text-sm text-gray-600">Tarefas selecionadas: <span id="selectedTasksCount">0</span></p>
+            </div>
+            
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="closeBulkAssignModal()" 
+                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                    Atribuir Tarefas
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Função para atribuir tarefa individual
+function assignTask(taskId, userId, sectorId) {
+    if (!userId) return;
+    
+    const formData = new FormData();
+    formData.append('task_id', taskId);
+    formData.append('user_id', userId);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch('{% url "admin_checklist:assign_task" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Atualizar a interface
+            const assignedDiv = document.getElementById(`assigned-user-${taskId}`);
+            assignedDiv.innerHTML = `
+                <div class="text-sm text-gray-900">${data.assigned_user}</div>
+                <div class="text-xs text-gray-500">Atribuído agora</div>
+            `;
+            alert(data.message);
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atribuir tarefa');
+    });
+}
+
+// Função para executar ações nas tarefas
+function taskAction(taskId, action) {
+    let notes = '';
+    let message = '';
+    
+    if (action === 'complete') {
+        notes = prompt('Observações da execução (opcional):');
+        if (notes === null) return;
+        message = 'Concluir tarefa';
+    } else if (action === 'approve') {
+        notes = prompt('Observações da aprovação (opcional):');
+        if (notes === null) return;
+        message = 'Aprovar tarefa';
+    } else if (action === 'reject') {
+        notes = prompt('Motivo da rejeição:');
+        if (notes === null || notes.trim() === '') {
+            alert('É obrigatório informar o motivo da rejeição.');
+            return;
+        }
+        message = 'Rejeitar tarefa';
+    }
+    
+    if (confirm(`Confirma ${message}?`)) {
+        const formData = new FormData();
+        formData.append('action', action);
+        formData.append('notes', notes);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`{% url 'admin_checklist:task_action' 0 %}`.replace('0', taskId), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Erro: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao processar solicitação');
+        });
+    }
+}
+
+// Funcionalidades de atribuição em lote
+function openBulkAssignModal() {
+    document.getElementById('bulkAssignModal').classList.remove('hidden');
+    updateSelectedTasksCount();
+}
+
+function closeBulkAssignModal() {
+    document.getElementById('bulkAssignModal').classList.add('hidden');
+}
+
+function toggleSectorTasks(checkbox, sectorName) {
+    const taskCheckboxes = document.querySelectorAll(`input.task-checkbox[data-sector="${sectorName}"]`);
+    taskCheckboxes.forEach(cb => cb.checked = checkbox.checked);
+    updateSelectedTasksCount();
+}
+
+function selectSectorTasks(sectorName) {
+    const sectorCheckbox = document.querySelector(`input.sector-checkbox[data-sector="${sectorName}"]`);
+    sectorCheckbox.checked = true;
+    toggleSectorTasks(sectorCheckbox, sectorName);
+}
+
+function updateSelectedTasksCount() {
+    const selectedTasks = document.querySelectorAll('input.task-checkbox:checked');
+    document.getElementById('selectedTasksCount').textContent = selectedTasks.length;
+}
+
+// Atualizar contador quando checkboxes individuais mudam
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('task-checkbox')) {
+        updateSelectedTasksCount();
+    }
+});
+
+// Submissão do formulário de atribuição em lote
+document.getElementById('bulkAssignForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const selectedTasks = Array.from(document.querySelectorAll('input.task-checkbox:checked')).map(cb => cb.value);
+    const userId = document.getElementById('bulkAssignUser').value;
+    
+    if (!userId) {
+        alert('Selecione um usuário');
+        return;
+    }
+    
+    if (selectedTasks.length === 0) {
+        alert('Selecione pelo menos uma tarefa');
+        return;
+    }
+    
+    const formData = new FormData(this);
+    selectedTasks.forEach(taskId => formData.append('task_ids[]', taskId));
+    
+    fetch('{% url "admin_checklist:bulk_assign" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            if (data.warnings && data.warnings.length > 0) {
+                alert('Avisos:\n' + data.warnings.join('\n'));
+            }
+            location.reload();
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atribuir tarefas');
+    });
+});
+
+// Função para visualizar detalhes da tarefa
+function viewTaskDetails(taskId) {
+    // Por enquanto, implementação básica
+    alert('Funcionalidade de detalhes em desenvolvimento');
+}
+</script>
+
+{% csrf_token %}
+{% endblock %}

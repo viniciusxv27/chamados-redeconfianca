@@ -1,0 +1,327 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklist Administrativo - Tarefas{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between">
+            <div>
+                <nav class="flex mb-2" aria-label="Breadcrumb">
+                    <ol class="flex items-center space-x-2 text-sm">
+                        <li><a href="{% url 'admin_checklist:dashboard' %}" class="text-gray-500 hover:text-gray-700">Dashboard</a></li>
+                        <li class="text-gray-400">/</li>
+                        <li class="text-gray-900">Tarefas</li>
+                    </ol>
+                </nav>
+                <h1 class="text-3xl font-bold text-gray-900">Tarefas do Checklist</h1>
+                <p class="mt-2 text-gray-600">Gerencie as tarefas do checklist administrativo</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <!-- Filtro por Data -->
+            <div>
+                <label for="date" class="block text-sm font-medium text-gray-700 mb-2">Data</label>
+                <input type="date" id="date" name="date" value="{{ date_filter }}" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <!-- Filtro por Setor -->
+            <div>
+                <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                <select id="sector" name="sector" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Todos os Setores</option>
+                    {% for sector in sectors %}
+                    <option value="{{ sector.id }}" {% if sector_filter == sector.id|stringformat:"s" %}selected{% endif %}>
+                        {{ sector.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Filtro por Status -->
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select id="status" name="status" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Todos os Status</option>
+                    <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>Pendente</option>
+                    <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>Em Andamento</option>
+                    <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Concluída</option>
+                    <option value="APPROVED" {% if status_filter == 'APPROVED' %}selected{% endif %}>Aprovada</option>
+                    <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>Rejeitada</option>
+                </select>
+            </div>
+            
+            <!-- Botão de Filtrar -->
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Tarefas -->
+    {% if daily_checklist %}
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">
+                Tarefas de {{ daily_checklist.date|date:"d/m/Y" }}
+            </h3>
+        </div>
+        
+        {% if tasks %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarefa</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for task in tasks %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <div>
+                                <div class="text-sm font-medium text-gray-900">{{ task.template.title }}</div>
+                                <div class="text-sm text-gray-500">{{ task.template.description|truncatechars:100 }}</div>
+                                <div class="flex items-center mt-1 space-x-2">
+                                    <span class="px-2 py-1 text-xs rounded-full 
+                                        {% if task.template.priority == 'URGENT' %}bg-red-100 text-red-800
+                                        {% elif task.template.priority == 'HIGH' %}bg-orange-100 text-orange-800
+                                        {% elif task.template.priority == 'MEDIUM' %}bg-yellow-100 text-yellow-800
+                                        {% else %}bg-green-100 text-green-800{% endif %}">
+                                        {{ task.template.get_priority_display }}
+                                    </span>
+                                    <span class="text-xs text-gray-500">{{ task.template.estimated_time_minutes }}min</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm text-gray-900">{{ task.template.sector.name }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if task.status == 'PENDING' %}bg-gray-100 text-gray-800
+                                {% elif task.status == 'IN_PROGRESS' %}bg-blue-100 text-blue-800
+                                {% elif task.status == 'COMPLETED' %}bg-yellow-100 text-yellow-800
+                                {% elif task.status == 'APPROVED' %}bg-green-100 text-green-800
+                                {% elif task.status == 'REJECTED' %}bg-red-100 text-red-800{% endif %}">
+                                {{ task.get_status_display }}
+                            </span>
+                            {% if task.completed_at %}
+                            <div class="text-xs text-gray-500 mt-1">
+                                Concl. {{ task.completed_at|date:"d/m H:i" }}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if task.assigned_to %}
+                                <div class="text-sm text-gray-900">{{ task.assigned_to.get_full_name }}</div>
+                                <div class="text-xs text-gray-500">{{ task.assigned_to.get_hierarchy_display }}</div>
+                            {% else %}
+                                <span class="text-sm text-gray-400">Não atribuído</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div class="flex space-x-2">
+                                {% if task.status == 'PENDING' and task.assigned_to == user %}
+                                    <button onclick="taskAction({{ task.id }}, 'complete')" 
+                                            class="text-blue-600 hover:text-blue-900">
+                                        <i class="fas fa-check mr-1"></i>Concluir
+                                    </button>
+                                {% endif %}
+                                
+                                {% if task.status == 'COMPLETED' and user.hierarchy == 'SUPERADMIN' %}
+                                    <button onclick="taskAction({{ task.id }}, 'approve')" 
+                                            class="text-green-600 hover:text-green-900">
+                                        <i class="fas fa-thumbs-up mr-1"></i>Aprovar
+                                    </button>
+                                    <button onclick="taskAction({{ task.id }}, 'reject')" 
+                                            class="text-red-600 hover:text-red-900">
+                                        <i class="fas fa-thumbs-down mr-1"></i>Rejeitar
+                                    </button>
+                                {% endif %}
+                                
+                                <button onclick="viewTaskDetails({{ task.id }})" 
+                                        class="text-gray-600 hover:text-gray-900">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Paginação -->
+        {% if tasks.has_other_pages %}
+        <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+            <div class="flex-1 flex justify-between sm:hidden">
+                {% if tasks.has_previous %}
+                    <a href="?page={{ tasks.previous_page_number }}&date={{ date_filter }}&sector={{ sector_filter }}&status={{ status_filter }}" 
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Anterior
+                    </a>
+                {% endif %}
+                
+                {% if tasks.has_next %}
+                    <a href="?page={{ tasks.next_page_number }}&date={{ date_filter }}&sector={{ sector_filter }}&status={{ status_filter }}" 
+                       class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Próximo
+                    </a>
+                {% endif %}
+            </div>
+            
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        Mostrando
+                        <span class="font-medium">{{ tasks.start_index }}</span>
+                        a
+                        <span class="font-medium">{{ tasks.end_index }}</span>
+                        de
+                        <span class="font-medium">{{ tasks.paginator.count }}</span>
+                        tarefa{{ tasks.paginator.count|pluralize:",s" }}
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        {% if tasks.has_previous %}
+                            <a href="?page={{ tasks.previous_page_number }}&date={{ date_filter }}&sector={{ sector_filter }}&status={{ status_filter }}" 
+                               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                        {% endif %}
+
+                        {% for num in tasks.paginator.page_range %}
+                            {% if tasks.number == num %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-blue-500 bg-blue-50 text-sm font-medium text-blue-600">
+                                    {{ num }}
+                                </span>
+                            {% elif num > tasks.number|add:'-3' and num < tasks.number|add:'3' %}
+                                <a href="?page={{ num }}&date={{ date_filter }}&sector={{ sector_filter }}&status={{ status_filter }}" 
+                                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    {{ num }}
+                                </a>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if tasks.has_next %}
+                            <a href="?page={{ tasks.next_page_number }}&date={{ date_filter }}&sector={{ sector_filter }}&status={{ status_filter }}" 
+                               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="p-8 text-center">
+            <i class="fas fa-tasks text-gray-400 text-4xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma tarefa encontrada</h3>
+            <p class="text-gray-600">Não há tarefas para os filtros selecionados.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-8 text-center">
+        <i class="fas fa-calendar-times text-gray-400 text-4xl mb-4"></i>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Checklist não encontrado</h3>
+        <p class="text-gray-600">Não há checklist administrativo para a data selecionada.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Detalhes da Tarefa -->
+<div id="taskDetailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Detalhes da Tarefa</h3>
+            <button onclick="closeTaskDetailModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <div id="taskDetailContent">
+            <!-- Conteúdo será carregado dinamicamente -->
+        </div>
+    </div>
+</div>
+
+<script>
+// Função para executar ações nas tarefas
+function taskAction(taskId, action) {
+    let notes = '';
+    let message = '';
+    
+    if (action === 'complete') {
+        notes = prompt('Observações da execução (opcional):');
+        if (notes === null) return;
+        message = 'Concluir tarefa';
+    } else if (action === 'approve') {
+        notes = prompt('Observações da aprovação (opcional):');
+        if (notes === null) return;
+        message = 'Aprovar tarefa';
+    } else if (action === 'reject') {
+        notes = prompt('Motivo da rejeição:');
+        if (notes === null || notes.trim() === '') {
+            alert('É obrigatório informar o motivo da rejeição.');
+            return;
+        }
+        message = 'Rejeitar tarefa';
+    }
+    
+    if (confirm(`Confirma ${message}?`)) {
+        const formData = new FormData();
+        formData.append('action', action);
+        formData.append('notes', notes);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`/core/admin-checklist/tasks/${taskId}/action/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Erro: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao processar solicitação');
+        });
+    }
+}
+
+// Função para visualizar detalhes da tarefa
+function viewTaskDetails(taskId) {
+    // Por enquanto, implementação básica
+    alert('Funcionalidade de detalhes em desenvolvimento');
+}
+
+// Função para fechar modal de detalhes
+function closeTaskDetailModal() {
+    document.getElementById('taskDetailModal').classList.add('hidden');
+}
+</script>
+
+{% csrf_token %}
+{% endblock %}
