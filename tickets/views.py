@@ -27,6 +27,16 @@ def tickets_list_view(request):
     setor_filter = request.GET.get('setor', '')
     prioridade_filter = request.GET.get('prioridade', '')
     
+    # Filtros avançados para SUPERADMIN - definir logo no início
+    created_by_filter = request.GET.get('created_by', '')
+    assigned_to_filter = request.GET.get('assigned_to', '')
+    date_from_filter = request.GET.get('date_from', '')
+    date_to_filter = request.GET.get('date_to', '')
+    user_hierarchy_filter = request.GET.get('user_hierarchy', '')
+    has_attachments_filter = request.GET.get('has_attachments', '')
+    has_comments_filter = request.GET.get('has_comments', '')
+    overdue_filter = request.GET.get('overdue', '')
+    
     # Filtro base: TODOS os usuários sempre veem seus próprios chamados
     base_filter = models.Q(created_by=user)
     
@@ -172,16 +182,6 @@ def tickets_list_view(request):
     # Remover duplicatas
     user_sectors = list(set(user_sectors))
     
-    # Filtros avançados para SUPERADMIN
-    created_by_filter = request.GET.get('created_by', '')
-    assigned_to_filter = request.GET.get('assigned_to', '')
-    date_from_filter = request.GET.get('date_from', '')
-    date_to_filter = request.GET.get('date_to', '')
-    user_hierarchy_filter = request.GET.get('user_hierarchy', '')
-    has_attachments_filter = request.GET.get('has_attachments', '')
-    has_comments_filter = request.GET.get('has_comments', '')
-    overdue_filter = request.GET.get('overdue', '')
-    
     # Aplicar filtros avançados apenas para SUPERADMIN
     if user.hierarchy == 'SUPERADMIN':
         # Filtro por usuário que criou
@@ -242,18 +242,26 @@ def tickets_list_view(request):
                 )
 
     # Obter categorias e setores baseado na hierarquia do usuário
-    if user.hierarchy == 'SUPERADMIN':
-        # SUPERADMIN pode ver todas as categorias e setores
-        user_categories = Category.objects.all().order_by('sector__name', 'name')
-        all_categories = Category.objects.all().order_by('sector__name', 'name')
-        all_sectors = Sector.objects.all().order_by('name')
-        all_users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
-    else:
-        # Usuários normais veem apenas as categorias dos seus setores
-        user_categories = Category.objects.filter(sector__in=user_sectors).order_by('sector__name', 'name')
-        all_categories = user_categories  # Mesma coisa para usuários normais
-        all_sectors = user_sectors
-        all_users = []  # Usuários normais não precisam desta lista
+    try:
+        if user.hierarchy == 'SUPERADMIN':
+            # SUPERADMIN pode ver todas as categorias e setores
+            user_categories = Category.objects.all().order_by('sector__name', 'name')
+            all_categories = Category.objects.all().order_by('sector__name', 'name')
+            all_sectors = Sector.objects.all().order_by('name')
+            all_users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+        else:
+            # Usuários normais veem apenas as categorias dos seus setores
+            user_categories = Category.objects.filter(sector__in=user_sectors).order_by('sector__name', 'name')
+            all_categories = user_categories  # Mesma coisa para usuários normais
+            all_sectors = user_sectors
+            all_users = []  # Usuários normais não precisam desta lista
+    except Exception as e:
+        # Em caso de erro, usar valores padrão vazios
+        print(f"Erro ao carregar categorias e setores: {str(e)}")
+        user_categories = []
+        all_categories = []
+        all_sectors = []
+        all_users = []
     
     # Obter nomes para exibição dos filtros aplicados
     categoria_name = ''

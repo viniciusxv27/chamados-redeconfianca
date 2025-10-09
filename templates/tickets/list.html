@@ -44,7 +44,10 @@
             {% endif %}
             <div class="min-w-0 flex-1">
                 <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.first_name }} {{ user.last_name }}</h2>
-                <p class="text-sm sm:text-base text-gray-600 truncate">{{ user.get_hierarchy_display }}{% if user.sectors_display != "Nenhum setor" %} - {{ user.sectors_display }}{% endif %}</p>
+                <p class="text-sm sm:text-base text-gray-600 truncate">
+                    {{ user.get_hierarchy_display }}
+                    {% if user.sectors_display and user.sectors_display != "Nenhum setor" %} - {{ user.sectors_display }}{% endif %}
+                </p>
             </div>
         </div>
     </div>
