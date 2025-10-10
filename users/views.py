@@ -4083,20 +4083,24 @@ def daily_automation_api(request):
         
         # Importar models necessários
         from tickets.models import Ticket
+        from django.db import models
         
-        # Chamados abertos do usuário
+        # Chamados do usuário (tickets criados pelo usuário OU atribuídos ao usuário que não estão fechados)
         user_open_tickets = Ticket.objects.filter(
-            assigned_to=user,
-            status__in=['open', 'in_progress', 'waiting']
-        ).select_related('category', 'sector', 'created_by')
+            models.Q(assigned_to=user) | models.Q(created_by=user),
+            status__in=['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO']
+        ).distinct().select_related('category', 'sector', 'created_by')
         
-        # Chamados abertos do setor do usuário
-        sector_open_tickets = Ticket.objects.filter(
-            sector=user.sector,
-            status__in=['open', 'in_progress', 'waiting']
-        ).exclude(
-            assigned_to=user  # Excluir os que já estão na lista do usuário
-        ).select_related('category', 'sector', 'created_by', 'assigned_to')
+        # Chamados abertos do setor do usuário (todos os tickets do setor que não estão fechados)
+        if user.sector:
+            sector_open_tickets = Ticket.objects.filter(
+                sector=user.sector,
+                status__in=['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO']
+            ).exclude(
+                assigned_to=user  # Excluir os que já estão na lista do usuário
+            ).select_related('category', 'sector', 'created_by', 'assigned_to')
+        else:
+            sector_open_tickets = Ticket.objects.none()
         
         # Preparar dados dos chamados do usuário
         user_tickets_data = []
