@@ -2330,10 +2330,18 @@ def manage_groups_view(request):
         return redirect('dashboard')
     
     from communications.models import CommunicationGroup
+    from django.db.models import Sum
+    
     groups = CommunicationGroup.objects.all().order_by('name')
+    
+    # Calcular total de usuários em grupos (sem duplicatas)
+    total_users_in_groups = User.objects.filter(
+        communication_groups__isnull=False
+    ).distinct().count()
     
     context = {
         'groups': groups,
+        'total_users_in_groups': total_users_in_groups,
         'user': request.user,
     }
     return render(request, 'admin/groups.html', context)
@@ -4083,24 +4091,20 @@ def daily_automation_api(request):
         
         # Importar models necessários
         from tickets.models import Ticket
-        from django.db import models
         
-        # Chamados do usuário (tickets criados pelo usuário OU atribuídos ao usuário que não estão fechados)
+        # Chamados abertos do usuário
         user_open_tickets = Ticket.objects.filter(
-            models.Q(assigned_to=user) | models.Q(created_by=user),
-            status__in=['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO']
-        ).distinct().select_related('category', 'sector', 'created_by')
+            assigned_to=user,
+            status__in=['open', 'in_progress', 'waiting']
+        ).select_related('category', 'sector', 'created_by')
         
-        # Chamados abertos do setor do usuário (todos os tickets do setor que não estão fechados)
-        if user.sector:
-            sector_open_tickets = Ticket.objects.filter(
-                sector=user.sector,
-                status__in=['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO']
-            ).exclude(
-                assigned_to=user  # Excluir os que já estão na lista do usuário
-            ).select_related('category', 'sector', 'created_by', 'assigned_to')
-        else:
-            sector_open_tickets = Ticket.objects.none()
+        # Chamados abertos do setor do usuário
+        sector_open_tickets = Ticket.objects.filter(
+            sector=user.sector,
+            status__in=['open', 'in_progress', 'waiting']
+        ).exclude(
+            assigned_to=user  # Excluir os que já estão na lista do usuário
+        ).select_related('category', 'sector', 'created_by', 'assigned_to')
         
         # Preparar dados dos chamados do usuário
         user_tickets_data = []
@@ -4115,8 +4119,7 @@ def daily_automation_api(request):
                 'created_by': {
                     'id': ticket.created_by.id,
                     'name': ticket.created_by.get_full_name() or ticket.created_by.username,
-                    'email': ticket.created_by.email,
-                    'phone': getattr(ticket.created_by, 'phone', None) or getattr(ticket.created_by, 'telefone', None)
+                    'email': ticket.created_by.email
                 },
                 'created_at': ticket.created_at.isoformat(),
                 'updated_at': ticket.updated_at.isoformat()
@@ -4130,8 +4133,7 @@ def daily_automation_api(request):
                 assigned_to_data = {
                     'id': ticket.assigned_to.id,
                     'name': ticket.assigned_to.get_full_name() or ticket.assigned_to.username,
-                    'email': ticket.assigned_to.email,
-                    'phone': getattr(ticket.assigned_to, 'phone', None) or getattr(ticket.assigned_to, 'telefone', None)
+                    'email': ticket.assigned_to.email
                 }
             
             sector_tickets_data.append({
@@ -4144,8 +4146,7 @@ def daily_automation_api(request):
                 'created_by': {
                     'id': ticket.created_by.id,
                     'name': ticket.created_by.get_full_name() or ticket.created_by.username,
-                    'email': ticket.created_by.email,
-                    'phone': getattr(ticket.created_by, 'phone', None) or getattr(ticket.created_by, 'telefone', None)
+                    'email': ticket.created_by.email
                 },
                 'assigned_to': assigned_to_data,
                 'created_at': ticket.created_at.isoformat(),
@@ -4162,7 +4163,6 @@ def daily_automation_api(request):
             'last_name': user.last_name,
             'hierarchy': user.hierarchy,
             'is_active': user.is_active,
-            'phone': getattr(user, 'phone', None) or getattr(user, 'telefone', None),
             'sector': {
                 'id': user.sector.id,
                 'name': user.sector.name

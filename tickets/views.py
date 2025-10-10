@@ -26,6 +26,7 @@ def tickets_list_view(request):
     categoria_filter = request.GET.get('categoria', '')
     setor_filter = request.GET.get('setor', '')
     prioridade_filter = request.GET.get('prioridade', '')
+    carteira_filter = request.GET.get('carteira', '')
     
     # Filtros avançados para SUPERADMIN - definir logo no início
     created_by_filter = request.GET.get('created_by', '')
@@ -112,6 +113,51 @@ def tickets_list_view(request):
     if prioridade_filter:
         tickets = tickets.filter(priority=prioridade_filter)
     
+    # Filtro por carteira específica (chamados direcionados PARA setores da carteira selecionada)
+    if carteira_filter:
+        from communications.models import CommunicationGroup
+        try:
+            # Buscar o grupo de carteira específico pelo ID
+            carteira_group = CommunicationGroup.objects.get(id=carteira_filter)
+            
+            # Obter usuários deste grupo de carteira
+            carteira_users = carteira_group.members.filter(is_active=True)
+            
+            # Obter setores onde os usuários da carteira trabalham (corrigir relacionamentos)
+            carteira_sectors = Sector.objects.filter(
+                models.Q(users__in=carteira_users) |  # Setores ManyToMany
+                models.Q(primary_users__in=carteira_users)  # Setor principal (ForeignKey)
+            ).distinct()
+            
+            print(f"DEBUG: Filtro carteira ativo: Grupo '{carteira_group.name}' (ID: {carteira_filter})")
+            print(f"DEBUG: Usuários da carteira ({carteira_users.count()}): {[u.username for u in carteira_users]}")
+            print(f"DEBUG: Setores da carteira ({carteira_sectors.count()}): {[s.name for s in carteira_sectors]}")
+            
+            # Contar tickets antes do filtro
+            tickets_antes = tickets.count()
+            print(f"DEBUG: Tickets antes do filtro carteira: {tickets_antes}")
+            
+            # Filtrar chamados que foram direcionados PARA os setores da carteira
+            # OU que foram atribuídos a usuários da carteira
+            tickets = tickets.filter(
+                models.Q(sector__in=carteira_sectors) |  # Chamados para setores da carteira
+                models.Q(assigned_to__in=carteira_users) |  # Chamados atribuídos a usuários da carteira
+                models.Q(additional_assignments__user__in=carteira_users, additional_assignments__is_active=True)  # Atribuições adicionais
+            ).distinct()
+            
+            print(f"DEBUG: Tickets após filtro carteira: {tickets.count()}")
+            
+            # Debug adicional: verificar se há tickets nos setores da carteira
+            tickets_por_setor = tickets.filter(sector__in=carteira_sectors).count()
+            tickets_atribuidos = tickets.filter(assigned_to__in=carteira_users).count()
+            print(f"DEBUG: Tickets por setor da carteira: {tickets_por_setor}")
+            print(f"DEBUG: Tickets atribuídos a usuários da carteira: {tickets_atribuidos}")
+            
+        except CommunicationGroup.DoesNotExist:
+            print(f"DEBUG: Grupo de carteira com ID {carteira_filter} não encontrado")
+        except Exception as e:
+            print(f"DEBUG: Erro no filtro carteira: {str(e)}")
+    
     # Filtro por pesquisa
     if search:
         tickets = tickets.filter(
@@ -150,6 +196,8 @@ def tickets_list_view(request):
         filter_params['setor'] = setor_filter
     if prioridade_filter:
         filter_params['prioridade'] = prioridade_filter
+    if carteira_filter:
+        filter_params['carteira'] = carteira_filter
     
     # Filtros avançados para SUPERADMIN
     if user.hierarchy == 'SUPERADMIN':
@@ -255,6 +303,11 @@ def tickets_list_view(request):
             all_categories = user_categories  # Mesma coisa para usuários normais
             all_sectors = user_sectors
             all_users = []  # Usuários normais não precisam desta lista
+        
+        # Obter grupos de carteira para todos os usuários (busca case-insensitive)
+        from communications.models import CommunicationGroup
+        carteira_groups = CommunicationGroup.objects.filter(name__icontains='carteira').order_by('name')
+        
     except Exception as e:
         # Em caso de erro, usar valores padrão vazios
         print(f"Erro ao carregar categorias e setores: {str(e)}")
@@ -262,6 +315,7 @@ def tickets_list_view(request):
         all_categories = []
         all_sectors = []
         all_users = []
+        carteira_groups = []
     
     # Obter nomes para exibição dos filtros aplicados
     categoria_name = ''
@@ -309,10 +363,12 @@ def tickets_list_view(request):
         'categoria': categoria_filter,
         'setor': setor_filter,
         'prioridade': prioridade_filter,
+        'carteira': carteira_filter,
         'categoria_name': categoria_name,
         'setor_name': setor_name,
         'user_categories': user_categories,
         'user_sectors': user_sectors,
+        'carteira_groups': carteira_groups,
         'paginator': paginator,
         'page_obj': tickets_page,
         # Filtros avançados para SUPERADMIN
