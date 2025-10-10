@@ -4115,7 +4115,8 @@ def daily_automation_api(request):
                 'created_by': {
                     'id': ticket.created_by.id,
                     'name': ticket.created_by.get_full_name() or ticket.created_by.username,
-                    'email': ticket.created_by.email
+                    'email': ticket.created_by.email,
+                    'phone': getattr(ticket.created_by, 'phone', None) or getattr(ticket.created_by, 'telefone', None)
                 },
                 'created_at': ticket.created_at.isoformat(),
                 'updated_at': ticket.updated_at.isoformat()
@@ -4129,7 +4130,8 @@ def daily_automation_api(request):
                 assigned_to_data = {
                     'id': ticket.assigned_to.id,
                     'name': ticket.assigned_to.get_full_name() or ticket.assigned_to.username,
-                    'email': ticket.assigned_to.email
+                    'email': ticket.assigned_to.email,
+                    'phone': getattr(ticket.assigned_to, 'phone', None) or getattr(ticket.assigned_to, 'telefone', None)
                 }
             
             sector_tickets_data.append({
@@ -4142,7 +4144,8 @@ def daily_automation_api(request):
                 'created_by': {
                     'id': ticket.created_by.id,
                     'name': ticket.created_by.get_full_name() or ticket.created_by.username,
-                    'email': ticket.created_by.email
+                    'email': ticket.created_by.email,
+                    'phone': getattr(ticket.created_by, 'phone', None) or getattr(ticket.created_by, 'telefone', None)
                 },
                 'assigned_to': assigned_to_data,
                 'created_at': ticket.created_at.isoformat(),
@@ -4159,6 +4162,7 @@ def daily_automation_api(request):
             'last_name': user.last_name,
             'hierarchy': user.hierarchy,
             'is_active': user.is_active,
+            'phone': getattr(user, 'phone', None) or getattr(user, 'telefone', None),
             'sector': {
                 'id': user.sector.id,
                 'name': user.sector.name
