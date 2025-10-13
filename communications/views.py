@@ -37,6 +37,19 @@ def home_feed(request):
         Q(send_to_all=True) | Q(recipients=request.user)
     ).distinct().prefetch_related('images').order_by('-created_at')
     
+    # Buscar elogios recentes para o feed
+    recent_compliments = []
+    try:
+        from compliments.models import Compliment
+        recent_compliments = Compliment.objects.filter(
+            is_active=True
+        ).select_related(
+            'from_user', 'to_user', 'to_sector'
+        ).order_by('-created_at')[:5]
+    except ImportError:
+        # App de elogios não disponível
+        pass
+    
     # Paginação
     paginator = Paginator(communications_list, 10)
     page_number = request.GET.get('page')
@@ -45,6 +58,7 @@ def home_feed(request):
     context = {
         'pinned_communications': pinned_communications,
         'communications': communications,
+        'recent_compliments': recent_compliments,
     }
     return render(request, 'home.html', context)
 
@@ -266,7 +280,7 @@ def create_communication_view(request):
                 if photos:
                     # Se tem imagens, forçar is_popup para False
                     communication.is_popup = False
-                    communication.save(skip_webhooks=True)
+                    communication.save()
                     
                     # Processar cada imagem
                     for index, photo in enumerate(photos):

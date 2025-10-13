@@ -220,6 +220,22 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        <li>
+                            <a href="{% url 'compliments:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Elogios">
+                                <i class="fas fa-star text-yellow-400 flex-shrink-0 w-6 text-center"></i>
+                                <span class="text-sm sidebar-text">Elogios</span>
+                                <div class="tooltip-collapsed">Elogios</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists">
+                                <i class="fas fa-clipboard-check text-green-400 flex-shrink-0 w-6 text-center"></i>
+                                <span class="text-sm sidebar-text">Checklists</span>
+                                <div class="tooltip-collapsed">Checklists</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
                         {% if user.hierarchy == 'SUPERADMIN' %}
                         <li>
                             <a href="{% url 'notifications:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Notificações">
@@ -1053,7 +1069,7 @@
                                     ${notification.title}
                                 </p>
                                 <p class="text-xs text-gray-500 mt-1">
-                                    ${notification.message}
+                                    ${stripHtmlTags(notification.message)}
                                 </p>
                                 <p class="text-xs text-gray-400 mt-1">
                                     ${formatDate(notification.created_at)}
@@ -1117,6 +1133,13 @@
                 return icons[type] || '<i class="fas fa-bell text-gray-500"></i>';
             }
             
+            // Strip HTML tags from text
+            function stripHtmlTags(html) {
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                return temp.textContent || temp.innerText || '';
+            }
+            
             // Format date
             function formatDate(dateString) {
                 const date = new Date(dateString);
@@ -1149,7 +1172,7 @@
                 // Populate modal content
                 document.getElementById('modalNotificationIcon').innerHTML = getNotificationIcon(notification.notification_type);
                 document.getElementById('modalNotificationTitle').textContent = notification.title;
-                document.getElementById('modalNotificationMessage').textContent = notification.message;
+                document.getElementById('modalNotificationMessage').innerHTML = notification.message;
                 document.getElementById('modalNotificationType').textContent = getNotificationTypeLabel(notification.notification_type);
                 document.getElementById('modalNotificationDate').textContent = formatFullDate(notification.created_at);
                 

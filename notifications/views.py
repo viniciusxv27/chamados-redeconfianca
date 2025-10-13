@@ -49,7 +49,8 @@ def api_recent_notifications(request):
         notifications_data.append({
             'id': user_notification.id,
             'title': notification.title,
-            'message': notification.message[:100] + ('...' if len(notification.message) > 100 else ''),
+            'message': notification.message,  # Não truncar - será tratado no frontend
+            'message_preview': notification.message[:100] + ('...' if len(notification.message) > 100 else ''),  # Preview para dropdown
             'type': {
                 'name': notification.get_notification_type_display(),
                 'icon': notification.category.icon if notification.category else notification.icon,

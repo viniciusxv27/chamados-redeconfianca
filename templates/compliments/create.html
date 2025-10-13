@@ -1,0 +1,652 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Elogio{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-red-50 p-4 sm:p-6 lg:p-8">
+    <!-- Header -->
+    <div class="max-w-4xl mx-auto mb-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                    <i class="fas fa-star text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">Enviar Elogio</h1>
+                    <p class="text-gray-600">Reconheça o trabalho excepcional de colegas e setores</p>
+                </div>
+            </div>
+            <a href="{% url 'compliments:dashboard' %}" 
+               class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Form -->
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <!-- Form Header -->
+            <div class="bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 p-6">
+                <h2 class="text-xl font-semibold text-white flex items-center">
+                    <i class="fas fa-heart mr-3"></i>
+                    Dados do Elogio
+                </h2>
+                <p class="text-yellow-100 mt-1">Preencha todos os campos para enviar seu elogio</p>
+            </div>
+            
+            <!-- Form Body -->
+            <div class="p-6 sm:p-8">
+                <form method="post" id="complimentForm" class="space-y-6">
+                    {% csrf_token %}
+                    <!-- Input hidden para target_id principal -->
+                    <input type="hidden" name="target_id" id="mainTargetId" value="">
+                    
+                    <!-- Tipo de Destinatário -->
+                    <div class="space-y-3">
+                        <label class="text-lg font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-target mr-2 text-orange-500"></i>
+                            Para quem é o elogio?
+                        </label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <label class="relative">
+                                <input type="radio" name="target_type" value="user" id="targetUser" 
+                                       class="sr-only peer" checked>
+                                <div class="flex items-center justify-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl cursor-pointer transition-all duration-300 peer-checked:from-blue-500 peer-checked:to-indigo-600 peer-checked:text-white peer-checked:border-blue-500 hover:shadow-md">
+                                    <i class="fas fa-user text-2xl mr-3"></i>
+                                    <span class="font-medium">Usuário</span>
+                                </div>
+                            </label>
+                            <label class="relative">
+                                <input type="radio" name="target_type" value="sector" id="targetSector" 
+                                       class="sr-only peer">
+                                <div class="flex items-center justify-center p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl cursor-pointer transition-all duration-300 peer-checked:from-green-500 peer-checked:to-emerald-600 peer-checked:text-white peer-checked:border-green-500 hover:shadow-md">
+                                    <i class="fas fa-building text-2xl mr-3"></i>
+                                    <span class="font-medium">Setor</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Seleção de Usuário -->
+                    <div id="userSelection" class="space-y-3">
+                        <label for="userSearch" class="text-lg font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-search mr-2 text-blue-500"></i>
+                            Selecionar Usuário
+                        </label>
+                        <div class="relative">
+                            <input type="text" 
+                                   id="userSearch" 
+                                   placeholder="Digite o nome do usuário..."
+                                   autocomplete="off"
+                                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-300 text-gray-700 placeholder-gray-400">
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                                <i class="fas fa-search text-gray-400"></i>
+                            </div>
+                            <!-- Dropdown Results -->
+                            <div id="userDropdown" 
+                                 class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden">
+                            </div>
+                        </div>
+                        <!-- Hidden input for selected user -->
+                        <input type="hidden" name="target_id" id="selectedUserId">
+                        <!-- Selected user display -->
+                        <div id="selectedUserDisplay" class="hidden">
+                            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                                        <i class="fas fa-user text-white"></i>
+                                    </div>
+                                    <span id="selectedUserName" class="font-medium text-gray-800"></span>
+                                </div>
+                                <button type="button" 
+                                        onclick="clearUserSelection()"
+                                        class="text-gray-500 hover:text-red-500 transition-colors">
+                                    <i class="fas fa-times text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Seleção de Setor -->
+                    <div id="sectorSelection" class="hidden space-y-3">
+                        <label for="sectorSelect" class="text-lg font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-building mr-2 text-green-500"></i>
+                            Selecionar Setor
+                        </label>
+                        <select id="sectorSelect" 
+                                class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-300 text-gray-700">
+                            <option value="">Escolha um setor...</option>
+                            {% for sector in sectors %}
+                                <option value="{{ sector.id }}">{{ sector.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Avaliação com Estrelas Animadas -->
+                    <div class="space-y-4">
+                        <label class="text-lg font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-star mr-2 text-yellow-500"></i>
+                            Sua Avaliação
+                        </label>
+                        <div class="bg-gradient-to-r from-yellow-50 to-orange-50 p-6 rounded-xl border-2 border-yellow-200">
+                            <!-- Stars Container -->
+                            <div class="flex justify-center items-center space-x-1 mb-4" id="starRating">
+                                <div class="star-wrapper" data-rating="1">
+                                    <span class="star" onclick="setRating(1)" onmouseover="highlightStars(1)" onmouseout="resetStars()">⭐</span>
+                                </div>
+                                <div class="star-wrapper" data-rating="2">
+                                    <span class="star" onclick="setRating(2)" onmouseover="highlightStars(2)" onmouseout="resetStars()">⭐</span>
+                                </div>
+                                <div class="star-wrapper" data-rating="3">
+                                    <span class="star" onclick="setRating(3)" onmouseover="highlightStars(3)" onmouseout="resetStars()">⭐</span>
+                                </div>
+                                <div class="star-wrapper" data-rating="4">
+                                    <span class="star" onclick="setRating(4)" onmouseover="highlightStars(4)" onmouseout="resetStars()">⭐</span>
+                                </div>
+                                <div class="star-wrapper" data-rating="5">
+                                    <span class="star" onclick="setRating(5)" onmouseover="highlightStars(5)" onmouseout="resetStars()">⭐</span>
+                                </div>
+                            </div>
+                            <input type="hidden" name="rating" id="ratingInput" required>
+                            <!-- Rating Text -->
+                            <div class="text-center">
+                                <span id="ratingText" class="text-lg font-bold text-gray-600 transition-all duration-300 transform">
+                                    Clique nas estrelas para avaliar
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comentário -->
+                    <div class="space-y-3">
+                        <label for="comment" class="text-lg font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-comment mr-2 text-purple-500"></i>
+                            Comentário
+                        </label>
+                        <textarea name="comment" 
+                                  id="comment" 
+                                  rows="4" 
+                                  placeholder="Descreva o motivo do elogio e compartilhe os detalhes que tornam esta pessoa especial..." 
+                                  required
+                                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-300 text-gray-700 placeholder-gray-400 resize-none"></textarea>
+                        <p class="text-sm text-gray-500 flex items-center">
+                            <i class="fas fa-info-circle mr-1 text-gray-400"></i>
+                            Descreva o que motivou este elogio de forma detalhada e positiva.
+                        </p>
+                    </div>
+
+                    <!-- Botões -->
+                    <div class="flex flex-col sm:flex-row gap-4 pt-6">
+                        <button type="submit" 
+                                id="submitBtn" 
+                                disabled
+                                class="btn-animate flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold py-4 px-6 rounded-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100 shadow-lg hover:shadow-xl">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Enviar Elogio
+                        </button>
+                        <a href="{% url 'compliments:dashboard' %}" 
+                           class="btn-animate flex-1 bg-gradient-to-r from-gray-500 to-gray-600 text-white font-bold py-4 px-6 rounded-xl hover:from-gray-600 hover:to-gray-700 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl text-center inline-flex items-center justify-center">
+                            <i class="fas fa-times mr-2"></i>
+                            Cancelar
+                        </a>
+                    </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedRating = 0;
+let searchTimeout;
+
+// Controle de tipo de destinatário
+document.querySelectorAll('input[name="target_type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        toggleTargetType();
+        validateForm();
+    });
+});
+
+function toggleTargetType() {
+    const userSelected = document.getElementById('targetUser').checked;
+    const userSelection = document.getElementById('userSelection');
+    const sectorSelection = document.getElementById('sectorSelection');
+    
+    if (userSelected) {
+        userSelection.classList.remove('hidden');
+        sectorSelection.classList.add('hidden');
+        document.getElementById('sectorSelect').value = '';
+        
+        // Atualizar target_id para user
+        const userId = document.getElementById('selectedUserId').value;
+        if (userId) {
+            document.getElementById('mainTargetId').value = userId;
+        }
+    } else {
+        userSelection.classList.add('hidden');
+        sectorSelection.classList.remove('hidden');
+        clearUserSelection();
+        
+        // Atualizar target_id para sector
+        const sectorId = document.getElementById('sectorSelect').value;
+        if (sectorId) {
+            document.getElementById('mainTargetId').value = sectorId;
+        }
+    }
+}
+
+// Sistema de estrelas animadas
+function setRating(rating) {
+    selectedRating = rating;
+    document.getElementById('ratingInput').value = rating;
+    
+    const stars = document.querySelectorAll('#starRating .star');
+    const wrappers = document.querySelectorAll('#starRating .star-wrapper');
+    const ratingText = document.getElementById('ratingText');
+    
+    // Atualizar todas as estrelas com animação
+    stars.forEach((star, index) => {
+        const wrapper = wrappers[index];
+        
+        // Limpar todas as classes
+        star.classList.remove('star-selected', 'star-hover', 'star-inactive');
+        wrapper.classList.remove('selected');
+        
+        if (index < rating) {
+            star.classList.add('star-selected');
+            wrapper.classList.add('selected');
+            // Adicionar animação de brilho sequencial
+            setTimeout(() => {
+                star.style.animation = 'starGlow 0.8s ease-out';
+                setTimeout(() => {
+                    star.style.animation = 'starFloat 3s ease-in-out infinite alternate';
+                }, 800);
+            }, index * 100);
+        } else {
+            star.classList.add('star-inactive');
+            star.style.animation = '';
+        }
+    });
+    
+    // Atualizar texto da avaliação com animação
+    const ratingTexts = {
+        1: '😞 Muito Ruim',
+        2: '😐 Ruim', 
+        3: '😊 Bom',
+        4: '😄 Muito Bom',
+        5: '🌟 Excelente!'
+    };
+    
+    ratingText.style.transform = 'scale(0.8)';
+    ratingText.style.opacity = '0.5';
+    
+    setTimeout(() => {
+        ratingText.textContent = ratingTexts[rating] || 'Clique nas estrelas para avaliar';
+        ratingText.style.transform = 'scale(1.1)';
+        ratingText.style.opacity = '1';
+        ratingText.style.color = '#f59e0b';
+        
+        setTimeout(() => {
+            ratingText.style.transform = 'scale(1)';
+            ratingText.style.color = '#6b7280';
+        }, 200);
+    }, 150);
+    
+    validateForm();
+}
+
+// Funções para hover nas estrelas
+function highlightStars(rating) {
+    const stars = document.querySelectorAll('#starRating .star');
+    stars.forEach((star, index) => {
+        if (index < selectedRating) {
+            // Manter estrelas selecionadas como estão
+            return;
+        }
+        
+        star.classList.remove('star-inactive', 'star-hover');
+        
+        if (index < rating) {
+            star.classList.add('star-hover');
+        } else {
+            star.classList.add('star-inactive');
+        }
+    });
+}
+
+function resetStars() {
+    const stars = document.querySelectorAll('#starRating .star');
+    stars.forEach((star, index) => {
+        star.classList.remove('star-hover');
+        
+        if (index < selectedRating) {
+            star.classList.remove('star-inactive');
+            star.classList.add('star-selected');
+        } else {
+            star.classList.remove('star-selected');
+            star.classList.add('star-inactive');
+        }
+    });
+}
+
+// Busca de usuários
+document.getElementById('userSearch').addEventListener('input', function() {
+    const query = this.value.trim();
+    
+    clearTimeout(searchTimeout);
+    
+    if (query.length < 2) {
+        hideDropdown();
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        searchUsers(query);
+    }, 300);
+});
+
+function searchUsers(query) {
+    fetch(`/compliments/api/search-users/?q=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+            showUserResults(data.users);
+        })
+        .catch(error => {
+            console.error('Erro na busca:', error);
+        });
+}
+
+function showUserResults(users) {
+    const dropdown = document.getElementById('userDropdown');
+    
+    if (users.length === 0) {
+        dropdown.innerHTML = '<div class="px-4 py-3 text-gray-500 text-center">Nenhum usuário encontrado</div>';
+    } else {
+        dropdown.innerHTML = users.map(user => `
+            <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" onclick="selectUser(${user.id}, '${user.name}', '${user.sector}')">
+                <div class="font-medium text-gray-800">${user.name}</div>
+                <div class="text-sm text-gray-500">${user.sector}</div>
+            </div>
+        `).join('');
+    }
+    
+    dropdown.classList.remove('hidden');
+}
+
+function selectUser(id, name, sector) {
+    document.getElementById('selectedUserId').value = id;
+    document.getElementById('userSearch').value = '';
+    document.getElementById('selectedUserName').textContent = `${name} - ${sector}`;
+    document.getElementById('selectedUserDisplay').classList.remove('hidden');
+    
+    // Atualizar target_id principal
+    document.getElementById('mainTargetId').value = id;
+    
+    hideDropdown();
+    validateForm();
+}
+
+function clearUserSelection() {
+    document.getElementById('selectedUserId').value = '';
+    document.getElementById('selectedUserDisplay').classList.add('hidden');
+    document.getElementById('userSearch').value = '';
+    document.getElementById('mainTargetId').value = '';
+    validateForm();
+}
+
+function hideDropdown() {
+    document.getElementById('userDropdown').classList.add('hidden');
+}
+
+// Validação de setor
+document.getElementById('sectorSelect').addEventListener('change', function() {
+    document.getElementById('mainTargetId').value = this.value;
+    validateForm();
+});
+
+// Validação do formulário
+function validateForm() {
+    const targetType = document.querySelector('input[name="target_type"]:checked')?.value;
+    const targetId = document.getElementById('mainTargetId').value;
+    const rating = document.getElementById('ratingInput').value;
+    const comment = document.getElementById('comment').value.trim();
+    
+    console.log('Validation:', {targetType, targetId, rating, comment}); // Debug
+    
+    const isValid = targetType && targetId && rating && comment;
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = !isValid;
+    
+    // Atualizar visualmente o estado do botão
+    if (isValid) {
+        submitBtn.classList.remove('from-gray-400', 'to-gray-500');
+        submitBtn.classList.add('from-green-500', 'to-green-600');
+    } else {
+        submitBtn.classList.remove('from-green-500', 'to-green-600');
+        submitBtn.classList.add('from-gray-400', 'to-gray-500');
+    }
+}
+
+// Event listeners para validação
+document.getElementById('comment').addEventListener('input', validateForm);
+
+// Fechar dropdown ao clicar fora
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('#userSearch') && !event.target.closest('#userDropdown')) {
+        hideDropdown();
+    }
+});
+
+// Inicializar estrelas e formulário
+document.addEventListener('DOMContentLoaded', function() {
+    toggleTargetType();
+    validateForm();
+    initializeStars();
+});
+
+// Função para inicializar as estrelas
+function initializeStars() {
+    const stars = document.querySelectorAll('#starRating .star');
+    
+    // Garantir que todas as estrelas tenham estado inicial correto
+    stars.forEach((star, index) => {
+        star.classList.add('star-inactive');
+        star.style.cursor = 'pointer';
+    });
+}
+</script>
+
+<style>
+/* Estrelas com Unicode melhorado */
+.star-wrapper {
+    position: relative;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid transparent;
+    margin: 0 2px;
+}
+
+.star-wrapper:hover {
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.3), rgba(245, 158, 11, 0.1));
+    transform: scale(1.15) rotate(10deg);
+    border-color: rgba(251, 191, 36, 0.5);
+    box-shadow: 0 8px 25px rgba(251, 191, 36, 0.3);
+}
+
+.star {
+    font-size: 2.5rem !important;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    position: relative;
+    display: inline-block;
+    filter: grayscale(100%) brightness(0.8);
+    user-select: none;
+}
+
+.star:hover {
+    transform: scale(1.2) rotate(15deg);
+    filter: grayscale(0%) brightness(1.3) drop-shadow(0 0 15px #fbbf24);
+    text-shadow: 0 6px 15px rgba(251, 191, 36, 0.6);
+}
+
+.star:hover {
+    transform: scale(1.3) rotate(15deg) !important;
+    text-shadow: 0 6px 12px rgba(251, 191, 36, 0.4);
+    filter: drop-shadow(0 0 8px #fbbf24) brightness(1.2);
+}
+
+/* Estados das estrelas */
+.star.star-selected {
+    filter: grayscale(0%) brightness(1.4) drop-shadow(0 0 15px #fbbf24) !important;
+    color: #fbbf24 !important;
+    text-shadow: 0 0 20px rgba(251, 191, 36, 0.8);
+}
+
+.star.star-hover {
+    filter: grayscale(0%) brightness(1.2) drop-shadow(0 0 10px #fcd34d) !important;
+    color: #fcd34d !important;
+}
+
+.star.star-inactive {
+    filter: grayscale(100%) brightness(0.6);
+    color: #9ca3af !important;
+}
+
+.star-wrapper.selected {
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.4), rgba(245, 158, 11, 0.2));
+    border-color: #fbbf24;
+    transform: scale(1.1);
+    box-shadow: 0 10px 30px rgba(251, 191, 36, 0.4);
+}
+
+/* Animações */
+@keyframes starGlow {
+    0% {
+        transform: scale(1) rotate(0deg);
+        filter: brightness(1) drop-shadow(0 0 0px #fbbf24);
+    }
+    25% {
+        transform: scale(1.4) rotate(10deg);
+        filter: brightness(1.4) drop-shadow(0 0 15px #fbbf24);
+    }
+    50% {
+        transform: scale(1.2) rotate(-8deg);
+        filter: brightness(1.3) drop-shadow(0 0 12px #fbbf24);
+    }
+    75% {
+        transform: scale(1.3) rotate(5deg);
+        filter: brightness(1.2) drop-shadow(0 0 10px #fbbf24);
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        filter: brightness(1.1) drop-shadow(0 0 8px #fbbf24);
+    }
+}
+
+@keyframes starFloat {
+    0% {
+        transform: translateY(0px) rotate(0deg);
+    }
+    100% {
+        transform: translateY(-4px) rotate(3deg);
+    }
+}
+
+/* Efeito de brilho no container das estrelas */
+#starRating {
+    padding: 10px;
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+}
+
+#starRating:hover {
+    background: linear-gradient(45deg, rgba(251, 191, 36, 0.08), rgba(245, 158, 11, 0.08));
+}
+
+/* Efeito de partículas quando estrela é clicada */
+.star-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: radial-gradient(circle, #fbbf24, transparent);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: all 0.4s ease;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.star-wrapper:active::before {
+    width: 60px;
+    height: 60px;
+    opacity: 0.6;
+}
+
+/* Animação de entrada para elementos */
+.animate-fadeIn {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Animações para botões */
+.btn-animate {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-animate::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn-animate:active::before {
+    width: 300px;
+    height: 300px;
+}
+
+/* Responsividade para mobile */
+@media (max-width: 640px) {
+    .star {
+        font-size: 2rem !important;
+    }
+    
+    .star-wrapper {
+        padding: 6px;
+        margin: 0 1px;
+    }
+    
+    #starRating {
+        padding: 5px;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Meus Checklists{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mt-4 text-green-600">📋 Meus Checklists</h1>
+        <a href="{% url 'checklists_dashboard' %}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Dashboard
+        </a>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-green-500 text-white">
+            <h6 class="mb-0">Filtros</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label for="status" class="form-label">Status</label>
+                    <select name="status" id="status" class="form-select">
+                        <option value="">Todos os status</option>
+                        <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Pendente</option>
+                        <option value="in_progress" {% if request.GET.status == 'in_progress' %}selected{% endif %}>Em Execução</option>
+                        <option value="completed" {% if request.GET.status == 'completed' %}selected{% endif %}>Concluído</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="schedule_type" class="form-label">Tipo de Agendamento</label>
+                    <select name="schedule_type" id="schedule_type" class="form-select">
+                        <option value="">Todos os tipos</option>
+                        <option value="this_week" {% if request.GET.schedule_type == 'this_week' %}selected{% endif %}>Esta Semana</option>
+                        <option value="weekdays_month" {% if request.GET.schedule_type == 'weekdays_month' %}selected{% endif %}>Dias Úteis do Mês</option>
+                        <option value="weekends_month" {% if request.GET.schedule_type == 'weekends_month' %}selected{% endif %}>Finais de Semana do Mês</option>
+                        <option value="custom" {% if request.GET.schedule_type == 'custom' %}selected{% endif %}>Datas Personalizadas</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="date_from" class="form-label">Data Inicial</label>
+                    <input type="date" name="date_from" id="date_from" class="form-control" value="{{ request.GET.date_from }}">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-filter"></i> Filtrar
+                    </button>
+                    <a href="{% url 'my_checklists' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1">Total</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ stats.total }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-list-alt fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white shadow">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1">Pendentes</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ stats.pending }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1">Em Execução</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ stats.in_progress }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-play fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1">Concluídos</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ stats.completed }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Checklists -->
+    <div class="row">
+        {% for assignment in assignments %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card shadow h-100 checklist-card">
+                <div class="card-header d-flex justify-content-between align-items-center
+                    {% if assignment.get_status == 'completed' %}bg-success text-white
+                    {% elif assignment.get_status == 'in_progress' %}bg-warning text-dark
+                    {% else %}bg-secondary text-white{% endif %}">
+                    <div>
+                        <h6 class="mb-0">{{ assignment.template.name }}</h6>
+                        <small>{{ assignment.get_schedule_type_display }}</small>
+                    </div>
+                    <span class="badge 
+                        {% if assignment.get_status == 'completed' %}bg-light text-success
+                        {% elif assignment.get_status == 'in_progress' %}bg-dark text-warning
+                        {% else %}bg-light text-secondary{% endif %}">
+                        {% if assignment.get_status == 'completed' %}Concluído
+                        {% elif assignment.get_status == 'in_progress' %}Em Execução
+                        {% else %}Pendente{% endif %}
+                    </span>
+                </div>
+                
+                <div class="card-body">
+                    {% if assignment.template.description %}
+                        <p class="card-text">{{ assignment.template.description|truncatechars:100 }}</p>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <i class="fas fa-tasks"></i> {{ assignment.template.tasks.count }} tarefas
+                        </small>
+                        <br>
+                        <small class="text-muted">
+                            <i class="fas fa-user"></i> {{ assignment.created_by.first_name }} {{ assignment.created_by.last_name }}
+                        </small>
+                        <br>
+                        <small class="text-muted">
+                            <i class="fas fa-calendar"></i> Criado em {{ assignment.created_at|date:"d/m/Y" }}
+                        </small>
+                    </div>
+
+                    <!-- Progresso -->
+                    {% if assignment.get_status != 'pending' %}
+                        {% with progress=assignment.get_progress %}
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted">Progresso</small>
+                                <small class="text-muted">{{ progress.completed }}/{{ progress.total }}</small>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar 
+                                    {% if progress.percentage == 100 %}bg-success
+                                    {% elif progress.percentage >= 75 %}bg-info
+                                    {% elif progress.percentage >= 50 %}bg-warning
+                                    {% else %}bg-danger{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ progress.percentage }}%">
+                                </div>
+                            </div>
+                        </div>
+                        {% endwith %}
+                    {% endif %}
+
+                    <!-- Próximas Execuções -->
+                    {% if assignment.get_next_execution_dates %}
+                    <div class="mt-3">
+                        <small class="text-muted"><strong>Próximas execuções:</strong></small>
+                        {% for date in assignment.get_next_execution_dates|slice:":3" %}
+                            <br><small class="text-info">{{ date|date:"d/m/Y (l)" }}</small>
+                        {% endfor %}
+                        {% if assignment.get_next_execution_dates|length > 3 %}
+                            <br><small class="text-muted">e mais {{ assignment.get_next_execution_dates|length|add:"-3" }} datas...</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        {% if assignment.get_status == 'completed' %}
+                            <span class="text-success">
+                                <i class="fas fa-check-circle"></i> Concluído
+                            </span>
+                            <a href="{% url 'execute_checklist' assignment.id %}" class="btn btn-outline-success btn-sm">
+                                <i class="fas fa-eye"></i> Ver
+                            </a>
+                        {% else %}
+                            <span class="text-muted">
+                                {% if assignment.is_due_today %}
+                                    <i class="fas fa-exclamation-triangle text-warning"></i> Vence hoje
+                                {% elif assignment.get_status == 'in_progress' %}
+                                    <i class="fas fa-play text-info"></i> Em andamento
+                                {% else %}
+                                    <i class="fas fa-clock"></i> Aguardando
+                                {% endif %}
+                            </span>
+                            <a href="{% url 'execute_checklist' assignment.id %}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-play"></i> 
+                                {% if assignment.get_status == 'in_progress' %}Continuar{% else %}Executar{% endif %}
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle fa-2x mb-3"></i>
+                <h5>Nenhum checklist encontrado</h5>
+                <p class="mb-3">
+                    {% if request.GET.status or request.GET.schedule_type or request.GET.date_from %}
+                        Nenhum checklist corresponde aos filtros aplicados.
+                    {% else %}
+                        Você ainda não tem checklists atribuídos.
+                    {% endif %}
+                </p>
+                <a href="{% url 'checklists_dashboard' %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Ver Dashboard
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Paginação -->
+    {% if is_paginated %}
+    <nav aria-label="Navegação de páginas">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ num }}</span>
+                    </li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<style>
+.checklist-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.checklist-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.progress {
+    background-color: #e9ecef;
+}
+
+.card-header h6 {
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .row.g-3 > .col-md-3 {
+        margin-bottom: 1rem;
+    }
+    
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .d-flex.justify-content-between .btn {
+        margin-top: 0.5rem;
+    }
+}
+</style>
+{% endblock %}

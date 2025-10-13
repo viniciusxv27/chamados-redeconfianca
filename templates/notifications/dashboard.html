@@ -193,9 +193,11 @@
                                         {% endif %}
                                     </div>
                                 </div>
-                                
-                                <p class="text-gray-600 mb-3">{{ notification.notification.message }}</p>
-                                
+
+                                <section>
+                                    <p class="text-gray-600 mb-3">{{ notification.notification.message|safe }}</p>
+                                </section>
+
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center text-sm text-gray-500 space-x-4">
                                         <span class="flex items-center">

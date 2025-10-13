@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% load checklist_tags %}
+
+{% block title %}Executar Checklist{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mt-4 text-green-600">✅ {{ assignment.template.name }}</h1>
+            <p class="text-muted">{{ assignment.template.description }}</p>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-info">{{ assignment.get_schedule_type_display }}</span>
+        </div>
+    </div>
+
+    <!-- Informações do Checklist -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-green-500 text-white">
+            <h6 class="mb-0">Informações da Execução</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>Responsável:</strong><br>
+                    {{ assignment.assigned_to.first_name }} {{ assignment.assigned_to.last_name }}
+                </div>
+                <div class="col-md-4">
+                    <strong>Data de Execução:</strong><br>
+                    {{ execution_date|date:"d/m/Y" }}
+                </div>
+                <div class="col-md-4">
+                    <strong>Status:</strong><br>
+                    {% if execution %}
+                        {% if execution.completed_at %}
+                            <span class="badge bg-success">Concluído em {{ execution.completed_at|date:"d/m/Y H:i" }}</span>
+                        {% else %}
+                            <span class="badge bg-warning">Em Execução</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="badge bg-secondary">Não Iniciado</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not execution or not execution.completed_at %}
+    <!-- Formulário de Execução -->
+    <form method="post" id="checklistForm">
+        {% csrf_token %}
+        
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Tarefas do Checklist</h6>
+                <div>
+                    <span id="completed-count">0</span> / {{ assignment.template.tasks.count }} concluídas
+                </div>
+            </div>
+            <div class="card-body">
+                {% for task in assignment.template.tasks.all %}
+                <div class="card mb-3 task-card">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start">
+                            <div class="form-check me-3">
+                                <input class="form-check-input task-checkbox" 
+                                       type="checkbox" 
+                                       name="task_{{ task.id }}" 
+                                       id="task_{{ task.id }}"
+                                       {% if task.id in completed_task_ids %}checked{% endif %}>
+                                <label class="form-check-label" for="task_{{ task.id }}"></label>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="card-title mb-2">{{ task.title }}</h6>
+                                {% if task.description %}
+                                    <p class="card-text text-muted mb-2">{{ task.description }}</p>
+                                {% endif %}
+                                
+                                <!-- Observações da Tarefa -->
+                                <div class="mt-3">
+                                    <label for="observation_{{ task.id }}" class="form-label small">
+                                        <strong>Observações:</strong>
+                                    </label>
+                                    <textarea name="observation_{{ task.id }}" 
+                                              id="observation_{{ task.id }}" 
+                                              class="form-control form-control-sm" 
+                                              rows="2" 
+                                              placeholder="Adicione observações sobre esta tarefa...">{% if task_observations %}{{ task_observations|get_item:task.id }}{% endif %}</textarea>
+                                </div>
+                                
+                                {% if task.id in completed_task_ids %}
+                                    <div class="mt-2">
+                                        <small class="text-success">
+                                            <i class="fas fa-check-circle"></i> 
+                                            Concluída
+                                        </small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Este checklist não possui tarefas definidas.
+                </div>
+                {% endfor %}
+            </div>
+            
+            {% if assignment.template.tasks.exists %}
+            <div class="card-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="progress flex-grow-1 me-3" style="height: 25px;">
+                        <div class="progress-bar bg-success" 
+                             role="progressbar" 
+                             id="progress-bar" 
+                             style="width: 0%">
+                            <span id="progress-text">0%</span>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-lg" id="saveBtn">
+                        <i class="fas fa-save"></i> Salvar Progresso
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+    {% else %}
+    <!-- Checklist Concluído -->
+    <div class="card shadow">
+        <div class="card-header bg-success text-white">
+            <h6 class="mb-0">Checklist Concluído</h6>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <h5>Parabéns! Checklist concluído com sucesso!</h5>
+                <p class="mb-0">Concluído em {{ execution.completed_at|date:"d/m/Y \à\s H:i" }}</p>
+            </div>
+            
+            <!-- Mostrar tarefas concluídas -->
+            <h6>Resumo das Tarefas:</h6>
+            {% for task_execution in execution.task_executions.all %}
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <strong>{{ task_execution.task.title }}</strong>
+                {% if task_execution.observations %}
+                    <small class="text-muted ms-2">- {{ task_execution.observations }}</small>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Botões de Navegação -->
+    <div class="text-center mt-4">
+        <a href="{% url 'checklists_dashboard' %}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
+        </a>
+        <a href="{% url 'my_checklists' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-list"></i> Meus Checklists
+        </a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.task-checkbox');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const completedCount = document.getElementById('completed-count');
+    const saveBtn = document.getElementById('saveBtn');
+    
+    function updateProgress() {
+        const total = checkboxes.length;
+        const completed = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+        
+        if (progressBar) {
+            progressBar.style.width = percentage + '%';
+        }
+        if (progressText) {
+            progressText.textContent = percentage + '%';
+        }
+        if (completedCount) {
+            completedCount.textContent = completed;
+        }
+        
+        // Atualizar cor da barra de progresso
+        if (progressBar) {
+            progressBar.className = 'progress-bar';
+            if (percentage === 100) {
+                progressBar.classList.add('bg-success');
+                if (saveBtn) {
+                    saveBtn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finalizar Checklist';
+                    saveBtn.classList.remove('btn-success');
+                    saveBtn.classList.add('btn-warning');
+                }
+            } else if (percentage >= 75) {
+                progressBar.classList.add('bg-info');
+            } else if (percentage >= 50) {
+                progressBar.classList.add('bg-warning');
+            } else {
+                progressBar.classList.add('bg-danger');
+            }
+        }
+    }
+    
+    // Event listeners para as checkboxes
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateProgress);
+    });
+    
+    // Inicializar progresso
+    updateProgress();
+    
+    // Auto-save a cada mudança
+    let saveTimeout;
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                // Auto-salvar após 2 segundos de inatividade
+                if (document.getElementById('checklistForm')) {
+                    const formData = new FormData(document.getElementById('checklistForm'));
+                    
+                    fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Mostrar feedback visual
+                            const btn = document.getElementById('saveBtn');
+                            const originalText = btn.innerHTML;
+                            btn.innerHTML = '<i class="fas fa-check"></i> Salvo!';
+                            btn.classList.add('btn-outline-success');
+                            setTimeout(() => {
+                                btn.innerHTML = originalText;
+                                btn.classList.remove('btn-outline-success');
+                            }, 2000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro no auto-save:', error);
+                    });
+                }
+            }, 2000);
+        });
+    });
+});
+</script>
+
+<style>
+.task-card {
+    border-left: 4px solid #28a745;
+    transition: all 0.3s ease;
+}
+
+.task-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.progress {
+    background-color: #e9ecef;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .d-flex.justify-content-between.align-items-center {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .progress {
+        margin-bottom: 1rem;
+    }
+}
+</style>
+{% endblock %}

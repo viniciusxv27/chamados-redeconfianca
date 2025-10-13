@@ -1,0 +1,782 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Atribuir Checklist - Rede Confiança{% endblock %}
+
+{% block extra_css %}
+<style>
+.template-card {
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.template-card:hover {
+    border-color: #fb923c;
+    transform: translateY(-2px);
+}
+.template-card.selected {
+    border-color: #fb923c;
+    background-color: #fff7ed;
+}
+.schedule-option {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+.schedule-option:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+.schedule-option.selected {
+    border-color: #f97316 !important;
+    background: linear-gradient(135deg, #fff7ed, #fed7aa) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(249, 115, 22, 0.2);
+}
+.schedule-option::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+.schedule-option:hover::before {
+    left: 100%;
+}
+.calendar-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #e5e7eb;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    background: white;
+    position: relative;
+}
+.calendar-day:hover {
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+    border-color: #3b82f6;
+    transform: scale(1.1);
+    z-index: 10;
+}
+.calendar-day.selected {
+    background: linear-gradient(135deg, #f97316, #ea580c) !important;
+    color: white !important;
+    border-color: #c2410c !important;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+}
+.calendar-day.other-month {
+    color: #d1d5db;
+    background: #f9fafb;
+}
+.calendar-day.today {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #047857;
+}
+/* Animação de entrada para os elementos do calendário */
+.calendar-day {
+    animation: fadeInScale 0.3s ease-out;
+}
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fadeOutScale {
+    from {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    to {
+        opacity: 0.7;
+        transform: scale(0.9);
+    }
+}
+
+/* Pulse animation for selected dates */
+@keyframes selectedPulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+    }
+    50% {
+        box-shadow: 0 6px 18px rgba(249, 115, 22, 0.6);
+    }
+}
+
+.calendar-day.selected {
+    background: linear-gradient(135deg, #f97316, #ea580c) !important;
+    color: white !important;
+    border-color: #c2410c !important;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+    font-weight: bold;
+    animation: selectedPulse 2s ease-in-out infinite;
+}
+.calendar-day.disabled {
+    background-color: #f9fafb;
+    color: #d1d5db;
+    cursor: not-allowed;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center space-x-4">
+            <a href="{% url 'checklists:dashboard' %}" 
+               class="text-gray-600 hover:text-gray-800">
+                <i class="fas fa-arrow-left text-xl"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Atribuir Checklist</h1>
+                <p class="text-gray-600 mt-2">Atribua um checklist para um usuário específico</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border">
+        <form method="POST" class="p-8 space-y-8" id="assignment-form">
+            {% csrf_token %}
+            
+            <!-- Seleção de Template -->
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Selecione o Checklist</h2>
+                {% if templates %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for template in templates %}
+                        <div class="template-card bg-white p-4 rounded-lg border" onclick="selectTemplate({{ template.id }})">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">{{ template.name }}</h3>
+                                    <p class="text-sm text-gray-600 mt-1">{{ template.description }}</p>
+                                </div>
+                                <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                                    {{ template.tasks.count }} tarefas
+                                </span>
+                            </div>
+                            
+                            <!-- Preview das tarefas -->
+                            <div class="text-sm text-gray-500">
+                                <p class="font-medium mb-1">Tarefas:</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    {% for task in template.tasks.all|slice:":3" %}
+                                        <li>{{ task.title }}</li>
+                                    {% endfor %}
+                                    {% if template.tasks.count > 3 %}
+                                        <li class="text-gray-400">... e mais {{ template.tasks.count|add:"-3" }}</li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                            
+                            <input type="radio" name="template_id" value="{{ template.id }}" class="hidden" id="template_{{ template.id }}">
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-clipboard text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500">Nenhum template disponível no seu setor.</p>
+                        <p class="text-gray-400 text-sm mt-2">Entre em contato com o administrador para criar templates.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Seleção de Usuário -->
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Para quem atribuir?</h2>
+                <div class="relative">
+                    <input type="text" 
+                           id="user_search" 
+                           placeholder="Digite o nome do usuário..."
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <div id="user_results" class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 hidden max-h-60 overflow-y-auto"></div>
+                </div>
+                <input type="hidden" name="assigned_to" id="selected_user_id" required>
+                <div id="selected_user" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                            <span class="text-white font-bold text-sm" id="selected_user_initials"></span>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900" id="selected_user_name"></p>
+                            <p class="text-sm text-gray-600" id="selected_user_details"></p>
+                        </div>
+                        <button type="button" onclick="clearUserSelection()" class="ml-auto text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agendamento -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+                <div class="flex items-center mb-6">
+                    <i class="fas fa-calendar-check text-2xl text-blue-500 mr-3"></i>
+                    <h2 class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Quando executar?</h2>
+                </div>
+                
+                <!-- Opções predefinidas -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div class="schedule-option bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-200 text-center hover:from-blue-100 hover:to-blue-200 transition-all duration-300 transform hover:scale-105 cursor-pointer" onclick="selectScheduleType('this_week')">
+                        <div class="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-calendar-week text-xl text-white"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-900 mb-1">Esta Semana</h3>
+                        <p class="text-sm text-gray-600">Segunda a Domingo</p>
+                        <input type="radio" name="schedule_type" value="this_week" class="hidden" id="schedule_this_week">
+                    </div>
+                    
+                    <div class="schedule-option bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border-2 border-green-200 text-center hover:from-green-100 hover:to-green-200 transition-all duration-300 transform hover:scale-105 cursor-pointer" onclick="selectScheduleType('weekdays_month')">
+                        <div class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-business-time text-xl text-white"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-900 mb-1">Dias Úteis</h3>
+                        <p class="text-sm text-gray-600">Seg-Sex do mês</p>
+                        <input type="radio" name="schedule_type" value="weekdays_month" class="hidden" id="schedule_weekdays_month">
+                    </div>
+                    
+                    <div class="schedule-option bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-200 text-center hover:from-purple-100 hover:to-purple-200 transition-all duration-300 transform hover:scale-105 cursor-pointer" onclick="selectScheduleType('weekends_month')">
+                        <div class="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-calendar-minus text-xl text-white"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-900 mb-1">Fins de Semana</h3>
+                        <p class="text-sm text-gray-600">Sáb-Dom do mês</p>
+                        <input type="radio" name="schedule_type" value="weekends_month" class="hidden" id="schedule_weekends_month">
+                    </div>
+                    
+                    <div class="schedule-option bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 text-center hover:from-orange-100 hover:to-orange-200 transition-all duration-300 transform hover:scale-105 cursor-pointer" onclick="selectScheduleType('custom')">
+                        <div class="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-calendar-alt text-xl text-white"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-900 mb-1">Personalizado</h3>
+                        <p class="text-sm text-gray-600">Selecionar datas</p>
+                        <input type="radio" name="schedule_type" value="custom" class="hidden" id="schedule_custom">
+                    </div>
+                </div>
+
+                <!-- Período para opções predefinidas -->
+                <div id="date_range_section" class="hidden mb-8">
+                    <div class="bg-gradient-to-r from-gray-50 to-gray-100 p-6 rounded-xl border-2 border-gray-200">
+                        <div class="flex items-center mb-4">
+                            <i class="fas fa-calendar-day text-lg text-blue-500 mr-2"></i>
+                            <h3 class="text-lg font-semibold text-gray-800">Período de Execução</h3>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-bold text-gray-700 flex items-center">
+                                    <i class="fas fa-play text-green-500 mr-2"></i>
+                                    Data de Início
+                                </label>
+                                <input type="date" 
+                                       name="start_date" 
+                                       id="start_date"
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium"
+                                       required>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-bold text-gray-700 flex items-center">
+                                    <i class="fas fa-stop text-red-500 mr-2"></i>
+                                    Data de Fim
+                                </label>
+                                <input type="date" 
+                                       name="end_date" 
+                                       id="end_date"
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium"
+                                       required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calendário para seleção personalizada -->
+                <div id="custom_calendar_section" class="mb-8">
+                        <div class="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl shadow-lg border-2 border-gray-200">
+                        <div class="flex justify-between items-center mb-6">
+                            <div class="flex items-center">
+                                <i class="fas fa-calendar-plus text-2xl text-orange-500 mr-3"></i>
+                                <div>
+                                    <h3 id="calendar_title" class="text-xl font-bold text-gray-900">Selecione as Datas</h3>
+                                    <p id="calendar_subtitle" class="text-sm text-gray-500 mt-1"></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <button type="button" 
+                                        onclick="changeCalendarMonth(-1)" 
+                                        class="p-3 hover:bg-orange-100 rounded-full transition-all duration-300 transform hover:scale-110 text-orange-600">
+                                    <i class="fas fa-chevron-left text-lg"></i>
+                                </button>
+                                <div class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-2 rounded-xl">
+                                    <span id="calendar_month_year" class="font-bold text-lg"></span>
+                                </div>
+                                <button type="button" 
+                                        onclick="changeCalendarMonth(1)" 
+                                        class="p-3 hover:bg-orange-100 rounded-full transition-all duration-300 transform hover:scale-110 text-orange-600">
+                                    <i class="fas fa-chevron-right text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Cabeçalhos dos dias da semana -->
+                        <div class="grid grid-cols-7 gap-2 mb-3">
+                            <div class="text-center font-bold text-red-600 p-3 bg-red-50 rounded-lg">Dom</div>
+                            <div class="text-center font-bold text-gray-700 p-3 bg-gray-100 rounded-lg">Seg</div>
+                            <div class="text-center font-bold text-gray-700 p-3 bg-gray-100 rounded-lg">Ter</div>
+                            <div class="text-center font-bold text-gray-700 p-3 bg-gray-100 rounded-lg">Qua</div>
+                            <div class="text-center font-bold text-gray-700 p-3 bg-gray-100 rounded-lg">Qui</div>
+                            <div class="text-center font-bold text-gray-700 p-3 bg-gray-100 rounded-lg">Sex</div>
+                            <div class="text-center font-bold text-blue-600 p-3 bg-blue-50 rounded-lg">Sáb</div>
+                        </div>
+                        
+                        <!-- Dias do calendário -->
+                        <div id="calendar_days" class="grid grid-cols-7 gap-2 mb-6"></div>
+                        
+                        <!-- Contador de datas -->
+                        <div class="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-xl border-2 border-green-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <i class="fas fa-calendar-check text-green-600 mr-2"></i>
+                                    <span class="font-bold text-green-800">
+                                        <span id="selected_dates_count" class="text-2xl">0</span> 
+                                        <span class="text-lg">datas selecionadas</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span id="current_month_info" class="text-sm text-green-700 bg-green-200 px-3 py-1 rounded-full"></span>
+                                    <button type="button" 
+                                            onclick="clearAllDates()" 
+                                            class="text-red-500 hover:text-red-700 transition-colors px-2 py-1 hover:bg-red-50 rounded"
+                                            title="Limpar todas as datas">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden field for custom dates -->
+            <input type="hidden" name="custom_dates" id="custom_dates_input" value="[]">
+
+            <!-- Botões -->
+            <div class="flex justify-between pt-6 border-t">
+                <a href="{% url 'checklists:dashboard' %}" 
+                   class="px-6 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="px-8 py-3 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        id="submit_btn"
+                        disabled>
+                    <i class="fas fa-clipboard-check mr-2"></i>
+                    Atribuir Checklist
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let selectedTemplateId = null;
+let selectedUserId = null;
+let selectedScheduleType = null;
+let selectedCustomDates = [];
+let currentCalendarDate = new Date();
+
+// Template selection
+function selectTemplate(templateId) {
+    document.querySelectorAll('.template-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    event.target.closest('.template-card').classList.add('selected');
+    document.getElementById(`template_${templateId}`).checked = true;
+    selectedTemplateId = templateId;
+    
+    checkFormValidity();
+}
+
+// Schedule type selection
+function selectScheduleType(type) {
+    document.querySelectorAll('.schedule-option').forEach(option => {
+        option.classList.remove('selected');
+    });
+    
+    event.target.closest('.schedule-option').classList.add('selected');
+    document.getElementById(`schedule_${type}`).checked = true;
+    selectedScheduleType = type;
+    
+    // Show/hide sections - sempre mostrar o calendário para feedback visual
+    document.getElementById('date_range_section').classList.toggle('hidden', type === 'custom');
+    document.getElementById('custom_calendar_section').classList.remove('hidden');
+    
+    if (type === 'custom') {
+        // Limpar datas selecionadas e renderizar calendário
+        selectedCustomDates = [];
+        document.getElementById('custom_dates_input').value = JSON.stringify(selectedCustomDates);
+        document.getElementById('selected_dates_count').textContent = selectedCustomDates.length;
+        renderCalendar();
+    } else {
+        // Set dates based on schedule type
+        const today = new Date();
+        let startDate, endDate;
+        
+        if (type === 'this_week') {
+            // Esta semana - do domingo ao sábado atual
+            const dayOfWeek = today.getDay();
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - dayOfWeek);
+            endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6);
+        } else if (type === 'weekdays_month' || type === 'weekends_month') {
+            // Mês atual
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        }
+        
+        document.getElementById('start_date').value = startDate.toISOString().split('T')[0];
+        document.getElementById('end_date').value = endDate.toISOString().split('T')[0];
+        
+        // Pre-selecionar datas no calendário
+        preselectDatesForScheduleType(type, startDate, endDate);
+    }
+    
+    // Atualizar título do calendário
+    const titles = {
+        'this_week': 'Datas da Semana Selecionada',
+        'weekdays_month': 'Dias Úteis do Período',
+        'weekends_month': 'Fins de Semana do Período',
+        'custom': 'Selecione as Datas'
+    };
+    
+    const subtitles = {
+        'this_week': 'Visualização das datas da semana atual',
+        'weekdays_month': 'Segunda-feira a sexta-feira do período selecionado',
+        'weekends_month': 'Sábados e domingos do período selecionado',
+        'custom': 'Clique nos dias do calendário para selecionar datas específicas'
+    };
+    
+    document.getElementById('calendar_title').textContent = titles[type];
+    document.getElementById('calendar_subtitle').textContent = subtitles[type];
+    
+    // Sempre renderizar o calendário após a seleção
+    renderCalendar();
+    updateSchedulePreview();
+    
+    checkFormValidity();
+}
+
+// Pre-selecionar datas baseado no tipo de agendamento
+function preselectDatesForScheduleType(type, startDate, endDate) {
+    selectedCustomDates = [];
+    
+    const current = new Date(startDate);
+    
+    while (current <= endDate) {
+        const dayOfWeek = current.getDay();
+        let shouldInclude = false;
+        
+        if (type === 'this_week') {
+            shouldInclude = true; // Toda semana
+        } else if (type === 'weekdays_month') {
+            shouldInclude = dayOfWeek >= 1 && dayOfWeek <= 5; // Segunda a sexta
+        } else if (type === 'weekends_month') {
+            shouldInclude = dayOfWeek === 0 || dayOfWeek === 6; // Sábado e domingo
+        }
+        
+        if (shouldInclude) {
+            selectedCustomDates.push(current.toISOString().split('T')[0]);
+        }
+        
+        current.setDate(current.getDate() + 1);
+    }
+    
+    document.getElementById('custom_dates_input').value = JSON.stringify(selectedCustomDates);
+}
+
+// User search functionality
+let searchTimeout;
+document.getElementById('user_search').addEventListener('input', function() {
+    const query = this.value.trim();
+    
+    clearTimeout(searchTimeout);
+    
+    if (query.length < 2) {
+        document.getElementById('user_results').classList.add('hidden');
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch(`{% url 'checklists:api_search_users' %}?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById('user_results');
+                resultsDiv.innerHTML = '';
+                
+                if (data.users.length > 0) {
+                    data.users.forEach(user => {
+                        const userDiv = document.createElement('div');
+                        userDiv.className = 'p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0';
+                        userDiv.innerHTML = `
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-bold text-xs">${user.name.split(' ').map(n => n[0]).join('')}</span>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-gray-900">${user.name}</p>
+                                    <p class="text-sm text-gray-600">${user.email} • ${user.sector}</p>
+                                </div>
+                            </div>
+                        `;
+                        userDiv.addEventListener('click', () => selectUser(user));
+                        resultsDiv.appendChild(userDiv);
+                    });
+                    resultsDiv.classList.remove('hidden');
+                } else {
+                    resultsDiv.innerHTML = '<div class="p-3 text-gray-500 text-center">Nenhum usuário encontrado</div>';
+                    resultsDiv.classList.remove('hidden');
+                }
+            });
+    }, 300);
+});
+
+function selectUser(user) {
+    selectedUserId = user.id;
+    document.getElementById('selected_user_id').value = user.id;
+    document.getElementById('user_search').value = user.name;
+    document.getElementById('user_results').classList.add('hidden');
+    
+    // Show selected user
+    document.getElementById('selected_user_name').textContent = user.name;
+    document.getElementById('selected_user_details').textContent = `${user.email} • ${user.sector}`;
+    document.getElementById('selected_user_initials').textContent = user.name.split(' ').map(n => n[0]).join('');
+    document.getElementById('selected_user').classList.remove('hidden');
+    
+    checkFormValidity();
+}
+
+function clearUserSelection() {
+    selectedUserId = null;
+    document.getElementById('selected_user_id').value = '';
+    document.getElementById('user_search').value = '';
+    document.getElementById('selected_user').classList.add('hidden');
+    checkFormValidity();
+}
+
+// Calendar functionality
+function renderCalendar() {
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    
+    document.getElementById('calendar_month_year').textContent = 
+        new Date(year, month).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay());
+    
+    const calendarDays = document.getElementById('calendar_days');
+    calendarDays.innerHTML = '';
+    
+    for (let i = 0; i < 42; i++) {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + i);
+        
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'calendar-day';
+        dayDiv.textContent = date.getDate();
+        
+        const dateString = date.toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0];
+        
+        if (date.getMonth() !== month) {
+            dayDiv.classList.add('other-month');
+            dayDiv.style.pointerEvents = 'none';
+        } else {
+            // Só permitir clique se estiver no modo personalizado
+            if (selectedScheduleType === 'custom') {
+                dayDiv.onclick = () => toggleCustomDate(dateString, dayDiv);
+                dayDiv.style.cursor = 'pointer';
+            } else {
+                dayDiv.style.cursor = 'default';
+                dayDiv.title = 'Modo de visualização - selecione "Personalizado" para editar';
+            }
+            
+            if (dateString === today) {
+                dayDiv.classList.add('today');
+            }
+            
+            if (selectedCustomDates.includes(dateString)) {
+                dayDiv.classList.add('selected');
+            }
+        }
+        
+        // Adicionar efeito visual melhorado para datas selecionadas
+        if (selectedCustomDates.includes(dateString) && date.getMonth() === month) {
+            dayDiv.style.background = 'linear-gradient(135deg, #f97316, #ea580c)';
+            dayDiv.style.color = 'white';
+            dayDiv.style.borderColor = '#c2410c';
+            dayDiv.style.borderRadius = '0.2rem';
+            dayDiv.style.transform = 'scale(1.05)';
+            dayDiv.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.4)';
+            dayDiv.style.fontWeight = 'bold';
+        }
+        
+        calendarDays.appendChild(dayDiv);
+    }
+    
+    // Atualizar contador de datas selecionadas
+    const currentMonthDates = selectedCustomDates.filter(dateStr => {
+        const date = new Date(dateStr);
+        return date.getFullYear() === year && date.getMonth() === month;
+    });
+    
+    document.getElementById('selected_dates_count').textContent = selectedCustomDates.length;
+    
+    // Adicionar informação sobre o mês atual
+    const monthInfo = document.getElementById('current_month_info');
+    if (monthInfo) {
+        if (currentMonthDates.length > 0) {
+            monthInfo.textContent = `${currentMonthDates.length} neste mês`;
+            monthInfo.style.display = 'block';
+        } else {
+            monthInfo.style.display = 'none';
+        }
+    }
+}
+
+function changeCalendarMonth(direction) {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+    renderCalendar();
+}
+
+function toggleCustomDate(dateString, dayElement) {
+    const index = selectedCustomDates.indexOf(dateString);
+    
+    if (index > -1) {
+        // Remover data selecionada
+        selectedCustomDates.splice(index, 1);
+        dayElement.classList.remove('selected');
+        
+        // Resetar estilos para estado normal
+        dayElement.style.background = '';
+        dayElement.style.color = '';
+        dayElement.style.borderColor = '';
+        dayElement.style.transform = '';
+        dayElement.style.boxShadow = '';
+        dayElement.style.fontWeight = '';
+        
+        // Adicionar animação de remoção
+        dayElement.style.animation = 'fadeOutScale 0.3s ease-out';
+        setTimeout(() => {
+            dayElement.style.animation = '';
+        }, 300);
+    } else {
+        // Adicionar data selecionada
+        selectedCustomDates.push(dateString);
+        dayElement.classList.add('selected');
+        
+        // Aplicar estilos de seleção com animação
+        dayElement.style.background = 'linear-gradient(135deg, #f97316, #ea580c)';
+        dayElement.style.color = 'white';
+        dayElement.style.borderColor = '#c2410c';
+        dayElement.style.transform = 'scale(1.05)';
+        dayElement.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.4)';
+        dayElement.style.fontWeight = 'bold';
+        
+        // Adicionar animação de entrada
+        dayElement.style.animation = 'fadeInScale 0.3s ease-out';
+        setTimeout(() => {
+            dayElement.style.animation = '';
+        }, 300);
+    }
+    
+    // Atualizar dados e validação
+    document.getElementById('custom_dates_input').value = JSON.stringify(selectedCustomDates);
+    document.getElementById('selected_dates_count').textContent = selectedCustomDates.length;
+    
+    checkFormValidity();
+}
+
+// Função para limpar todas as datas selecionadas
+function clearAllDates() {
+    selectedCustomDates = [];
+    document.getElementById('custom_dates_input').value = JSON.stringify(selectedCustomDates);
+    document.getElementById('selected_dates_count').textContent = '0';
+    
+    // Atualizar visual do calendário
+    renderCalendar();
+    checkFormValidity();
+}
+
+// Função para mostrar preview das datas nos botões predefinidos
+function updateSchedulePreview() {
+    if (selectedScheduleType !== 'custom' && selectedCustomDates.length > 0) {
+        const previewElement = document.querySelector(`#schedule_${selectedScheduleType}`).closest('.schedule-option').querySelector('.preview-dates');
+        if (!previewElement) {
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'preview-dates text-xs text-gray-500 mt-2';
+            previewDiv.innerHTML = `<i class="fas fa-info-circle mr-1"></i>${selectedCustomDates.length} datas selecionadas`;
+            document.querySelector(`#schedule_${selectedScheduleType}`).closest('.schedule-option').appendChild(previewDiv);
+        }
+    }
+}
+
+// Form validation
+function checkFormValidity() {
+    const hasTemplate = selectedTemplateId !== null;
+    const hasUser = selectedUserId !== null;
+    const hasSchedule = selectedScheduleType !== null;
+    const hasValidDates = selectedScheduleType === 'custom' ? selectedCustomDates.length > 0 : true;
+    
+    document.getElementById('submit_btn').disabled = !(hasTemplate && hasUser && hasSchedule && hasValidDates);
+}
+
+// Date validation
+document.getElementById('start_date').addEventListener('change', function() {
+    document.getElementById('end_date').min = this.value;
+});
+
+document.getElementById('end_date').addEventListener('change', function() {
+    document.getElementById('start_date').max = this.value;
+});
+
+// Close search results when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('#user_search') && !event.target.closest('#user_results')) {
+        document.getElementById('user_results').classList.add('hidden');
+    }
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default dates
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    document.getElementById('start_date').value = startDate.toISOString().split('T')[0];
+    document.getElementById('end_date').value = endDate.toISOString().split('T')[0];
+    document.getElementById('start_date').min = today.toISOString().split('T')[0];
+    document.getElementById('end_date').min = today.toISOString().split('T')[0];
+});
+</script>
+{% endblock %}

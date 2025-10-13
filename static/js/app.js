@@ -589,6 +589,13 @@ function updateNotificationBadge(count) {
     }
 }
 
+// Função para remover HTML de texto (para preview)
+function stripHtmlFromText(html) {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    return temp.textContent || temp.innerText || '';
+}
+
 // Renderizar dropdown de notificações
 function renderNotificationDropdown(notifications) {
     if (!notificationDropdown) return;
@@ -614,7 +621,7 @@ function renderNotificationDropdown(notifications) {
                         </div>
                         <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium text-gray-900">${notification.title}</p>
-                            <p class="text-xs text-gray-600 mt-1">${notification.message}</p>
+                            <p class="text-xs text-gray-600 mt-1">${stripHtmlFromText(notification.message_preview || notification.message)}</p>
                             <p class="text-xs text-gray-400 mt-1">${formatNotificationTime(notification.sent_at)}</p>
                         </div>
                         ${!notification.is_read ? '<div class="w-2 h-2 bg-blue-600 rounded-full"></div>' : ''}

@@ -119,6 +119,60 @@
     </div>
     {% endif %}
 
+    <!-- Recent Compliments -->
+    {% if recent_compliments %}
+    <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <i class="fas fa-star text-yellow-500 mr-2"></i>
+            Elogios Recentes
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for compliment in recent_compliments %}
+            <div class="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-star text-white text-sm"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-sm font-medium text-gray-900">
+                                {{ compliment.from_user.get_full_name }} elogiou
+                                {% if compliment.to_user %}
+                                    {{ compliment.to_user.get_full_name }}
+                                {% else %}
+                                    o setor {{ compliment.to_sector.name }}
+                                {% endif %}
+                            </p>
+                            <div class="flex items-center space-x-1 text-yellow-500 text-sm">
+                                {% for i in "12345" %}
+                                    {% if forloop.counter <= compliment.rating %}
+                                        <i class="fas fa-star"></i>
+                                    {% else %}
+                                        <i class="fas fa-star text-gray-300"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-600 mb-2">{{ compliment.created_at|date:"d/m/Y H:i" }}</p>
+                        <p class="text-sm text-gray-700">{{ compliment.comment|truncatewords:15 }}</p>
+                        {% if compliment.to_user == user or compliment.to_sector == user.sector %}
+                        <a href="{% url 'compliments:detail' compliment.id %}" class="text-xs text-yellow-600 hover:text-yellow-800 font-medium mt-1 inline-block">
+                            Ver detalhes →
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="text-center mt-4">
+            <a href="{% url 'compliments:dashboard' %}" class="text-yellow-600 hover:text-yellow-800 font-medium text-sm">
+                Ver todos os elogios →
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Communications Feed -->
     <div class="mb-6">
         <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">

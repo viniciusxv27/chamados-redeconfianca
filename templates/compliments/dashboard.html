@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Painel de Elogios - Rede Confiança{% endblock %}
+
+{% block extra_css %}
+<style>
+.star-rating {
+    color: #fbbf24;
+    font-size: 1.25rem;
+}
+.star-empty {
+    color: #d1d5db;
+}
+.compliment-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.compliment-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Painel de Elogios</h1>
+                <p class="text-gray-600 mt-2">Visualize elogios recebidos e crie novos elogios</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'compliments:my_compliments' %}" 
+                   class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-list mr-2"></i>
+                    Meus Elogios
+                </a>
+                <a href="{% url 'compliments:create' %}" 
+                   class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>
+                    Novo Elogio
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Elogios Recebidos -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                    <i class="fas fa-star text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ user_stats.total_received }}</h3>
+                    <p class="text-gray-600">Elogios Recebidos</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Média de Avaliação -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 text-green-600">
+                    <i class="fas fa-chart-line text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ user_stats.avg_rating|floatformat:1 }}</h3>
+                    <p class="text-gray-600">Média de Estrelas</p>
+                    <div class="star-rating">
+                        {% for i in "12345" %}
+                            {% if forloop.counter <= user_stats.avg_rating|floatformat:0 %}
+                                <i class="fas fa-star"></i>
+                            {% else %}
+                                <i class="fas fa-star star-empty"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Elogios Dados -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                    <i class="fas fa-heart text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ user_stats.total_given }}</h3>
+                    <p class="text-gray-600">Elogios Dados</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Elogios do Setor -->
+        {% if user.sector %}
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                    <i class="fas fa-users text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ sector_stats.total_received }}</h3>
+                    <p class="text-gray-600">Elogios do Setor</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Elogios Recebidos -->
+        <div class="bg-white rounded-lg shadow-sm border">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Elogios Recebidos</h2>
+            </div>
+            <div class="p-6 space-y-4">
+                {% for compliment in received_compliments %}
+                <div class="compliment-card bg-gray-50 p-4 rounded-lg border-l-4 border-yellow-400">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gradient-to-br from-primary to-orange-500 rounded-full flex items-center justify-center">
+                                <span class="text-white font-bold text-sm">{{ compliment.from_user.first_name.0 }}{{ compliment.from_user.last_name.0 }}</span>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">{{ compliment.from_user.get_full_name }}</p>
+                                <p class="text-sm text-gray-600">{{ compliment.created_at|date:"d/m/Y H:i" }}</p>
+                            </div>
+                        </div>
+                        <div class="star-rating">
+                            {% for i in "12345" %}
+                                {% if forloop.counter <= compliment.rating %}
+                                    <i class="fas fa-star"></i>
+                                {% else %}
+                                    <i class="fas fa-star star-empty"></i>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="text-gray-700 text-sm">{{ compliment.comment|truncatewords:20 }}</p>
+                    <a href="{% url 'compliments:detail' compliment.id %}" 
+                       class="text-primary hover:text-orange-600 text-sm font-medium mt-2 inline-block">
+                        Ver detalhes →
+                    </a>
+                </div>
+                {% empty %}
+                <div class="text-center py-8">
+                    <i class="fas fa-star text-4xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-500">Você ainda não recebeu elogios.</p>
+                </div>
+                {% endfor %}
+                
+                {% if received_compliments|length > 10 %}
+                <div class="text-center pt-4">
+                    <a href="{% url 'compliments:my_compliments' %}" 
+                       class="text-primary hover:text-orange-600 font-medium">
+                        Ver todos os elogios →
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Elogios do Setor -->
+        {% if user.sector %}
+        <div class="bg-white rounded-lg shadow-sm border">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Elogios do Setor {{ user.sector.name }}</h2>
+            </div>
+            <div class="p-6 space-y-4">
+                {% for compliment in sector_compliments %}
+                <div class="compliment-card bg-gray-50 p-4 rounded-lg border-l-4 border-purple-400">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                                <span class="text-white font-bold text-sm">{{ compliment.from_user.first_name.0 }}{{ compliment.from_user.last_name.0 }}</span>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">{{ compliment.from_user.get_full_name }}</p>
+                                <p class="text-sm text-gray-600">{{ compliment.created_at|date:"d/m/Y H:i" }}</p>
+                            </div>
+                        </div>
+                        <div class="star-rating">
+                            {% for i in "12345" %}
+                                {% if forloop.counter <= compliment.rating %}
+                                    <i class="fas fa-star"></i>
+                                {% else %}
+                                    <i class="fas fa-star star-empty"></i>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="text-gray-700 text-sm">{{ compliment.comment|truncatewords:20 }}</p>
+                </div>
+                {% empty %}
+                <div class="text-center py-8">
+                    <i class="fas fa-users text-4xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-500">Seu setor ainda não recebeu elogios.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Distribuição de Avaliações -->
+    {% if user_stats.total_received > 0 %}
+    <div class="bg-white rounded-lg shadow-sm border mt-8">
+        <div class="p-6 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">Distribuição de Avaliações</h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-3">
+                {% for rating, count in user_stats.rating_distribution.items %}
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 w-20">
+                        <span class="font-medium">{{ rating }}</span>
+                        <i class="fas fa-star text-yellow-400"></i>
+                    </div>
+                    <div class="flex-1 bg-gray-200 rounded-full h-3">
+                        {% widthratio count user_stats.total_received 100 as percentage %}
+                        <div class="bg-yellow-400 h-3 rounded-full" style="width: {{ percentage }}%"></div>
+                    </div>
+                    <span class="text-sm text-gray-600 w-16">{{ count }} ({{ percentage }}%)</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

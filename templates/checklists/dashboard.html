@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklists - Rede Confiança{% endblock %}
+
+{% block extra_css %}
+<style>
+.checklist-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.checklist-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.status-pending { background-color: #fef3c7; color: #92400e; }
+.status-in_progress { background-color: #dbeafe; color: #1e40af; }
+.status-completed { background-color: #d1fae5; color: #065f46; }
+.status-overdue { background-color: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Checklists ADM</h1>
+                <p class="text-gray-600 mt-2">Gerencie e execute checklists administrativos</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'checklists:my_checklists' %}" 
+                   class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-list mr-2"></i>
+                    Meus Checklists
+                </a>
+                <a href="{% url 'checklists:create_assignment' %}" 
+                   class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>
+                    Atribuir Checklist
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                    <i class="fas fa-clipboard-list text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ stats.total_assignments }}</h3>
+                    <p class="text-gray-600">Checklists Ativos</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                    <i class="fas fa-clock text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ stats.today_pending }}</h3>
+                    <p class="text-gray-600">Pendentes Hoje</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 text-green-600">
+                    <i class="fas fa-check-circle text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ stats.today_completed }}</h3>
+                    <p class="text-gray-600">Concluídos Hoje</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-red-100 text-red-600">
+                    <i class="fas fa-exclamation-triangle text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ stats.overdue }}</h3>
+                    <p class="text-gray-600">Atrasados</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Execuções de Hoje -->
+        <div class="bg-white rounded-lg shadow-sm border">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Checklists de Hoje</h2>
+            </div>
+            <div class="p-6">
+                {% if today_executions %}
+                    <div class="space-y-4">
+                        {% for execution in today_executions %}
+                        <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 class="font-medium text-gray-900">{{ execution.assignment.template.name }}</h3>
+                                    <p class="text-sm text-gray-600">{{ execution.assignment.template.description|truncatewords:10 }}</p>
+                                </div>
+                                <span class="status-badge status-{{ execution.status }}">
+                                    {% if execution.status == 'pending' %}
+                                        <i class="fas fa-clock mr-1"></i> Pendente
+                                    {% elif execution.status == 'in_progress' %}
+                                        <i class="fas fa-play mr-1"></i> Em Andamento
+                                    {% elif execution.status == 'completed' %}
+                                        <i class="fas fa-check mr-1"></i> Concluído
+                                    {% elif execution.status == 'overdue' %}
+                                        <i class="fas fa-exclamation mr-1"></i> Atrasado
+                                    {% endif %}
+                                </span>
+                            </div>
+                            
+                            <!-- Barra de Progresso -->
+                            <div class="mb-3">
+                                <div class="flex justify-between text-sm text-gray-600 mb-1">
+                                    <span>Progresso</span>
+                                    <span>{{ execution.progress_percentage }}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="h-2 rounded-full {% if execution.status == 'completed' %}bg-green-500{% elif execution.status == 'overdue' %}bg-red-500{% else %}bg-blue-500{% endif %}" 
+                                         style="width: {{ execution.progress_percentage }}%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-500">
+                                    {{ execution.task_executions.count }} tarefas
+                                </span>
+                                <a href="{% url 'checklists:execute_checklist' execution.id %}" 
+                                   class="text-primary hover:text-orange-600 font-medium text-sm">
+                                    {% if execution.status == 'completed' %}
+                                        Ver Detalhes →
+                                    {% else %}
+                                        Executar →
+                                    {% endif %}
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-clipboard-check text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500">Nenhum checklist para hoje.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Meus Checklists Ativos -->
+        <div class="bg-white rounded-lg shadow-sm border">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">Meus Checklists Ativos</h2>
+            </div>
+            <div class="p-6">
+                {% if my_assignments %}
+                    <div class="space-y-4">
+                        {% for assignment in my_assignments %}
+                        <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <h3 class="font-medium text-gray-900">{{ assignment.template.name }}</h3>
+                                    <p class="text-sm text-gray-600">Atribuído por {{ assignment.assigned_by.get_full_name }}</p>
+                                </div>
+                                <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                                    {{ assignment.get_schedule_type_display }}
+                                </span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center text-sm text-gray-500">
+                                <span>{{ assignment.start_date|date:"d/m" }} - {{ assignment.end_date|date:"d/m" }}</span>
+                                <span>{{ assignment.template.tasks.count }} tarefas</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    {% if my_assignments|length >= 5 %}
+                    <div class="text-center pt-4">
+                        <a href="{% url 'checklists:my_checklists' %}" 
+                           class="text-primary hover:text-orange-600 font-medium">
+                            Ver todos os checklists →
+                        </a>
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fas fa-clipboard text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500">Você não possui checklists ativos.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates Disponíveis -->
+    {% if available_templates %}
+    <div class="bg-white rounded-lg shadow-sm border mt-8">
+        <div class="p-6 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">Templates Disponíveis do Seu Setor</h2>
+            <p class="text-gray-600 text-sm mt-1">Você pode atribuir estes checklists para outros usuários</p>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for template in available_templates %}
+                <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="font-medium text-gray-900">{{ template.name }}</h3>
+                            <p class="text-sm text-gray-600 mt-1">{{ template.description|truncatewords:8 }}</p>
+                        </div>
+                        <span class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                            {{ template.tasks.count }} tarefas
+                        </span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-500">{{ template.sector.name }}</span>
+                        <a href="{% url 'checklists:create_assignment' %}?template={{ template.id }}" 
+                           class="text-primary hover:text-orange-600 font-medium text-sm">
+                            Atribuir →
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

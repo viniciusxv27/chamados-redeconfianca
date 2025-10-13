@@ -55,7 +55,9 @@ INSTALLED_APPS = [
     'projects',
     'suppliers',
     'purchases',
-    'webpush',  # Django WebPush
+    'compliments',  # Sistema de elogios
+    'checklists',  # Sistema de checklists
+    # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
 MIDDLEWARE = [
