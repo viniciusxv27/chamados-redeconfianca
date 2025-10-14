@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Detalhes do Elogio{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-pink-50 p-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-4xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
+                    ⭐ Detalhes do Elogio
+                </h1>
+                <a href="{% url 'compliments:dashboard' %}" 
+                   class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
+                    ← Voltar
+                </a>
+            </div>
+        </div>
+
+        <!-- Compliment Card -->
+        <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <!-- Header com gradiente -->
+            <div class="bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 p-8 text-white">
+                <div class="flex items-start justify-between">
+                    <!-- De (Sender) -->
+                    <div class="flex items-center gap-4">
+                        <div class="w-16 h-16 bg-white bg-opacity-30 rounded-full flex items-center justify-center backdrop-blur-sm">
+                            <span class="text-2xl font-bold">
+                                {{ compliment.from_user.first_name.0 }}{{ compliment.from_user.last_name.0 }}
+                            </span>
+                        </div>
+                        <div>
+                            <p class="text-sm opacity-90 mb-1">De</p>
+                            <h2 class="text-2xl font-bold">{{ compliment.from_user.get_full_name }}</h2>
+                            <p class="text-sm opacity-90">{{ compliment.from_user.sector.name|default:"Sem setor" }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Rating Stars -->
+                    <div class="text-right">
+                        <div class="flex gap-2 mb-2">
+                            {% for i in "12345" %}
+                                {% if forloop.counter <= compliment.rating %}
+                                    <i class="fas fa-star text-yellow-300 text-3xl animate-pulse"></i>
+                                {% else %}
+                                    <i class="fas fa-star text-white text-opacity-30 text-3xl"></i>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="bg-yellow-300 text-gray-900 px-4 py-2 rounded-full font-bold text-lg inline-block">
+                            {{ compliment.rating }}/5
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Para (Recipient) -->
+                <div class="mt-6 pt-6 border-t border-white border-opacity-30">
+                    <p class="text-sm opacity-90 mb-2">Para</p>
+                    <div class="flex items-center gap-3">
+                        {% if compliment.to_user %}
+                            <div class="w-12 h-12 bg-white bg-opacity-30 rounded-full flex items-center justify-center backdrop-blur-sm">
+                                <span class="text-xl font-bold">
+                                    {{ compliment.to_user.first_name.0 }}{{ compliment.to_user.last_name.0 }}
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold">{{ compliment.to_user.get_full_name }}</h3>
+                                <p class="text-sm opacity-90">{{ compliment.to_user.sector.name|default:"Sem setor" }}</p>
+                            </div>
+                        {% elif compliment.to_sector %}
+                            <div class="w-12 h-12 bg-white bg-opacity-30 rounded-full flex items-center justify-center backdrop-blur-sm">
+                                <i class="fas fa-building text-2xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold">{{ compliment.to_sector.name }}</h3>
+                                <p class="text-sm opacity-90">Setor</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Body - Comentário -->
+            <div class="p-8">
+                <div class="mb-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-comment-dots text-orange-500 mr-3"></i>
+                        Comentário
+                    </h3>
+                    <div class="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-6 border-l-4 border-orange-500">
+                        <p class="text-gray-800 text-lg leading-relaxed">
+                            {{ compliment.comment }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Metadados -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-8 border-t border-gray-200">
+                    <div class="flex items-center gap-3 text-gray-600">
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-calendar text-blue-600"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Data de Criação</p>
+                            <p class="font-semibold text-gray-800">{{ compliment.created_at|date:"d/m/Y H:i" }}</p>
+                        </div>
+                    </div>
+                    
+                    {% if compliment.updated_at != compliment.created_at %}
+                    <div class="flex items-center gap-3 text-gray-600">
+                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-clock text-purple-600"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Última Atualização</p>
+                            <p class="font-semibold text-gray-800">{{ compliment.updated_at|date:"d/m/Y H:i" }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Ações -->
+                <div class="mt-8 pt-8 border-t border-gray-200 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        {% if compliment.from_user == request.user %}
+                            <span class="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                                <i class="fas fa-paper-plane mr-1"></i>
+                                Você enviou este elogio
+                            </span>
+                        {% endif %}
+                        {% if compliment.to_user == request.user %}
+                            <span class="px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
+                                <i class="fas fa-gift mr-1"></i>
+                                Você recebeu este elogio
+                            </span>
+                        {% endif %}
+                        {% if compliment.to_sector and request.user.sector == compliment.to_sector %}
+                            <span class="px-4 py-2 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                                <i class="fas fa-building mr-1"></i>
+                                Elogio para seu setor
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <a href="{% url 'compliments:my_compliments' %}" 
+                       class="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl hover:from-orange-600 hover:to-pink-600 transition-all shadow-lg font-semibold">
+                        Ver Meus Elogios
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dica -->
+        <div class="mt-8 bg-yellow-50 border border-yellow-200 rounded-2xl p-6 flex items-start gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center">
+                    <i class="fas fa-lightbulb text-white text-xl"></i>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-bold text-gray-800 mb-2">💡 Dica</h4>
+                <p class="text-gray-700">
+                    Elogios positivos ajudam a criar um ambiente de trabalho mais motivador e colaborativo. 
+                    Continue reconhecendo o bom trabalho dos seus colegas!
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

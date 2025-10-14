@@ -49,6 +49,22 @@ class ChecklistTask(models.Model):
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
     is_required = models.BooleanField(default=True, verbose_name='Obrigatória')
     
+    # Mídia de instrução
+    instruction_image = models.ImageField(
+        upload_to='checklists/instructions/images/',
+        blank=True,
+        null=True,
+        verbose_name='Imagem de Instrução',
+        help_text='Imagem explicativa de como executar a tarefa'
+    )
+    instruction_video = models.FileField(
+        upload_to='checklists/instructions/videos/',
+        blank=True,
+        null=True,
+        verbose_name='Vídeo de Instrução',
+        help_text='Vídeo explicativo de como executar a tarefa (MP4, AVI, MOV)'
+    )
+    
     class Meta:
         verbose_name = 'Tarefa de Checklist'
         verbose_name_plural = 'Tarefas de Checklist'
@@ -56,6 +72,10 @@ class ChecklistTask(models.Model):
         
     def __str__(self):
         return f'{self.template.name} - {self.title}'
+    
+    def has_instruction_media(self):
+        """Verifica se a tarefa possui mídia de instrução"""
+        return bool(self.instruction_image or self.instruction_video)
 
 
 class ChecklistAssignment(models.Model):
@@ -67,6 +87,12 @@ class ChecklistAssignment(models.Model):
         ('weekends_month', 'Fins de Semana do Mês'),
         ('daily', 'Todos os Dias'),
         ('custom', 'Datas Personalizadas'),
+    ]
+    
+    PERIOD_CHOICES = [
+        ('morning', 'Manhã'),
+        ('afternoon', 'Tarde'),
+        ('both', 'Manhã e Tarde'),
     ]
     
     template = models.ForeignKey(
@@ -99,6 +125,15 @@ class ChecklistAssignment(models.Model):
         verbose_name='Tipo de Agendamento'
     )
     
+    # Período do dia
+    period = models.CharField(
+        max_length=10,
+        choices=PERIOD_CHOICES,
+        default='both',
+        verbose_name='Período',
+        help_text='Período do dia para execução do checklist'
+    )
+    
     # Datas personalizadas (JSON)
     custom_dates = models.JSONField(
         default=list,
@@ -121,7 +156,8 @@ class ChecklistAssignment(models.Model):
         ordering = ['-created_at']
         
     def __str__(self):
-        return f'{self.template.name} → {self.assigned_to.get_full_name()}'
+        period_display = self.get_period_display()
+        return f'{self.template.name} ({period_display}) → {self.assigned_to.get_full_name()}'
     
     def get_active_dates(self):
         """Retorna as datas ativas para este checklist"""
@@ -219,6 +255,12 @@ class ChecklistExecution(models.Model):
         ('in_progress', 'Em Andamento'),
         ('completed', 'Concluído'),
         ('overdue', 'Atrasado'),
+        ('awaiting_approval', 'Aguardando Aprovação'),
+    ]
+    
+    PERIOD_CHOICES = [
+        ('morning', 'Manhã'),
+        ('afternoon', 'Tarde'),
     ]
     
     assignment = models.ForeignKey(
@@ -229,6 +271,13 @@ class ChecklistExecution(models.Model):
     )
     
     execution_date = models.DateField(verbose_name='Data de Execução')
+    period = models.CharField(
+        max_length=10,
+        choices=PERIOD_CHOICES,
+        default='morning',
+        verbose_name='Período',
+        help_text='Período do dia (Manhã ou Tarde)'
+    )
     status = models.CharField(
         max_length=20, 
         choices=STATUS_CHOICES, 
@@ -238,6 +287,7 @@ class ChecklistExecution(models.Model):
     
     started_at = models.DateTimeField(null=True, blank=True, verbose_name='Iniciado em')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Concluído em')
+    submitted_at = models.DateTimeField(null=True, blank=True, verbose_name='Enviado para Aprovação em')
     
     # Observações
     notes = models.TextField(blank=True, verbose_name='Observações')
@@ -245,11 +295,12 @@ class ChecklistExecution(models.Model):
     class Meta:
         verbose_name = 'Execução de Checklist'
         verbose_name_plural = 'Execuções de Checklist'
-        ordering = ['-execution_date']
-        unique_together = ['assignment', 'execution_date']
+        ordering = ['-execution_date', 'period']
+        unique_together = ['assignment', 'execution_date', 'period']
         
     def __str__(self):
-        return f'{self.assignment.template.name} - {self.execution_date} ({self.get_status_display()})'
+        period_display = self.get_period_display()
+        return f'{self.assignment.template.name} - {self.execution_date} {period_display} ({self.get_status_display()})'
     
     @property
     def progress_percentage(self):
@@ -297,6 +348,22 @@ class ChecklistTaskExecution(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Concluída em')
     notes = models.TextField(blank=True, verbose_name='Observações')
     
+    # Evidências
+    evidence_image = models.ImageField(
+        upload_to='checklists/evidences/images/',
+        blank=True,
+        null=True,
+        verbose_name='Imagem de Evidência',
+        help_text='Foto como prova de execução da tarefa'
+    )
+    evidence_video = models.FileField(
+        upload_to='checklists/evidences/videos/',
+        blank=True,
+        null=True,
+        verbose_name='Vídeo de Evidência',
+        help_text='Vídeo como prova de execução da tarefa'
+    )
+    
     class Meta:
         verbose_name = 'Execução de Tarefa'
         verbose_name_plural = 'Execuções de Tarefas'
@@ -306,12 +373,20 @@ class ChecklistTaskExecution(models.Model):
     def __str__(self):
         return f'{self.execution} - {self.task.title}'
     
-    def complete_task(self, notes=''):
-        """Marca a tarefa como concluída"""
+    def has_evidence(self):
+        """Verifica se possui evidência anexada"""
+        return bool(self.evidence_image or self.evidence_video)
+    
+    def complete_task(self, notes='', evidence_image=None, evidence_video=None):
+        """Marca a tarefa como concluída com evidências"""
         self.is_completed = True
         self.completed_at = timezone.now()
         if notes:
             self.notes = notes
+        if evidence_image:
+            self.evidence_image = evidence_image
+        if evidence_video:
+            self.evidence_video = evidence_video
         self.save()
         
         # Verificar se todas as tarefas foram concluídas

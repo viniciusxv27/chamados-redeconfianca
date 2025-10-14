@@ -37,15 +37,34 @@
                 <p class="text-gray-600 mt-2">Gerencie e execute checklists administrativos</p>
             </div>
             <div class="flex space-x-3">
-                <a href="{% url 'checklists:my_checklists' %}" 
-                   class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
-                    <i class="fas fa-list mr-2"></i>
-                    Meus Checklists
+                <a href="{% url 'checklists:today_checklists' %}" 
+                   class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg transform hover:scale-105">
+                    <i class="fas fa-calendar-day mr-2"></i>
+                    📋 Checklists de Hoje
+                </a>
+                {% if user.is_superuser %}
+                <a href="{% url 'checklists:admin_approvals' %}" 
+                   class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg transform hover:scale-105">
+                    <i class="fas fa-crown mr-2"></i>
+                    👑 Aprovações
+                </a>
+                {% endif %}
+                {% if user.is_staff %}
+                <a href="{% url 'checklists:admin_templates' %}" 
+                   class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-cogs mr-2"></i>
+                    Administrar Templates
                 </a>
                 <a href="{% url 'checklists:create_assignment' %}" 
                    class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors">
                     <i class="fas fa-plus mr-2"></i>
                     Atribuir Checklist
+                </a>
+                {% endif %}
+                <a href="{% url 'checklists:my_checklists' %}" 
+                   class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-list mr-2"></i>
+                    Meus Checklists
                 </a>
             </div>
         </div>
@@ -114,11 +133,22 @@
                         {% for execution in today_executions %}
                         <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors">
                             <div class="flex justify-between items-start mb-3">
-                                <div>
-                                    <h3 class="font-medium text-gray-900">{{ execution.assignment.template.name }}</h3>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <h3 class="font-medium text-gray-900">{{ execution.assignment.template.name }}</h3>
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                            {% if execution.period == 'morning' %}bg-yellow-100 text-yellow-800
+                                            {% else %}bg-orange-100 text-orange-800{% endif %}">
+                                            {% if execution.period == 'morning' %}
+                                                <i class="fas fa-sun mr-1"></i> Manhã
+                                            {% else %}
+                                                <i class="fas fa-moon mr-1"></i> Tarde
+                                            {% endif %}
+                                        </span>
+                                    </div>
                                     <p class="text-sm text-gray-600">{{ execution.assignment.template.description|truncatewords:10 }}</p>
                                 </div>
-                                <span class="status-badge status-{{ execution.status }}">
+                                <span class="status-badge status-{{ execution.status }} ml-2">
                                     {% if execution.status == 'pending' %}
                                         <i class="fas fa-clock mr-1"></i> Pendente
                                     {% elif execution.status == 'in_progress' %}
@@ -147,7 +177,7 @@
                                 <span class="text-sm text-gray-500">
                                     {{ execution.task_executions.count }} tarefas
                                 </span>
-                                <a href="{% url 'checklists:execute_checklist' execution.id %}" 
+                                <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
                                    class="text-primary hover:text-orange-600 font-medium text-sm">
                                     {% if execution.status == 'completed' %}
                                         Ver Detalhes →
@@ -179,8 +209,25 @@
                         {% for assignment in my_assignments %}
                         <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors">
                             <div class="flex justify-between items-start mb-2">
-                                <div>
-                                    <h3 class="font-medium text-gray-900">{{ assignment.template.name }}</h3>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <h3 class="font-medium text-gray-900">{{ assignment.template.name }}</h3>
+                                        {% if assignment.period != 'both' %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                            {% if assignment.period == 'morning' %}bg-yellow-100 text-yellow-800
+                                            {% else %}bg-orange-100 text-orange-800{% endif %}">
+                                            {% if assignment.period == 'morning' %}
+                                                <i class="fas fa-sun mr-1"></i> Manhã
+                                            {% else %}
+                                                <i class="fas fa-moon mr-1"></i> Tarde
+                                            {% endif %}
+                                        </span>
+                                        {% else %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                            <i class="fas fa-sun mr-1"></i><i class="fas fa-moon mr-1"></i> Ambos
+                                        </span>
+                                        {% endif %}
+                                    </div>
                                     <p class="text-sm text-gray-600">Atribuído por {{ assignment.assigned_by.get_full_name }}</p>
                                 </div>
                                 <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">

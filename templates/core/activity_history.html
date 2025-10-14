@@ -1,0 +1,457 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Histórico de Atividades - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                        <i class="fas fa-history text-blue-600"></i>
+                        Histórico de Atividades
+                    </h1>
+                    <p class="mt-2 text-gray-600">Visualize e analise todas as atividades do sistema</p>
+                </div>
+                <a href="{% url 'core:export_activity_history' %}?{{ request.GET.urlencode }}" 
+                   class="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg">
+                    <i class="fas fa-file-csv"></i>
+                    <span>Exportar CSV</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total de Logs</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.total_logs|default:0 }}</p>
+                    </div>
+                    <div class="bg-blue-100 rounded-full p-3">
+                        <i class="fas fa-database text-blue-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Hoje</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.today|default:0 }}</p>
+                    </div>
+                    <div class="bg-green-100 rounded-full p-3">
+                        <i class="fas fa-calendar-day text-green-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Ontem</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.yesterday|default:0 }}</p>
+                    </div>
+                    <div class="bg-yellow-100 rounded-full p-3">
+                        <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Esta Semana</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.this_week|default:0 }}</p>
+                    </div>
+                    <div class="bg-purple-100 rounded-full p-3">
+                        <i class="fas fa-calendar-week text-purple-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-pink-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Este Mês</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.this_month|default:0 }}</p>
+                    </div>
+                    <div class="bg-pink-100 rounded-full p-3">
+                        <i class="fas fa-calendar-alt text-pink-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Nunca Entraram</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ users_never_logged.count|default:0 }}</p>
+                    </div>
+                    <div class="bg-red-100 rounded-full p-3">
+                        <i class="fas fa-user-slash text-red-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Inativos 30+ dias</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ inactive_users_top|length|default:0 }}</p>
+                    </div>
+                    <div class="bg-orange-100 rounded-full p-3">
+                        <i class="fas fa-user-clock text-orange-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <form method="get" action="{% url 'core:activity_history' %}" class="space-y-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="fas fa-filter text-gray-500"></i>
+                    <h3 class="text-lg font-semibold text-gray-900">Filtros</h3>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <!-- Tipo de Ação -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Ação</label>
+                        <select name="action_type" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos</option>
+                            {% for value, label in action_types %}
+                                <option value="{{ value }}" {% if action_type_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Usuário -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
+                        <select name="user" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Todos</option>
+                            {% for user in active_users %}
+                                <option value="{{ user.id }}" {% if user_filter == user.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ user.get_full_name|default:user.username }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Data De -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Data De</label>
+                        <input type="date" name="date_from" value="{{ date_from }}" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+
+                    <!-- Data Até -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Data Até</label>
+                        <input type="date" name="date_to" value="{{ date_to }}" 
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+
+                    <!-- Busca -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
+                        <input type="text" name="q" value="{{ search_query }}" placeholder="Descrição ou usuário..."
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-search mr-2"></i>Filtrar
+                    </button>
+                    <a href="{% url 'core:activity_history' %}" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                        <i class="fas fa-times mr-2"></i>Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Top Ações e Top Usuários -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Top Ações (30 dias) -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="fas fa-chart-bar text-blue-600"></i>
+                    Top Ações (30 dias)
+                </h3>
+                <div class="space-y-3">
+                    {% for action in action_stats %}
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span class="text-sm font-medium text-gray-700">
+                                {{ action.action_type|default:"Desconhecido" }}
+                            </span>
+                            <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
+                                {{ action.count }}
+                            </span>
+                        </div>
+                    {% empty %}
+                        <p class="text-gray-500 text-center py-4">Nenhum dado disponível</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Top Usuários (30 dias) -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="fas fa-users text-green-600"></i>
+                    Usuários Mais Ativos (30 dias)
+                </h3>
+                <div class="space-y-3">
+                    {% for user in top_users %}
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span class="text-sm font-medium text-gray-700">
+                                {{ user.user__first_name }} {{ user.user__last_name }}
+                            </span>
+                            <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                                {{ user.activity_count }} ações
+                            </span>
+                        </div>
+                    {% empty %}
+                        <p class="text-gray-500 text-center py-4">Nenhum dado disponível</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Métricas de Inatividade -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Usuários que Nunca Entraram -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="fas fa-user-slash text-red-600"></i>
+                    Usuários que Nunca Entraram
+                    <span class="ml-2 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                        {{ users_never_logged.count }}
+                    </span>
+                </h3>
+                <div class="space-y-3 max-h-80 overflow-y-auto">
+                    {% for user in users_never_logged|slice:":10" %}
+                        <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <div class="h-8 w-8 rounded-full bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center text-white font-semibold text-sm">
+                                    {{ user.first_name.0|default:user.username.0|upper }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ user.get_full_name|default:user.username }}
+                                    </div>
+                                    {% if user.sector %}
+                                        <div class="text-xs text-gray-500">{{ user.sector.name }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <span class="px-2 py-1 bg-red-200 text-red-800 rounded text-xs font-semibold">
+                                Cadastrado em {{ user.date_joined|date:"d/m/Y" }}
+                            </span>
+                        </div>
+                    {% empty %}
+                        <div class="flex flex-col items-center justify-center py-8 text-green-600">
+                            <i class="fas fa-check-circle text-4xl mb-2"></i>
+                            <p class="text-sm font-medium">Todos os usuários já acessaram o sistema!</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Usuários Inativos (Tempo sem login) -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="fas fa-clock text-orange-600"></i>
+                    Usuários com Maior Tempo sem Login
+                </h3>
+                <div class="space-y-3 max-h-80 overflow-y-auto">
+                    {% for user in inactive_users_top %}
+                        <div class="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <div class="h-8 w-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-semibold text-sm">
+                                    {{ user.name.0|upper }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ user.name }}
+                                    </div>
+                                    <div class="text-xs text-gray-500">
+                                        Último login: {{ user.last_login|date:"d/m/Y H:i" }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="px-3 py-1 bg-orange-200 text-orange-800 rounded-full text-xs font-semibold">
+                                    {{ user.days_inactive }} dias
+                                </div>
+                            </div>
+                        </div>
+                    {% empty %}
+                        <p class="text-gray-500 text-center py-4">Nenhum dado disponível</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista de Logs -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="p-6 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <i class="fas fa-list text-gray-600"></i>
+                    Registros de Atividades
+                    <span class="ml-2 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
+                        {{ page_obj.paginator.count }} registros
+                    </span>
+                </h3>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data/Hora</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Ação</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for log in logs %}
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {{ log.created_at|date:"d/m/Y H:i:s" }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold text-sm mr-3">
+                                            {% if log.user %}
+                                                {{ log.user.first_name.0|default:log.user.username.0|upper }}
+                                            {% else %}
+                                                <i class="fas fa-robot text-xs"></i>
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <div class="text-sm font-medium text-gray-900">
+                                                {% if log.user %}
+                                                    {{ log.user.get_full_name|default:log.user.username }}
+                                                {% else %}
+                                                    Sistema
+                                                {% endif %}
+                                            </div>
+                                            {% if log.user and log.user.sector %}
+                                                <div class="text-xs text-gray-500">{{ log.user.sector.name }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% if 'LOGIN' in log.action_type %}
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                            <i class="fas fa-sign-in-alt mr-1"></i>
+                                            {{ log.get_action_type_display }}
+                                        </span>
+                                    {% elif 'LOGOUT' in log.action_type %}
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                            <i class="fas fa-sign-out-alt mr-1"></i>
+                                            {{ log.get_action_type_display }}
+                                        </span>
+                                    {% elif 'CREATE' in log.action_type %}
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                            <i class="fas fa-plus mr-1"></i>
+                                            {{ log.get_action_type_display }}
+                                        </span>
+                                    {% elif 'UPDATE' in log.action_type or 'EDIT' in log.action_type %}
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                            <i class="fas fa-edit mr-1"></i>
+                                            {{ log.get_action_type_display }}
+                                        </span>
+                                    {% elif 'DELETE' in log.action_type %}
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                            <i class="fas fa-trash mr-1"></i>
+                                            {{ log.get_action_type_display }}
+                                        </span>
+                                    {% else %}
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                            <i class="fas fa-cog mr-1"></i>
+                                            {{ log.get_action_type_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 text-sm text-gray-700">
+                                    {{ log.description|truncatewords:15 }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {{ log.ip_address|default:"—" }}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center">
+                                    <div class="flex flex-col items-center justify-center text-gray-400">
+                                        <i class="fas fa-inbox text-5xl mb-3"></i>
+                                        <p class="text-lg font-medium">Nenhum registro encontrado</p>
+                                        <p class="text-sm mt-1">Tente ajustar os filtros de busca</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginação -->
+            {% if is_paginated %}
+                <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="text-sm text-gray-700">
+                            Mostrando 
+                            <span class="font-medium">{{ page_obj.start_index }}</span>
+                            a
+                            <span class="font-medium">{{ page_obj.end_index }}</span>
+                            de
+                            <span class="font-medium">{{ page_obj.paginator.count }}</span>
+                            registros
+                        </div>
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                            {% if page_obj.has_previous %}
+                                <a href="?page=1&{{ request.GET.urlencode }}" 
+                                   class="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                                <a href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}" 
+                                   class="relative inline-flex items-center px-3 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-angle-left"></i>
+                                </a>
+                            {% endif %}
+
+                            <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                            </span>
+
+                            {% if page_obj.has_next %}
+                                <a href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}" 
+                                   class="relative inline-flex items-center px-3 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                                <a href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode }}" 
+                                   class="relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}

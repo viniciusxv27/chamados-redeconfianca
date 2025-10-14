@@ -63,25 +63,49 @@ def create_assignment(request):
     """Criar nova atribuição de checklist"""
     if request.method == 'POST':
         template_id = request.POST.get('template_id')
+        assignment_type = request.POST.get('assignment_type', 'user')  # 'user' ou 'group'
         assigned_to_id = request.POST.get('assigned_to')
+        group_id = request.POST.get('group_id')
         schedule_type = request.POST.get('schedule_type')
+        period = request.POST.get('period', 'both')
         start_date = request.POST.get('start_date')
         end_date = request.POST.get('end_date')
         custom_dates_str = request.POST.get('custom_dates', '[]')
         
-        # Validações
-        if not all([template_id, assigned_to_id, schedule_type, start_date, end_date]):
+        # Validações básicas
+        if not all([template_id, schedule_type, start_date, end_date]):
             messages.error(request, 'Todos os campos obrigatórios devem ser preenchidos.')
             return redirect('checklists:create_assignment')
         
         try:
             template = get_object_or_404(ChecklistTemplate, id=template_id)
-            assigned_to = get_object_or_404(User, id=assigned_to_id)
             
-            # Verificar se o usuário pode atribuir para este setor
+            # Determinar usuários a atribuir
+            users_to_assign = []
+            
+            if assignment_type == 'group' and group_id:
+                # Atribuir para grupo
+                from communications.models import CommunicationGroup
+                group = get_object_or_404(CommunicationGroup, id=group_id)
+                users_to_assign = list(group.members.filter(is_active=True))
+                
+                if not users_to_assign:
+                    messages.error(request, 'O grupo selecionado não possui membros ativos.')
+                    return redirect('checklists:create_assignment')
+                    
+            elif assignment_type == 'user' and assigned_to_id:
+                # Atribuir para usuário específico
+                user = get_object_or_404(User, id=assigned_to_id)
+                users_to_assign = [user]
+            else:
+                messages.error(request, 'Selecione um usuário ou grupo válido.')
+                return redirect('checklists:create_assignment')
+            
+            # Verificar permissão
             if not request.user.sector or request.user.sector != template.sector:
-                messages.error(request, 'Você só pode criar checklists do seu setor.')
-                return redirect('checklists:dashboard')
+                if not request.user.is_superuser:
+                    messages.error(request, 'Você só pode criar checklists do seu setor.')
+                    return redirect('checklists:dashboard')
             
             # Processar datas personalizadas
             custom_dates = []
@@ -91,21 +115,29 @@ def create_assignment(request):
                 except (json.JSONDecodeError, TypeError):
                     custom_dates = []
             
-            # Criar atribuição
-            assignment = ChecklistAssignment.objects.create(
-                template=template,
-                assigned_to=assigned_to,
-                assigned_by=request.user,
-                schedule_type=schedule_type,
-                start_date=datetime.strptime(start_date, '%Y-%m-%d').date(),
-                end_date=datetime.strptime(end_date, '%Y-%m-%d').date(),
-                custom_dates=custom_dates
-            )
+            # Criar atribuições para cada usuário
+            assignments_created = 0
+            for user in users_to_assign:
+                assignment = ChecklistAssignment.objects.create(
+                    template=template,
+                    assigned_to=user,
+                    assigned_by=request.user,
+                    schedule_type=schedule_type,
+                    period=period,
+                    start_date=datetime.strptime(start_date, '%Y-%m-%d').date(),
+                    end_date=datetime.strptime(end_date, '%Y-%m-%d').date(),
+                    custom_dates=custom_dates
+                )
+                
+                # Criar execuções para as datas ativas
+                create_executions_for_assignment(assignment)
+                assignments_created += 1
             
-            # Criar execuções para as datas ativas
-            create_executions_for_assignment(assignment)
-            
-            messages.success(request, f'Checklist atribuído para {assigned_to.get_full_name()} com sucesso!')
+            if assignment_type == 'group':
+                messages.success(request, f'✅ Checklist atribuído para {assignments_created} usuário(s) do grupo com sucesso!')
+            else:
+                messages.success(request, f'✅ Checklist atribuído para {users_to_assign[0].get_full_name()} com sucesso!')
+                
             return redirect('checklists:dashboard')
             
         except Exception as e:
@@ -129,9 +161,14 @@ def create_assignment(request):
         is_active=True
     ).exclude(id=request.user.id).order_by('first_name', 'last_name')
     
+    # Grupos disponíveis
+    from communications.models import CommunicationGroup
+    groups = CommunicationGroup.objects.filter(is_active=True).prefetch_related('members').order_by('name')
+    
     context = {
         'templates': templates,
         'users': sector_users,
+        'groups': groups,
     }
     return render(request, 'checklists/create_assignment.html', context)
 
@@ -140,26 +177,139 @@ def create_executions_for_assignment(assignment):
     """Cria as execuções baseadas nas datas ativas da atribuição"""
     active_dates = assignment.get_active_dates()
     
+    # Determinar períodos a criar
+    if assignment.period == 'both':
+        periods = ['morning', 'afternoon']
+    else:
+        periods = [assignment.period]
+    
     for exec_date in active_dates:
-        # Verificar se já existe execução para esta data
-        execution, created = ChecklistExecution.objects.get_or_create(
-            assignment=assignment,
-            execution_date=exec_date,
-            defaults={'status': 'pending'}
-        )
+        for period in periods:
+            # Verificar se já existe execução para esta data e período
+            execution, created = ChecklistExecution.objects.get_or_create(
+                assignment=assignment,
+                execution_date=exec_date,
+                period=period,
+                defaults={'status': 'pending'}
+            )
+            
+            if created:
+                # Criar execuções das tarefas
+                for task in assignment.template.tasks.all():
+                    ChecklistTaskExecution.objects.create(
+                        execution=execution,
+                        task=task
+                    )
+
+
+@login_required
+def execute_today_checklists(request):
+    """Executar todos os checklists de hoje em um único formulário"""
+    user = request.user
+    today = timezone.now().date()
+    
+    # Buscar todas as execuções de hoje do usuário
+    today_executions = ChecklistExecution.objects.filter(
+        assignment__assigned_to=user,
+        execution_date=today,
+        status__in=['pending', 'in_progress']
+    ).select_related(
+        'assignment__template'
+    ).prefetch_related(
+        'task_executions__task'
+    ).order_by('period', 'assignment__template__name')
+    
+    if request.method == 'POST':
+        # Processar submissão de todos os checklists
+        all_completed = True
         
-        if created:
-            # Criar execuções das tarefas
-            for task in assignment.template.tasks.all():
-                ChecklistTaskExecution.objects.create(
-                    execution=execution,
-                    task=task
-                )
+        for execution in today_executions:
+            # Marcar início se ainda não foi iniciado
+            if not execution.started_at:
+                execution.started_at = timezone.now()
+                execution.status = 'in_progress'
+            
+            # Processar tarefas deste checklist
+            execution_completed = True
+            for task_exec in execution.task_executions.all():
+                task_key = f'task_{execution.id}_{task_exec.task.id}'
+                notes_key = f'notes_{execution.id}_{task_exec.task.id}'
+                image_key = f'evidence_image_{execution.id}_{task_exec.task.id}'
+                video_key = f'evidence_video_{execution.id}_{task_exec.task.id}'
+                
+                is_completed = request.POST.get(task_key) == 'on'
+                notes = request.POST.get(notes_key, '')
+                evidence_image = request.FILES.get(image_key)
+                evidence_video = request.FILES.get(video_key)
+                
+                # Atualizar task execution
+                task_exec.is_completed = is_completed
+                task_exec.notes = notes
+                
+                if evidence_image:
+                    task_exec.evidence_image = evidence_image
+                if evidence_video:
+                    task_exec.evidence_video = evidence_video
+                
+                if is_completed and not task_exec.completed_at:
+                    task_exec.completed_at = timezone.now()
+                
+                task_exec.save()
+                
+                # Verificar se todas as tarefas obrigatórias estão completas
+                if task_exec.task.is_required and not is_completed:
+                    execution_completed = False
+            
+            # Atualizar status da execução
+            if execution_completed:
+                execution.completed_at = timezone.now()
+                execution.submitted_at = timezone.now()
+                execution.status = 'awaiting_approval'
+            else:
+                all_completed = False
+                execution.status = 'in_progress'
+            
+            execution.save()
+        
+        if all_completed:
+            messages.success(request, '✅ Todos os checklists foram enviados para aprovação!')
+        else:
+            messages.info(request, '💾 Progresso salvo! Complete todas as tarefas para enviar.')
+        
+        return redirect('checklists:today_checklists')
+    
+    # GET - Mostrar formulário
+    # Calcular progresso geral
+    total_tasks = 0
+    completed_tasks = 0
+    
+    # Adicionar contador de tarefas para cada execução
+    for execution in today_executions:
+        execution.total_tasks_count = 0
+        execution.completed_tasks_count = 0
+        for task_exec in execution.task_executions.all():
+            execution.total_tasks_count += 1
+            total_tasks += 1
+            if task_exec.is_completed:
+                execution.completed_tasks_count += 1
+                completed_tasks += 1
+    
+    progress_percentage = round((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+    
+    context = {
+        'today_executions': today_executions,
+        'total_tasks': total_tasks,
+        'completed_tasks': completed_tasks,
+        'progress_percentage': progress_percentage,
+        'today': today,
+    }
+    
+    return render(request, 'checklists/today_checklists.html', context)
 
 
 @login_required
 def execute_checklist(request, assignment_id):
-    """Executar checklist"""
+    """Executar checklist individual (view antiga - redirecionar para nova)"""
     from datetime import date
     
     assignment = get_object_or_404(
@@ -168,95 +318,9 @@ def execute_checklist(request, assignment_id):
         assigned_to=request.user
     )
     
-    # Data de execução (hoje por padrão, ou a data selecionada)
-    execution_date = request.GET.get('date')
-    if execution_date:
-        execution_date = datetime.strptime(execution_date, '%Y-%m-%d').date()
-    else:
-        execution_date = date.today()
-    
-    # Buscar ou criar execução
-    execution, created = ChecklistExecution.objects.get_or_create(
-        assignment=assignment,
-        execution_date=execution_date,
-        defaults={'status': 'pending'}
-    )
-    
-    if created:
-        # Criar execuções das tarefas
-        for task in assignment.template.tasks.all():
-            ChecklistTaskExecution.objects.create(
-                execution=execution,
-                task=task
-            )
-    
-    if request.method == 'POST':
-        # Marcar início se ainda não foi iniciado
-        if not execution.started_at:
-            execution.started_at = timezone.now()
-            execution.status = 'in_progress'
-            execution.save()
-        
-        # Processar tarefas
-        for task in assignment.template.tasks.all():
-            task_key = f'task_{task.id}'
-            notes_key = f'observation_{task.id}'
-            
-            is_completed = request.POST.get(task_key) == 'on'
-            notes = request.POST.get(notes_key, '')
-            
-            # Buscar ou criar task execution
-            task_execution, _ = ChecklistTaskExecution.objects.get_or_create(
-                execution=execution,
-                task=task
-            )
-            
-            if is_completed and not task_execution.is_completed:
-                task_execution.complete_task(notes)
-            elif not is_completed and task_execution.is_completed:
-                task_execution.is_completed = False
-                task_execution.completed_at = None
-                task_execution.notes = notes
-                task_execution.save()
-            else:
-                task_execution.notes = notes
-                task_execution.save()
-        
-        # Verificar se todas as tarefas obrigatórias foram concluídas
-        pending_required = execution.task_executions.filter(
-            task__is_required=True,
-            is_completed=False
-        ).exists()
-        
-        if not pending_required and not execution.completed_at:
-            execution.completed_at = timezone.now()
-            execution.status = 'completed'
-        
-        execution.save()
-        
-        messages.success(request, 'Progresso salvo com sucesso!')
-        return redirect('execute_checklist', assignment_id=assignment.id)
-    
-    # Atualizar status baseado na data
-    execution.update_status()
-    
-    # Buscar task executions existentes
-    completed_task_ids = [
-        te.task.id for te in execution.task_executions.filter(is_completed=True)
-    ]
-    
-    task_observations = {
-        te.task.id: te.notes for te in execution.task_executions.all()
-    }
-    
-    context = {
-        'assignment': assignment,
-        'execution': execution,
-        'execution_date': execution_date,
-        'completed_task_ids': completed_task_ids,
-        'task_observations': task_observations,
-    }
-    return render(request, 'checklists/execute.html', context)
+    # Redirecionar para a nova view unificada
+    messages.info(request, '📋 Use o formulário unificado "Checklists de Hoje" para executar todos os seus checklists.')
+    return redirect('checklists:today_checklists')
 
 
 @login_required
@@ -387,3 +451,358 @@ def api_search_users(request):
     ]
     
     return JsonResponse({'users': users_data})
+
+
+@login_required
+def api_group_members(request, group_id):
+    """API para buscar membros de um grupo"""
+    from communications.models import CommunicationGroup
+    
+    try:
+        group = get_object_or_404(CommunicationGroup, id=group_id, is_active=True)
+        members = group.members.filter(is_active=True).order_by('first_name', 'last_name')
+        
+        members_data = [{
+            'id': member.id,
+            'name': member.get_full_name() or member.username,
+            'email': member.email,
+            'sector': member.sector.name if member.sector else 'Sem setor'
+        } for member in members]
+        
+        return JsonResponse({
+            'group_name': group.name,
+            'members': members_data,
+            'total': members.count()
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+# ===== ADMIN - TEMPLATES =====@login_required
+def admin_templates(request):
+    """Administração de templates (apenas para admins)"""
+    if not request.user.is_staff:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Filtros
+    sector_filter = request.GET.get('sector', '')
+    status_filter = request.GET.get('status', '')
+    
+    # Buscar templates
+    templates = ChecklistTemplate.objects.all().select_related('sector', 'created_by')
+    
+    if sector_filter:
+        templates = templates.filter(sector_id=sector_filter)
+    
+    if status_filter == 'active':
+        templates = templates.filter(is_active=True)
+    elif status_filter == 'inactive':
+        templates = templates.filter(is_active=False)
+    
+    templates = templates.order_by('-created_at')
+    
+    # Setores para o filtro
+    sectors = Sector.objects.all().order_by('name')
+    
+    # Estatísticas
+    stats = {
+        'total': ChecklistTemplate.objects.count(),
+        'active': ChecklistTemplate.objects.filter(is_active=True).count(),
+        'inactive': ChecklistTemplate.objects.filter(is_active=False).count(),
+    }
+    
+    # Paginação
+    paginator = Paginator(templates, 15)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'templates': page_obj,
+        'sectors': sectors,
+        'stats': stats,
+        'sector_filter': sector_filter,
+        'status_filter': status_filter,
+        'is_paginated': page_obj.has_other_pages(),
+        'page_obj': page_obj,
+    }
+    return render(request, 'checklists/admin_templates.html', context)
+
+
+@login_required
+def create_template(request):
+    """Criar novo template de checklist (apenas para admins)"""
+    if not request.user.is_staff:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        sector_id = request.POST.get('sector')
+        
+        # Validações
+        if not name or not sector_id:
+            messages.error(request, 'Nome e setor são obrigatórios.')
+            return redirect('checklists:create_template')
+        
+        try:
+            sector = get_object_or_404(Sector, id=sector_id)
+            
+            # Criar template
+            template = ChecklistTemplate.objects.create(
+                name=name,
+                description=description,
+                sector=sector,
+                created_by=request.user
+            )
+            
+            # Processar tarefas
+            task_titles = request.POST.getlist('task_title[]')
+            task_descriptions = request.POST.getlist('task_description[]')
+            task_required = request.POST.getlist('task_required[]')
+            
+            # Arquivos de instrução
+            task_images = request.FILES.getlist('task_image[]')
+            task_videos = request.FILES.getlist('task_video[]')
+            
+            for i, title in enumerate(task_titles):
+                if title.strip():
+                    task = ChecklistTask.objects.create(
+                        template=template,
+                        title=title.strip(),
+                        description=task_descriptions[i].strip() if i < len(task_descriptions) else '',
+                        is_required=str(i) in task_required,
+                        order=i
+                    )
+                    
+                    # Adicionar imagem se fornecida
+                    if i < len(task_images) and task_images[i]:
+                        task.instruction_image = task_images[i]
+                    
+                    # Adicionar vídeo se fornecido
+                    if i < len(task_videos) and task_videos[i]:
+                        task.instruction_video = task_videos[i]
+                    
+                    task.save()
+            
+            messages.success(request, f'Template "{template.name}" criado com sucesso!')
+            return redirect('checklists:admin_templates')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar template: {str(e)}')
+            return redirect('checklists:create_template')
+    
+    # GET - mostrar formulário
+    sectors = Sector.objects.all().order_by('name')
+    
+    context = {
+        'sectors': sectors,
+    }
+    return render(request, 'checklists/create_template.html', context)
+
+
+@login_required
+def edit_template(request, template_id):
+    """Editar template de checklist (apenas para admins)"""
+    if not request.user.is_staff:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    template = get_object_or_404(ChecklistTemplate, id=template_id)
+    
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        sector_id = request.POST.get('sector')
+        is_active = request.POST.get('is_active') == 'on'
+        
+        # Validações
+        if not name or not sector_id:
+            messages.error(request, 'Nome e setor são obrigatórios.')
+            return redirect('checklists:edit_template', template_id=template.id)
+        
+        try:
+            sector = get_object_or_404(Sector, id=sector_id)
+            
+            # Atualizar template
+            template.name = name
+            template.description = description
+            template.sector = sector
+            template.is_active = is_active
+            template.save()
+            
+            # Remover tarefas antigas
+            template.tasks.all().delete()
+            
+            # Processar novas tarefas
+            task_titles = request.POST.getlist('task_title[]')
+            task_descriptions = request.POST.getlist('task_description[]')
+            task_required = request.POST.getlist('task_required[]')
+            
+            for i, title in enumerate(task_titles):
+                if title.strip():
+                    ChecklistTask.objects.create(
+                        template=template,
+                        title=title.strip(),
+                        description=task_descriptions[i].strip() if i < len(task_descriptions) else '',
+                        is_required=str(i) in task_required,
+                        order=i
+                    )
+            
+            messages.success(request, f'Template "{template.name}" atualizado com sucesso!')
+            return redirect('checklists:admin_templates')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar template: {str(e)}')
+            return redirect('checklists:edit_template', template_id=template.id)
+    
+    # GET - mostrar formulário
+    sectors = Sector.objects.all().order_by('name')
+    
+    context = {
+        'template': template,
+        'sectors': sectors,
+    }
+    return render(request, 'checklists/edit_template.html', context)
+
+
+@login_required
+def delete_template(request, template_id):
+    """Deletar template de checklist (apenas para admins)"""
+    if not request.user.is_staff:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    template = get_object_or_404(ChecklistTemplate, id=template_id)
+    
+    # Verificar se o template está em uso
+    assignments_count = ChecklistAssignment.objects.filter(template=template, is_active=True).count()
+    
+    if assignments_count > 0:
+        messages.error(request, f'Não é possível deletar este template pois ele possui {assignments_count} atribuição(ões) ativa(s). Desative-o primeiro.')
+        return redirect('checklists:admin_templates')
+    
+    template_name = template.name
+    template.delete()
+    
+    messages.success(request, f'Template "{template_name}" deletado com sucesso!')
+    return redirect('checklists:admin_templates')
+
+
+@login_required
+def admin_approvals(request):
+    """Área de aprovação de checklists para super admins"""
+    if not request.user.is_superuser:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Filtros
+    status_filter = request.GET.get('status', 'awaiting_approval')
+    sector_filter = request.GET.get('sector', '')
+    user_filter = request.GET.get('user', '')
+    date_filter = request.GET.get('date', '')
+    
+    # Buscar execuções pendentes de aprovação
+    executions = ChecklistExecution.objects.select_related(
+        'assignment__template',
+        'assignment__template__sector',
+        'assignment__assigned_to'
+    ).prefetch_related(
+        'task_executions__task'
+    )
+    
+    if status_filter:
+        executions = executions.filter(status=status_filter)
+    
+    if sector_filter:
+        executions = executions.filter(assignment__template__sector_id=sector_filter)
+    
+    if user_filter:
+        executions = executions.filter(assignment__assigned_to_id=user_filter)
+    
+    if date_filter:
+        executions = executions.filter(execution_date=date_filter)
+    
+    executions = executions.order_by('-submitted_at', 'execution_date')
+    
+    # Estatísticas
+    stats = {
+        'awaiting_approval': ChecklistExecution.objects.filter(status='awaiting_approval').count(),
+        'approved_today': ChecklistExecution.objects.filter(
+            status='completed',
+            completed_at__date=timezone.now().date()
+        ).count(),
+    }
+    
+    # Setores para filtro
+    from users.models import Sector
+    sectors = Sector.objects.all().order_by('name')
+    
+    context = {
+        'executions': executions,
+        'stats': stats,
+        'sectors': sectors,
+        'status_filter': status_filter,
+        'sector_filter': sector_filter,
+        'user_filter': user_filter,
+        'date_filter': date_filter,
+    }
+    
+    return render(request, 'checklists/admin_approvals.html', context)
+
+
+@login_required
+def approve_checklist(request, execution_id):
+    """Aprovar checklist executado"""
+    if not request.user.is_superuser:
+        messages.error(request, 'Você não tem permissão para esta ação.')
+        return redirect('checklists:dashboard')
+    
+    execution = get_object_or_404(ChecklistExecution, id=execution_id)
+    
+    if execution.status != 'awaiting_approval':
+        messages.error(request, 'Este checklist não está aguardando aprovação.')
+        return redirect('checklists:admin_approvals')
+    
+    execution.status = 'completed'
+    execution.save()
+    
+    messages.success(request, f'✅ Checklist "{execution.assignment.template.name}" aprovado com sucesso!')
+    return redirect('checklists:admin_approvals')
+
+
+@login_required
+def reject_checklist(request, execution_id):
+    """Rejeitar checklist executado"""
+    if not request.user.is_superuser:
+        messages.error(request, 'Você não tem permissão para esta ação.')
+        return redirect('checklists:dashboard')
+    
+    execution = get_object_or_404(ChecklistExecution, id=execution_id)
+    
+    if execution.status != 'awaiting_approval':
+        messages.error(request, 'Este checklist não está aguardando aprovação.')
+        return redirect('checklists:admin_approvals')
+    
+    if request.method == 'POST':
+        rejection_note = request.POST.get('rejection_note', '')
+        
+        execution.status = 'in_progress'
+        execution.submitted_at = None
+        
+        # Adicionar nota de rejeição na primeira tarefa (ou criar sistema de notas)
+        if rejection_note:
+            first_task = execution.task_executions.first()
+            if first_task:
+                current_note = first_task.notes or ''
+                first_task.notes = f"⚠️ REJEITADO: {rejection_note}\n\n{current_note}"
+                first_task.save()
+        
+        execution.save()
+        
+        messages.warning(request, f'⚠️ Checklist "{execution.assignment.template.name}" rejeitado e retornado para correção.')
+        return redirect('checklists:admin_approvals')
+    
+    return redirect('checklists:admin_approvals')
+    return redirect('checklists:admin_templates')

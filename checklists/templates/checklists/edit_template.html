@@ -1,0 +1,259 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Editar Template{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+                        ✏️ Editar Template
+                    </h1>
+                    <p class="text-gray-600">Modifique o template de checklist</p>
+                </div>
+                <a href="{% url 'checklists:admin_templates' %}" 
+                   class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
+                    ← Voltar
+                </a>
+            </div>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data" id="templateForm">
+            {% csrf_token %}
+            
+            <!-- Informações Básicas -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">📋 Informações Básicas</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Nome do Template <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" 
+                               name="name" 
+                               value="{{ template.name }}"
+                               required
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                               placeholder="Ex: Checklist de Abertura">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Setor <span class="text-red-500">*</span>
+                        </label>
+                        <select name="sector" 
+                                required
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="">Selecione...</option>
+                            {% for sector in sectors %}
+                                <option value="{{ sector.id }}" {% if sector.id == template.sector.id %}selected{% endif %}>
+                                    {{ sector.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Descrição</label>
+                    <textarea name="description" 
+                              rows="3"
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                              placeholder="Descreva o propósito deste checklist...">{{ template.description }}</textarea>
+                </div>
+
+                <div class="flex items-center">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" 
+                               name="is_active" 
+                               class="sr-only peer"
+                               {% if template.is_active %}checked{% endif %}>
+                        <div class="w-14 h-8 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+                        <span class="ml-3 text-sm font-semibold text-gray-700">Template Ativo</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Tarefas -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">📝 Tarefas do Checklist</h2>
+                    <button type="button" 
+                            onclick="addTask()"
+                            class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg font-semibold">
+                        <i class="fas fa-plus mr-2"></i>Adicionar Tarefa
+                    </button>
+                </div>
+
+                <div id="tasksList" class="space-y-4">
+                    {% for task in template.tasks.all %}
+                        <div class="bg-gradient-to-r from-gray-50 to-purple-50 rounded-xl p-6 border-2 border-gray-200 task-item">
+                            <div class="flex gap-4">
+                                <div class="flex-shrink-0 pt-2 cursor-move task-handle">
+                                    <i class="fas fa-grip-vertical text-gray-400 text-xl"></i>
+                                </div>
+                                <div class="flex-1 space-y-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                                Título da Tarefa <span class="text-red-500">*</span>
+                                            </label>
+                                            <input type="text" 
+                                                   name="task_title[]" 
+                                                   value="{{ task.title }}"
+                                                   required
+                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                        </div>
+                                        <div class="flex items-center pt-7">
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" 
+                                                       name="task_required[]" 
+                                                       value="{{ forloop.counter0 }}"
+                                                       class="sr-only peer"
+                                                       {% if task.is_required %}checked{% endif %}>
+                                                <div class="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                                <span class="ml-3 text-sm font-semibold text-gray-700">Obrigatória</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-semibold text-gray-700 mb-2">Descrição</label>
+                                        <textarea name="task_description[]" 
+                                                  rows="2"
+                                                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">{{ task.description }}</textarea>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-2">📷 Instrução (Imagem)</label>
+                                            <input type="file" 
+                                                   name="task_instruction_image_{{ forloop.counter0 }}"
+                                                   accept="image/*"
+                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                                            {% if task.instruction_image %}
+                                                <img src="{{ task.instruction_image.url }}" alt="Instrução" class="mt-2 max-w-xs rounded-lg shadow-md">
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-2">🎥 Instrução (Vídeo)</label>
+                                            <input type="file" 
+                                                   name="task_instruction_video_{{ forloop.counter0 }}"
+                                                   accept="video/*"
+                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                                            {% if task.instruction_video %}
+                                                <video controls class="mt-2 max-w-xs rounded-lg shadow-md">
+                                                    <source src="{{ task.instruction_video.url }}">
+                                                </video>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0 pt-2">
+                                    <button type="button" 
+                                            onclick="removeTask(this)"
+                                            class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div id="noTasksAlert" class="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center mt-6" style="display: none;">
+                    <i class="fas fa-info-circle text-blue-600 text-2xl mb-2"></i>
+                    <p class="text-blue-800">Clique em "Adicionar Tarefa" para começar.</p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="bg-white rounded-2xl shadow-xl p-8">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="text-sm text-gray-600">
+                        <i class="fas fa-user"></i> Criado por: <strong>{{ template.created_by.get_full_name|default:template.created_by.username }}</strong>
+                        <span class="mx-2">•</span>
+                        <i class="fas fa-calendar"></i> {{ template.created_at|date:"d/m/Y H:i" }}
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-4">
+                    <a href="{% url 'checklists:admin_templates' %}" 
+                       class="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
+                        ❌ Cancelar
+                    </a>
+                    <button type="submit"
+                            class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg font-bold">
+                        💾 Salvar Alterações
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<template id="taskTemplate">
+    <div class="bg-gradient-to-r from-gray-50 to-purple-50 rounded-xl p-6 border-2 border-gray-200 task-item">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0 pt-2 cursor-move task-handle">
+                <i class="fas fa-grip-vertical text-gray-400 text-xl"></i>
+            </div>
+            <div class="flex-1 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Título <span class="text-red-500">*</span></label>
+                        <input type="text" name="task_title[]" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div class="flex items-center pt-7">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="task_required[]" value="TASK_INDEX" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                            <span class="ml-3 text-sm font-semibold text-gray-700">Obrigatória</span>
+                        </label>
+                    </div>
+                </div>
+                <textarea name="task_description[]" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Descrição..."></textarea>
+            </div>
+            <div class="flex-shrink-0 pt-2">
+                <button type="button" onclick="removeTask(this)" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script>
+let taskCounter = {{ template.tasks.count }};
+function addTask() {
+    const template = document.getElementById('taskTemplate');
+    const clone = template.content.cloneNode(true);
+    const html = new XMLSerializer().serializeToString(clone);
+    const updatedHtml = html.replace(/TASK_INDEX/g, taskCounter);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = updatedHtml;
+    document.getElementById('tasksList').appendChild(tempDiv.firstElementChild);
+    document.getElementById('noTasksAlert').style.display = 'none';
+    taskCounter++;
+}
+function removeTask(button) {
+    button.closest('.task-item').remove();
+    if (document.getElementById('tasksList').children.length === 0) {
+        document.getElementById('noTasksAlert').style.display = 'block';
+    }
+}
+document.getElementById('templateForm').addEventListener('submit', function(e) {
+    if (document.getElementById('tasksList').children.length === 0) {
+        e.preventDefault();
+        alert('⚠️ Adicione pelo menos uma tarefa!');
+    }
+});
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('tasksList').children.length === 0) {
+        document.getElementById('noTasksAlert').style.display = 'block';
+    }
+});
+</script>
+{% endblock %}

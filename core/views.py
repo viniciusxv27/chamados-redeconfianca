@@ -1533,3 +1533,248 @@ def admin_checklist_approve_sector_tasks(request):
     }
     
     return render(request, 'core/admin_checklist_approve_sector_tasks.html', context)
+
+
+# ===== HISTÓRICO DE ATIVIDADES (SUPERADMIN) =====
+
+@login_required
+def activity_history(request):
+    """Dashboard de histórico de atividades - apenas para superadmins"""
+    if not request.user.is_superuser:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    from django.core.paginator import Paginator
+    from django.db.models import Count, Q
+    from datetime import datetime, timedelta
+    from .models import SystemLog
+    
+    # Filtros
+    action_type_filter = request.GET.get('action_type', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    search_query = request.GET.get('q', '')
+    
+    # Buscar logs
+    logs = SystemLog.objects.select_related('user').all()
+    
+    # Aplicar filtros
+    if action_type_filter:
+        logs = logs.filter(action_type=action_type_filter)
+    
+    if user_filter:
+        logs = logs.filter(user_id=user_filter)
+    
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            logs = logs.filter(created_at__gte=date_from_obj)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            # Adicionar 1 dia para incluir todo o dia selecionado
+            date_to_obj = date_to_obj + timedelta(days=1)
+            logs = logs.filter(created_at__lt=date_to_obj)
+        except ValueError:
+            pass
+    
+    if search_query:
+        logs = logs.filter(
+            Q(description__icontains=search_query) |
+            Q(user__first_name__icontains=search_query) |
+            Q(user__last_name__icontains=search_query) |
+            Q(user__username__icontains=search_query)
+        )
+    
+    # Ordenar por mais recente
+    logs = logs.order_by('-created_at')
+    
+    # Estatísticas gerais
+    today = timezone.now().date()
+    yesterday = today - timedelta(days=1)
+    this_week_start = today - timedelta(days=today.weekday())
+    this_month_start = today.replace(day=1)
+    
+    stats = {
+        'total_logs': SystemLog.objects.count(),
+        'today': SystemLog.objects.filter(created_at__date=today).count(),
+        'yesterday': SystemLog.objects.filter(created_at__date=yesterday).count(),
+        'this_week': SystemLog.objects.filter(created_at__gte=this_week_start).count(),
+        'this_month': SystemLog.objects.filter(created_at__gte=this_month_start).count(),
+    }
+    
+    # Estatísticas por tipo de ação (últimos 30 dias)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    action_stats = SystemLog.objects.filter(
+        created_at__gte=thirty_days_ago
+    ).values('action_type').annotate(
+        count=Count('id')
+    ).order_by('-count')[:10]
+    
+    # Top usuários mais ativos (últimos 30 dias)
+    top_users = SystemLog.objects.filter(
+        created_at__gte=thirty_days_ago,
+        user__isnull=False
+    ).values(
+        'user__id',
+        'user__first_name',
+        'user__last_name',
+        'user__username'
+    ).annotate(
+        activity_count=Count('id')
+    ).order_by('-activity_count')[:10]
+    
+    # NOVAS MÉTRICAS: Usuários que nunca entraram e tempo sem login
+    from django.db.models import Max
+    
+    # Usuários ativos que nunca fizeram login
+    users_never_logged = User.objects.filter(
+        is_active=True
+    ).exclude(
+        id__in=SystemLog.objects.filter(
+            action_type='USER_LOGIN'
+        ).values_list('user_id', flat=True)
+    ).order_by('date_joined')
+    
+    # Usuários inativos (tempo desde último login)
+    users_with_last_login = SystemLog.objects.filter(
+        action_type='USER_LOGIN',
+        user__is_active=True
+    ).values('user__id', 'user__first_name', 'user__last_name', 'user__username').annotate(
+        last_login=Max('created_at')
+    ).order_by('last_login')
+    
+    # Calcular dias desde último login
+    now = timezone.now()
+    inactive_users = []
+    for user_data in users_with_last_login:
+        last_login = user_data['last_login']
+        days_inactive = (now - last_login).days
+        if days_inactive > 0:  # Apenas usuários com algum tempo de inatividade
+            inactive_users.append({
+                'user_id': user_data['user__id'],
+                'name': f"{user_data['user__first_name']} {user_data['user__last_name']}",
+                'username': user_data['user__username'],
+                'last_login': last_login,
+                'days_inactive': days_inactive
+            })
+    
+    # Ordenar por dias de inatividade (maior primeiro) e pegar top 10
+    inactive_users.sort(key=lambda x: x['days_inactive'], reverse=True)
+    inactive_users_top = inactive_users[:10]
+    
+    # Paginação
+    paginator = Paginator(logs, 50)  # 50 logs por página
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Usuários para filtro
+    active_users = User.objects.filter(
+        is_active=True
+    ).order_by('first_name', 'last_name')
+    
+    # Tipos de ação disponíveis
+    action_types = SystemLog.ACTION_TYPES
+    
+    context = {
+        'logs': page_obj,
+        'stats': stats,
+        'action_stats': action_stats,
+        'top_users': top_users,
+        'users_never_logged': users_never_logged,
+        'inactive_users_top': inactive_users_top,
+        'active_users': active_users,
+        'action_types': action_types,
+        'action_type_filter': action_type_filter,
+        'user_filter': user_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'search_query': search_query,
+        'is_paginated': page_obj.has_other_pages(),
+        'page_obj': page_obj,
+    }
+    
+    return render(request, 'core/activity_history.html', context)
+
+
+@login_required
+def export_activity_history(request):
+    """Exportar histórico de atividades para CSV"""
+    if not request.user.is_superuser:
+        messages.error(request, 'Você não tem permissão para esta ação.')
+        return redirect('dashboard')
+    
+    import csv
+    from django.http import HttpResponse
+    from datetime import datetime
+    from .models import SystemLog
+    
+    # Aplicar mesmos filtros da view principal
+    action_type_filter = request.GET.get('action_type', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    search_query = request.GET.get('q', '')
+    
+    logs = SystemLog.objects.select_related('user').all()
+    
+    if action_type_filter:
+        logs = logs.filter(action_type=action_type_filter)
+    
+    if user_filter:
+        logs = logs.filter(user_id=user_filter)
+    
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            logs = logs.filter(created_at__gte=date_from_obj)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            from datetime import timedelta
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            date_to_obj = date_to_obj + timedelta(days=1)
+            logs = logs.filter(created_at__lt=date_to_obj)
+        except ValueError:
+            pass
+    
+    if search_query:
+        from django.db.models import Q
+        logs = logs.filter(
+            Q(description__icontains=search_query) |
+            Q(user__first_name__icontains=search_query) |
+            Q(user__last_name__icontains=search_query)
+        )
+    
+    logs = logs.order_by('-created_at')
+    
+    # Criar resposta CSV
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="historico_atividades_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    
+    # Adicionar BOM para Excel reconhecer UTF-8
+    response.write('\ufeff')
+    
+    writer = csv.writer(response)
+    writer.writerow(['Data/Hora', 'Usuário', 'Tipo de Ação', 'Descrição', 'IP', 'User Agent'])
+    
+    for log in logs:
+        user_name = log.user.get_full_name() if log.user else 'Sistema'
+        action_label = dict(SystemLog.ACTION_TYPES).get(log.action_type, log.action_type)
+        
+        writer.writerow([
+            log.created_at.strftime('%d/%m/%Y %H:%M:%S'),
+            user_name,
+            action_label,
+            log.description,
+            log.ip_address or '',
+            log.user_agent[:100] if log.user_agent else ''  # Limitar tamanho
+        ])
+    
+    return response
