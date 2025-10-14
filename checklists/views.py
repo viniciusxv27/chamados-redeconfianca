@@ -49,11 +49,27 @@ def checklist_dashboard(request):
             is_active=True
         ).prefetch_related('tasks')
     
+    # Execuções do calendário (mês atual + próximo mês + mês anterior)
+    current_month = today.replace(day=1)
+    next_month = (current_month + timedelta(days=32)).replace(day=1)
+    previous_month = (current_month - timedelta(days=1)).replace(day=1)
+    
+    calendar_start = previous_month
+    calendar_end = next_month.replace(day=28) + timedelta(days=4)  # garante fim do próximo mês
+    calendar_end = calendar_end.replace(day=1) - timedelta(days=1)  # último dia do próximo mês
+    
+    calendar_executions = ChecklistExecution.objects.filter(
+        assignment__assigned_to=user,
+        execution_date__gte=calendar_start,
+        execution_date__lte=calendar_end
+    ).select_related('assignment__template').order_by('execution_date')
+    
     context = {
         'my_assignments': my_assignments[:5],  # Primeiros 5
         'today_executions': today_executions,
         'stats': stats,
         'available_templates': available_templates,
+        'calendar_executions': calendar_executions,
     }
     return render(request, 'checklists/dashboard.html', context)
 

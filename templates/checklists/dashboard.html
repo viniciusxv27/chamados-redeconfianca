@@ -121,6 +121,79 @@
         </div>
     </div>
 
+    <!-- Calendário de Checklists -->
+    <div class="bg-white rounded-lg shadow-sm border mb-8">
+        <div class="p-6 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">📅 Calendário de Checklists</h2>
+                    <p class="text-gray-600 text-sm mt-1">Visualize o status dos checklists ao longo do tempo</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="previousMonth()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <i class="fas fa-chevron-left text-gray-600"></i>
+                    </button>
+                    <span id="currentMonthYear" class="text-lg font-semibold text-gray-900 px-4"></span>
+                    <button onclick="nextMonth()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <i class="fas fa-chevron-right text-gray-600"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            <!-- Legenda -->
+            <div class="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 rounded-full bg-green-500"></div>
+                    <span class="text-sm text-gray-700">Concluído</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 rounded-full bg-red-500"></div>
+                    <span class="text-sm text-gray-700">Atrasado/Não Feito</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 rounded-full bg-blue-500"></div>
+                    <span class="text-sm text-gray-700">Em Andamento/Em Dia</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 rounded-full bg-gray-300"></div>
+                    <span class="text-sm text-gray-700">Sem Checklist</span>
+                </div>
+            </div>
+
+            <!-- Calendário -->
+            <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6">
+                <div class="grid grid-cols-7 gap-2 mb-2">
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Dom</div>
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Seg</div>
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Ter</div>
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Qua</div>
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Qui</div>
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Sex</div>
+                    <div class="text-center text-sm font-semibold text-gray-600 py-2">Sáb</div>
+                </div>
+                
+                <div id="calendarDays" class="grid grid-cols-7 gap-2">
+                    <!-- Dias serão inseridos via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Detalhes do Dia Selecionado -->
+            <div id="dayDetails" class="mt-6 hidden">
+                <div class="border-t pt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-calendar-day text-primary mr-2"></i>
+                        Checklists do dia <span id="selectedDate"></span>
+                    </h3>
+                    <div id="dayChecklistsList" class="space-y-3">
+                        <!-- Checklists do dia serão inseridos aqui -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Execuções de Hoje -->
         <div class="bg-white rounded-lg shadow-sm border">
@@ -296,4 +369,183 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+// Dados de execuções do calendário (enviados pelo Django)
+const calendarData = {
+    {% for execution in calendar_executions %}
+    "{{ execution.execution_date|date:'Y-m-d' }}": {
+        status: "{{ execution.status }}",
+        checklists: [
+            {
+                name: "{{ execution.assignment.template.name|escapejs }}",
+                period: "{{ execution.period }}",
+                status: "{{ execution.status }}",
+                progress: {{ execution.progress_percentage }},
+                url: "{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}"
+            }
+        ]
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+};
+
+let currentDate = new Date();
+
+function renderCalendar() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    // Atualizar título do mês/ano
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    document.getElementById('currentMonthYear').textContent = `${monthNames[month]} ${year}`;
+    
+    // Primeiro dia do mês
+    const firstDay = new Date(year, month, 1).getDay();
+    // Último dia do mês
+    const lastDate = new Date(year, month + 1, 0).getDate();
+    
+    const calendarDaysContainer = document.getElementById('calendarDays');
+    calendarDaysContainer.innerHTML = '';
+    
+    // Dias vazios antes do início do mês
+    for (let i = 0; i < firstDay; i++) {
+        const emptyDay = document.createElement('div');
+        emptyDay.className = 'h-16';
+        calendarDaysContainer.appendChild(emptyDay);
+    }
+    
+    // Dias do mês
+    const today = new Date();
+    for (let day = 1; day <= lastDate; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayData = calendarData[dateStr];
+        
+        const dayElement = document.createElement('div');
+        const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
+        
+        // Determinar cor de fundo baseado no status
+        let bgClass = 'bg-white hover:bg-gray-50';
+        let borderClass = 'border-gray-200';
+        let dotClass = 'bg-gray-300';
+        
+        if (dayData) {
+            const status = dayData.status;
+            if (status === 'completed' || status === 'awaiting_approval') {
+                bgClass = 'bg-green-50 hover:bg-green-100';
+                borderClass = 'border-green-300';
+                dotClass = 'bg-green-500';
+            } else if (status === 'overdue') {
+                bgClass = 'bg-red-50 hover:bg-red-100';
+                borderClass = 'border-red-300';
+                dotClass = 'bg-red-500';
+            } else if (status === 'in_progress' || status === 'pending') {
+                bgClass = 'bg-blue-50 hover:bg-blue-100';
+                borderClass = 'border-blue-300';
+                dotClass = 'bg-blue-500';
+            }
+        }
+        
+        if (isToday) {
+            borderClass = 'border-purple-500 border-2';
+        }
+        
+        dayElement.className = `relative h-16 ${bgClass} border ${borderClass} rounded-lg p-2 cursor-pointer transition-all transform hover:scale-105 hover:shadow-md`;
+        dayElement.innerHTML = `
+            <div class="flex flex-col h-full">
+                <span class="text-sm font-semibold ${isToday ? 'text-purple-600' : 'text-gray-700'}">${day}</span>
+                ${dayData ? `<div class="flex-1 flex items-center justify-center">
+                    <div class="w-3 h-3 ${dotClass} rounded-full animate-pulse"></div>
+                </div>` : ''}
+            </div>
+        `;
+        
+        dayElement.onclick = () => showDayDetails(dateStr, day);
+        calendarDaysContainer.appendChild(dayElement);
+    }
+}
+
+function showDayDetails(dateStr, day) {
+    const dayData = calendarData[dateStr];
+    const detailsSection = document.getElementById('dayDetails');
+    const checklistsList = document.getElementById('dayChecklistsList');
+    const selectedDateSpan = document.getElementById('selectedDate');
+    
+    const monthNames = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+                       'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    selectedDateSpan.textContent = `${day} de ${monthNames[currentDate.getMonth()]}`;
+    
+    if (dayData && dayData.checklists) {
+        checklistsList.innerHTML = '';
+        dayData.checklists.forEach(checklist => {
+            const statusColors = {
+                'completed': 'bg-green-100 text-green-800',
+                'awaiting_approval': 'bg-green-100 text-green-800',
+                'overdue': 'bg-red-100 text-red-800',
+                'in_progress': 'bg-blue-100 text-blue-800',
+                'pending': 'bg-yellow-100 text-yellow-800'
+            };
+            
+            const statusLabels = {
+                'completed': '✅ Concluído',
+                'awaiting_approval': '⏳ Aguardando Aprovação',
+                'overdue': '❌ Atrasado',
+                'in_progress': '🔄 Em Andamento',
+                'pending': '⏰ Pendente'
+            };
+            
+            const periodLabels = {
+                'morning': '☀️ Manhã',
+                'afternoon': '🌙 Tarde'
+            };
+            
+            checklistsList.innerHTML += `
+                <div class="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:border-primary transition-colors">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <h4 class="font-medium text-gray-900">${checklist.name}</h4>
+                            <span class="text-xs px-2 py-1 rounded-full ${statusColors[checklist.status]}">
+                                ${statusLabels[checklist.status]}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-gray-600">
+                            <span>${periodLabels[checklist.period]}</span>
+                            <span>•</span>
+                            <span>Progresso: ${checklist.progress}%</span>
+                        </div>
+                    </div>
+                    <a href="${checklist.url}" class="text-primary hover:text-orange-600 font-medium">
+                        ${checklist.status === 'completed' || checklist.status === 'awaiting_approval' ? 'Ver' : 'Executar'} →
+                    </a>
+                </div>
+            `;
+        });
+        detailsSection.classList.remove('hidden');
+    } else {
+        checklistsList.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-calendar-times text-4xl mb-3"></i>
+                <p>Nenhum checklist para este dia</p>
+            </div>
+        `;
+        detailsSection.classList.remove('hidden');
+    }
+}
+
+function previousMonth() {
+    currentDate.setMonth(currentDate.getMonth() - 1);
+    renderCalendar();
+}
+
+function nextMonth() {
+    currentDate.setMonth(currentDate.getMonth() + 1);
+    renderCalendar();
+}
+
+// Renderizar calendário ao carregar a página
+document.addEventListener('DOMContentLoaded', () => {
+    renderCalendar();
+});
+</script>
+
 {% endblock %}
