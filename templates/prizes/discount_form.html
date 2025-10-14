@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Editar{% else %}Criar{% endif %} Desconto - Prêmios{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-8 mb-8 text-white shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-4xl font-bold">
+                    {% if is_edit %}
+                        <i class="fas fa-edit mr-2"></i>Editar Desconto
+                    {% else %}
+                        <i class="fas fa-plus mr-2"></i>Criar Novo Desconto
+                    {% endif %}
+                </h1>
+                <p class="text-xl opacity-90 mt-2">Configure cupons e promoções para prêmios</p>
+            </div>
+            <a href="{% url 'manage_discounts' %}" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-5 py-3 rounded-lg font-medium transition-colors border border-white border-opacity-30">
+                <i class="fas fa-arrow-left mr-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Formulário -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Informações Básicas -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                <i class="fas fa-info-circle mr-3 text-purple-500"></i>
+                Informações Básicas
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="name" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-tag mr-1"></i>Nome do Desconto *
+                    </label>
+                    <input type="text" 
+                           id="name" 
+                           name="name" 
+                           required 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           value="{% if is_edit %}{{ discount.name }}{% endif %}"
+                           placeholder="Ex: Black Friday 2024">
+                </div>
+
+                <div>
+                    <label for="code" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-barcode mr-1"></i>Código do Cupom *
+                    </label>
+                    <input type="text" 
+                           id="code" 
+                           name="code" 
+                           required 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 uppercase font-mono"
+                           value="{% if is_edit %}{{ discount.code }}{% endif %}"
+                           placeholder="Ex: BLACKFRIDAY24"
+                           pattern="[A-Z0-9]+"
+                           title="Apenas letras maiúsculas e números">
+                    <p class="text-xs text-gray-500 mt-1">Apenas letras maiúsculas e números, sem espaços</p>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <label for="description" class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-align-left mr-1"></i>Descrição
+                </label>
+                <textarea id="description" 
+                          name="description" 
+                          rows="3" 
+                          class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Descrição opcional do desconto...">{% if is_edit %}{{ discount.description }}{% endif %}</textarea>
+            </div>
+        </div>
+
+        <!-- Configurações do Desconto -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                <i class="fas fa-percentage mr-3 text-purple-500"></i>
+                Configurações do Desconto
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="discount_type" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-sliders-h mr-1"></i>Tipo de Desconto *
+                    </label>
+                    <select id="discount_type" 
+                            name="discount_type" 
+                            required 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            onchange="toggleDiscountType()">
+                        <option value="PERCENTAGE" {% if is_edit and discount.discount_type == 'PERCENTAGE' %}selected{% endif %}>Porcentagem (%)</option>
+                        <option value="FIXED" {% if is_edit and discount.discount_type == 'FIXED' %}selected{% endif %}>Valor Fixo (C$)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="discount_value" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-dollar-sign mr-1"></i>Valor do Desconto *
+                    </label>
+                    <div class="relative">
+                        <input type="number" 
+                               id="discount_value" 
+                               name="discount_value" 
+                               required 
+                               step="0.01" 
+                               min="0"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                               value="{% if is_edit %}{{ discount.discount_value }}{% endif %}"
+                               placeholder="Ex: 10">
+                        <span id="discount_suffix" class="absolute right-4 top-3 text-gray-500 font-semibold">%</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="min_purchase_value" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-shopping-cart mr-1"></i>Valor Mínimo (C$)
+                    </label>
+                    <input type="number" 
+                           id="min_purchase_value" 
+                           name="min_purchase_value" 
+                           step="0.01" 
+                           min="0"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           value="{% if is_edit %}{{ discount.min_purchase_value }}{% else %}0{% endif %}"
+                           placeholder="0.00">
+                    <p class="text-xs text-gray-500 mt-1">Valor mínimo em C$ para aplicar o desconto</p>
+                </div>
+
+                <div id="max_discount_field">
+                    <label for="max_discount_value" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-hand-holding-usd mr-1"></i>Desconto Máximo (C$)
+                    </label>
+                    <input type="number" 
+                           id="max_discount_value" 
+                           name="max_discount_value" 
+                           step="0.01" 
+                           min="0"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           value="{% if is_edit %}{{ discount.max_discount_value|default:'' }}{% endif %}"
+                           placeholder="Deixe vazio para ilimitado">
+                    <p class="text-xs text-gray-500 mt-1">Valor máximo de desconto (apenas para porcentagem)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validade e Limites -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                <i class="fas fa-calendar-alt mr-3 text-purple-500"></i>
+                Validade e Limites
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="valid_from" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calendar-plus mr-1"></i>Válido De *
+                    </label>
+                    <input type="date" 
+                           id="valid_from" 
+                           name="valid_from" 
+                           required 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           value="{% if is_edit %}{{ discount.valid_from|date:'Y-m-d' }}{% endif %}">
+                </div>
+
+                <div>
+                    <label for="valid_until" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calendar-times mr-1"></i>Válido Até *
+                    </label>
+                    <input type="date" 
+                           id="valid_until" 
+                           name="valid_until" 
+                           required 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           value="{% if is_edit %}{{ discount.valid_until|date:'Y-m-d' }}{% endif %}">
+                </div>
+
+                <div>
+                    <label for="max_uses" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-users mr-1"></i>Máximo de Usos
+                    </label>
+                    <input type="number" 
+                           id="max_uses" 
+                           name="max_uses" 
+                           min="1"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           value="{% if is_edit %}{{ discount.max_uses|default:'' }}{% endif %}"
+                           placeholder="Deixe vazio para ilimitado">
+                    <p class="text-xs text-gray-500 mt-1">Número máximo de vezes que pode ser usado</p>
+                </div>
+
+                {% if is_edit %}
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-chart-line mr-1"></i>Usos Atuais
+                    </label>
+                    <div class="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
+                        <span class="text-lg font-bold text-purple-600">{{ discount.uses_count }}</span>
+                        <span class="text-gray-600 ml-2">vez(es) usado</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Categorias Aplicáveis -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-list mr-3 text-purple-500"></i>
+                Categorias Aplicáveis
+            </h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Selecione as categorias de prêmios onde este desconto pode ser aplicado. 
+                Deixe vazio para aplicar em todos os prêmios.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {% for category in categories %}
+                <label class="flex items-center p-4 border border-gray-200 rounded-xl hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer">
+                    <input type="checkbox" 
+                           name="categories" 
+                           value="{{ category.id }}"
+                           class="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                           {% if is_edit and category in discount.applies_to_categories.all %}checked{% endif %}>
+                    <span class="ml-3 text-sm font-medium text-gray-700">
+                        <i class="{{ category.icon }} mr-2"></i>{{ category.name }}
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Status (apenas edição) -->
+        {% if is_edit %}
+        <div class="bg-green-50 rounded-2xl border border-green-100 p-6">
+            <label class="flex items-center cursor-pointer">
+                <input type="checkbox" 
+                       name="is_active" 
+                       class="w-6 h-6 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                       {% if discount.is_active %}checked{% endif %}>
+                <span class="ml-3 text-lg font-semibold text-green-800">
+                    <i class="fas fa-toggle-on mr-2"></i>Desconto Ativo
+                </span>
+            </label>
+            <p class="text-sm text-green-700 ml-9 mt-1">
+                Marque para ativar ou desmarque para desativar este desconto
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- Instruções -->
+        <div class="bg-blue-50 rounded-2xl border border-blue-100 p-6">
+            <h3 class="font-semibold text-blue-900 mb-3 flex items-center">
+                <i class="fas fa-info-circle mr-2"></i>
+                Instruções
+            </h3>
+            <ul class="space-y-2 text-sm text-blue-800">
+                <li><i class="fas fa-check mr-2 text-blue-600"></i>O código deve ser único e em maiúsculas</li>
+                <li><i class="fas fa-check mr-2 text-blue-600"></i>Para desconto de porcentagem, você pode definir um valor máximo</li>
+                <li><i class="fas fa-check mr-2 text-blue-600"></i>Defina um valor mínimo se quiser que o desconto só se aplique a compras maiores</li>
+                <li><i class="fas fa-check mr-2 text-blue-600"></i>Se não selecionar categorias, o desconto se aplicará a todos os prêmios</li>
+            </ul>
+        </div>
+
+        <!-- Botões -->
+        <div class="flex space-x-4">
+            <a href="{% url 'manage_discounts' %}" class="flex-1 px-6 py-4 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 font-semibold transition-colors text-center">
+                <i class="fas fa-times mr-2"></i>Cancelar
+            </a>
+            <button type="submit" class="flex-1 px-6 py-4 bg-purple-600 text-white rounded-xl hover:bg-purple-700 font-semibold transition-colors">
+                <i class="fas fa-save mr-2"></i>
+                {% if is_edit %}Salvar Alterações{% else %}Criar Desconto{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function toggleDiscountType() {
+    const discountType = document.getElementById('discount_type').value;
+    const suffix = document.getElementById('discount_suffix');
+    const maxDiscountField = document.getElementById('max_discount_field');
+    
+    if (discountType === 'PERCENTAGE') {
+        suffix.textContent = '%';
+        maxDiscountField.style.display = 'block';
+    } else {
+        suffix.textContent = 'C$';
+        maxDiscountField.style.display = 'none';
+    }
+}
+
+// Inicializar no carregamento
+document.addEventListener('DOMContentLoaded', toggleDiscountType);
+
+// Converter código para maiúsculas ao digitar
+document.getElementById('code').addEventListener('input', function(e) {
+    this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+</script>
+{% endblock %}

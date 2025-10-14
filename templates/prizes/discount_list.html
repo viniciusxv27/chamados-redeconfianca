@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerenciar Descontos - Prêmios{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-8 mb-8 text-white shadow-lg">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+            <div>
+                <h1 class="text-4xl font-bold">Descontos de Prêmios</h1>
+                <p class="text-xl opacity-90 mt-2">Gerencie cupons e promoções</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'manage_prizes' %}" class="bg-white bg-opacity-20 text-white hover:bg-opacity-30 px-5 py-3 rounded-lg font-medium transition-colors border border-white border-opacity-30">
+                    <i class="fas fa-arrow-left mr-2"></i>Voltar
+                </a>
+                <a href="{% url 'create_discount' %}" class="bg-white text-purple-600 hover:bg-gray-100 px-6 py-3 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Novo Desconto
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-center text-white shadow-sm">
+            <div class="text-3xl font-bold mb-2">{{ total_discounts }}</div>
+            <div class="text-sm opacity-90 uppercase tracking-wide">Total de Descontos</div>
+        </div>
+        <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-center text-white shadow-sm">
+            <div class="text-3xl font-bold mb-2">{{ active_discounts }}</div>
+            <div class="text-sm opacity-90 uppercase tracking-wide">Descontos Ativos</div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
+        <form method="get" class="flex flex-col sm:flex-row gap-4">
+            <div class="flex-1">
+                <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Filtrar por Status</label>
+                <select name="status" id="status" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500" onchange="this.form.submit()">
+                    <option value="all" {% if current_status == 'all' %}selected{% endif %}>Todos</option>
+                    <option value="active" {% if current_status == 'active' %}selected{% endif %}>Ativos</option>
+                    <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>Inativos</option>
+                    <option value="expired" {% if current_status == 'expired' %}selected{% endif %}>Expirados</option>
+                </select>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Descontos -->
+    {% if discounts %}
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gradient-to-r from-purple-50 to-purple-100">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Código</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Nome</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Tipo</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Valor</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Validade</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Usos</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-purple-800 uppercase tracking-wider">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for discount in discounts %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-lg text-sm font-bold font-mono">
+                                {{ discount.code }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-semibold text-gray-900">{{ discount.name }}</div>
+                            {% if discount.description %}
+                            <div class="text-xs text-gray-500 mt-1">{{ discount.description|truncatewords:10 }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm text-gray-700">
+                                {% if discount.discount_type == 'PERCENTAGE' %}
+                                    <i class="fas fa-percentage mr-1 text-purple-500"></i>Porcentagem
+                                {% else %}
+                                    <i class="fas fa-dollar-sign mr-1 text-green-500"></i>Valor Fixo
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm font-semibold text-purple-700">
+                                {% if discount.discount_type == 'PERCENTAGE' %}
+                                    {{ discount.discount_value }}%
+                                {% else %}
+                                    C$ {{ discount.discount_value }}
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-xs text-gray-600">
+                                <div><i class="fas fa-calendar-plus mr-1"></i>{{ discount.valid_from|date:"d/m/Y" }}</div>
+                                <div><i class="fas fa-calendar-times mr-1"></i>{{ discount.valid_until|date:"d/m/Y" }}</div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <div class="text-sm">
+                                <span class="font-semibold text-gray-900">{{ discount.uses_count }}</span>
+                                {% if discount.max_uses %}
+                                    <span class="text-gray-500">/ {{ discount.max_uses }}</span>
+                                {% else %}
+                                    <span class="text-gray-500">/ ∞</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if discount.is_valid %}
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                                    <i class="fas fa-check-circle mr-1"></i>Ativo
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">
+                                    <i class="fas fa-times-circle mr-1"></i>Inativo
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div class="flex space-x-2">
+                                <a href="{% url 'edit_discount' discount.id %}" class="text-blue-600 hover:text-blue-800 font-medium">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button onclick="confirmDelete({{ discount.id }}, '{{ discount.name }}')" class="text-red-600 hover:text-red-800 font-medium">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Paginação -->
+    {% if discounts.has_other_pages %}
+    <div class="mt-8 flex justify-center">
+        <nav class="flex items-center space-x-2">
+            {% if discounts.has_previous %}
+                <a href="?page={{ discounts.previous_page_number }}&status={{ current_status }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
+                    <i class="fas fa-chevron-left mr-1"></i>Anterior
+                </a>
+            {% endif %}
+            
+            <span class="px-4 py-2 bg-purple-100 text-purple-800 rounded-lg text-sm font-semibold">
+                Página {{ discounts.number }} de {{ discounts.paginator.num_pages }}
+            </span>
+            
+            {% if discounts.has_next %}
+                <a href="?page={{ discounts.next_page_number }}&status={{ current_status }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
+                    Próxima<i class="fas fa-chevron-right ml-1"></i>
+                </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Estado Vazio -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center">
+        <i class="fas fa-tags text-6xl text-gray-300 mb-4"></i>
+        <h3 class="text-xl font-semibold text-gray-700 mb-2">Nenhum desconto encontrado</h3>
+        <p class="text-gray-500 mb-6">Crie seu primeiro desconto para começar a oferecer promoções!</p>
+        <a href="{% url 'create_discount' %}" class="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium">
+            <i class="fas fa-plus mr-2"></i>Criar Primeiro Desconto
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Confirmar Exclusão</h3>
+            <p class="text-sm text-gray-500 mb-6">
+                Tem certeza que deseja excluir o desconto <strong id="discountName"></strong>?
+                Esta ação não pode ser desfeita.
+            </p>
+        </div>
+        <div class="flex space-x-3">
+            <button onclick="closeDeleteModal()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium transition-colors">
+                Cancelar
+            </button>
+            <button onclick="deleteDiscount()" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors">
+                Excluir
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let discountToDelete = null;
+
+function confirmDelete(discountId, discountName) {
+    discountToDelete = discountId;
+    document.getElementById('discountName').textContent = discountName;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+    discountToDelete = null;
+}
+
+function deleteDiscount() {
+    if (!discountToDelete) return;
+    
+    fetch(`/prizes/discounts/${discountToDelete}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Erro ao excluir desconto');
+            closeDeleteModal();
+        }
+    })
+    .catch(error => {
+        alert('Erro ao excluir desconto: ' + error);
+        closeDeleteModal();
+    });
+}
+
+// Fechar modal ao clicar fora
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeDeleteModal();
+    }
+});
+</script>
+{% endblock %}

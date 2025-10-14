@@ -181,6 +181,34 @@
                 </div>
             </div>
 
+            <!-- Forma de Pagamento -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <i class="fas fa-credit-card mr-3 text-orange-500"></i>
+                    Forma de Pagamento
+                </h3>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    {% if purchase.payment_method %}
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-900 font-semibold text-lg">{{ purchase.payment_method.name }}</p>
+                                {% if purchase.payment_method.description %}
+                                    <p class="text-gray-600 text-sm mt-1">{{ purchase.payment_method.description }}</p>
+                                {% endif %}
+                            </div>
+                            {% if purchase.payment_method.requires_approval %}
+                                <span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg text-xs font-semibold">
+                                    <i class="fas fa-exclamation-circle mr-1"></i>
+                                    Requer Aprovação
+                                </span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <p class="text-gray-500 italic">Não informada</p>
+                    {% endif %}
+                </div>
+            </div>
+
             <!-- Observações -->
             {% if purchase.notes %}
             <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">

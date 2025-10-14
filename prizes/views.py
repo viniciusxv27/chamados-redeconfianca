@@ -9,7 +9,7 @@ from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
 
-from .models import Prize, PrizeCategory, Redemption, CSTransaction
+from .models import Prize, PrizeCategory, Redemption, CSTransaction, PrizeDiscount
 from users.models import User
 
 
@@ -350,3 +350,200 @@ def cancel_redemption(request, redemption_id):
             
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def manage_discounts(request):
+    """Gerenciar descontos (admin)"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Acesso negado.')
+        return redirect('marketplace')
+    
+    status_filter = request.GET.get('status', 'active')
+    discounts = PrizeDiscount.objects.all()
+    
+    if status_filter == 'active':
+        discounts = discounts.filter(is_active=True)
+    elif status_filter == 'inactive':
+        discounts = discounts.filter(is_active=False)
+    elif status_filter == 'expired':
+        discounts = discounts.filter(valid_until__lt=timezone.now().date())
+    
+    discounts = discounts.order_by('-created_at')
+    
+    # Estatísticas
+    total_discounts = PrizeDiscount.objects.count()
+    active_discounts = PrizeDiscount.objects.filter(is_active=True).count()
+    
+    paginator = Paginator(discounts, 20)
+    page_number = request.GET.get('page')
+    discounts_page = paginator.get_page(page_number)
+    
+    context = {
+        'discounts': discounts_page,
+        'current_status': status_filter,
+        'total_discounts': total_discounts,
+        'active_discounts': active_discounts,
+    }
+    return render(request, 'prizes/discount_list.html', context)
+
+
+@login_required
+def create_discount(request):
+    """Criar novo desconto"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Acesso negado.')
+        return redirect('marketplace')
+    
+    if request.method == 'POST':
+        try:
+            discount = PrizeDiscount.objects.create(
+                name=request.POST['name'],
+                code=request.POST['code'].upper().strip(),
+                description=request.POST.get('description', ''),
+                discount_type=request.POST['discount_type'],
+                discount_value=Decimal(request.POST['discount_value']),
+                min_purchase_value=Decimal(request.POST.get('min_purchase_value', 0)),
+                max_discount_value=Decimal(request.POST['max_discount_value']) if request.POST.get('max_discount_value') else None,
+                valid_from=request.POST['valid_from'],
+                valid_until=request.POST['valid_until'],
+                max_uses=int(request.POST['max_uses']) if request.POST.get('max_uses') else None,
+                created_by=request.user
+            )
+            
+            # Adicionar categorias aplicáveis
+            if request.POST.getlist('categories'):
+                discount.applies_to_categories.set(request.POST.getlist('categories'))
+            
+            messages.success(request, f'Desconto "{discount.name}" criado com sucesso!')
+            return redirect('manage_discounts')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar desconto: {str(e)}')
+    
+    categories = PrizeCategory.objects.filter(active=True)
+    context = {
+        'categories': categories,
+        'is_edit': False,
+    }
+    return render(request, 'prizes/discount_form.html', context)
+
+
+@login_required
+def edit_discount(request, discount_id):
+    """Editar desconto"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Acesso negado.')
+        return redirect('marketplace')
+    
+    discount = get_object_or_404(PrizeDiscount, id=discount_id)
+    
+    if request.method == 'POST':
+        try:
+            discount.name = request.POST['name']
+            discount.code = request.POST['code'].upper().strip()
+            discount.description = request.POST.get('description', '')
+            discount.discount_type = request.POST['discount_type']
+            discount.discount_value = Decimal(request.POST['discount_value'])
+            discount.min_purchase_value = Decimal(request.POST.get('min_purchase_value', 0))
+            discount.max_discount_value = Decimal(request.POST['max_discount_value']) if request.POST.get('max_discount_value') else None
+            discount.valid_from = request.POST['valid_from']
+            discount.valid_until = request.POST['valid_until']
+            discount.max_uses = int(request.POST['max_uses']) if request.POST.get('max_uses') else None
+            discount.is_active = request.POST.get('is_active') == 'on'
+            discount.save()
+            
+            # Atualizar categorias aplicáveis
+            if request.POST.getlist('categories'):
+                discount.applies_to_categories.set(request.POST.getlist('categories'))
+            else:
+                discount.applies_to_categories.clear()
+            
+            messages.success(request, f'Desconto "{discount.name}" atualizado com sucesso!')
+            return redirect('manage_discounts')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar desconto: {str(e)}')
+    
+    categories = PrizeCategory.objects.filter(active=True)
+    context = {
+        'discount': discount,
+        'categories': categories,
+        'is_edit': True,
+    }
+    return render(request, 'prizes/discount_form.html', context)
+
+
+@login_required
+@require_POST
+def delete_discount(request, discount_id):
+    """Excluir desconto"""
+    if not request.user.can_manage_users():
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    discount = get_object_or_404(PrizeDiscount, id=discount_id)
+    
+    # Verificar se há resgates usando este desconto
+    redemptions_count = Redemption.objects.filter(discount=discount).count()
+    
+    if redemptions_count > 0:
+        return JsonResponse({
+            'success': False, 
+            'error': f'Este desconto não pode ser excluído pois está sendo usado em {redemptions_count} resgate(s). Você pode desativá-lo.'
+        })
+    
+    try:
+        discount_name = discount.name
+        discount.delete()
+        
+        # Log da ação
+        from core.middleware import log_action
+        log_action(
+            request.user,
+            'DISCOUNT_DELETED',
+            f'Desconto "{discount_name}" excluído',
+            request
+        )
+        
+        return JsonResponse({'success': True, 'message': f'Desconto "{discount_name}" excluído com sucesso!'})
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def validate_discount_code(request):
+    """Validar código de desconto (AJAX)"""
+    code = request.GET.get('code', '').upper().strip()
+    prize_id = request.GET.get('prize_id')
+    
+    if not code:
+        return JsonResponse({'valid': False, 'error': 'Código não informado'})
+    
+    try:
+        discount = PrizeDiscount.objects.get(code=code)
+        prize = get_object_or_404(Prize, id=prize_id)
+        
+        if not discount.is_valid:
+            return JsonResponse({'valid': False, 'error': 'Desconto inválido ou expirado'})
+        
+        if not discount.can_apply_to_prize(prize):
+            return JsonResponse({'valid': False, 'error': 'Este desconto não se aplica a este prêmio'})
+        
+        discount_amount = discount.calculate_discount(prize.value_cs)
+        final_value = prize.value_cs - discount_amount
+        
+        return JsonResponse({
+            'valid': True,
+            'discount_name': discount.name,
+            'discount_type': discount.get_discount_type_display(),
+            'discount_value': str(discount.discount_value),
+            'discount_amount': str(discount_amount),
+            'original_value': str(prize.value_cs),
+            'final_value': str(final_value),
+        })
+        
+    except PrizeDiscount.DoesNotExist:
+        return JsonResponse({'valid': False, 'error': 'Código de desconto não encontrado'})
+    except Exception as e:
+        return JsonResponse({'valid': False, 'error': str(e)})

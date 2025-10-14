@@ -553,6 +553,51 @@ def project_delete(request, project_id):
 
 
 @login_required
+def set_completion_date(request, project_id):
+    """Define a data de conclusão de um projeto"""
+    if not user_can_access_projects(request.user):
+        return JsonResponse({'error': 'Acesso negado'}, status=403)
+    
+    project = get_object_or_404(Project, id=project_id)
+    
+    # Verificar se usuário pode editar (criador, responsável ou SUPERADMIN)
+    if not (request.user.hierarchy == 'SUPERADMIN' or 
+            project.created_by == request.user or 
+            project.responsible_user == request.user):
+        return JsonResponse({'success': False, 'message': 'Você não tem permissão para editar este projeto'}, status=403)
+    
+    if request.method == 'POST':
+        import json
+        from datetime import datetime
+        
+        try:
+            data = json.loads(request.body)
+            completion_date_str = data.get('completion_date')
+            
+            if not completion_date_str:
+                return JsonResponse({'success': False, 'message': 'Data de conclusão não fornecida'})
+            
+            # Converter string para date
+            completion_date = datetime.strptime(completion_date_str, '%Y-%m-%d').date()
+            
+            # Atualizar projeto
+            project.completion_date = completion_date
+            project.status = 'CONCLUIDO'
+            project.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Data de conclusão definida com sucesso!',
+                'completion_date': completion_date.strftime('%d/%m/%Y')
+            })
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+    
+    return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+
+@login_required
 def activity_detail_api(request, activity_id):
     """API para detalhes da atividade (para modal)"""
     if not user_can_access_projects(request.user):

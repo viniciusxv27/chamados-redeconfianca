@@ -6,6 +6,40 @@ from suppliers.models import Supplier
 from suppliers.models import Supplier
 
 
+class PaymentMethod(models.Model):
+    """Modelo para gerenciar formas de pagamento"""
+    
+    name = models.CharField(
+        max_length=100,
+        verbose_name="Nome",
+        help_text="Ex: Cartão de Crédito, Boleto, PIX, etc."
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descrição",
+        help_text="Detalhes sobre esta forma de pagamento"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Ativo"
+    )
+    requires_approval = models.BooleanField(
+        default=False,
+        verbose_name="Requer Aprovação",
+        help_text="Compras com esta forma de pagamento precisam de aprovação"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Forma de Pagamento"
+        verbose_name_plural = "Formas de Pagamento"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
 class Purchase(models.Model):
     """Model para compras vinculadas aos fornecedores"""
     
@@ -95,11 +129,32 @@ class Purchase(models.Model):
         verbose_name="Solicitado por"
     )
     
+    # Forma de Pagamento
+    payment_method = models.ForeignKey(
+        PaymentMethod,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchases',
+        verbose_name="Forma de Pagamento"
+    )
+    
     # Observações
     notes = models.TextField(
         blank=True,
         verbose_name="Observações",
         help_text="Observações adicionais sobre a compra"
+    )
+    
+    # Livelo (Programa de Pontos)
+    accumulated_livelo_points = models.BooleanField(
+        default=False,
+        verbose_name="Acumulou Pontos Livelo"
+    )
+    livelo_points_quantity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Quantidade de Pontos Livelo"
     )
     
     # Metadados

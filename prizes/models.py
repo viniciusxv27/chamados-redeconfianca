@@ -85,6 +85,71 @@ class Prize(models.Model):
         return max(0, ((self.stock - approved_count) / self.stock) * 100)
 
 
+class PrizeDiscount(models.Model):
+    DISCOUNT_TYPE_CHOICES = [
+        ('PERCENTAGE', 'Porcentagem'),
+        ('FIXED', 'Valor Fixo'),
+    ]
+    
+    name = models.CharField(max_length=200, verbose_name="Nome do Desconto")
+    code = models.CharField(max_length=50, unique=True, verbose_name="Código", help_text="Código único para o desconto")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES, default='PERCENTAGE', verbose_name="Tipo de Desconto")
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor do Desconto", help_text="Porcentagem (ex: 10 para 10%) ou valor fixo em C$")
+    min_purchase_value = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Valor Mínimo de Compra", help_text="Valor mínimo em C$ para aplicar o desconto")
+    max_discount_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Desconto Máximo", help_text="Valor máximo de desconto em C$ (apenas para porcentagem)")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    valid_from = models.DateField(verbose_name="Válido de")
+    valid_until = models.DateField(verbose_name="Válido até")
+    max_uses = models.PositiveIntegerField(null=True, blank=True, verbose_name="Máximo de Usos", help_text="Número máximo de vezes que pode ser usado (deixe vazio para ilimitado)")
+    uses_count = models.PositiveIntegerField(default=0, verbose_name="Quantidade de Usos")
+    applies_to_categories = models.ManyToManyField(PrizeCategory, blank=True, verbose_name="Categorias Aplicáveis", help_text="Deixe vazio para aplicar a todos os prêmios")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, verbose_name="Criado por")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Desconto"
+        verbose_name_plural = "Descontos"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+    
+    @property
+    def is_valid(self):
+        """Verifica se o desconto está válido"""
+        if not self.is_active:
+            return False
+        today = timezone.now().date()
+        if self.valid_from > today or self.valid_until < today:
+            return False
+        if self.max_uses and self.uses_count >= self.max_uses:
+            return False
+        return True
+    
+    def can_apply_to_prize(self, prize):
+        """Verifica se o desconto pode ser aplicado ao prêmio"""
+        if not self.is_valid:
+            return False
+        if self.applies_to_categories.exists():
+            return prize.category in self.applies_to_categories.all()
+        return True
+    
+    def calculate_discount(self, prize_value):
+        """Calcula o valor do desconto"""
+        if prize_value < self.min_purchase_value:
+            return Decimal('0.00')
+        
+        if self.discount_type == 'PERCENTAGE':
+            discount = (prize_value * self.discount_value) / Decimal('100')
+            if self.max_discount_value:
+                discount = min(discount, self.max_discount_value)
+            return discount
+        else:  # FIXED
+            return min(self.discount_value, prize_value)
+
+
 class Redemption(models.Model):
     STATUS_CHOICES = [
         ('PENDENTE', 'Pendente'),
@@ -96,6 +161,10 @@ class Redemption(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Usuário")
     prize = models.ForeignKey(Prize, on_delete=models.CASCADE, verbose_name="Prêmio")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE', verbose_name="Status")
+    discount = models.ForeignKey(PrizeDiscount, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Desconto Aplicado")
+    original_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Valor Original")
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Valor do Desconto")
+    final_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Valor Final")
     redeemed_at = models.DateTimeField(auto_now_add=True, verbose_name="Data do Resgate")
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Data da Aprovação")
     delivered_at = models.DateTimeField(null=True, blank=True, verbose_name="Data da Entrega")

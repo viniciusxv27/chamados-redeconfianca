@@ -202,6 +202,11 @@ class Project(models.Model):
             completed_weight = activities.filter(status='CONCLUIDA').count()
             self.progress_percentage = Decimal(str((completed_weight / total_weight) * 100))
         
+        # Se projeto atingiu 100% e não tem data de conclusão, registrar
+        if self.progress_percentage == 100 and not self.completion_date:
+            self.completion_date = timezone.now().date()
+            self.status = 'CONCLUIDO'
+        
         self.save()
 
 

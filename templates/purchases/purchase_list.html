@@ -13,7 +13,10 @@
                     <h1 class="text-4xl font-bold">Compras</h1>
                     <p class="text-xl opacity-90 mt-2">Gerencie todas as compras e pedidos</p>
                 </div>
-                <div class="flex space-x-4">
+                <div class="flex space-x-3">
+                    <a href="{% url 'purchases:payment_method_list' %}" class="bg-white bg-opacity-20 text-white hover:bg-opacity-30 px-5 py-3 rounded-lg font-medium transition-colors border border-white border-opacity-30">
+                        <i class="fas fa-credit-card mr-2"></i>Formas de Pagamento
+                    </a>
                     <a href="{% url 'purchases:purchase_create' %}" class="bg-white text-orange-600 hover:bg-gray-100 px-6 py-3 rounded-lg font-medium transition-colors">
                         <i class="fas fa-plus mr-2"></i>Nova Compra
                     </a>
