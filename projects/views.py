@@ -228,7 +228,8 @@ def project_detail(request, project_id):
         'can_edit': (
             user_can_manage_all_projects(request.user) or
             project.created_by == request.user or
-            project.responsible_user == request.user
+            project.responsible_user == request.user or
+            request.user.sector == project.sector
         ),
     }
     
@@ -306,11 +307,12 @@ def activity_create(request, project_id):
     
     project = get_object_or_404(Project, id=project_id)
     
-    # Verificar permissão para editar este projeto
+    # Verificar permissão: usuários do mesmo setor podem adicionar tarefas
     if not (user_can_manage_all_projects(request.user) or 
             project.created_by == request.user or
-            project.responsible_user == request.user):
-        return HttpResponseForbidden("Você não tem permissão para editar este projeto.")
+            project.responsible_user == request.user or
+            request.user.sector == project.sector):
+        return HttpResponseForbidden("Você não tem permissão para adicionar atividades neste projeto.")
     
     if request.method == 'POST':
         try:
@@ -374,11 +376,12 @@ def activity_update_status(request, activity_id):
     
     activity = get_object_or_404(Activity, id=activity_id)
     
-    # Verificar permissão
+    # Verificar permissão: usuários do mesmo setor podem atualizar status
     if not (user_can_manage_all_projects(request.user) or 
             activity.project.created_by == request.user or
             activity.project.responsible_user == request.user or
-            activity.responsible_user == request.user):
+            activity.responsible_user == request.user or
+            request.user.sector == activity.project.sector):
         return JsonResponse({'success': False, 'message': 'Sem permissão para editar'})
     
     try:
@@ -998,10 +1001,12 @@ def activity_edit(request, activity_id):
     if not user_can_access_projects(request.user):
         return HttpResponseForbidden("Você não tem permissão para acessar esta área.")
     
+    # Verificar permissão: usuários do mesmo setor podem editar tarefas
     if not (user_can_manage_all_projects(request.user) or 
             activity.project.created_by == request.user or
             activity.project.responsible_user == request.user or
-            activity.responsible_user == request.user):
+            activity.responsible_user == request.user or
+            request.user.sector == activity.project.sector):
         messages.error(request, 'Você não tem permissão para editar esta atividade.')
         return redirect('projects:project_detail', project_id=activity.project.id)
     
