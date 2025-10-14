@@ -12,6 +12,17 @@ from .models import ChecklistTemplate, ChecklistTask, ChecklistAssignment, Check
 from users.models import User, Sector
 
 
+def has_checklist_admin_permission(user):
+    """Verifica se o usuário tem permissão para administrar checklists"""
+    if user.is_superuser:
+        return True
+    
+    if hasattr(user, 'hierarchy') and user.hierarchy:
+        return user.hierarchy in ['SUPERADMIN', 'ADMIN', 'ADMINISTRATIVO', 'SUPERVISOR']
+    
+    return False
+
+
 @login_required
 def checklist_dashboard(request):
     """Dashboard principal dos checklists"""
@@ -119,7 +130,7 @@ def create_assignment(request):
             
             # Verificar permissão
             if not request.user.sector or request.user.sector != template.sector:
-                if not request.user.is_superuser:
+                if not has_checklist_admin_permission(request.user):
                     messages.error(request, 'Você só pode criar checklists do seu setor.')
                     return redirect('checklists:dashboard')
             
@@ -497,7 +508,7 @@ def api_group_members(request, group_id):
 # ===== ADMIN - TEMPLATES =====@login_required
 def admin_templates(request):
     """Administração de templates (apenas para admins)"""
-    if not request.user.is_staff:
+    if not has_checklist_admin_permission(request.user):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('checklists:dashboard')
     
@@ -548,7 +559,7 @@ def admin_templates(request):
 @login_required
 def create_template(request):
     """Criar novo template de checklist (apenas para admins)"""
-    if not request.user.is_staff:
+    if not has_checklist_admin_permission(request.user):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('checklists:dashboard')
     
@@ -621,7 +632,7 @@ def create_template(request):
 @login_required
 def edit_template(request, template_id):
     """Editar template de checklist (apenas para admins)"""
-    if not request.user.is_staff:
+    if not has_checklist_admin_permission(request.user):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('checklists:dashboard')
     
@@ -686,7 +697,7 @@ def edit_template(request, template_id):
 @login_required
 def delete_template(request, template_id):
     """Deletar template de checklist (apenas para admins)"""
-    if not request.user.is_staff:
+    if not has_checklist_admin_permission(request.user):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('checklists:dashboard')
     
