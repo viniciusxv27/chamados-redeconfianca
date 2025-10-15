@@ -101,11 +101,49 @@
     {% endif %}
 
     <!-- Botão de Voltar -->
-    <div class="mt-8">
+    <div class="mt-8 flex items-center justify-between">
         <a href="{% url 'checklist_dashboard' %}" 
            class="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors">
             <i class="fas fa-arrow-left mr-2"></i>Voltar para Meus Checklists
         </a>
+        
+        <!-- Botão de Excluir -->
+        <button onclick="confirmDelete()" 
+                class="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 transition-colors">
+            <i class="fas fa-trash mr-2"></i>Excluir Checklist
+        </button>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div class="text-center mb-6">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Confirmar Exclusão</h3>
+            <p class="text-gray-500">
+                Tem certeza que deseja excluir o checklist "<strong>{{ checklist.title }}</strong>" de <strong>{{ checklist.date|date:"d/m/Y" }}</strong>?
+                <br><br>
+                Esta ação não pode ser desfeita.
+            </p>
+        </div>
+        
+        <div class="flex space-x-3">
+            <button onclick="closeDeleteModal()" 
+                    class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors">
+                <i class="fas fa-times mr-2"></i>Cancelar
+            </button>
+            
+            <form action="{% url 'delete_checklist' checklist.id %}" method="POST" class="flex-1">
+                {% csrf_token %}
+                <button type="submit" 
+                        class="w-full bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                    <i class="fas fa-trash mr-2"></i>Excluir
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -123,6 +161,34 @@
 
 {% block extra_js %}
 <script>
+function confirmDelete() {
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+}
+
+// Fechar modal ao clicar fora
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('deleteModal');
+    if (e.target === modal) {
+        closeDeleteModal();
+    }
+});
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const deleteModal = document.getElementById('deleteModal');
+        if (!deleteModal.classList.contains('hidden')) {
+            closeDeleteModal();
+        } else {
+            window.location.href = "{% url 'checklist_dashboard' %}";
+        }
+    }
+});
+
 function updateItemStatus(itemId, newStatus) {
     // Mostrar loading
     document.getElementById('loadingModal').classList.remove('hidden');
@@ -181,12 +247,5 @@ function showToast(message, type) {
         }, 300);
     }, 3000);
 }
-
-// Atalhos de teclado
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        window.location.href = "{% url 'checklist_dashboard' %}";
-    }
-});
 </script>
 {% endblock %}

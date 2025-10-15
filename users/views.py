@@ -3077,6 +3077,64 @@ def update_checklist_item_status(request, item_id):
         return JsonResponse({'success': False, 'error': str(e)})
 
 
+@login_required
+@require_POST
+def delete_checklist(request, checklist_id):
+    """Excluir um checklist (apenas o próprio usuário ou superiores)"""
+    from core.models import DailyChecklist
+    from django.db import models
+    
+    user = request.user
+    
+    try:
+        # Lógica de permissões por hierarquia
+        user_hierarchy = getattr(user, 'hierarchy', None)
+        
+        if user_hierarchy in ['SUPERADMIN', 'ADMIN']:
+            # SuperAdmins e Admins podem excluir qualquer checklist
+            checklist = get_object_or_404(DailyChecklist, id=checklist_id)
+        
+        elif user_hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO'] or user.is_staff:
+            # Supervisores podem excluir:
+            # 1. Seus próprios checklists
+            # 2. Checklists que criaram
+            # 3. Checklists de usuários do seu setor
+            checklist_query = DailyChecklist.objects.filter(
+                id=checklist_id
+            ).filter(
+                models.Q(user=user) |                          # Próprios checklists
+                models.Q(created_by=user) |                    # Checklists que criou
+                models.Q(user__sector=user.sector)             # Checklists do seu setor
+            )
+            
+            if not checklist_query.exists():
+                messages.error(request, 'Você não tem permissão para excluir este checklist.')
+                return redirect('checklist_dashboard')
+            
+            checklist = checklist_query.first()
+        
+        else:
+            # Usuários comuns só podem excluir seus próprios checklists
+            checklist = get_object_or_404(DailyChecklist, id=checklist_id, user=user)
+        
+        # Armazenar informações antes de excluir
+        checklist_title = checklist.title
+        checklist_date = checklist.date.strftime('%d/%m/%Y')
+        
+        # Excluir o checklist (cascade irá excluir os itens automaticamente)
+        checklist.delete()
+        
+        messages.success(request, f'✅ Checklist "{checklist_title}" de {checklist_date} excluído com sucesso!')
+        return redirect('checklist_dashboard')
+        
+    except DailyChecklist.DoesNotExist:
+        messages.error(request, 'Checklist não encontrado.')
+        return redirect('checklist_dashboard')
+    except Exception as e:
+        messages.error(request, f'Erro ao excluir checklist: {str(e)}')
+        return redirect('checklist_dashboard')
+
+
 # ===== ATIVIDADES/TAREFAS VIEWS =====
 @login_required
 def tasks_dashboard_view(request):

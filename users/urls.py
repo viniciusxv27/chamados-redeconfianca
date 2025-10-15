@@ -68,6 +68,7 @@ urlpatterns = [
     path('checklist/', views.checklist_dashboard_view, name='checklist_dashboard'),
     path('checklist/sector/', views.sector_checklists_view, name='sector_checklists'),
     path('checklist/<int:checklist_id>/', views.checklist_detail_view, name='checklist_detail'),
+    path('checklist/<int:checklist_id>/delete/', views.delete_checklist, name='delete_checklist'),
     path('checklist/item/<int:item_id>/update-status/', views.update_checklist_item_status, name='update_checklist_item_status'),
     
     # Tasks URLs
