@@ -30,8 +30,8 @@ def marketplace_view(request):
     if search:
         prizes = prizes.filter(name__icontains=search)
     
-    # Ordenação por prioridade
-    prizes = prizes.order_by('-priority', 'name')
+    # Ordenação: produtos com desconto primeiro, depois por prioridade
+    prizes = prizes.order_by('-has_discount', '-priority', 'name')
     
     # Paginação
     paginator = Paginator(prizes, 12)
