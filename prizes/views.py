@@ -57,7 +57,10 @@ def redeem_prize(request, prize_id):
     if not prize.available:
         return JsonResponse({'success': False, 'error': 'Prêmio não disponível'})
     
-    if request.user.balance_cs < prize.value_cs:
+    # Usar valor final (com desconto se aplicável)
+    final_value = prize.final_value
+    
+    if request.user.balance_cs < final_value:
         return JsonResponse({'success': False, 'error': 'Saldo insuficiente'})
     
     try:
@@ -66,17 +69,20 @@ def redeem_prize(request, prize_id):
             redemption = Redemption.objects.create(
                 user=request.user,
                 prize=prize,
-                status='PENDENTE'
+                status='PENDENTE',
+                original_value=prize.value_cs,
+                discount_value=prize.discount_amount,
+                final_value=final_value
             )
             
-            # Debitar saldo
-            request.user.balance_cs -= prize.value_cs
+            # Debitar saldo (usar valor final)
+            request.user.balance_cs -= final_value
             request.user.save()
             
             # Registrar transação
             CSTransaction.objects.create(
                 user=request.user,
-                amount=-prize.value_cs,
+                amount=-final_value,
                 transaction_type='REDEMPTION',
                 description=f'Resgate: {prize.name}',
                 related_redemption=redemption,
@@ -124,11 +130,24 @@ def create_prize(request):
     
     if request.method == 'POST':
         try:
+            # Calcular desconto se aplicável
+            has_discount = request.POST.get('has_discount') == 'on'
+            discount_percentage = None
+            discounted_value = None
+            
+            if has_discount and request.POST.get('discount_percentage'):
+                discount_percentage = Decimal(request.POST['discount_percentage'])
+                value_cs = Decimal(request.POST['value_cs'])
+                discounted_value = value_cs - (value_cs * discount_percentage / 100)
+            
             prize = Prize.objects.create(
                 name=request.POST['name'],
                 description=request.POST['description'],
                 category_id=request.POST.get('category') or None,
                 value_cs=Decimal(request.POST['value_cs']),
+                has_discount=has_discount,
+                discount_percentage=discount_percentage,
+                discounted_value=discounted_value,
                 priority=request.POST.get('priority', 'NORMAL'),
                 stock=int(request.POST.get('stock', 0)),
                 unlimited_stock=request.POST.get('unlimited_stock') == 'on',
@@ -149,6 +168,67 @@ def create_prize(request):
     
     categories = PrizeCategory.objects.filter(active=True)
     return render(request, 'prizes/create.html', {'categories': categories})
+
+
+@login_required
+def edit_prize(request, prize_id):
+    """Editar prêmio existente"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Acesso negado.')
+        return redirect('marketplace')
+    
+    prize = get_object_or_404(Prize, id=prize_id)
+    
+    if request.method == 'POST':
+        try:
+            # Calcular desconto se aplicável
+            has_discount = request.POST.get('has_discount') == 'on'
+            discount_percentage = None
+            discounted_value = None
+            
+            if has_discount and request.POST.get('discount_percentage'):
+                discount_percentage = Decimal(request.POST['discount_percentage'])
+                value_cs = Decimal(request.POST['value_cs'])
+                discounted_value = value_cs - (value_cs * discount_percentage / 100)
+            
+            # Atualizar dados do prêmio
+            prize.name = request.POST['name']
+            prize.description = request.POST['description']
+            prize.category_id = request.POST.get('category') or None
+            prize.value_cs = Decimal(request.POST['value_cs'])
+            prize.has_discount = has_discount
+            prize.discount_percentage = discount_percentage
+            prize.discounted_value = discounted_value
+            prize.priority = request.POST.get('priority', 'NORMAL')
+            prize.stock = int(request.POST.get('stock', 0))
+            prize.unlimited_stock = request.POST.get('unlimited_stock') == 'on'
+            prize.terms = request.POST.get('terms', '')
+            prize.valid_until = request.POST.get('valid_until') or None
+            prize.is_active = request.POST.get('is_active') == 'on'
+            
+            # Gerenciar imagem
+            if request.FILES.get('image'):
+                prize.image = request.FILES['image']
+            elif request.POST.get('remove_image') == 'on':
+                prize.image = None
+            
+            prize.save()
+            
+            messages.success(request, f'Prêmio "{prize.name}" atualizado com sucesso!')
+            return redirect('manage_prizes')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao atualizar prêmio: {str(e)}')
+    
+    categories = PrizeCategory.objects.filter(active=True)
+    redemptions = Redemption.objects.filter(prize=prize).select_related('user').order_by('-redeemed_at')[:10]
+    
+    context = {
+        'prize': prize,
+        'categories': categories,
+        'redemptions': redemptions,
+    }
+    return render(request, 'prizes/edit.html', context)
 
 
 @login_required

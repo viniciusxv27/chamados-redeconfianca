@@ -104,6 +104,11 @@ class Communication(models.Model):
     def __str__(self):
         return f"{self.title} - {self.sender.full_name}"
     
+    @property
+    def created_by(self):
+        """Alias para sender por compatibilidade"""
+        return self.sender
+    
     def is_active(self):
         """Verifica se o comunicado está ativo no momento"""
         from django.utils import timezone

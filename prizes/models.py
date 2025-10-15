@@ -41,6 +41,12 @@ class Prize(models.Model):
     description = models.TextField(verbose_name="Descrição")
     category = models.ForeignKey(PrizeCategory, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Categoria")
     value_cs = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor em C$")
+    
+    # Desconto específico do prêmio
+    has_discount = models.BooleanField(default=False, verbose_name="Tem Desconto")
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="Desconto (%)", help_text="Porcentagem de desconto (ex: 10 para 10%)")
+    discounted_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Valor com Desconto", help_text="Valor final após aplicar o desconto")
+    
     image = models.ImageField(upload_to=upload_prize_image, storage=get_media_storage(), blank=True, null=True, verbose_name="Imagem")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='NORMAL', verbose_name="Prioridade")
@@ -60,6 +66,20 @@ class Prize(models.Model):
     
     def __str__(self):
         return f"{self.name} - C$ {self.value_cs}"
+    
+    @property
+    def final_value(self):
+        """Retorna o valor final (com desconto se aplicável)"""
+        if self.has_discount and self.discounted_value:
+            return self.discounted_value
+        return self.value_cs
+    
+    @property
+    def discount_amount(self):
+        """Retorna o valor do desconto"""
+        if self.has_discount and self.discounted_value:
+            return self.value_cs - self.discounted_value
+        return Decimal('0.00')
     
     @property
     def available(self):

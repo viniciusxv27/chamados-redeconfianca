@@ -69,7 +69,8 @@
                     </label>
                     <input type="number" id="value_cs" name="value_cs" required min="1" step="1"
                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                           placeholder="100">
+                           placeholder="100"
+                           onchange="calculateDiscount()">
                 </div>
                 
                 <div>
@@ -83,6 +84,52 @@
                         <option value="HIGH">Destaque</option>
                         <option value="URGENT">Limitado</option>
                     </select>
+                </div>
+            </div>
+
+            <!-- Desconto -->
+            <div class="bg-orange-50 rounded-lg border border-orange-100 p-6">
+                <div class="flex items-center mb-4">
+                    <input type="checkbox" id="has_discount" name="has_discount" 
+                           class="h-5 w-5 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                           onchange="toggleDiscount()">
+                    <label for="has_discount" class="ml-3 block text-sm font-semibold text-orange-800">
+                        <i class="fas fa-percent mr-2"></i>
+                        Aplicar Desconto neste Prêmio
+                    </label>
+                </div>
+                
+                <div id="discount_fields" class="hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="discount_percentage" class="block text-sm font-medium text-orange-700 mb-2">
+                                <i class="fas fa-percentage mr-1"></i>
+                                Desconto (%)
+                            </label>
+                            <input type="number" id="discount_percentage" name="discount_percentage" 
+                                   min="1" max="99" step="0.01"
+                                   class="w-full px-4 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white"
+                                   placeholder="Ex: 15"
+                                   onchange="calculateDiscount()">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-orange-700 mb-2">
+                                <i class="fas fa-tag mr-1"></i>
+                                Valor Final
+                            </label>
+                            <div class="w-full px-4 py-2 bg-white border border-orange-300 rounded-lg">
+                                <span id="final_value" class="text-lg font-bold text-orange-600">C$ 0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-orange-100 rounded-lg p-4">
+                        <p class="text-sm text-orange-800">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            O preço original será exibido riscado no marketplace, destacando o desconto.
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -204,6 +251,33 @@ function previewImage(input) {
         reader.readAsDataURL(input.files[0]);
     } else {
         preview.classList.add('hidden');
+    }
+}
+
+// Toggle de desconto
+function toggleDiscount() {
+    const hasDiscount = document.getElementById('has_discount').checked;
+    const discountFields = document.getElementById('discount_fields');
+    
+    if (hasDiscount) {
+        discountFields.classList.remove('hidden');
+    } else {
+        discountFields.classList.add('hidden');
+        document.getElementById('discount_percentage').value = '';
+        document.getElementById('final_value').textContent = 'C$ 0';
+    }
+}
+
+// Calcular desconto
+function calculateDiscount() {
+    const valueCs = parseFloat(document.getElementById('value_cs').value) || 0;
+    const discountPercentage = parseFloat(document.getElementById('discount_percentage').value) || 0;
+    
+    if (valueCs > 0 && discountPercentage > 0) {
+        const finalValue = valueCs - (valueCs * discountPercentage / 100);
+        document.getElementById('final_value').textContent = 'C$ ' + finalValue.toFixed(2);
+    } else {
+        document.getElementById('final_value').textContent = 'C$ ' + valueCs.toFixed(2);
     }
 }
 

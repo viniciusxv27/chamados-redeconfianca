@@ -74,32 +74,135 @@
 
                     <!-- Custo em C$ -->
                     <div>
-                        <label for="cost" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Custo em C$ <span class="text-red-500">*</span>
+                        <label for="value_cs" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Valor Original em C$ <span class="text-red-500">*</span>
                         </label>
                         <input type="number" 
                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                               id="cost" 
-                               name="cost" 
+                               id="value_cs" 
+                               name="value_cs" 
                                value="{{ prize.value_cs }}"
                                min="1" 
+                               step="0.01"
                                placeholder="0"
+                               onchange="calculateDiscount()"
                                required>
                     </div>
 
-                    <!-- Estoque -->
+                    <!-- Desconto -->
+                    <div class="bg-orange-50 rounded-lg border border-orange-100 p-6">
+                        <div class="flex items-center mb-4">
+                            <input type="checkbox" id="has_discount" name="has_discount" 
+                                   class="h-5 w-5 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                                   onchange="toggleDiscount()"
+                                   {% if prize.has_discount %}checked{% endif %}>
+                            <label for="has_discount" class="ml-3 block text-sm font-semibold text-orange-800">
+                                <i class="fas fa-percent mr-2"></i>
+                                Aplicar Desconto neste Prêmio
+                            </label>
+                        </div>
+                        
+                        <div id="discount_fields" class="{% if not prize.has_discount %}hidden{% endif %} space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="discount_percentage" class="block text-sm font-medium text-orange-700 mb-2">
+                                        <i class="fas fa-percentage mr-1"></i>
+                                        Desconto (%)
+                                    </label>
+                                    <input type="number" id="discount_percentage" name="discount_percentage" 
+                                           min="1" max="99" step="0.01"
+                                           class="w-full px-4 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white"
+                                           placeholder="Ex: 15"
+                                           value="{{ prize.discount_percentage|default:'' }}"
+                                           onchange="calculateDiscount()">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-orange-700 mb-2">
+                                        <i class="fas fa-tag mr-1"></i>
+                                        Valor Final
+                                    </label>
+                                    <div class="w-full px-4 py-2 bg-white border border-orange-300 rounded-lg">
+                                        <span id="final_value" class="text-lg font-bold text-orange-600">
+                                            C$ {{ prize.discounted_value|default:prize.value_cs }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-orange-100 rounded-lg p-4">
+                                <p class="text-sm text-orange-800">
+                                    <i class="fas fa-info-circle mr-2"></i>
+                                    O preço original será exibido riscado no marketplace, destacando o desconto.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Prioridade -->
                     <div>
-                        <label for="stock" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Estoque
+                        <label for="priority" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Prioridade
                         </label>
-                        <input type="number" 
+                        <select class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                id="priority" 
+                                name="priority">
+                            <option value="BAIXA" {% if prize.priority == 'BAIXA' %}selected{% endif %}>Baixa</option>
+                            <option value="NORMAL" {% if prize.priority == 'NORMAL' %}selected{% endif %}>Normal</option>
+                            <option value="ALTA" {% if prize.priority == 'ALTA' %}selected{% endif %}>Alta</option>
+                            <option value="DESTAQUE" {% if prize.priority == 'DESTAQUE' %}selected{% endif %}>Destaque</option>
+                        </select>
+                    </div>
+
+                    <!-- Estoque -->
+                    <div class="space-y-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="unlimited_stock" name="unlimited_stock" 
+                                   class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                   onchange="toggleStock()"
+                                   {% if prize.unlimited_stock %}checked{% endif %}>
+                            <label for="unlimited_stock" class="ml-2 block text-sm text-gray-700">
+                                Estoque ilimitado
+                            </label>
+                        </div>
+                        
+                        <div id="stock_field" {% if prize.unlimited_stock %}class="hidden"{% endif %}>
+                            <label for="stock" class="block text-sm font-semibold text-gray-900 mb-2">
+                                Quantidade em Estoque
+                            </label>
+                            <input type="number" 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                   id="stock" 
+                                   name="stock" 
+                                   value="{{ prize.stock }}"
+                                   min="0" 
+                                   placeholder="0">
+                        </div>
+                    </div>
+
+                    <!-- Termos e Condições -->
+                    <div>
+                        <label for="terms" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Termos e Condições
+                        </label>
+                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
+                                  id="terms" 
+                                  name="terms" 
+                                  rows="3" 
+                                  placeholder="Termos e condições do prêmio">{{ prize.terms }}</textarea>
+                    </div>
+
+                    <!-- Data de Validade -->
+                    <div>
+                        <label for="valid_until" class="block text-sm font-semibold text-gray-900 mb-2">
+                            Válido até
+                        </label>
+                        <input type="date" 
                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                               id="stock" 
-                               name="stock" 
-                               value="{{ prize.stock }}"
-                               min="0" 
-                               placeholder="0">
-                        <p class="text-sm text-gray-500 mt-1">Deixe em branco para estoque ilimitado</p>
+                               id="valid_until" 
+                               name="valid_until" 
+                               value="{% if prize.valid_until %}{{ prize.valid_until|date:'Y-m-d' }}{% endif %}">
+                        <p class="text-sm text-gray-500 mt-1">Deixe em branco se não houver data de expiração</p>
                     </div>
 
                     <!-- Imagem do Prêmio -->
@@ -254,6 +357,50 @@
 </div>
 
 <script>
+// Toggle de desconto
+function toggleDiscount() {
+    const hasDiscount = document.getElementById('has_discount').checked;
+    const discountFields = document.getElementById('discount_fields');
+    
+    if (hasDiscount) {
+        discountFields.classList.remove('hidden');
+    } else {
+        discountFields.classList.add('hidden');
+        document.getElementById('discount_percentage').value = '';
+        updateFinalValue();
+    }
+}
+
+// Toggle de estoque
+function toggleStock() {
+    const unlimitedStock = document.getElementById('unlimited_stock').checked;
+    const stockField = document.getElementById('stock_field');
+    
+    if (unlimitedStock) {
+        stockField.classList.add('hidden');
+    } else {
+        stockField.classList.remove('hidden');
+    }
+}
+
+// Calcular desconto
+function calculateDiscount() {
+    const valueCs = parseFloat(document.getElementById('value_cs').value) || 0;
+    const discountPercentage = parseFloat(document.getElementById('discount_percentage').value) || 0;
+    
+    if (valueCs > 0 && discountPercentage > 0) {
+        const finalValue = valueCs - (valueCs * discountPercentage / 100);
+        document.getElementById('final_value').textContent = 'C$ ' + finalValue.toFixed(2);
+    } else {
+        document.getElementById('final_value').textContent = 'C$ ' + valueCs.toFixed(2);
+    }
+}
+
+function updateFinalValue() {
+    const valueCs = parseFloat(document.getElementById('value_cs').value) || 0;
+    document.getElementById('final_value').textContent = 'C$ ' + valueCs.toFixed(2);
+}
+
 function previewImage(input) {
     const preview = document.getElementById('image-preview');
     const previewImg = document.getElementById('preview-img');
