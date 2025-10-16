@@ -21,12 +21,13 @@ def tickets_list_view(request):
     
     # Filtros de pesquisa
     search = request.GET.get('search', '')
-    status_filter = request.GET.get('status', '')
+    status_filter = request.GET.getlist('status')  # Mudado para getlist para múltiplos valores
     origem_filter = request.GET.get('origem', '')
     categoria_filter = request.GET.get('categoria', '')
     setor_filter = request.GET.get('setor', '')
     prioridade_filter = request.GET.get('prioridade', '')
     carteira_filter = request.GET.get('carteira', '')
+    atribuidos_filter = request.GET.get('atribuidos', '')  # Novo filtro para chamados atribuídos
     
     # Filtros avançados para SUPERADMIN - definir logo no início
     created_by_filter = request.GET.get('created_by', '')
@@ -78,13 +79,24 @@ def tickets_list_view(request):
             user_sectors.append(user.sector)
         tickets = tickets.filter(sector__in=user_sectors).exclude(created_by=user)
     
-    # Filtro por status
-    if status_filter == 'abertos':
-        tickets = tickets.filter(status='ABERTO')
-    elif status_filter == 'nao_resolvidos':
-        tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO'])
-    elif status_filter in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']:
-        tickets = tickets.filter(status=status_filter)
+    # Filtro por chamados atribuídos (atribuído a mim)
+    if atribuidos_filter == 'sim':
+        tickets = tickets.filter(
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).distinct()
+    
+    # Filtro por status - suporte para múltiplos valores
+    if status_filter:
+        if 'abertos' in status_filter:
+            tickets = tickets.filter(status='ABERTO')
+        elif 'nao_resolvidos' in status_filter:
+            tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO'])
+        else:
+            # Filtrar por múltiplos status específicos
+            valid_statuses = [s for s in status_filter if s in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']]
+            if valid_statuses:
+                tickets = tickets.filter(status__in=valid_statuses)
     
     # Filtro por categoria - SUPERADMINs podem filtrar por qualquer categoria
     if categoria_filter:
@@ -187,7 +199,9 @@ def tickets_list_view(request):
     if search:
         filter_params['search'] = search
     if status_filter:
-        filter_params['status'] = status_filter
+        # Para múltiplos valores, precisamos tratá-los de forma especial na URL
+        for status in status_filter:
+            filter_params.setdefault('status', []).append(status)
     if origem_filter:
         filter_params['origem'] = origem_filter
     if categoria_filter:
@@ -198,6 +212,8 @@ def tickets_list_view(request):
         filter_params['prioridade'] = prioridade_filter
     if carteira_filter:
         filter_params['carteira'] = carteira_filter
+    if atribuidos_filter:
+        filter_params['atribuidos'] = atribuidos_filter
     
     # Filtros avançados para SUPERADMIN
     if user.hierarchy == 'SUPERADMIN':
@@ -364,6 +380,7 @@ def tickets_list_view(request):
         'setor': setor_filter,
         'prioridade': prioridade_filter,
         'carteira': carteira_filter,
+        'atribuidos': atribuidos_filter,
         'categoria_name': categoria_name,
         'setor_name': setor_name,
         'user_categories': user_categories,
