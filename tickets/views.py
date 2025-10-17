@@ -700,13 +700,18 @@ def update_ticket_status_view(request, ticket_id):
             else:
                 messages.error(request, 'Solução é obrigatória para marcar como resolvido.')
                 return redirect('ticket_detail', ticket_id=ticket.id)
-            # Aguarda aprovação do usuário que criou o chamado
+            
+            # Se a categoria não requer aprovação, fechar direto
+            if not ticket.category.requires_approval:
+                ticket.status = 'FECHADO'
+                ticket.closed_at = timezone.now()
         elif new_status == 'FECHADO':
             ticket.closed_at = timezone.now()
-        elif new_status == 'EM_ANDAMENTO' and old_status == 'RESOLVIDO':
-            # Reprovação - limpar campos de resolução
-            ticket.resolved_at = None
-            ticket.solution = ''
+        elif new_status == 'EM_ANDAMENTO' and old_status in ['RESOLVIDO', 'FECHADO', 'AGUARDANDO_APROVACAO']:
+            # Reabertura do chamado - limpar campos de resolução se necessário
+            if old_status in ['RESOLVIDO', 'FECHADO']:
+                ticket.resolved_at = None
+                ticket.closed_at = None
         
         ticket.save()
         
@@ -725,9 +730,12 @@ def update_ticket_status_view(request, ticket_id):
             if new_status == 'FECHADO' and old_status == 'RESOLVIDO':
                 comment_type = 'COMMENT'
                 observation = f"Solução aprovada pelo usuário. {observation}"
-            elif new_status == 'EM_ANDAMENTO' and old_status == 'RESOLVIDO':
+            elif new_status == 'EM_ANDAMENTO' and old_status in ['RESOLVIDO', 'FECHADO', 'AGUARDANDO_APROVACAO']:
                 comment_type = 'COMMENT'
-                observation = f"Solução reprovada pelo usuário. Motivo: {observation}"
+                if old_status == 'RESOLVIDO':
+                    observation = f"Solução reprovada pelo usuário. Motivo: {observation}"
+                else:
+                    observation = f"Chamado reaberto. Motivo: {observation}"
                 
             TicketComment.objects.create(
                 ticket=ticket,
@@ -737,12 +745,15 @@ def update_ticket_status_view(request, ticket_id):
             )
         
         # Mensagem de sucesso personalizada
-        if new_status == 'RESOLVIDO':
+        if ticket.status == 'FECHADO' and old_status == 'RESOLVIDO':
+            # Fechamento direto sem aprovação
+            messages.success(request, f'Chamado #{ticket.id} resolvido e fechado automaticamente (categoria não requer aprovação do usuário).')
+        elif new_status == 'RESOLVIDO' and ticket.category.requires_approval:
             messages.success(request, f'Chamado #{ticket.id} marcado como resolvido. Aguardando aprovação do usuário.')
         elif new_status == 'FECHADO':
             messages.success(request, f'Chamado #{ticket.id} fechado com sucesso!')
-        elif new_status == 'EM_ANDAMENTO' and old_status == 'RESOLVIDO':
-            messages.warning(request, f'Solução do chamado #{ticket.id} foi reprovada. O chamado retornou para "Em Andamento".')
+        elif new_status == 'EM_ANDAMENTO' and old_status in ['RESOLVIDO', 'FECHADO', 'AGUARDANDO_APROVACAO']:
+            messages.warning(request, f'Chamado #{ticket.id} foi reaberto e retornou para "Em Andamento".')
         else:
             messages.success(request, f'Status do chamado #{ticket.id} atualizado com sucesso!')
         
@@ -938,12 +949,17 @@ class TicketViewSet(viewsets.ModelViewSet):
         if new_status == 'RESOLVIDO':
             ticket.resolved_at = timezone.now()
             ticket.solution = solution
-            # Se não requer aprovação do usuário, vai direto para fechado
-            if not ticket.requires_approval:
+            # Se a categoria não requer aprovação, vai direto para fechado
+            if not ticket.category.requires_approval:
                 ticket.status = 'FECHADO'
                 ticket.closed_at = timezone.now()
         elif new_status == 'FECHADO':
             ticket.closed_at = timezone.now()
+        elif new_status == 'EM_ANDAMENTO' and old_status in ['RESOLVIDO', 'FECHADO', 'AGUARDANDO_APROVACAO']:
+            # Reabertura do chamado - limpar campos de resolução se necessário
+            if old_status in ['RESOLVIDO', 'FECHADO']:
+                ticket.resolved_at = None
+                ticket.closed_at = None
         
         ticket.save()
         
