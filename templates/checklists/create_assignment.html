@@ -6,17 +6,28 @@
 {% block extra_css %}
 <style>
 .template-card {
-    border: 2px solid transparent;
+    border: 2px solid #e5e7eb;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
+    position: relative;
 }
 .template-card:hover {
     border-color: #fb923c;
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(251, 146, 60, 0.2);
 }
 .template-card.selected {
-    border-color: #fb923c;
-    background-color: #fff7ed;
+    border-color: #f97316 !important;
+    background: linear-gradient(135deg, #fff7ed, #ffedd5) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.3);
+}
+.template-check-icon {
+    animation: checkBounce 0.5s ease;
+}
+@keyframes checkBounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
 }
 .schedule-option {
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -161,15 +172,27 @@
                 {% if templates %}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {% for template in templates %}
-                        <div class="template-card bg-white p-4 rounded-lg border" onclick="selectTemplate({{ template.id }})">
+                        <div class="template-card bg-white p-4 rounded-lg border-2 border-gray-200 hover:border-orange-400 transition-all duration-300 cursor-pointer" 
+                             onclick="selectTemplate({{ template.id }})"
+                             id="template_card_{{ template.id }}">
                             <div class="flex justify-between items-start mb-3">
-                                <div>
-                                    <h3 class="font-semibold text-gray-900">{{ template.name }}</h3>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <h3 class="font-semibold text-gray-900">{{ template.name }}</h3>
+                                        <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                                            {{ template.sector.name }}
+                                        </span>
+                                    </div>
                                     <p class="text-sm text-gray-600 mt-1">{{ template.description }}</p>
                                 </div>
-                                <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                                    {{ template.tasks.count }} tarefas
-                                </span>
+                                <div class="flex flex-col items-end gap-2 ml-2">
+                                    <span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full whitespace-nowrap">
+                                        {{ template.tasks.count }} tarefas
+                                    </span>
+                                    <div class="template-check-icon hidden">
+                                        <i class="fas fa-check-circle text-2xl text-orange-500"></i>
+                                    </div>
+                                </div>
                             </div>
                             
                             <!-- Preview das tarefas -->
@@ -374,8 +397,7 @@
                                 <input type="date" 
                                        name="start_date" 
                                        id="start_date"
-                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium"
-                                       required>
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium">
                             </div>
                             <div class="space-y-2">
                                 <label class="block text-sm font-bold text-gray-700 flex items-center">
@@ -385,8 +407,7 @@
                                 <input type="date" 
                                        name="end_date" 
                                        id="end_date"
-                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium"
-                                       required>
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium">
                             </div>
                         </div>
                     </div>
@@ -489,11 +510,28 @@ let currentCalendarDate = new Date();
 
 // Template selection
 function selectTemplate(templateId) {
+    // Remover seleção de todos os cards
     document.querySelectorAll('.template-card').forEach(card => {
         card.classList.remove('selected');
+        // Esconder todos os ícones de check
+        const checkIcon = card.querySelector('.template-check-icon');
+        if (checkIcon) {
+            checkIcon.classList.add('hidden');
+        }
     });
     
-    event.target.closest('.template-card').classList.add('selected');
+    // Adicionar seleção ao card clicado
+    const selectedCard = document.getElementById(`template_card_${templateId}`);
+    if (selectedCard) {
+        selectedCard.classList.add('selected');
+        // Mostrar ícone de check
+        const checkIcon = selectedCard.querySelector('.template-check-icon');
+        if (checkIcon) {
+            checkIcon.classList.remove('hidden');
+        }
+    }
+    
+    // Marcar o radio button
     document.getElementById(`template_${templateId}`).checked = true;
     selectedTemplateId = templateId;
     
@@ -511,16 +549,28 @@ function selectScheduleType(type) {
     selectedScheduleType = type;
     
     // Show/hide sections - sempre mostrar o calendário para feedback visual
-    document.getElementById('date_range_section').classList.toggle('hidden', type === 'custom');
-    document.getElementById('custom_calendar_section').classList.remove('hidden');
+    const dateRangeSection = document.getElementById('date_range_section');
+    const customCalendarSection = document.getElementById('custom_calendar_section');
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
     
     if (type === 'custom') {
+        // Modo personalizado: esconder campos de data e desabilitá-los
+        dateRangeSection.classList.add('hidden');
+        startDateInput.disabled = true;
+        endDateInput.disabled = true;
+        
         // Limpar datas selecionadas e renderizar calendário
         selectedCustomDates = [];
         document.getElementById('custom_dates_input').value = JSON.stringify(selectedCustomDates);
         document.getElementById('selected_dates_count').textContent = selectedCustomDates.length;
         renderCalendar();
     } else {
+        // Outros modos: mostrar campos de data e habilitá-los
+        dateRangeSection.classList.remove('hidden');
+        startDateInput.disabled = false;
+        endDateInput.disabled = false;
+        
         // Set dates based on schedule type
         const today = new Date();
         let startDate, endDate;
@@ -544,6 +594,8 @@ function selectScheduleType(type) {
         // Pre-selecionar datas no calendário
         preselectDatesForScheduleType(type, startDate, endDate);
     }
+    
+    customCalendarSection.classList.remove('hidden');
     
     // Atualizar título do calendário
     const titles = {
@@ -834,7 +886,33 @@ function checkFormValidity() {
     const hasUser = assignmentType === 'user' ? selectedUserId !== null : true;
     const hasGroup = assignmentType === 'group' ? document.getElementById('group_select').value !== '' : true;
     const hasSchedule = selectedScheduleType !== null;
-    const hasValidDates = selectedScheduleType === 'custom' ? selectedCustomDates.length > 0 : true;
+    
+    // Validar datas baseado no tipo de agendamento
+    let hasValidDates = false;
+    
+    if (selectedScheduleType === 'custom') {
+        // Modo personalizado: precisa ter datas selecionadas
+        hasValidDates = selectedCustomDates.length > 0;
+    } else if (selectedScheduleType) {
+        // Outros modos: precisa ter start_date e end_date preenchidos E não desabilitados
+        const startDate = document.getElementById('start_date');
+        const endDate = document.getElementById('end_date');
+        hasValidDates = !startDate.disabled && !endDate.disabled && startDate.value && endDate.value;
+    }
+    
+    console.log('Form validation:', {
+        hasTemplate,
+        hasUser,
+        hasGroup,
+        hasSchedule,
+        hasValidDates,
+        selectedScheduleType,
+        customDatesCount: selectedCustomDates.length,
+        startDate: document.getElementById('start_date')?.value,
+        endDate: document.getElementById('end_date')?.value,
+        startDateDisabled: document.getElementById('start_date')?.disabled,
+        endDateDisabled: document.getElementById('end_date')?.disabled
+    });
     
     document.getElementById('submit_btn').disabled = !(hasTemplate && (hasUser || hasGroup) && hasSchedule && hasValidDates);
 }
@@ -897,10 +975,12 @@ document.getElementById('group_select').addEventListener('change', function() {
 // Date validation
 document.getElementById('start_date').addEventListener('change', function() {
     document.getElementById('end_date').min = this.value;
+    checkFormValidity();
 });
 
 document.getElementById('end_date').addEventListener('change', function() {
     document.getElementById('start_date').max = this.value;
+    checkFormValidity();
 });
 
 // Close search results when clicking outside
@@ -937,6 +1017,48 @@ document.addEventListener('DOMContentLoaded', function() {
             const input = this.querySelector('input');
             input.checked = true;
         });
+    });
+    
+    // Validação inicial do formulário
+    checkFormValidity();
+    
+    // Validação customizada no submit
+    const form = document.getElementById('assignment-form');
+    form.addEventListener('submit', function(e) {
+        // Validar campos obrigatórios baseado no tipo de agendamento
+        if (selectedScheduleType && selectedScheduleType !== 'custom') {
+            const startDateInput = document.getElementById('start_date');
+            const endDateInput = document.getElementById('end_date');
+            
+            // Só validar se os campos estiverem habilitados
+            if (!startDateInput.disabled && !endDateInput.disabled) {
+                if (!startDateInput.value || !endDateInput.value) {
+                    e.preventDefault();
+                    alert('Por favor, preencha as datas de início e fim.');
+                    return false;
+                }
+            }
+        }
+        
+        if (selectedScheduleType === 'custom' && selectedCustomDates.length === 0) {
+            e.preventDefault();
+            alert('Por favor, selecione pelo menos uma data no calendário.');
+            return false;
+        }
+        
+        if (!selectedTemplateId) {
+            e.preventDefault();
+            alert('Por favor, selecione um template de checklist.');
+            return false;
+        }
+        
+        if (!selectedUserId && document.querySelector('input[name="assignment_type"]:checked').value === 'user') {
+            e.preventDefault();
+            alert('Por favor, selecione um usuário.');
+            return false;
+        }
+        
+        return true;
     });
 });
 </script>

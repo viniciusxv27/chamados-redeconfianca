@@ -41,11 +41,29 @@ def checklist_dashboard(request):
         execution_date=today
     ).select_related('assignment__template')
     
+    # Separar por período e status
+    pending_morning = today_executions.filter(
+        period='morning',
+        status__in=['pending', 'in_progress']
+    )
+    pending_afternoon = today_executions.filter(
+        period='afternoon',
+        status__in=['pending', 'in_progress']
+    )
+    completed_morning = today_executions.filter(
+        period='morning',
+        status__in=['completed', 'awaiting_approval']
+    )
+    completed_afternoon = today_executions.filter(
+        period='afternoon',
+        status__in=['completed', 'awaiting_approval']
+    )
+    
     # Estatísticas
     stats = {
         'total_assignments': my_assignments.count(),
-        'today_pending': today_executions.filter(status='pending').count(),
-        'today_completed': today_executions.filter(status='completed').count(),
+        'today_pending': today_executions.filter(status__in=['pending', 'in_progress']).count(),
+        'today_completed': today_executions.filter(status__in=['completed', 'awaiting_approval']).count(),
         'overdue': ChecklistExecution.objects.filter(
             assignment__assigned_to=user,
             status='overdue'
@@ -78,6 +96,10 @@ def checklist_dashboard(request):
     context = {
         'my_assignments': my_assignments[:5],  # Primeiros 5
         'today_executions': today_executions,
+        'pending_morning': pending_morning,
+        'pending_afternoon': pending_afternoon,
+        'completed_morning': completed_morning,
+        'completed_afternoon': completed_afternoon,
         'stats': stats,
         'available_templates': available_templates,
         'calendar_executions': calendar_executions,
@@ -100,9 +122,26 @@ def create_assignment(request):
         custom_dates_str = request.POST.get('custom_dates', '[]')
         
         # Validações básicas
-        if not all([template_id, schedule_type, start_date, end_date]):
+        if not all([template_id, schedule_type]):
             messages.error(request, 'Todos os campos obrigatórios devem ser preenchidos.')
             return redirect('checklists:create_assignment')
+        
+        # Validar datas baseado no tipo de agendamento
+        if schedule_type == 'custom':
+            # Modo personalizado: validar custom_dates
+            try:
+                custom_dates = json.loads(custom_dates_str)
+                if not custom_dates:
+                    messages.error(request, 'Selecione pelo menos uma data no calendário.')
+                    return redirect('checklists:create_assignment')
+            except (json.JSONDecodeError, TypeError):
+                messages.error(request, 'Erro ao processar datas personalizadas.')
+                return redirect('checklists:create_assignment')
+        else:
+            # Outros modos: validar start_date e end_date
+            if not all([start_date, end_date]):
+                messages.error(request, 'Informe a data de início e fim.')
+                return redirect('checklists:create_assignment')
         
         try:
             template = get_object_or_404(ChecklistTemplate, id=template_id)
@@ -128,10 +167,14 @@ def create_assignment(request):
                 messages.error(request, 'Selecione um usuário ou grupo válido.')
                 return redirect('checklists:create_assignment')
             
-            # Verificar permissão
-            if not request.user.sector or request.user.sector != template.sector:
+            # Verificar permissão - usuário pode atribuir templates de qualquer setor que pertence
+            user_sectors = list(request.user.sectors.all())
+            if request.user.sector:
+                user_sectors.append(request.user.sector)
+            
+            if template.sector not in user_sectors:
                 if not has_checklist_admin_permission(request.user):
-                    messages.error(request, 'Você só pode criar checklists do seu setor.')
+                    messages.error(request, 'Você só pode criar checklists dos seus setores.')
                     return redirect('checklists:dashboard')
             
             # Processar datas personalizadas
@@ -145,14 +188,22 @@ def create_assignment(request):
             # Criar atribuições para cada usuário
             assignments_created = 0
             for user in users_to_assign:
+                # Para schedule_type 'custom', usar primeira e última data do array
+                if schedule_type == 'custom' and custom_dates:
+                    start_date_obj = datetime.strptime(custom_dates[0], '%Y-%m-%d').date()
+                    end_date_obj = datetime.strptime(custom_dates[-1], '%Y-%m-%d').date()
+                else:
+                    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                
                 assignment = ChecklistAssignment.objects.create(
                     template=template,
                     assigned_to=user,
                     assigned_by=request.user,
                     schedule_type=schedule_type,
                     period=period,
-                    start_date=datetime.strptime(start_date, '%Y-%m-%d').date(),
-                    end_date=datetime.strptime(end_date, '%Y-%m-%d').date(),
+                    start_date=start_date_obj,
+                    end_date=end_date_obj,
                     custom_dates=custom_dates
                 )
                 
@@ -172,16 +223,23 @@ def create_assignment(request):
             return redirect('checklists:create_assignment')
     
     # GET - mostrar formulário
-    user_sector = request.user.sector
-    if not user_sector:
+    # Obter todos os setores do usuário (principal + secundários)
+    user_sectors = list(request.user.sectors.all())
+    if request.user.sector:
+        user_sectors.append(request.user.sector)
+    
+    # Remover duplicatas
+    user_sectors = list(set(user_sectors))
+    
+    if not user_sectors:
         messages.error(request, 'Você precisa estar em um setor para criar checklists.')
         return redirect('checklists:dashboard')
     
-    # Templates do setor do usuário
+    # Templates de TODOS os setores do usuário
     templates = ChecklistTemplate.objects.filter(
-        sector=user_sector,
+        sector__in=user_sectors,
         is_active=True
-    ).prefetch_related('tasks')
+    ).prefetch_related('tasks').order_by('sector__name', 'name')
     
     # Usuários para atribuição
     sector_users = User.objects.filter(
@@ -720,7 +778,11 @@ def delete_template(request, template_id):
 @login_required
 def admin_approvals(request):
     """Área de aprovação de checklists para super admins"""
-    if not request.user.is_superuser:
+    # Verificar se o usuário tem permissão para acessar aprovações
+    allowed_sectors = ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERUSER']
+    user_sector = request.user.sector.name if request.user.sector else None
+    
+    if not request.user.is_superuser and user_sector not in allowed_sectors:
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('checklists:dashboard')
     
@@ -782,8 +844,12 @@ def admin_approvals(request):
 @login_required
 def approve_checklist(request, execution_id):
     """Aprovar checklist executado"""
-    if not request.user.is_superuser:
-        messages.error(request, 'Você não tem permissão para esta ação.')
+    # Verificar se o usuário tem permissão para aprovar
+    allowed_sectors = ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERUSER']
+    user_sector = request.user.sector.name if request.user.sector else None
+    
+    if not request.user.is_superuser and user_sector not in allowed_sectors:
+        messages.error(request, 'Você não tem permissão para aprovar checklists.')
         return redirect('checklists:dashboard')
     
     execution = get_object_or_404(ChecklistExecution, id=execution_id)
@@ -802,8 +868,12 @@ def approve_checklist(request, execution_id):
 @login_required
 def reject_checklist(request, execution_id):
     """Rejeitar checklist executado"""
-    if not request.user.is_superuser:
-        messages.error(request, 'Você não tem permissão para esta ação.')
+    # Verificar se o usuário tem permissão para rejeitar
+    allowed_sectors = ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERUSER']
+    user_sector = request.user.sector.name if request.user.sector else None
+    
+    if not request.user.is_superuser and user_sector not in allowed_sectors:
+        messages.error(request, 'Você não tem permissão para rejeitar checklists.')
         return redirect('checklists:dashboard')
     
     execution = get_object_or_404(ChecklistExecution, id=execution_id)
