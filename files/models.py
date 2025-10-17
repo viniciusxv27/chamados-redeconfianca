@@ -103,6 +103,7 @@ class SharedFile(models.Model):
     VISIBILITY_CHOICES = [
         ('ALL', 'Todos os usuários'),
         ('SECTOR', 'Usuários do setor'),
+        ('GROUP', 'Grupo específico'),
         ('USER', 'Usuário específico'),
     ]
     
@@ -114,6 +115,7 @@ class SharedFile(models.Model):
     # Controle de visibilidade
     visibility = models.CharField(max_length=10, choices=VISIBILITY_CHOICES, default='ALL', verbose_name="Visibilidade")
     target_sector = models.ForeignKey(Sector, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Setor alvo")
+    target_group = models.ForeignKey('communications.CommunicationGroup', on_delete=models.CASCADE, null=True, blank=True, verbose_name="Grupo alvo")
     target_user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='targeted_files', verbose_name="Usuário alvo")
     
     # Metadados
@@ -159,6 +161,8 @@ class SharedFile(models.Model):
             return True
         elif self.visibility == 'SECTOR' and self.target_sector:
             return user.is_in_sector(self.target_sector)
+        elif self.visibility == 'GROUP' and self.target_group:
+            return user in self.target_group.members.all()
         elif self.visibility == 'USER' and self.target_user:
             return user == self.target_user
         

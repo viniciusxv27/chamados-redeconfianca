@@ -110,49 +110,76 @@ def file_upload_view(request):
         category_id = request.POST.get('category')
         visibility = request.POST.get('visibility')
         target_sector_id = request.POST.get('target_sector')
+        target_group_id = request.POST.get('target_group')
         target_user_id = request.POST.get('target_user')
-        uploaded_file = request.FILES.get('file')
+        uploaded_files = request.FILES.getlist('files')  # Mudança: getlist para múltiplos arquivos
         
-        if not all([title, category_id, visibility, uploaded_file]):
-            messages.error(request, 'Todos os campos obrigatórios devem ser preenchidos.')
-            return render(request, 'files/upload.html', get_upload_context())
+        if not all([title, category_id, visibility]):
+            messages.error(request, 'Título, categoria e visibilidade são obrigatórios.')
+            return render(request, 'files/upload.html', get_upload_context(folder_id))
+        
+        if not uploaded_files:
+            messages.error(request, 'Selecione pelo menos um arquivo para enviar.')
+            return render(request, 'files/upload.html', get_upload_context(folder_id))
         
         try:
             category = FileCategory.objects.get(id=category_id, is_active=True)
             
             # Validações de visibilidade
             target_sector = None
+            target_group = None
             target_user = None
             
             if visibility == 'SECTOR':
                 if not target_sector_id:
                     messages.error(request, 'Selecione um setor para visibilidade por setor.')
-                    return render(request, 'files/upload.html', get_upload_context())
+                    return render(request, 'files/upload.html', get_upload_context(folder_id))
                 target_sector = Sector.objects.get(id=target_sector_id)
+            
+            elif visibility == 'GROUP':
+                if not target_group_id:
+                    messages.error(request, 'Selecione um grupo para visibilidade por grupo.')
+                    return render(request, 'files/upload.html', get_upload_context(folder_id))
+                from communications.models import CommunicationGroup
+                target_group = CommunicationGroup.objects.get(id=target_group_id)
             
             elif visibility == 'USER':
                 if not target_user_id:
                     messages.error(request, 'Selecione um usuário para visibilidade específica.')
-                    return render(request, 'files/upload.html', get_upload_context())
+                    return render(request, 'files/upload.html', get_upload_context(folder_id))
                 target_user = User.objects.get(id=target_user_id)
             
-            # Criar arquivo
-            shared_file = SharedFile.objects.create(
-                title=title,
-                description=description,
-                file=uploaded_file,
-                category=category,
-                visibility=visibility,
-                target_sector=target_sector,
-                target_user=target_user,
-                uploaded_by=request.user,
-                file_size=uploaded_file.size
-            )
+            # Criar arquivos (um para cada arquivo enviado)
+            created_files = []
+            for index, uploaded_file in enumerate(uploaded_files):
+                # Se houver múltiplos arquivos, adicionar número ao título
+                file_title = title
+                if len(uploaded_files) > 1:
+                    file_title = f"{title} ({index + 1})"
+                
+                shared_file = SharedFile.objects.create(
+                    title=file_title,
+                    description=description,
+                    file=uploaded_file,
+                    category=category,
+                    visibility=visibility,
+                    target_sector=target_sector,
+                    target_group=target_group,
+                    target_user=target_user,
+                    uploaded_by=request.user,
+                    file_size=uploaded_file.size
+                )
+                
+                created_files.append(shared_file)
+                
+                # Criar notificações
+                create_file_notifications(shared_file, request.user)
             
-            # Criar notificações
-            create_file_notifications(shared_file, request.user)
-            
-            messages.success(request, f'Arquivo "{title}" enviado com sucesso!')
+            # Mensagem de sucesso
+            if len(created_files) == 1:
+                messages.success(request, f'Arquivo "{title}" enviado com sucesso!')
+            else:
+                messages.success(request, f'{len(created_files)} arquivos enviados com sucesso!')
             
             # Voltar para a pasta de origem
             if folder_id:
@@ -172,6 +199,8 @@ def file_upload_view(request):
 
 def get_upload_context(folder_id=None):
     """Retorna o contexto necessário para o template de upload"""
+    from communications.models import CommunicationGroup
+    
     current_folder = None
     if folder_id:
         try:
@@ -182,9 +211,13 @@ def get_upload_context(folder_id=None):
     # Categorias da pasta atual
     categories = FileCategory.objects.filter(folder=current_folder, is_active=True).order_by('order', 'name')
     
+    # Grupos disponíveis
+    groups = CommunicationGroup.objects.filter(is_active=True).order_by('name')
+    
     return {
         'categories': categories,
         'users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
+        'groups': groups,
         'current_folder': current_folder
     }
 
@@ -423,9 +456,11 @@ def create_category(request):
 
 @login_required
 def get_sectors(request):
-    """Retorna lista de setores e pastas disponíveis para o usuário via JSON"""
+    """Retorna lista de setores, grupos e pastas disponíveis para o usuário via JSON"""
     if not request.user.can_view_sector_tickets():
-        return JsonResponse({'sectors': [], 'folders': []})
+        return JsonResponse({'sectors': [], 'groups': [], 'folders': []})
+    
+    from communications.models import CommunicationGroup
     
     # Para supervisores e admins, mostrar TODOS os setores
     sectors = Sector.objects.all().order_by('name')
@@ -437,6 +472,18 @@ def get_sectors(request):
             'description': getattr(sector, 'description', '')
         }
         for sector in sectors
+    ]
+    
+    # Buscar todos os grupos disponíveis
+    groups = CommunicationGroup.objects.filter(is_active=True).order_by('name')
+    groups_data = [
+        {
+            'id': group.id,
+            'name': group.name,
+            'description': group.description or '',
+            'members_count': group.members.count()
+        }
+        for group in groups
     ]
     
     # Buscar todas as pastas disponíveis
@@ -462,10 +509,11 @@ def get_sectors(request):
         for category in categories
     ]
     
-    print(f"DEBUG: User {request.user.email} can access {len(sectors_data)} sectors, {len(folders_data)} folders, and {len(categories_data)} categories")
+    print(f"DEBUG: User {request.user.email} can access {len(sectors_data)} sectors, {len(groups_data)} groups, {len(folders_data)} folders, and {len(categories_data)} categories")
     
     return JsonResponse({
         'sectors': sectors_data,
+        'groups': groups_data,
         'folders': folders_data,
         'categories': categories_data
     })
@@ -616,6 +664,10 @@ def create_file_notifications(shared_file, uploader):
     elif shared_file.visibility == 'SECTOR' and shared_file.target_sector:
         # Notificar usuários do setor
         users_to_notify = shared_file.target_sector.users.filter(is_active=True).exclude(id=uploader.id)
+    
+    elif shared_file.visibility == 'GROUP' and shared_file.target_group:
+        # Notificar membros do grupo
+        users_to_notify = shared_file.target_group.members.filter(is_active=True).exclude(id=uploader.id)
         
     elif shared_file.visibility == 'USER' and shared_file.target_user:
         # Notificar usuário específico

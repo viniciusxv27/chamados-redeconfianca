@@ -55,24 +55,24 @@
             
             <!-- File Upload -->
             <div>
-                <label for="file" class="block text-sm font-medium text-gray-700 mb-2">Arquivo *</label>
+                <label for="files" class="block text-sm font-medium text-gray-700 mb-2">Arquivo(s) *</label>
                 <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
-                    <input type="file" name="file" id="file" required class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.zip,.rar">
+                    <input type="file" name="files" id="files" required multiple class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.zip,.rar">
                     <div id="file-upload-area" class="cursor-pointer">
                         <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
-                        <p class="text-lg font-medium text-gray-600 mb-2">Clique para selecionar um arquivo</p>
+                        <p class="text-lg font-medium text-gray-600 mb-2">Clique para selecionar arquivo(s)</p>
                         <p class="text-sm text-gray-500">ou arraste e solte aqui</p>
                         <p class="text-xs text-gray-400 mt-2">
+                            <strong>Você pode selecionar múltiplos arquivos!</strong><br>
                             Formatos aceitos: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, PNG, GIF, ZIP, RAR<br>
-                            Tamanho máximo: 10MB
+                            Tamanho máximo por arquivo: 10MB
                         </p>
                     </div>
                     <div id="file-info" class="hidden">
                         <i class="fas fa-file text-4xl text-green-500 mb-4"></i>
-                        <p id="file-name" class="text-lg font-medium text-gray-600"></p>
-                        <p id="file-size" class="text-sm text-gray-500"></p>
-                        <button type="button" id="remove-file" class="text-red-500 text-sm mt-2 hover:text-red-700">
-                            <i class="fas fa-times mr-1"></i>Remover arquivo
+                        <div id="files-list" class="text-left mt-4 max-h-60 overflow-y-auto"></div>
+                        <button type="button" id="remove-file" class="text-red-500 text-sm mt-4 hover:text-red-700">
+                            <i class="fas fa-times mr-1"></i>Remover todos os arquivos
                         </button>
                     </div>
                 </div>
@@ -103,6 +103,10 @@
                         <span class="text-sm text-gray-700">Usuários de um setor específico</span>
                     </label>
                     <label class="flex items-center">
+                        <input type="radio" name="visibility" value="GROUP" class="mr-2" onchange="toggleTargetFields()">
+                        <span class="text-sm text-gray-700">Membros de um grupo específico</span>
+                    </label>
+                    <label class="flex items-center">
                         <input type="radio" name="visibility" value="USER" class="mr-2" onchange="toggleTargetFields()">
                         <span class="text-sm text-gray-700">Usuário específico</span>
                     </label>
@@ -115,6 +119,15 @@
                 <select name="target_sector" id="target_sector"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                     <option value="">Carregando setores...</option>
+                </select>
+            </div>
+            
+            <!-- Target Group -->
+            <div id="target-group-field" class="hidden">
+                <label for="target_group" class="block text-sm font-medium text-gray-700 mb-2">Grupo</label>
+                <select name="target_group" id="target_group"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">Carregando grupos...</option>
                 </select>
             </div>
             
@@ -145,20 +158,19 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const fileInput = document.getElementById('file');
+    const fileInput = document.getElementById('files');
     const fileUploadArea = document.getElementById('file-upload-area');
     const fileInfo = document.getElementById('file-info');
-    const fileName = document.getElementById('file-name');
-    const fileSize = document.getElementById('file-size');
+    const filesList = document.getElementById('files-list');
     const removeFileBtn = document.getElementById('remove-file');
     
     // File upload handling
     fileUploadArea.addEventListener('click', () => fileInput.click());
     
     fileInput.addEventListener('change', function() {
-        const file = this.files[0];
-        if (file) {
-            showFileInfo(file);
+        const files = this.files;
+        if (files.length > 0) {
+            showFilesInfo(files);
         }
     });
     
@@ -184,13 +196,30 @@ document.addEventListener('DOMContentLoaded', function() {
         const files = e.dataTransfer.files;
         if (files.length > 0) {
             fileInput.files = files;
-            showFileInfo(files[0]);
+            showFilesInfo(files);
         }
     });
     
-    function showFileInfo(file) {
-        fileName.textContent = file.name;
-        fileSize.textContent = formatFileSize(file.size);
+    function showFilesInfo(files) {
+        filesList.innerHTML = '';
+        
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileItem = document.createElement('div');
+            fileItem.className = 'flex items-center justify-between p-2 bg-gray-50 rounded mb-2';
+            fileItem.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-file text-green-500 mr-2"></i>
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">${file.name}</p>
+                        <p class="text-xs text-gray-500">${formatFileSize(file.size)}</p>
+                    </div>
+                </div>
+                <i class="fas fa-check text-green-500"></i>
+            `;
+            filesList.appendChild(fileItem);
+        }
+        
         fileUploadArea.classList.add('hidden');
         fileInfo.classList.remove('hidden');
     }
@@ -198,6 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideFileInfo() {
         fileUploadArea.classList.remove('hidden');
         fileInfo.classList.add('hidden');
+        filesList.innerHTML = '';
     }
     
     function formatFileSize(bytes) {
@@ -212,14 +242,19 @@ document.addEventListener('DOMContentLoaded', function() {
 function toggleTargetFields() {
     const visibility = document.querySelector('input[name="visibility"]:checked').value;
     const sectorField = document.getElementById('target-sector-field');
+    const groupField = document.getElementById('target-group-field');
     const userField = document.getElementById('target-user-field');
     
     sectorField.classList.add('hidden');
+    groupField.classList.add('hidden');
     userField.classList.add('hidden');
     
     if (visibility === 'SECTOR') {
         sectorField.classList.remove('hidden');
         loadSectorsForUpload();
+    } else if (visibility === 'GROUP') {
+        groupField.classList.remove('hidden');
+        loadGroupsForUpload();
     } else if (visibility === 'USER') {
         userField.classList.remove('hidden');
     }
@@ -269,6 +304,53 @@ function loadSectorsForUpload() {
         console.error('Erro ao carregar setores:', error);
         sectorSelect.innerHTML = '<option value="">Erro ao carregar setores</option>';
         sectorSelect.disabled = false;
+    });
+}
+
+function loadGroupsForUpload() {
+    const groupSelect = document.getElementById('target_group');
+    
+    // Mostrar loading
+    groupSelect.innerHTML = '<option value="">Carregando grupos...</option>';
+    groupSelect.disabled = true;
+    
+    console.log('Carregando grupos para upload...');
+    
+    fetch('{% url "files:get_sectors" %}', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Grupos recebidos para upload:', data);
+        groupSelect.innerHTML = '<option value="">Selecione um grupo</option>';
+        
+        if (data.groups && data.groups.length > 0) {
+            data.groups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.id;
+                option.textContent = `${group.name} (${group.members_count} membros)`;
+                groupSelect.appendChild(option);
+            });
+        } else {
+            groupSelect.innerHTML = '<option value="">Nenhum grupo disponível</option>';
+        }
+        
+        groupSelect.disabled = false;
+    })
+    .catch(error => {
+        console.error('Erro ao carregar grupos:', error);
+        groupSelect.innerHTML = '<option value="">Erro ao carregar grupos</option>';
+        groupSelect.disabled = false;
     });
 }
 </script>
