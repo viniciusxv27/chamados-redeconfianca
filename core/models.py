@@ -369,6 +369,11 @@ class ChecklistTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # Novos campos para status personalizados
+    use_custom_statuses = models.BooleanField(default=False, verbose_name="Usar Status Personalizados")
+    custom_statuses = models.JSONField(default=list, blank=True, verbose_name="Status Personalizados",
+                                       help_text="Lista de status customizados: [{'label': 'Nome', 'icon': 'fas fa-star', 'color': 'blue'}]")
+    
     class Meta:
         verbose_name = "Template de Checklist"
         verbose_name_plural = "Templates de Checklist"
@@ -376,6 +381,18 @@ class ChecklistTemplate(models.Model):
     
     def __str__(self):
         return self.title
+    
+    def get_status_options(self):
+        """Retorna as opções de status (padrão ou personalizadas)"""
+        if self.use_custom_statuses and self.custom_statuses:
+            return self.custom_statuses
+        else:
+            # Status padrão
+            return [
+                {'value': 'PENDING', 'label': 'Pendente', 'icon': 'fas fa-clock', 'color': 'yellow'},
+                {'value': 'DOING', 'label': 'Fazendo', 'icon': 'fas fa-play', 'color': 'blue'},
+                {'value': 'DONE', 'label': 'Concluído', 'icon': 'fas fa-check', 'color': 'green'},
+            ]
 
 
 class ChecklistTemplateItem(models.Model):
@@ -433,15 +450,20 @@ class DailyChecklist(models.Model):
     
     def get_completion_percentage(self):
         """Calcula a porcentagem de conclusão do checklist"""
-        total_items = self.items.count()
+        # Excluir itens "Não se aplica" do cálculo
+        applicable_items = self.items.filter(is_not_applicable=False)
+        total_items = applicable_items.count()
+        
         if total_items == 0:
             return 0
-        completed_items = self.items.filter(status='DONE').count()
+        
+        completed_items = applicable_items.filter(status='DONE').count()
         return round((completed_items / total_items) * 100)
     
     def is_fully_completed(self):
         """Verifica se todos os itens obrigatórios foram concluídos"""
-        required_items = self.items.filter(is_required=True)
+        # Considerar apenas itens obrigatórios que se aplicam
+        required_items = self.items.filter(is_required=True, is_not_applicable=False)
         completed_required = required_items.filter(status='DONE')
         return required_items.count() == completed_required.count()
     
@@ -457,12 +479,16 @@ class ChecklistItem(models.Model):
         ('PENDING', 'Pendente'),
         ('DOING', 'Fazendo'),
         ('DONE', 'Feito'),
+        ('NOT_APPLICABLE', 'Não se aplica'),
     ]
     
     checklist = models.ForeignKey(DailyChecklist, on_delete=models.CASCADE, related_name='items')
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(blank=True, verbose_name="Descrição")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")
+    custom_status = models.CharField(max_length=100, blank=True, verbose_name="Status Personalizado",
+                                    help_text="Para templates com status personalizados")
+    is_not_applicable = models.BooleanField(default=False, verbose_name="Não se aplica")
     is_required = models.BooleanField(default=True, verbose_name="Obrigatório")
     order = models.IntegerField(default=0, verbose_name="Ordem")
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")

@@ -186,6 +186,38 @@
                               placeholder="Descreva o propósito deste checklist..."></textarea>
                 </div>
                 
+                <!-- Status Personalizados -->
+                <div class="border-t pt-4">
+                    <div class="flex items-center mb-4">
+                        <input type="checkbox" 
+                               id="use_custom_statuses" 
+                               name="use_custom_statuses"
+                               class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                               onchange="toggleCustomStatuses()">
+                        <label for="use_custom_statuses" class="ml-2 block text-sm font-medium text-gray-700">
+                            Usar Status Personalizados
+                            <span class="text-gray-500 font-normal ml-1">(ao invés de Pendente, Fazendo, Concluído)</span>
+                        </label>
+                    </div>
+                    
+                    <div id="custom-statuses-container" class="hidden space-y-3 pl-6">
+                        <p class="text-sm text-gray-600 mb-3">
+                            <i class="fas fa-info-circle text-blue-500 mr-1"></i>
+                            Defina os status personalizados que os usuários poderão selecionar para cada item do checklist.
+                        </p>
+                        
+                        <div id="statuses-list" class="space-y-2">
+                            <!-- Status serão adicionados aqui dinamicamente -->
+                        </div>
+                        
+                        <button type="button" 
+                                class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md text-sm transition-colors" 
+                                onclick="addCustomStatus()">
+                            <i class="fas fa-plus mr-2"></i>Adicionar Status
+                        </button>
+                    </div>
+                </div>
+                
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Itens do Checklist</label>
                     <div id="items-container" class="space-y-2">
@@ -231,6 +263,30 @@
 {% block extra_js %}
 <script>
 let itemCounter = 1;
+let statusCounter = 0;
+
+// Ícones disponíveis para seleção
+const availableIcons = [
+    'fas fa-check', 'fas fa-times', 'fas fa-star', 'fas fa-heart', 'fas fa-flag',
+    'fas fa-fire', 'fas fa-bolt', 'fas fa-thumbs-up', 'fas fa-thumbs-down',
+    'fas fa-exclamation', 'fas fa-question', 'fas fa-info', 'fas fa-bell',
+    'fas fa-clock', 'fas fa-calendar', 'fas fa-play', 'fas fa-pause', 'fas fa-stop',
+    'fas fa-eye', 'fas fa-eye-slash', 'fas fa-lock', 'fas fa-unlock',
+    'fas fa-smile', 'fas fa-frown', 'fas fa-meh', 'fas fa-grin-stars'
+];
+
+// Cores disponíveis
+const availableColors = [
+    { name: 'Azul', value: 'blue', bg: 'bg-blue-500', text: 'text-blue-800', lightBg: 'bg-blue-100' },
+    { name: 'Verde', value: 'green', bg: 'bg-green-500', text: 'text-green-800', lightBg: 'bg-green-100' },
+    { name: 'Amarelo', value: 'yellow', bg: 'bg-yellow-500', text: 'text-yellow-800', lightBg: 'bg-yellow-100' },
+    { name: 'Vermelho', value: 'red', bg: 'bg-red-500', text: 'text-red-800', lightBg: 'bg-red-100' },
+    { name: 'Roxo', value: 'purple', bg: 'bg-purple-500', text: 'text-purple-800', lightBg: 'bg-purple-100' },
+    { name: 'Rosa', value: 'pink', bg: 'bg-pink-500', text: 'text-pink-800', lightBg: 'bg-pink-100' },
+    { name: 'Índigo', value: 'indigo', bg: 'bg-indigo-500', text: 'text-indigo-800', lightBg: 'bg-indigo-100' },
+    { name: 'Laranja', value: 'orange', bg: 'bg-orange-500', text: 'text-orange-800', lightBg: 'bg-orange-100' },
+    { name: 'Cinza', value: 'gray', bg: 'bg-gray-500', text: 'text-gray-800', lightBg: 'bg-gray-100' }
+];
 
 function openCreateModal() {
     document.getElementById('createTemplateModal').classList.remove('hidden');
@@ -240,6 +296,129 @@ function closeCreateModal() {
     document.getElementById('createTemplateModal').classList.add('hidden');
     document.getElementById('createTemplateForm').reset();
     resetItems();
+    resetCustomStatuses();
+}
+
+function toggleCustomStatuses() {
+    const checkbox = document.getElementById('use_custom_statuses');
+    const container = document.getElementById('custom-statuses-container');
+    
+    if (checkbox.checked) {
+        container.classList.remove('hidden');
+        // Adicionar 3 status padrão se ainda não tiver nenhum
+        if (statusCounter === 0) {
+            addCustomStatus('Em Análise', 'fas fa-search', 'blue');
+            addCustomStatus('Aprovado', 'fas fa-check', 'green');
+            addCustomStatus('Reprovado', 'fas fa-times', 'red');
+        }
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+function addCustomStatus(defaultLabel = '', defaultIcon = 'fas fa-star', defaultColor = 'blue') {
+    statusCounter++;
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'bg-gray-50 p-4 rounded-lg border border-gray-200';
+    statusDiv.id = `status-${statusCounter}`;
+    
+    // Criar select de ícones
+    const iconOptions = availableIcons.map(icon => 
+        `<option value="${icon}" ${icon === defaultIcon ? 'selected' : ''}>
+            ${icon.replace('fas fa-', '').replace(/-/g, ' ')}
+        </option>`
+    ).join('');
+    
+    // Criar select de cores
+    const colorOptions = availableColors.map(color => 
+        `<option value="${color.value}" ${color.value === defaultColor ? 'selected' : ''}>${color.name}</option>`
+    ).join('');
+    
+    statusDiv.innerHTML = `
+        <div class="flex items-start space-x-3">
+            <div class="flex-1 space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Nome do Status *</label>
+                    <input type="text" 
+                           name="custom_status_label_${statusCounter}" 
+                           value="${defaultLabel}"
+                           class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary"
+                           placeholder="Ex: Em Análise, Aprovado..."
+                           required>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Ícone</label>
+                        <select name="custom_status_icon_${statusCounter}" 
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary"
+                                onchange="updateStatusPreview(${statusCounter})">
+                            ${iconOptions}
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Cor</label>
+                        <select name="custom_status_color_${statusCounter}" 
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary"
+                                onchange="updateStatusPreview(${statusCounter})">
+                            ${colorOptions}
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Preview -->
+                <div class="pt-2">
+                    <span class="text-xs font-medium text-gray-600 block mb-1">Preview:</span>
+                    <div id="status-preview-${statusCounter}" class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium">
+                        <i class="${defaultIcon} mr-2"></i>
+                        <span>${defaultLabel || 'Status'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <button type="button" 
+                    class="mt-6 bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md transition-colors flex-shrink-0"
+                    onclick="removeCustomStatus(${statusCounter})">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    
+    document.getElementById('statuses-list').appendChild(statusDiv);
+    updateStatusPreview(statusCounter);
+}
+
+function removeCustomStatus(statusId) {
+    const statusDiv = document.getElementById(`status-${statusId}`);
+    if (statusDiv) {
+        statusDiv.remove();
+    }
+}
+
+function updateStatusPreview(statusId) {
+    const labelInput = document.querySelector(`input[name="custom_status_label_${statusId}"]`);
+    const iconSelect = document.querySelector(`select[name="custom_status_icon_${statusId}"]`);
+    const colorSelect = document.querySelector(`select[name="custom_status_color_${statusId}"]`);
+    const preview = document.getElementById(`status-preview-${statusId}`);
+    
+    if (!preview) return;
+    
+    const label = labelInput ? labelInput.value || 'Status' : 'Status';
+    const icon = iconSelect ? iconSelect.value : 'fas fa-star';
+    const colorValue = colorSelect ? colorSelect.value : 'blue';
+    
+    const colorObj = availableColors.find(c => c.value === colorValue);
+    
+    preview.className = `inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium ${colorObj.lightBg} ${colorObj.text}`;
+    preview.innerHTML = `<i class="${icon} mr-2"></i><span>${label}</span>`;
+}
+
+function resetCustomStatuses() {
+    document.getElementById('statuses-list').innerHTML = '';
+    document.getElementById('use_custom_statuses').checked = false;
+    document.getElementById('custom-statuses-container').classList.add('hidden');
+    statusCounter = 0;
 }
 
 function toggleDropdown(templateId) {

@@ -3054,11 +3054,41 @@ def update_checklist_item_status(request, item_id):
             checklist__user=request.user
         )
         
-        new_status = request.POST.get('status')
-        if new_status not in ['PENDING', 'DOING', 'DONE']:
-            return JsonResponse({'success': False, 'error': 'Status inválido'})
+        # Verificar se é atualização de "Não se aplica"
+        is_not_applicable = request.POST.get('is_not_applicable')
+        if is_not_applicable is not None:
+            item.is_not_applicable = is_not_applicable == 'true'
+            if item.is_not_applicable:
+                item.status = 'NOT_APPLICABLE'
+                item.custom_status = ''
+            item.save()
+            
+            message = f'Item "{item.title}" marcado como {"não aplicável" if item.is_not_applicable else "aplicável"}!'
+            
+            return JsonResponse({
+                'success': True,
+                'is_not_applicable': item.is_not_applicable,
+                'message': message
+            })
         
-        item.status = new_status
+        # Atualização de status
+        new_status = request.POST.get('status')
+        
+        # Verificar se é status personalizado ou padrão
+        if new_status.startswith('CUSTOM_'):
+            # Status personalizado
+            item.custom_status = new_status
+            item.status = 'DONE'  # Marcar como concluído para cálculos
+            item.is_not_applicable = False
+        else:
+            # Status padrão
+            if new_status not in ['PENDING', 'DOING', 'DONE']:
+                return JsonResponse({'success': False, 'error': 'Status inválido'})
+            
+            item.status = new_status
+            item.custom_status = ''
+            item.is_not_applicable = False
+        
         item.save()
         
         # Recalcular porcentagem de conclusão
@@ -3070,7 +3100,7 @@ def update_checklist_item_status(request, item_id):
             'new_status': new_status,
             'completion_percentage': completion_percentage,
             'is_completed': is_completed,
-            'message': f'Item "{item.title}" atualizado!'
+            'message': f'✅ Item "{item.title}" atualizado!'
         })
         
     except Exception as e:
@@ -3223,13 +3253,40 @@ def manage_checklists_view(request):
         # Criar novo template de checklist (apenas supervisores)
         title = request.POST.get('title')
         description = request.POST.get('description')
+        use_custom_statuses = request.POST.get('use_custom_statuses') == 'on'
         
         if title:
             template = ChecklistTemplate.objects.create(
                 title=title,
                 description=description,
-                created_by=request.user
+                created_by=request.user,
+                use_custom_statuses=use_custom_statuses
             )
+            
+            # Processar status personalizados se habilitado
+            if use_custom_statuses:
+                custom_statuses = []
+                status_counter = 1
+                
+                while True:
+                    label = request.POST.get(f'custom_status_label_{status_counter}')
+                    if not label:
+                        break
+                    
+                    icon = request.POST.get(f'custom_status_icon_{status_counter}', 'fas fa-star')
+                    color = request.POST.get(f'custom_status_color_{status_counter}', 'blue')
+                    
+                    custom_statuses.append({
+                        'value': f'CUSTOM_{status_counter}',
+                        'label': label,
+                        'icon': icon,
+                        'color': color
+                    })
+                    
+                    status_counter += 1
+                
+                template.custom_statuses = custom_statuses
+                template.save()
             
             # Adicionar itens se fornecidos
             items = request.POST.getlist('items[]')
@@ -3241,7 +3298,7 @@ def manage_checklists_view(request):
                         order=i + 1
                     )
             
-            messages.success(request, f'Template "{title}" criado com sucesso!')
+            messages.success(request, f'✅ Template "{title}" criado com sucesso!')
             return redirect('manage_checklists')
         else:
             messages.error(request, 'Nome do template é obrigatório!')
