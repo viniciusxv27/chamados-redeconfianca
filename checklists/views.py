@@ -6,6 +6,7 @@ from django.db.models import Q, Count
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta, date
+from itertools import chain
 import json
 
 from .models import ChecklistTemplate, ChecklistTask, ChecklistAssignment, ChecklistExecution, ChecklistTaskExecution
@@ -28,11 +29,24 @@ def checklist_dashboard(request):
     """Dashboard principal dos checklists"""
     user = request.user
     
+    # Verificar se é supervisor ou hierarquia maior
+    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_superuser
+    
     # Checklists atribuídos ao usuário
     my_assignments = ChecklistAssignment.objects.filter(
         assigned_to=user,
         is_active=True
     ).select_related('template', 'assigned_by')
+    
+    # Para supervisores: também mostrar checklists que eles atribuíram
+    assigned_by_me = ChecklistAssignment.objects.none()
+    if is_supervisor:
+        assigned_by_me = ChecklistAssignment.objects.filter(
+            assigned_by=user,
+            is_active=True
+        ).exclude(
+            assigned_to=user  # Não duplicar os que já estão em my_assignments
+        ).select_related('template', 'assigned_to', 'assigned_by')
     
     # Execuções pendentes de hoje
     today = timezone.now().date()
@@ -41,29 +55,57 @@ def checklist_dashboard(request):
         execution_date=today
     ).select_related('assignment__template')
     
+    # Para supervisores: também incluir execuções dos checklists que atribuíram
+    if is_supervisor:
+        supervisor_executions = ChecklistExecution.objects.filter(
+            assignment__assigned_by=user,
+            execution_date=today
+        ).exclude(
+            assignment__assigned_to=user  # Não duplicar
+        ).select_related('assignment__template', 'assignment__assigned_to')
+        
+        # Combinar as querysets
+        from itertools import chain
+        today_executions = list(chain(today_executions, supervisor_executions))
+    
     # Separar por período e status
-    pending_morning = today_executions.filter(
-        period='morning',
-        status__in=['pending', 'in_progress']
-    )
-    pending_afternoon = today_executions.filter(
-        period='afternoon',
-        status__in=['pending', 'in_progress']
-    )
-    completed_morning = today_executions.filter(
-        period='morning',
-        status__in=['completed', 'awaiting_approval']
-    )
-    completed_afternoon = today_executions.filter(
-        period='afternoon',
-        status__in=['completed', 'awaiting_approval']
-    )
+    if isinstance(today_executions, list):
+        # Se é lista (combinada), filtrar manualmente
+        pending_morning = [e for e in today_executions if e.period == 'morning' and e.status in ['pending', 'in_progress']]
+        pending_afternoon = [e for e in today_executions if e.period == 'afternoon' and e.status in ['pending', 'in_progress']]
+        completed_morning = [e for e in today_executions if e.period == 'morning' and e.status in ['completed', 'awaiting_approval']]
+        completed_afternoon = [e for e in today_executions if e.period == 'afternoon' and e.status in ['completed', 'awaiting_approval']]
+    else:
+        # Se é queryset, usar filter
+        pending_morning = today_executions.filter(
+            period='morning',
+            status__in=['pending', 'in_progress']
+        )
+        pending_afternoon = today_executions.filter(
+            period='afternoon',
+            status__in=['pending', 'in_progress']
+        )
+        completed_morning = today_executions.filter(
+            period='morning',
+            status__in=['completed', 'awaiting_approval']
+        )
+        completed_afternoon = today_executions.filter(
+            period='afternoon',
+            status__in=['completed', 'awaiting_approval']
+        )
     
     # Estatísticas
+    if isinstance(today_executions, list):
+        total_pending = len([e for e in today_executions if e.status in ['pending', 'in_progress']])
+        total_completed = len([e for e in today_executions if e.status in ['completed', 'awaiting_approval']])
+    else:
+        total_pending = today_executions.filter(status__in=['pending', 'in_progress']).count()
+        total_completed = today_executions.filter(status__in=['completed', 'awaiting_approval']).count()
+    
     stats = {
-        'total_assignments': my_assignments.count(),
-        'today_pending': today_executions.filter(status__in=['pending', 'in_progress']).count(),
-        'today_completed': today_executions.filter(status__in=['completed', 'awaiting_approval']).count(),
+        'total_assignments': my_assignments.count() + (assigned_by_me.count() if is_supervisor else 0),
+        'today_pending': total_pending,
+        'today_completed': total_completed,
         'overdue': ChecklistExecution.objects.filter(
             assignment__assigned_to=user,
             status='overdue'
@@ -93,8 +135,24 @@ def checklist_dashboard(request):
         execution_date__lte=calendar_end
     ).select_related('assignment__template').order_by('execution_date')
     
+    # Para supervisores: também incluir execuções dos checklists que atribuíram no calendário
+    if is_supervisor:
+        supervisor_calendar_executions = ChecklistExecution.objects.filter(
+            assignment__assigned_by=user,
+            execution_date__gte=calendar_start,
+            execution_date__lte=calendar_end
+        ).exclude(
+            assignment__assigned_to=user  # Não duplicar
+        ).select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
+        
+        # Combinar as querysets
+        calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
+        # Ordenar manualmente por execution_date
+        calendar_executions.sort(key=lambda x: x.execution_date)
+    
     context = {
         'my_assignments': my_assignments[:5],  # Primeiros 5
+        'assigned_by_me': assigned_by_me[:5] if is_supervisor else [],  # Primeiros 5 atribuídos por mim
         'today_executions': today_executions,
         'pending_morning': pending_morning,
         'pending_afternoon': pending_afternoon,
@@ -103,6 +161,7 @@ def checklist_dashboard(request):
         'stats': stats,
         'available_templates': available_templates,
         'calendar_executions': calendar_executions,
+        'is_supervisor': is_supervisor,
     }
     return render(request, 'checklists/dashboard.html', context)
 
