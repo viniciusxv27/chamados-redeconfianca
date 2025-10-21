@@ -31,6 +31,7 @@ def tickets_list_view(request):
     
     # Filtros avançados para SUPERADMIN - definir logo no início
     created_by_filter = request.GET.get('created_by', '')
+    created_by_sector_filter = request.GET.get('created_by_sector', '')
     assigned_to_filter = request.GET.get('assigned_to', '')
     date_from_filter = request.GET.get('date_from', '')
     date_to_filter = request.GET.get('date_to', '')
@@ -219,6 +220,8 @@ def tickets_list_view(request):
     if user.hierarchy == 'SUPERADMIN':
         if created_by_filter:
             filter_params['created_by'] = created_by_filter
+        if created_by_sector_filter:
+            filter_params['created_by_sector'] = created_by_sector_filter
         if assigned_to_filter:
             filter_params['assigned_to'] = assigned_to_filter
         if date_from_filter:
@@ -251,6 +254,13 @@ def tickets_list_view(request):
         # Filtro por usuário que criou
         if created_by_filter:
             tickets = tickets.filter(created_by_id=created_by_filter)
+        
+        # Filtro por setor do solicitante
+        if created_by_sector_filter:
+            tickets = tickets.filter(
+                models.Q(created_by__sector_id=created_by_sector_filter) |
+                models.Q(created_by__sectors__id=created_by_sector_filter)
+            ).distinct()
         
         # Filtro por responsável
         if assigned_to_filter:
@@ -390,6 +400,7 @@ def tickets_list_view(request):
         'page_obj': tickets_page,
         # Filtros avançados para SUPERADMIN
         'created_by': created_by_filter,
+        'created_by_sector': created_by_sector_filter,
         'assigned_to': assigned_to_filter,
         'date_from': date_from_filter,
         'date_to': date_to_filter,
