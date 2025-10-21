@@ -125,19 +125,42 @@
                                             {% endif %}
 
                                             <!-- Instruction Media -->
-                                            {% if task_exec.task.instruction_image or task_exec.task.instruction_video %}
-                                                <div class="mb-4 p-4 bg-white rounded-lg">
-                                                    <p class="text-sm font-semibold text-gray-700 mb-2">📖 Instrução:</p>
-                                                    {% if task_exec.task.instruction_image %}
-                                                        <img src="{{ task_exec.task.instruction_image.url }}" 
-                                                             alt="Instrução" 
-                                                             class="max-w-md rounded-lg shadow-md mb-2">
-                                                    {% endif %}
-                                                    {% if task_exec.task.instruction_video %}
-                                                        <video controls class="max-w-md rounded-lg shadow-md">
-                                                            <source src="{{ task_exec.task.instruction_video.url }}">
-                                                        </video>
-                                                    {% endif %}
+                                            {% if task_exec.task.instruction_image or task_exec.task.instruction_video or task_exec.task.instruction_document %}
+                                                <div class="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
+                                                    <p class="text-sm font-bold text-blue-800 mb-3">📖 Material de Auxílio</p>
+                                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                        {% if task_exec.task.instruction_image %}
+                                                            <div>
+                                                                <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                                                <img src="{{ task_exec.task.instruction_image.url }}" 
+                                                                     alt="Instrução" 
+                                                                     onclick="openImageModal(this.src)"
+                                                                     class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity">
+                                                            </div>
+                                                        {% endif %}
+                                                        {% if task_exec.task.instruction_video %}
+                                                            <div>
+                                                                <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                                                <video controls class="w-full rounded-lg shadow-md">
+                                                                    <source src="{{ task_exec.task.instruction_video.url }}">
+                                                                </video>
+                                                            </div>
+                                                        {% endif %}
+                                                        {% if task_exec.task.instruction_document %}
+                                                            <div>
+                                                                <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento</p>
+                                                                <a href="{{ task_exec.task.instruction_document.url }}" 
+                                                                   target="_blank"
+                                                                   class="flex flex-col items-center justify-center p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 border-gray-200 hover:border-blue-400">
+                                                                    <i class="fas fa-file-alt text-4xl text-blue-600 mb-2"></i>
+                                                                    <span class="text-xs text-center text-gray-700 font-medium">
+                                                                        {{ task_exec.task.instruction_document.name|slice:"-30:" }}
+                                                                    </span>
+                                                                    <span class="text-xs text-blue-600 mt-1">Clique para abrir</span>
+                                                                </a>
+                                                            </div>
+                                                        {% endif %}
+                                                    </div>
                                                 </div>
                                             {% endif %}
 
@@ -261,6 +284,36 @@ document.getElementById('todayChecklistsForm').addEventListener('submit', functi
         if (!confirm('✅ Enviar todos os checklists para aprovação?')) {
             e.preventDefault();
         }
+    }
+});
+
+// Modal para visualizar imagem em tela cheia
+function openImageModal(src) {
+    const modal = document.createElement('div');
+    modal.id = 'imageModal';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
+    modal.onclick = function() { closeImageModal(); };
+    
+    const img = document.createElement('img');
+    img.src = src;
+    img.className = 'max-w-full max-h-full rounded-lg shadow-2xl';
+    img.onclick = function(e) { e.stopPropagation(); };
+    
+    modal.appendChild(img);
+    document.body.appendChild(modal);
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeImageModal();
     }
 });
 </script>

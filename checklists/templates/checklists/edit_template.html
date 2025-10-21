@@ -127,7 +127,7 @@
                                                   rows="2"
                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">{{ task.description }}</textarea>
                                     </div>
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
                                             <label class="block text-sm font-semibold text-gray-700 mb-2">📷 Instrução (Imagem)</label>
                                             <input type="file" 
@@ -135,6 +135,7 @@
                                                    accept="image/*"
                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
                                             {% if task.instruction_image %}
+                                                <p class="text-xs text-gray-600 mt-1 mb-1">Imagem atual:</p>
                                                 <img src="{{ task.instruction_image.url }}" alt="Instrução" class="mt-2 max-w-xs rounded-lg shadow-md">
                                             {% endif %}
                                         </div>
@@ -145,9 +146,24 @@
                                                    accept="video/*"
                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
                                             {% if task.instruction_video %}
+                                                <p class="text-xs text-gray-600 mt-1 mb-1">Vídeo atual:</p>
                                                 <video controls class="mt-2 max-w-xs rounded-lg shadow-md">
                                                     <source src="{{ task.instruction_video.url }}">
                                                 </video>
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-2">📄 Instrução (Documento)</label>
+                                            <input type="file" 
+                                                   name="task_instruction_document_{{ forloop.counter0 }}"
+                                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                                            {% if task.instruction_document %}
+                                                <p class="text-xs text-gray-600 mt-1 mb-1">Documento atual:</p>
+                                                <a href="{{ task.instruction_document.url }}" target="_blank" class="inline-flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 mt-2">
+                                                    <i class="fas fa-file-alt mr-2"></i>
+                                                    <span class="text-sm">{{ task.instruction_document.name|slice:"-30:" }}</span>
+                                                </a>
                                             {% endif %}
                                         </div>
                                     </div>

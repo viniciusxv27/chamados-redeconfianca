@@ -709,6 +709,7 @@ def create_template(request):
             # Arquivos de instrução
             task_images = request.FILES.getlist('task_image[]')
             task_videos = request.FILES.getlist('task_video[]')
+            task_documents = request.FILES.getlist('task_document[]')
             
             for i, title in enumerate(task_titles):
                 if title.strip():
@@ -727,6 +728,10 @@ def create_template(request):
                     # Adicionar vídeo se fornecido
                     if i < len(task_videos) and task_videos[i]:
                         task.instruction_video = task_videos[i]
+                    
+                    # Adicionar documento se fornecido
+                    if i < len(task_documents) and task_documents[i]:
+                        task.instruction_document = task_documents[i]
                     
                     task.save()
             
@@ -786,13 +791,25 @@ def edit_template(request, template_id):
             
             for i, title in enumerate(task_titles):
                 if title.strip():
-                    ChecklistTask.objects.create(
+                    task = ChecklistTask.objects.create(
                         template=template,
                         title=title.strip(),
                         description=task_descriptions[i].strip() if i < len(task_descriptions) else '',
                         is_required=str(i) in task_required,
                         order=i
                     )
+                    
+                    # Adicionar mídia de instrução se fornecida
+                    if request.FILES.get(f'task_instruction_image_{i}'):
+                        task.instruction_image = request.FILES.get(f'task_instruction_image_{i}')
+                    
+                    if request.FILES.get(f'task_instruction_video_{i}'):
+                        task.instruction_video = request.FILES.get(f'task_instruction_video_{i}')
+                    
+                    if request.FILES.get(f'task_instruction_document_{i}'):
+                        task.instruction_document = request.FILES.get(f'task_instruction_document_{i}')
+                    
+                    task.save()
             
             messages.success(request, f'Template "{template.name}" atualizado com sucesso!')
             return redirect('checklists:admin_templates')

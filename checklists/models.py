@@ -64,6 +64,13 @@ class ChecklistTask(models.Model):
         verbose_name='Vídeo de Instrução',
         help_text='Vídeo explicativo de como executar a tarefa (MP4, AVI, MOV)'
     )
+    instruction_document = models.FileField(
+        upload_to='checklists/instructions/documents/',
+        blank=True,
+        null=True,
+        verbose_name='Documento de Instrução',
+        help_text='Documento de apoio (PDF, DOC, XLS, PPT, etc.)'
+    )
     
     class Meta:
         verbose_name = 'Tarefa de Checklist'
@@ -75,7 +82,7 @@ class ChecklistTask(models.Model):
     
     def has_instruction_media(self):
         """Verifica se a tarefa possui mídia de instrução"""
-        return bool(self.instruction_image or self.instruction_video)
+        return bool(self.instruction_image or self.instruction_video or self.instruction_document)
 
 
 class ChecklistAssignment(models.Model):
