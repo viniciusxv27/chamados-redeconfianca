@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db import models
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -13,6 +13,10 @@ from .models import Ticket, Category, TicketLog, TicketComment, Webhook, TicketV
 from .serializers import TicketSerializer, CategorySerializer, TicketLogSerializer, TicketCommentSerializer, WebhookSerializer
 from users.models import Sector, User
 from core.middleware import log_action
+import csv
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 
 @login_required
@@ -314,6 +318,14 @@ def tickets_list_view(request):
                     models.Q(due_date__gte=now) | 
                     models.Q(status__in=['RESOLVIDO', 'FECHADO'])
                 )
+
+    # Verificar se é solicitação de exportação (apenas para SUPERADMIN)
+    export_format = request.GET.get('export', '')
+    if export_format and user.hierarchy == 'SUPERADMIN':
+        if export_format == 'csv':
+            return export_tickets_csv(tickets)
+        elif export_format == 'xlsx':
+            return export_tickets_xlsx(tickets)
 
     # Obter categorias e setores baseado na hierarquia do usuário
     try:
@@ -1517,3 +1529,120 @@ def user_tickets_api(request, user_id):
             'error': f'Erro interno do servidor: {str(e)}',
             'success': False
         }, status=500)
+
+
+def export_tickets_csv(tickets):
+    """Exporta tickets para CSV"""
+    # Criar resposta HTTP com tipo CSV
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="chamados_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    
+    # Adicionar BOM para Excel reconhecer UTF-8
+    response.write('\ufeff')
+    
+    writer = csv.writer(response)
+    
+    # Cabeçalhos
+    writer.writerow([
+        'ID',
+        'Título',
+        'Status',
+        'Prioridade',
+        'Categoria',
+        'Setor',
+        'Solicitante',
+        'Email Solicitante',
+        'Responsável',
+        'Data Criação',
+        'Data Atualização',
+        'Descrição'
+    ])
+    
+    # Dados
+    for ticket in tickets.select_related('created_by', 'assigned_to', 'category', 'sector'):
+        writer.writerow([
+            f'#{ticket.id:04d}',
+            ticket.title,
+            ticket.get_status_display(),
+            ticket.get_priority_display() if hasattr(ticket, 'priority') else '',
+            ticket.category.name if ticket.category else '',
+            ticket.sector.name if ticket.sector else '',
+            ticket.created_by.get_full_name() if ticket.created_by else '',
+            ticket.created_by.email if ticket.created_by else '',
+            ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído',
+            ticket.created_at.strftime('%d/%m/%Y %H:%M'),
+            ticket.updated_at.strftime('%d/%m/%Y %H:%M'),
+            ticket.description[:100] + '...' if len(ticket.description) > 100 else ticket.description
+        ])
+    
+    return response
+
+
+def export_tickets_xlsx(tickets):
+    """Exporta tickets para Excel (XLSX)"""
+    # Criar workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Chamados"
+    
+    # Estilo do cabeçalho
+    header_fill = PatternFill(start_color="1F4788", end_color="1F4788", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=12)
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Cabeçalhos
+    headers = [
+        'ID',
+        'Título',
+        'Status',
+        'Prioridade',
+        'Categoria',
+        'Setor',
+        'Solicitante',
+        'Email Solicitante',
+        'Responsável',
+        'Data Criação',
+        'Data Atualização',
+        'Descrição'
+    ]
+    
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+    
+    # Ajustar largura das colunas
+    column_widths = [8, 40, 15, 12, 25, 20, 25, 30, 25, 18, 18, 50]
+    for col, width in enumerate(column_widths, start=1):
+        ws.column_dimensions[chr(64 + col)].width = width
+    
+    # Dados
+    for row_num, ticket in enumerate(tickets.select_related('created_by', 'assigned_to', 'category', 'sector'), start=2):
+        ws.cell(row=row_num, column=1, value=f'#{ticket.id:04d}')
+        ws.cell(row=row_num, column=2, value=ticket.title)
+        ws.cell(row=row_num, column=3, value=ticket.get_status_display())
+        ws.cell(row=row_num, column=4, value=ticket.get_priority_display() if hasattr(ticket, 'priority') else '')
+        ws.cell(row=row_num, column=5, value=ticket.category.name if ticket.category else '')
+        ws.cell(row=row_num, column=6, value=ticket.sector.name if ticket.sector else '')
+        ws.cell(row=row_num, column=7, value=ticket.created_by.get_full_name() if ticket.created_by else '')
+        ws.cell(row=row_num, column=8, value=ticket.created_by.email if ticket.created_by else '')
+        ws.cell(row=row_num, column=9, value=ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído')
+        ws.cell(row=row_num, column=10, value=ticket.created_at.strftime('%d/%m/%Y %H:%M'))
+        ws.cell(row=row_num, column=11, value=ticket.updated_at.strftime('%d/%m/%Y %H:%M'))
+        ws.cell(row=row_num, column=12, value=ticket.description[:100] + '...' if len(ticket.description) > 100 else ticket.description)
+        
+        # Alinhar células
+        for col in range(1, 13):
+            ws.cell(row=row_num, column=col).alignment = Alignment(vertical="top", wrap_text=True)
+    
+    # Criar resposta HTTP
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="chamados_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    
+    # Salvar workbook na resposta
+    wb.save(response)
+    
+    return response

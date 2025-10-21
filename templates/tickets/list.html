@@ -864,18 +864,39 @@ function applyQuickFilter(filterType) {
 
 // Export functionality for Superadmin
 function exportTickets(format) {
+    event.preventDefault();
+    event.stopPropagation();
+    
     const form = document.querySelector('form');
     const formData = new FormData(form);
     
     // Create download link with current filters
     const params = new URLSearchParams();
+    
+    // Adicionar todos os parâmetros do formulário
     for (let [key, value] of formData.entries()) {
-        if (value) params.append(key, value);
+        if (value) {
+            params.append(key, value);
+        }
     }
+    
+    // Adicionar parâmetro de exportação
     params.append('export', format);
     
-    // Redirect to export URL
+    // Mostrar mensagem de feedback
+    const exportBtn = event.target.closest('button');
+    const originalText = exportBtn.innerHTML;
+    exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Exportando...';
+    exportBtn.disabled = true;
+    
+    // Redirecionar para download
     window.location.href = '{% url "tickets_list" %}?' + params.toString();
+    
+    // Restaurar botão após 2 segundos
+    setTimeout(() => {
+        exportBtn.innerHTML = originalText;
+        exportBtn.disabled = false;
+    }, 2000);
 }
 
 // Toggle Quick Filters for Superadmin
@@ -951,13 +972,13 @@ document.addEventListener('DOMContentLoaded', function() {
             </button>
             <div class="border-t pt-1 mt-1">
                 <div class="text-xs text-gray-500 px-2 py-1 font-semibold">Exportar</div>
-                <button onclick="exportTickets('csv')" 
+                <button type="button" onclick="exportTickets('csv')" 
                         class="px-3 py-2 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors w-full flex items-center justify-center"
                         title="Exportar para CSV">
                     <i class="fas fa-download mr-2"></i>
                     CSV
                 </button>
-                <button onclick="exportTickets('xlsx')" 
+                <button type="button" onclick="exportTickets('xlsx')" 
                         class="px-3 py-2 text-xs bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors w-full flex items-center justify-center mt-1"
                         title="Exportar para Excel">
                     <i class="fas fa-file-excel mr-2"></i>
