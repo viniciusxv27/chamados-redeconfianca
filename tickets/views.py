@@ -1574,8 +1574,8 @@ def export_tickets_csv(tickets):
                 # Construir URL completo do anexo
                 # Em produção com MinIO, MEDIA_URL já contém o endpoint completo
                 if hasattr(settings, 'USE_S3') and settings.USE_S3:
-                    # MinIO: MEDIA_URL já inclui endpoint + bucket
-                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                    # MinIO: MEDIA_URL já inclui endpoint + bucket, precisa adicionar /media/
+                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/media/{attachment.file.name}"
                 elif hasattr(settings, 'MEDIA_URL') and settings.MEDIA_URL.startswith('http'):
                     # URL absoluta (CDN ou similar)
                     file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
@@ -1776,8 +1776,8 @@ def export_tickets_xlsx(tickets):
                 # Em produção com MinIO, MEDIA_URL já contém o endpoint completo
                 # Ex: https://minio.example.com/bucket/ ou http://localhost:9000/bucket/
                 if hasattr(settings, 'USE_S3') and settings.USE_S3:
-                    # MinIO: MEDIA_URL já inclui endpoint + bucket
-                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                    # MinIO: MEDIA_URL já inclui endpoint + bucket, precisa adicionar /media/
+                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/media/{attachment.file.name}"
                 elif hasattr(settings, 'MEDIA_URL') and settings.MEDIA_URL.startswith('http'):
                     # URL absoluta (CDN ou similar)
                     file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
