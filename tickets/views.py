@@ -5,6 +5,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db import models
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -16,7 +17,8 @@ from core.middleware import log_action
 import csv
 import io
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 
 @login_required
@@ -1532,17 +1534,17 @@ def user_tickets_api(request, user_id):
 
 
 def export_tickets_csv(tickets):
-    """Exporta tickets para CSV"""
+    """Exporta tickets para CSV com descrição completa"""
     # Criar resposta HTTP com tipo CSV
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = f'attachment; filename="chamados_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    response['Content-Disposition'] = f'attachment; filename="chamados_completo_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     
     # Adicionar BOM para Excel reconhecer UTF-8
     response.write('\ufeff')
     
     writer = csv.writer(response)
     
-    # Cabeçalhos
+    # Cabeçalhos expandidos
     writer.writerow([
         'ID',
         'Título',
@@ -1555,11 +1557,53 @@ def export_tickets_csv(tickets):
         'Responsável',
         'Data Criação',
         'Data Atualização',
-        'Descrição'
+        'Descrição Completa',
+        'Imagens Anexadas',
+        'Arquivos Anexados'
     ])
     
     # Dados
-    for ticket in tickets.select_related('created_by', 'assigned_to', 'category', 'sector'):
+    for ticket in tickets.select_related('created_by', 'assigned_to', 'category', 'sector').prefetch_related('attachments'):
+        # Processar anexos
+        attachments = ticket.attachments.all()
+        images_list = []
+        files_list = []
+        
+        if attachments.exists():
+            for attachment in attachments:
+                # Construir URL completo do anexo
+                # Em produção com MinIO, MEDIA_URL já contém o endpoint completo
+                if hasattr(settings, 'USE_S3') and settings.USE_S3:
+                    # MinIO: MEDIA_URL já inclui endpoint + bucket
+                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                elif hasattr(settings, 'MEDIA_URL') and settings.MEDIA_URL.startswith('http'):
+                    # URL absoluta (CDN ou similar)
+                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                elif hasattr(settings, 'MEDIA_URL') and hasattr(settings, 'SITE_URL'):
+                    # URL relativa + domínio do site
+                    file_url = f"{settings.SITE_URL.rstrip('/')}{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                else:
+                    # Fallback para métodos padrão
+                    file_url = attachment.file.url if hasattr(attachment.file, 'url') else attachment.file.name
+                
+                # Verificar se é imagem
+                is_image = False
+                if attachment.content_type:
+                    is_image = attachment.content_type.startswith('image/')
+                elif attachment.original_filename:
+                    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']
+                    is_image = any(attachment.original_filename.lower().endswith(ext) for ext in image_extensions)
+                
+                attachment_info = f"{attachment.original_filename}: {file_url}"
+                
+                if is_image:
+                    images_list.append(attachment_info)
+                else:
+                    files_list.append(attachment_info)
+        
+        images_text = '; '.join(images_list) if images_list else 'Nenhuma imagem'
+        files_text = '; '.join(files_list) if files_list else 'Nenhum arquivo'
+        
         writer.writerow([
             f'#{ticket.id:04d}',
             ticket.title,
@@ -1572,14 +1616,18 @@ def export_tickets_csv(tickets):
             ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído',
             ticket.created_at.strftime('%d/%m/%Y %H:%M'),
             ticket.updated_at.strftime('%d/%m/%Y %H:%M'),
-            ticket.description[:100] + '...' if len(ticket.description) > 100 else ticket.description
+            ticket.description,  # DESCRIÇÃO COMPLETA SEM CORTE
+            images_text,
+            files_text
         ])
     
     return response
 
 
 def export_tickets_xlsx(tickets):
-    """Exporta tickets para Excel (XLSX)"""
+    """Exporta tickets para Excel (XLSX) com descrição completa e anexos"""
+    from django.conf import settings
+    
     # Criar workbook
     wb = Workbook()
     ws = wb.active
@@ -1588,9 +1636,17 @@ def export_tickets_xlsx(tickets):
     # Estilo do cabeçalho
     header_fill = PatternFill(start_color="1F4788", end_color="1F4788", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True, size=12)
-    header_alignment = Alignment(horizontal="center", vertical="center")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     
-    # Cabeçalhos
+    # Borda para células
+    thin_border = Border(
+        left=Side(style='thin', color='CCCCCC'),
+        right=Side(style='thin', color='CCCCCC'),
+        top=Side(style='thin', color='CCCCCC'),
+        bottom=Side(style='thin', color='CCCCCC')
+    )
+    
+    # Cabeçalhos expandidos
     headers = [
         'ID',
         'Título',
@@ -1603,44 +1659,185 @@ def export_tickets_xlsx(tickets):
         'Responsável',
         'Data Criação',
         'Data Atualização',
-        'Descrição'
+        'Descrição Completa',
+        'Imagens Anexadas',
+        'Arquivos Anexados'
     ]
     
+    # Aplicar cabeçalhos
     for col, header in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = header_alignment
+        cell.border = thin_border
     
     # Ajustar largura das colunas
-    column_widths = [8, 40, 15, 12, 25, 20, 25, 30, 25, 18, 18, 50]
-    for col, width in enumerate(column_widths, start=1):
-        ws.column_dimensions[chr(64 + col)].width = width
+    column_widths = {
+        1: 8,   # ID
+        2: 35,  # Título
+        3: 12,  # Status
+        4: 12,  # Prioridade
+        5: 20,  # Categoria
+        6: 18,  # Setor
+        7: 22,  # Solicitante
+        8: 28,  # Email
+        9: 22,  # Responsável
+        10: 16, # Data Criação
+        11: 16, # Data Atualização
+        12: 60, # Descrição Completa
+        13: 50, # Imagens
+        14: 50  # Arquivos
+    }
+    
+    for col, width in column_widths.items():
+        ws.column_dimensions[get_column_letter(col)].width = width
+    
+    # Congelar primeira linha (cabeçalho)
+    ws.freeze_panes = 'A2'
+    
+    # Estilos para dados
+    link_font = Font(color="0563C1", underline="single")
+    data_alignment = Alignment(vertical="top", wrap_text=True)
     
     # Dados
-    for row_num, ticket in enumerate(tickets.select_related('created_by', 'assigned_to', 'category', 'sector'), start=2):
-        ws.cell(row=row_num, column=1, value=f'#{ticket.id:04d}')
-        ws.cell(row=row_num, column=2, value=ticket.title)
-        ws.cell(row=row_num, column=3, value=ticket.get_status_display())
-        ws.cell(row=row_num, column=4, value=ticket.get_priority_display() if hasattr(ticket, 'priority') else '')
-        ws.cell(row=row_num, column=5, value=ticket.category.name if ticket.category else '')
-        ws.cell(row=row_num, column=6, value=ticket.sector.name if ticket.sector else '')
-        ws.cell(row=row_num, column=7, value=ticket.created_by.get_full_name() if ticket.created_by else '')
-        ws.cell(row=row_num, column=8, value=ticket.created_by.email if ticket.created_by else '')
-        ws.cell(row=row_num, column=9, value=ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído')
-        ws.cell(row=row_num, column=10, value=ticket.created_at.strftime('%d/%m/%Y %H:%M'))
-        ws.cell(row=row_num, column=11, value=ticket.updated_at.strftime('%d/%m/%Y %H:%M'))
-        ws.cell(row=row_num, column=12, value=ticket.description[:100] + '...' if len(ticket.description) > 100 else ticket.description)
+    for row_num, ticket in enumerate(tickets.select_related('created_by', 'assigned_to', 'category', 'sector').prefetch_related('attachments'), start=2):
+        # Coluna 1: ID
+        cell = ws.cell(row=row_num, column=1, value=f'#{ticket.id:04d}')
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
         
-        # Alinhar células
-        for col in range(1, 13):
-            ws.cell(row=row_num, column=col).alignment = Alignment(vertical="top", wrap_text=True)
+        # Coluna 2: Título
+        cell = ws.cell(row=row_num, column=2, value=ticket.title)
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Coluna 3: Status
+        cell = ws.cell(row=row_num, column=3, value=ticket.get_status_display())
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+        
+        # Coluna 4: Prioridade
+        priority = ticket.get_priority_display() if hasattr(ticket, 'priority') else ''
+        cell = ws.cell(row=row_num, column=4, value=priority)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+        
+        # Coluna 5: Categoria
+        cell = ws.cell(row=row_num, column=5, value=ticket.category.name if ticket.category else '')
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Coluna 6: Setor
+        cell = ws.cell(row=row_num, column=6, value=ticket.sector.name if ticket.sector else '')
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Coluna 7: Solicitante
+        cell = ws.cell(row=row_num, column=7, value=ticket.created_by.get_full_name() if ticket.created_by else '')
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Coluna 8: Email Solicitante
+        cell = ws.cell(row=row_num, column=8, value=ticket.created_by.email if ticket.created_by else '')
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Coluna 9: Responsável
+        cell = ws.cell(row=row_num, column=9, value=ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído')
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Coluna 10: Data Criação
+        cell = ws.cell(row=row_num, column=10, value=ticket.created_at.strftime('%d/%m/%Y %H:%M'))
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+        
+        # Coluna 11: Data Atualização
+        cell = ws.cell(row=row_num, column=11, value=ticket.updated_at.strftime('%d/%m/%Y %H:%M'))
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+        
+        # Coluna 12: Descrição Completa (SEM CORTE)
+        cell = ws.cell(row=row_num, column=12, value=ticket.description)
+        cell.alignment = data_alignment
+        cell.border = thin_border
+        
+        # Colunas 13 e 14: Anexos (Imagens e Arquivos)
+        attachments = ticket.attachments.all()
+        
+        if attachments.exists():
+            # Separar imagens e outros arquivos
+            images = []
+            files = []
+            
+            for attachment in attachments:
+                # Construir URL completo do anexo
+                # Em produção com MinIO, MEDIA_URL já contém o endpoint completo
+                # Ex: https://minio.example.com/bucket/ ou http://localhost:9000/bucket/
+                if hasattr(settings, 'USE_S3') and settings.USE_S3:
+                    # MinIO: MEDIA_URL já inclui endpoint + bucket
+                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                elif hasattr(settings, 'MEDIA_URL') and settings.MEDIA_URL.startswith('http'):
+                    # URL absoluta (CDN ou similar)
+                    file_url = f"{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                elif hasattr(settings, 'MEDIA_URL') and hasattr(settings, 'SITE_URL'):
+                    # URL relativa + domínio do site
+                    file_url = f"{settings.SITE_URL.rstrip('/')}{settings.MEDIA_URL.rstrip('/')}/{attachment.file.name}"
+                else:
+                    # Fallback para métodos padrão
+                    file_url = attachment.file.url if hasattr(attachment.file, 'url') else attachment.file.name
+                
+                # Verificar se é imagem
+                is_image = False
+                if attachment.content_type:
+                    is_image = attachment.content_type.startswith('image/')
+                elif attachment.original_filename:
+                    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']
+                    is_image = any(attachment.original_filename.lower().endswith(ext) for ext in image_extensions)
+                
+                attachment_info = f"{attachment.original_filename}\n{file_url}"
+                
+                if is_image:
+                    images.append(attachment_info)
+                else:
+                    files.append(attachment_info)
+            
+            # Coluna 13: Imagens
+            images_text = '\n\n'.join(images) if images else 'Nenhuma imagem'
+            cell = ws.cell(row=row_num, column=13, value=images_text)
+            cell.alignment = data_alignment
+            cell.border = thin_border
+            if images:
+                cell.font = link_font
+            
+            # Coluna 14: Arquivos
+            files_text = '\n\n'.join(files) if files else 'Nenhum arquivo'
+            cell = ws.cell(row=row_num, column=14, value=files_text)
+            cell.alignment = data_alignment
+            cell.border = thin_border
+            if files:
+                cell.font = link_font
+        else:
+            # Sem anexos
+            cell = ws.cell(row=row_num, column=13, value='Nenhuma imagem')
+            cell.alignment = data_alignment
+            cell.border = thin_border
+            cell.font = Font(color="999999", italic=True)
+            
+            cell = ws.cell(row=row_num, column=14, value='Nenhum arquivo')
+            cell.alignment = data_alignment
+            cell.border = thin_border
+            cell.font = Font(color="999999", italic=True)
+        
+        # Ajustar altura da linha para acomodar conteúdo
+        ws.row_dimensions[row_num].height = max(30, len(ticket.description) / 3)
     
     # Criar resposta HTTP
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="chamados_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="chamados_completo_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
     
     # Salvar workbook na resposta
     wb.save(response)
