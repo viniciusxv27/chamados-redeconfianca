@@ -1214,6 +1214,39 @@ def close_support_chat(request, chat_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+
+@login_required
+@require_POST
+def delete_support_chat(request, chat_id):
+    """Exclui um chat de suporte (apenas para SUPERVISOR ou maior)"""
+    try:
+        chat = get_object_or_404(SupportChat, id=chat_id)
+        
+        # Verificar permissão: SUPERVISOR ou maior
+        is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+        
+        if not is_supervisor_or_higher:
+            return JsonResponse({
+                'success': False,
+                'error': 'Apenas supervisores ou hierarquia maior podem excluir chats'
+            }, status=403)
+        
+        # Salvar informações para log
+        chat_title = chat.title
+        chat_user = chat.user.get_full_name()
+        
+        # Deletar o chat (isso também deletará mensagens, arquivos, etc via CASCADE)
+        chat.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Chat "{chat_title}" de {chat_user} foi excluído com sucesso'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
 @login_required
 def support_metrics(request):
     """

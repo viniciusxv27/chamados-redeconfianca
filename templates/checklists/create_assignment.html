@@ -168,12 +168,21 @@
             
             <!-- Seleção de Template -->
             <div>
-                <h2 class="text-xl font-semibold text-gray-900 mb-4">Selecione o Checklist</h2>
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    Selecione os Checklists
+                    <span class="text-sm font-normal text-gray-500 ml-2">(Você pode selecionar múltiplos)</span>
+                </h2>
+                <div id="selected-templates-info" class="hidden mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-sm font-medium text-blue-900">
+                        <i class="fas fa-check-circle mr-2"></i>
+                        <span id="selected-count">0</span> checklist(s) selecionado(s)
+                    </p>
+                </div>
                 {% if templates %}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {% for template in templates %}
                         <div class="template-card bg-white p-4 rounded-lg border-2 border-gray-200 hover:border-orange-400 transition-all duration-300 cursor-pointer" 
-                             onclick="selectTemplate({{ template.id }})"
+                             onclick="toggleTemplate({{ template.id }})"
                              id="template_card_{{ template.id }}">
                             <div class="flex justify-between items-start mb-3">
                                 <div class="flex-1">
@@ -482,6 +491,9 @@
 
             <!-- Hidden field for custom dates -->
             <input type="hidden" name="custom_dates" id="custom_dates_input" value="[]">
+            
+            <!-- Hidden field for selected templates -->
+            <div id="templates_input_container"></div>
 
             <!-- Botões -->
             <div class="flex justify-between pt-6 border-t">
@@ -494,7 +506,7 @@
                         id="submit_btn"
                         disabled>
                     <i class="fas fa-clipboard-check mr-2"></i>
-                    Atribuir Checklist
+                    Atribuir Checklist<span id="plural_s" style="display:none;">s</span>
                 </button>
             </div>
         </form>
@@ -502,40 +514,63 @@
 </div>
 
 <script>
-let selectedTemplateId = null;
+let selectedTemplateIds = [];  // Mudado para array
 let selectedUserId = null;
 let selectedScheduleType = null;
 let selectedCustomDates = [];
 let currentCalendarDate = new Date();
 
-// Template selection
-function selectTemplate(templateId) {
-    // Remover seleção de todos os cards
-    document.querySelectorAll('.template-card').forEach(card => {
-        card.classList.remove('selected');
-        // Esconder todos os ícones de check
-        const checkIcon = card.querySelector('.template-check-icon');
-        if (checkIcon) {
-            checkIcon.classList.add('hidden');
-        }
-    });
-    
-    // Adicionar seleção ao card clicado
+// Template selection - agora permite múltipla seleção
+function toggleTemplate(templateId) {
     const selectedCard = document.getElementById(`template_card_${templateId}`);
-    if (selectedCard) {
+    const checkIcon = selectedCard.querySelector('.template-check-icon');
+    
+    // Verificar se já está selecionado
+    const index = selectedTemplateIds.indexOf(templateId);
+    
+    if (index > -1) {
+        // Remover seleção
+        selectedTemplateIds.splice(index, 1);
+        selectedCard.classList.remove('selected');
+        checkIcon.classList.add('hidden');
+    } else {
+        // Adicionar seleção
+        selectedTemplateIds.push(templateId);
         selectedCard.classList.add('selected');
-        // Mostrar ícone de check
-        const checkIcon = selectedCard.querySelector('.template-check-icon');
-        if (checkIcon) {
-            checkIcon.classList.remove('hidden');
-        }
+        checkIcon.classList.remove('hidden');
     }
     
-    // Marcar o radio button
-    document.getElementById(`template_${templateId}`).checked = true;
-    selectedTemplateId = templateId;
+    // Atualizar contador e plural
+    const countSpan = document.getElementById('selected-count');
+    const infoDiv = document.getElementById('selected-templates-info');
+    const pluralS = document.getElementById('plural_s');
+    
+    if (selectedTemplateIds.length > 0) {
+        countSpan.textContent = selectedTemplateIds.length;
+        infoDiv.classList.remove('hidden');
+        pluralS.style.display = selectedTemplateIds.length > 1 ? 'inline' : 'none';
+    } else {
+        infoDiv.classList.add('hidden');
+        pluralS.style.display = 'none';
+    }
+    
+    // Atualizar inputs hidden para o form
+    updateTemplateInputs();
     
     checkFormValidity();
+}
+
+function updateTemplateInputs() {
+    const container = document.getElementById('templates_input_container');
+    container.innerHTML = '';
+    
+    selectedTemplateIds.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'template_ids';
+        input.value = id;
+        container.appendChild(input);
+    });
 }
 
 // Schedule type selection
@@ -885,7 +920,7 @@ function updateSchedulePreview() {
 
 // Form validation
 function checkFormValidity() {
-    const hasTemplate = selectedTemplateId !== null;
+    const hasTemplate = selectedTemplateIds.length > 0;  // Mudado para array
     const assignmentType = document.querySelector('input[name="assignment_type"]:checked').value;
     const hasUser = assignmentType === 'user' ? selectedUserId !== null : true;
     const hasGroup = assignmentType === 'group' ? document.getElementById('group_select').value !== '' : true;
@@ -1072,9 +1107,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
         
-        if (!selectedTemplateId) {
+        if (selectedTemplateIds.length === 0) {  // Mudado para array
             e.preventDefault();
-            alert('Por favor, selecione um template de checklist.');
+            alert('Por favor, selecione pelo menos um template de checklist.');
             return false;
         }
         

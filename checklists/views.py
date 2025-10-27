@@ -68,29 +68,17 @@ def checklist_dashboard(request):
         from itertools import chain
         today_executions = list(chain(today_executions, supervisor_executions))
     
-    # Separar por período e status
+    # Separar por status apenas (combinando manhã e tarde)
     if isinstance(today_executions, list):
         # Se é lista (combinada), filtrar manualmente
-        pending_morning = [e for e in today_executions if e.period == 'morning' and e.status in ['pending', 'in_progress']]
-        pending_afternoon = [e for e in today_executions if e.period == 'afternoon' and e.status in ['pending', 'in_progress']]
-        completed_morning = [e for e in today_executions if e.period == 'morning' and e.status in ['completed', 'awaiting_approval']]
-        completed_afternoon = [e for e in today_executions if e.period == 'afternoon' and e.status in ['completed', 'awaiting_approval']]
+        pending_checklists = [e for e in today_executions if e.status in ['pending', 'in_progress']]
+        completed_checklists = [e for e in today_executions if e.status in ['completed', 'awaiting_approval']]
     else:
         # Se é queryset, usar filter
-        pending_morning = today_executions.filter(
-            period='morning',
+        pending_checklists = today_executions.filter(
             status__in=['pending', 'in_progress']
         )
-        pending_afternoon = today_executions.filter(
-            period='afternoon',
-            status__in=['pending', 'in_progress']
-        )
-        completed_morning = today_executions.filter(
-            period='morning',
-            status__in=['completed', 'awaiting_approval']
-        )
-        completed_afternoon = today_executions.filter(
-            period='afternoon',
+        completed_checklists = today_executions.filter(
             status__in=['completed', 'awaiting_approval']
         )
     
@@ -154,10 +142,8 @@ def checklist_dashboard(request):
         'my_assignments': my_assignments[:5],  # Primeiros 5
         'assigned_by_me': assigned_by_me[:5] if is_supervisor else [],  # Primeiros 5 atribuídos por mim
         'today_executions': today_executions,
-        'pending_morning': pending_morning,
-        'pending_afternoon': pending_afternoon,
-        'completed_morning': completed_morning,
-        'completed_afternoon': completed_afternoon,
+        'pending_checklists': pending_checklists,
+        'completed_checklists': completed_checklists,
         'stats': stats,
         'available_templates': available_templates,
         'calendar_executions': calendar_executions,
@@ -170,7 +156,8 @@ def checklist_dashboard(request):
 def create_assignment(request):
     """Criar nova atribuição de checklist"""
     if request.method == 'POST':
-        template_id = request.POST.get('template_id')
+        # Mudado para aceitar múltiplos templates
+        template_ids = request.POST.getlist('template_ids')  # Lista de IDs
         assignment_type = request.POST.get('assignment_type', 'user')  # 'user' ou 'group'
         assigned_to_id = request.POST.get('assigned_to')
         group_id = request.POST.get('group_id')
@@ -181,7 +168,7 @@ def create_assignment(request):
         custom_dates_str = request.POST.get('custom_dates', '[]')
         
         # Validações básicas
-        if not all([template_id, schedule_type]):
+        if not template_ids or not schedule_type:
             messages.error(request, 'Todos os campos obrigatórios devem ser preenchidos.')
             return redirect('checklists:create_assignment')
         
@@ -203,7 +190,12 @@ def create_assignment(request):
                 return redirect('checklists:create_assignment')
         
         try:
-            template = get_object_or_404(ChecklistTemplate, id=template_id)
+            # Buscar todos os templates selecionados
+            templates = ChecklistTemplate.objects.filter(id__in=template_ids)
+            
+            if not templates.exists():
+                messages.error(request, 'Nenhum template válido foi selecionado.')
+                return redirect('checklists:create_assignment')
             
             # Determinar usuários a atribuir
             users_to_assign = []
@@ -226,15 +218,16 @@ def create_assignment(request):
                 messages.error(request, 'Selecione um usuário ou grupo válido.')
                 return redirect('checklists:create_assignment')
             
-            # Verificar permissão - usuário pode atribuir templates de qualquer setor que pertence
+            # Verificar permissão para todos os templates
             user_sectors = list(request.user.sectors.all())
             if request.user.sector:
                 user_sectors.append(request.user.sector)
             
-            if template.sector not in user_sectors:
-                if not has_checklist_admin_permission(request.user):
-                    messages.error(request, 'Você só pode criar checklists dos seus setores.')
-                    return redirect('checklists:dashboard')
+            for template in templates:
+                if template.sector not in user_sectors:
+                    if not has_checklist_admin_permission(request.user):
+                        messages.error(request, f'Você não tem permissão para atribuir o checklist "{template.name}".')
+                        return redirect('checklists:dashboard')
             
             # Processar datas personalizadas
             custom_dates = []
@@ -244,36 +237,41 @@ def create_assignment(request):
                 except (json.JSONDecodeError, TypeError):
                     custom_dates = []
             
-            # Criar atribuições para cada usuário
+            # Criar atribuições para cada combinação de template e usuário
             assignments_created = 0
-            for user in users_to_assign:
-                # Para schedule_type 'custom', usar primeira e última data do array
-                if schedule_type == 'custom' and custom_dates:
-                    start_date_obj = datetime.strptime(custom_dates[0], '%Y-%m-%d').date()
-                    end_date_obj = datetime.strptime(custom_dates[-1], '%Y-%m-%d').date()
-                else:
-                    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-                    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
-                
-                assignment = ChecklistAssignment.objects.create(
-                    template=template,
-                    assigned_to=user,
-                    assigned_by=request.user,
-                    schedule_type=schedule_type,
-                    period=period,
-                    start_date=start_date_obj,
-                    end_date=end_date_obj,
-                    custom_dates=custom_dates
-                )
-                
-                # Criar execuções para as datas ativas
-                create_executions_for_assignment(assignment)
-                assignments_created += 1
+            for template in templates:
+                for user in users_to_assign:
+                    # Para schedule_type 'custom', usar primeira e última data do array
+                    if schedule_type == 'custom' and custom_dates:
+                        start_date_obj = datetime.strptime(custom_dates[0], '%Y-%m-%d').date()
+                        end_date_obj = datetime.strptime(custom_dates[-1], '%Y-%m-%d').date()
+                    else:
+                        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    
+                    assignment = ChecklistAssignment.objects.create(
+                        template=template,
+                        assigned_to=user,
+                        assigned_by=request.user,
+                        schedule_type=schedule_type,
+                        period=period,
+                        start_date=start_date_obj,
+                        end_date=end_date_obj,
+                        custom_dates=custom_dates
+                    )
+                    
+                    # Criar execuções para as datas ativas
+                    create_executions_for_assignment(assignment)
+                    assignments_created += 1
+            
+            # Mensagem de sucesso personalizada
+            template_count = len(template_ids)
+            user_count = len(users_to_assign)
             
             if assignment_type == 'group':
-                messages.success(request, f'✅ Checklist atribuído para {assignments_created} usuário(s) do grupo com sucesso!')
+                messages.success(request, f'✅ {template_count} checklist(s) atribuído(s) para {user_count} usuário(s) do grupo com sucesso!')
             else:
-                messages.success(request, f'✅ Checklist atribuído para {users_to_assign[0].get_full_name()} com sucesso!')
+                messages.success(request, f'✅ {template_count} checklist(s) atribuído(s) para {users_to_assign[0].get_full_name()} com sucesso!')
                 
             return redirect('checklists:dashboard')
             

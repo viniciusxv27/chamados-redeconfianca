@@ -195,10 +195,10 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Execuções de Hoje -->
+        <!-- Checklists de Hoje -->
         <div class="bg-white rounded-lg shadow-sm border">
             <div class="p-6 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">Checklists de Hoje</h2>
+                <h2 class="text-xl font-semibold text-gray-900">📋 Checklists de Hoje</h2>
             </div>
             <div class="p-6">
                 {% if today_executions %}
@@ -280,7 +280,7 @@
         <!-- Meus Checklists Ativos -->
         <div class="bg-white rounded-lg shadow-sm border">
             <div class="p-6 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">Meus Checklists Ativos</h2>
+                <h2 class="text-xl font-semibold text-gray-900">📊 Meus Checklists Ativos</h2>
             </div>
             <div class="p-6">
                 {% if my_assignments %}
@@ -338,14 +338,16 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- Checklists Pendentes -->
         <div class="bg-white rounded-lg shadow-sm border">
             <div class="p-6 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">☀️ Checklists Pendentes (Manhã)</h2>
+                <h2 class="text-xl font-semibold text-gray-900">⏳ Checklists Pendentes</h2>
             </div>
             <div class="p-6">
-                {% if pending_morning %}
+                {% if pending_checklists %}
                     <div class="space-y-4">
-                        {% for execution in pending_morning %}
+                        {% for execution in pending_checklists %}
                         <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors {% if is_supervisor and execution.assignment.assigned_to != user %}bg-purple-50{% endif %}">
                             <div class="flex justify-between items-start mb-3">
                                 <div class="flex-1">
@@ -373,8 +375,6 @@
                                         <i class="fas fa-clock mr-1"></i> Pendente
                                     {% elif execution.status == 'in_progress' %}
                                         <i class="fas fa-play mr-1"></i> Em Andamento
-                                    {% elif execution.status == 'completed' %}
-                                        <i class="fas fa-check mr-1"></i> Concluído
                                     {% elif execution.status == 'overdue' %}
                                         <i class="fas fa-exclamation mr-1"></i> Atrasado
                                     {% endif %}
@@ -388,82 +388,7 @@
                                     <span>{{ execution.progress_percentage }}%</span>
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-2">
-                                    <div class="h-2 rounded-full {% if execution.status == 'completed' %}bg-green-500{% elif execution.status == 'overdue' %}bg-red-500{% else %}bg-blue-500{% endif %}" 
-                                         style="width: {{ execution.progress_percentage }}%"></div>
-                                </div>
-                            </div>
-                            
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-500">
-                                    {{ execution.task_executions.count }} tarefas
-                                </span>
-                                <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
-                                   class="text-primary hover:text-orange-600 font-medium text-sm">
-                                    {% if execution.status == 'completed' %}
-                                        Ver Detalhes →
-                                    {% else %}
-                                        Executar →
-                                    {% endif %}
-                                </a>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="text-center py-8">
-                        <i class="fas fa-clipboard-check text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500">Nenhum checklist pendente para manhã.</p>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Checklists Pendentes Tarde -->
-        <div class="bg-white rounded-lg shadow-sm border">
-            <div class="p-6 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">🌙 Checklists Pendentes (Tarde)</h2>
-            </div>
-            <div class="p-6">
-                {% if pending_afternoon %}
-                    <div class="space-y-4">
-                        {% for execution in pending_afternoon %}
-                        <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors {% if is_supervisor and execution.assignment.assigned_to != user %}bg-purple-50{% endif %}">
-                            <div class="flex justify-between items-start mb-3">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <h3 class="font-medium text-gray-900">{{ execution.assignment.template.name }}</h3>
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                                            <i class="fas fa-moon mr-1"></i> Tarde
-                                        </span>
-                                        {% if is_supervisor and execution.assignment.assigned_to != user %}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                            <i class="fas fa-user-tie mr-1"></i> Atribuído para {{ execution.assignment.assigned_to.first_name }}
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    <p class="text-sm text-gray-600">{{ execution.assignment.template.description|truncatewords:10 }}</p>
-                                </div>
-                                <span class="status-badge status-{{ execution.status }} ml-2">
-                                    {% if execution.status == 'pending' %}
-                                        <i class="fas fa-clock mr-1"></i> Pendente
-                                    {% elif execution.status == 'in_progress' %}
-                                        <i class="fas fa-play mr-1"></i> Em Andamento
-                                    {% elif execution.status == 'completed' %}
-                                        <i class="fas fa-check mr-1"></i> Concluído
-                                    {% elif execution.status == 'overdue' %}
-                                        <i class="fas fa-exclamation mr-1"></i> Atrasado
-                                    {% endif %}
-                                </span>
-                            </div>
-                            
-                            <!-- Barra de Progresso -->
-                            <div class="mb-3">
-                                <div class="flex justify-between text-sm text-gray-600 mb-1">
-                                    <span>Progresso</span>
-                                    <span>{{ execution.progress_percentage }}%</span>
-                                </div>
-                                <div class="w-full bg-gray-200 rounded-full h-2">
-                                    <div class="h-2 rounded-full {% if execution.status == 'completed' %}bg-green-500{% elif execution.status == 'overdue' %}bg-red-500{% else %}bg-blue-500{% endif %}" 
+                                    <div class="h-2 rounded-full {% if execution.status == 'overdue' %}bg-red-500{% else %}bg-blue-500{% endif %}" 
                                          style="width: {{ execution.progress_percentage }}%"></div>
                                 </div>
                             </div>
@@ -475,11 +400,7 @@
                                 {% if execution.assignment.assigned_to == user %}
                                 <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
                                    class="text-primary hover:text-orange-600 font-medium text-sm">
-                                    {% if execution.status == 'completed' %}
-                                        Ver Detalhes →
-                                    {% else %}
-                                        Executar →
-                                    {% endif %}
+                                    Executar →
                                 </a>
                                 {% else %}
                                 <span class="text-sm text-gray-500 italic">
@@ -492,21 +413,22 @@
                     </div>
                 {% else %}
                     <div class="text-center py-8">
-                        <i class="fas fa-clipboard text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500">Nenhum checklist pendente para tarde.</p>
+                        <i class="fas fa-clipboard-check text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500">Nenhum checklist pendente.</p>
                     </div>
                 {% endif %}
             </div>
         </div>
-        
+
+        <!-- Checklists Concluídos -->
         <div class="bg-white rounded-lg shadow-sm border">
             <div class="p-6 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">✅ Checklists Concluídos (Manhã)</h2>
+                <h2 class="text-xl font-semibold text-gray-900">✅ Checklists Concluídos</h2>
             </div>
             <div class="p-6">
-                {% if completed_morning %}
+                {% if completed_checklists %}
                     <div class="space-y-4">
-                        {% for execution in completed_morning %}
+                        {% for execution in completed_checklists %}
                         <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors {% if is_supervisor and execution.assignment.assigned_to != user %}bg-purple-50{% endif %}">
                             <div class="flex justify-between items-start mb-3">
                                 <div class="flex-1">
@@ -520,87 +442,6 @@
                                             {% else %}
                                                 <i class="fas fa-moon mr-1"></i> Tarde
                                             {% endif %}
-                                        </span>
-                                        {% if is_supervisor and execution.assignment.assigned_to != user %}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                            <i class="fas fa-user-tie mr-1"></i> Atribuído para {{ execution.assignment.assigned_to.first_name }}
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    <p class="text-sm text-gray-600">{{ execution.assignment.template.description|truncatewords:10 }}</p>
-                                </div>
-                                <span class="status-badge status-{{ execution.status }} ml-2">
-                                    {% if execution.status == 'pending' %}
-                                        <i class="fas fa-clock mr-1"></i> Pendente
-                                    {% elif execution.status == 'in_progress' %}
-                                        <i class="fas fa-play mr-1"></i> Em Andamento
-                                    {% elif execution.status == 'completed' %}
-                                        <i class="fas fa-check mr-1"></i> Concluído
-                                    {% elif execution.status == 'overdue' %}
-                                        <i class="fas fa-exclamation mr-1"></i> Atrasado
-                                    {% endif %}
-                                </span>
-                            </div>
-                            
-                            <!-- Barra de Progresso -->
-                            <div class="mb-3">
-                                <div class="flex justify-between text-sm text-gray-600 mb-1">
-                                    <span>Progresso</span>
-                                    <span>{{ execution.progress_percentage }}%</span>
-                                </div>
-                                <div class="w-full bg-gray-200 rounded-full h-2">
-                                    <div class="h-2 rounded-full {% if execution.status == 'completed' %}bg-green-500{% elif execution.status == 'overdue' %}bg-red-500{% else %}bg-blue-500{% endif %}" 
-                                         style="width: {{ execution.progress_percentage }}%"></div>
-                                </div>
-                            </div>
-                            
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-500">
-                                    {{ execution.task_executions.count }} tarefas
-                                </span>
-                                {% if execution.assignment.assigned_to == user %}
-                                <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
-                                   class="text-primary hover:text-orange-600 font-medium text-sm">
-                                    {% if execution.status == 'completed' %}
-                                        Ver Detalhes →
-                                    {% else %}
-                                        Executar →
-                                    {% endif %}
-                                </a>
-                                {% else %}
-                                <span class="text-sm text-gray-500 italic">
-                                    <i class="fas fa-eye mr-1"></i> Apenas visualização
-                                </span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="text-center py-8">
-                        <i class="fas fa-clipboard-check text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500">Nenhum checklist concluído para manhã.</p>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Checklists Concluídos Tarde -->
-        <div class="bg-white rounded-lg shadow-sm border">
-            <div class="p-6 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">✅ Checklists Concluídos (Tarde)</h2>
-            </div>
-            <div class="p-6">
-                {% if completed_afternoon %}
-                    <div class="space-y-4">
-                        {% for execution in completed_afternoon %}
-                        <div class="checklist-card border border-gray-200 rounded-lg p-4 hover:border-primary transition-colors {% if is_supervisor and execution.assignment.assigned_to != user %}bg-purple-50{% endif %}">
-                            <div class="flex justify-between items-start mb-3">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <h3 class="font-medium text-gray-900">{{ execution.assignment.template.name }}</h3>
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                                            <i class="fas fa-moon mr-1"></i> Tarde
                                         </span>
                                         {% if is_supervisor and execution.assignment.assigned_to != user %}
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
@@ -652,7 +493,7 @@
                 {% else %}
                     <div class="text-center py-8">
                         <i class="fas fa-clipboard-check text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500">Nenhum checklist concluído para tarde.</p>
+                        <p class="text-gray-500">Nenhum checklist concluído.</p>
                     </div>
                 {% endif %}
             </div>

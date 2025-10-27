@@ -501,7 +501,14 @@ function createTicketElement(ticket) {
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
             <h4 class="font-medium text-sm text-gray-900 truncate flex-1 mr-2">${escapeHtml(ticket.title)}</h4>
-            <span class="text-xs px-2 py-1 rounded-full font-medium ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
+            <div class="flex items-center gap-1">
+                <span class="text-xs px-2 py-1 rounded-full font-medium ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
+                <button onclick="event.stopPropagation(); deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}');" 
+                        class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                        title="Excluir chat">
+                    <i class="fas fa-trash text-xs"></i>
+                </button>
+            </div>
         </div>
         
         <div class="text-xs text-gray-600 space-y-1 mb-2">
@@ -524,6 +531,33 @@ function createTicketElement(ticket) {
     `;
     
     return div;
+}
+
+function deleteTicket(ticketId, ticketTitle) {
+    if (!confirm(`Tem certeza que deseja excluir o chat "${ticketTitle}"?\n\nEsta ação não pode ser desfeita.`)) {
+        return;
+    }
+    
+    fetch(`/projects/support/chat/${ticketId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Chat excluído com sucesso!');
+            loadSupportTickets();
+        } else {
+            alert('❌ Erro ao excluir chat: ' + (data.error || 'Erro desconhecido'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao excluir chat:', error);
+        alert('❌ Erro ao excluir chat');
+    });
 }
 
 // Helper para escapar HTML e prevenir XSS

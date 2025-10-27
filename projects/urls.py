@@ -53,6 +53,7 @@ urlpatterns = [
     path('support/chat/<int:chat_id>/assign/', views_chat.assign_chat_to_agent, name='assign_chat_to_agent'),
     path('support/chat/<int:chat_id>/resolve/', views_chat.resolve_support_chat, name='resolve_support_chat'),
     path('support/chat/<int:chat_id>/close/', views_chat.close_support_chat, name='close_support_chat'),
+    path('support/chat/<int:chat_id>/delete/', views_chat.delete_support_chat, name='delete_support_chat'),
     path('support/metrics/', views_chat.support_metrics, name='support_metrics'),
     path('support/metrics/export/', views_chat.export_metrics_report, name='export_metrics_report'),
     path('support/admin/categories/', views_chat.manage_support_categories, name='manage_support_categories'),
