@@ -622,6 +622,99 @@ def api_group_members(request, group_id):
         return JsonResponse({'error': str(e)}, status=400)
 
 
+@login_required
+def api_get_day_checklists(request):
+    """API para buscar todos os checklists de um dia específico (supervisor ou maior)"""
+    user = request.user
+    
+    # Verificar se é supervisor ou hierarquia maior
+    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_superuser
+    
+    if not is_supervisor:
+        return JsonResponse({'error': 'Sem permissão'}, status=403)
+    
+    date_str = request.GET.get('date')
+    if not date_str:
+        return JsonResponse({'error': 'Data não informada'}, status=400)
+    
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Formato de data inválido'}, status=400)
+    
+    # Buscar todas as execuções daquele dia que o usuário pode visualizar
+    # Inclui: checklists atribuídos ao usuário + checklists que ele atribuiu
+    executions = ChecklistExecution.objects.filter(
+        Q(assignment__assigned_to=user) | Q(assignment__assigned_by=user),
+        execution_date=target_date
+    ).select_related(
+        'assignment__template',
+        'assignment__assigned_to',
+        'assignment__assigned_by'
+    ).prefetch_related(
+        'task_executions__task'
+    ).order_by('period', 'assignment__template__name')
+    
+    checklists_data = []
+    for execution in executions:
+        # Calcular progresso
+        total_tasks = execution.task_executions.count()
+        completed_tasks = execution.task_executions.filter(is_completed=True).count()
+        progress = round((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+        
+        checklists_data.append({
+            'id': execution.id,
+            'assignment_id': execution.assignment.id,
+            'name': execution.assignment.template.name,
+            'description': execution.assignment.template.description,
+            'assigned_to': execution.assignment.assigned_to.get_full_name(),
+            'assigned_to_id': execution.assignment.assigned_to.id,
+            'assigned_by': execution.assignment.assigned_by.get_full_name() if execution.assignment.assigned_by else '',
+            'status': execution.status,
+            'period': execution.period,
+            'progress': progress,
+            'can_unassign': execution.assignment.assigned_by == user,
+            'url': f'/checklists/execute/{execution.assignment.id}/?period={execution.period}'
+        })
+    
+    return JsonResponse({'checklists': checklists_data})
+
+
+@login_required
+def api_unassign_checklist(request, assignment_id):
+    """API para desatribuir um checklist"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    user = request.user
+    
+    try:
+        assignment = get_object_or_404(ChecklistAssignment, id=assignment_id)
+        
+        # Verificar se o usuário tem permissão para desatribuir
+        # Pode desatribuir se foi quem atribuiu OU se é SUPERADMIN
+        can_unassign = (
+            assignment.assigned_by == user or 
+            user.hierarchy == 'SUPERADMIN' or 
+            user.is_superuser
+        )
+        
+        if not can_unassign:
+            return JsonResponse({'error': 'Você não tem permissão para desatribuir este checklist'}, status=403)
+        
+        # Marcar como inativo ao invés de deletar (preservar histórico)
+        assignment.is_active = False
+        assignment.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Checklist "{assignment.template.name}" desatribuído de {assignment.assigned_to.get_full_name()}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 # ===== ADMIN - TEMPLATES =====@login_required
 def admin_templates(request):
     """Administração de templates (apenas para admins)"""

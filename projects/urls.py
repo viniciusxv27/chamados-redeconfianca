@@ -51,10 +51,17 @@ urlpatterns = [
     path('support/admin/', views_chat.support_admin_dashboard, name='support_admin_dashboard'),
     path('support/admin/template/', views_chat.support_admin_template, name='support_admin_template'),
     path('support/chat/<int:chat_id>/assign/', views_chat.assign_chat_to_agent, name='assign_chat_to_agent'),
+    path('support/chat/<int:chat_id>/resolve/', views_chat.resolve_support_chat, name='resolve_support_chat'),
+    path('support/chat/<int:chat_id>/close/', views_chat.close_support_chat, name='close_support_chat'),
     path('support/metrics/', views_chat.support_metrics, name='support_metrics'),
     path('support/metrics/export/', views_chat.export_metrics_report, name='export_metrics_report'),
     path('support/admin/categories/', views_chat.manage_support_categories, name='manage_support_categories'),
     path('support/admin/agents/', views_chat.manage_support_agents, name='manage_support_agents'),
+    
+    # Support Admin API
+    path('support/api/categories/', views_chat.get_support_categories_api, name='support_categories_api'),
+    path('support/api/agents/', views_chat.get_support_agents_api, name='support_agents_api'),
+    path('support/api/available-users/', views_chat.get_available_users_api, name='support_available_users_api'),
     
     # API
     path('api/sectors/<int:sector_id>/users/', api_views.sector_users_api, name='sector_users_api'),

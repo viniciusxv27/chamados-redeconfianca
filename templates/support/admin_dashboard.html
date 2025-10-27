@@ -4,10 +4,83 @@
 {% block title %}Dashboard de Suporte - Administrativo{% endblock %}
 
 {% block extra_css %}
-<!-- Todos os estilos foram convertidos para Tailwind CSS puro -->
+<style>
+    /* Estilização customizada da barra de rolagem */
+    #chatMessages::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    #chatMessages::-webkit-scrollbar-track {
+        background: #F7FAFC;
+        border-radius: 4px;
+    }
+    
+    #chatMessages::-webkit-scrollbar-thumb {
+        background: #CBD5E0;
+        border-radius: 4px;
+    }
+    
+    #chatMessages::-webkit-scrollbar-thumb:hover {
+        background: #A0AEC0;
+    }
+    
+    /* Garantir que a barra de rolagem seja sempre visível */
+    #chatMessages {
+        overflow-y: scroll !important;
+    }
+    
+    /* Estilização para as listas de categorias e agentes */
+    #categoriesList::-webkit-scrollbar,
+    #agentsList::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    #categoriesList::-webkit-scrollbar-track,
+    #agentsList::-webkit-scrollbar-track {
+        background: #F7FAFC;
+    }
+    
+    #categoriesList::-webkit-scrollbar-thumb,
+    #agentsList::-webkit-scrollbar-thumb {
+        background: #CBD5E0;
+        border-radius: 3px;
+    }
+    
+    /* Badges de prioridade */
+    .priority-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .priority-baixa {
+        background-color: #D1FAE5;
+        color: #065F46;
+    }
+    
+    .priority-media {
+        background-color: #FEF3C7;
+        color: #92400E;
+    }
+    
+    .priority-alta {
+        background-color: #FED7AA;
+        color: #9A3412;
+    }
+    
+    .priority-urgente {
+        background-color: #FECACA;
+        color: #991B1B;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
+<!-- CSRF Token Global -->
+{% csrf_token %}
+
 <div class="container mx-auto px-4 py-6">
     <!-- Header -->
     <div class="flex justify-between items-center mb-6">
@@ -23,11 +96,9 @@
             <button onclick="openAgentsModal()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">
                 <i class="fas fa-users mr-2"></i>Agentes
             </button>
-            {% if request.user.hierarchy == 'SUPERADMIN' %}
             <button onclick="openMetricsModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg">
                 <i class="fas fa-chart-bar mr-2"></i>Métricas
             </button>
-            {% endif %}
         </div>
     </div>
 
@@ -120,11 +191,223 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Categorias -->
+<div id="categoriesModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col mx-4">
+        <div class="flex items-center justify-between p-4 border-b">
+            <h3 class="text-lg font-semibold">Gerenciar Categorias</h3>
+            <button onclick="closeCategoriesModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-hidden flex">
+            <!-- Lista de categorias -->
+            <div class="w-2/3 border-r overflow-y-auto p-4">
+                <h4 class="font-semibold mb-4">Categorias Existentes</h4>
+                <div id="categoriesList" class="space-y-2">
+                    <!-- Categorias serão carregadas aqui -->
+                </div>
+            </div>
+            
+            <!-- Formulário de nova categoria -->
+            <div class="w-1/3 p-4">
+                <h4 class="font-semibold mb-4">Nova Categoria</h4>
+                <form id="newCategoryForm" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
+                        <select id="newCategorySector" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                            <option value="">Selecione o setor</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                        <input type="text" id="newCategoryName" required 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                        <textarea id="newCategoryDescription" rows="3"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md">
+                        <i class="fas fa-plus mr-2"></i>Criar Categoria
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Agentes -->
+<div id="agentsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col mx-4">
+        <div class="flex items-center justify-between p-4 border-b">
+            <h3 class="text-lg font-semibold">Gerenciar Agentes de Suporte</h3>
+            <button onclick="closeAgentsModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-hidden flex">
+            <!-- Lista de agentes -->
+            <div class="w-2/3 border-r overflow-y-auto p-4">
+                <h4 class="font-semibold mb-4">Agentes Ativos</h4>
+                <div id="agentsList" class="space-y-2">
+                    <!-- Agentes serão carregados aqui -->
+                </div>
+            </div>
+            
+            <!-- Formulário de novo agente -->
+            <div class="w-1/3 p-4">
+                <h4 class="font-semibold mb-4">Adicionar Agente</h4>
+                <form id="newAgentForm" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                        <select id="newAgentUser" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                            <option value="">Selecione o usuário</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Apenas usuários dos seus setores</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Permissões</label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="newAgentCanAssign" class="rounded border-gray-300">
+                            <span class="text-sm text-gray-700">Pode atribuir tickets</span>
+                        </label>
+                        <p class="text-xs text-gray-500 mt-1">Permitir que este agente atribua tickets a outros</p>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md">
+                        <i class="fas fa-user-plus mr-2"></i>Adicionar Agente
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Métricas -->
+<div id="metricsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-6xl h-[85vh] flex flex-col mx-4">
+        <div class="flex items-center justify-between p-4 border-b">
+            <h3 class="text-lg font-semibold">Métricas e Relatórios</h3>
+            <button onclick="closeMetricsModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6">
+            <!-- Filtros -->
+            <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
+                        <input type="date" id="metricsStartDate" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Data Final</label>
+                        <input type="date" id="metricsEndDate" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="loadMetrics()" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-md">
+                            <i class="fas fa-search mr-2"></i>Buscar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Estatísticas Gerais -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-blue-600" id="metricTotalTickets">0</div>
+                    <div class="text-sm text-gray-600 mt-1">Total de Tickets</div>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-green-600" id="metricResolved">0</div>
+                    <div class="text-sm text-gray-600 mt-1">Resolvidos</div>
+                </div>
+                <div class="bg-yellow-50 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-yellow-600" id="metricAvgTime">0h</div>
+                    <div class="text-sm text-gray-600 mt-1">Tempo Médio</div>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-purple-600" id="metricSatisfaction">0%</div>
+                    <div class="text-sm text-gray-600 mt-1">Satisfação</div>
+                </div>
+            </div>
+            
+            <!-- Tabelas de Métricas -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Por Agente -->
+                <div class="bg-white border rounded-lg p-4">
+                    <h4 class="font-semibold mb-3">Desempenho por Agente</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Agente</th>
+                                    <th class="px-3 py-2 text-center">Tickets</th>
+                                    <th class="px-3 py-2 text-center">Resolvidos</th>
+                                    <th class="px-3 py-2 text-center">Taxa</th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricsAgentTable">
+                                <tr><td colspan="4" class="text-center text-gray-500 py-4">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Por Categoria -->
+                <div class="bg-white border rounded-lg p-4">
+                    <h4 class="font-semibold mb-3">Tickets por Categoria</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Categoria</th>
+                                    <th class="px-3 py-2 text-center">Total</th>
+                                    <th class="px-3 py-2 text-center">Abertos</th>
+                                    <th class="px-3 py-2 text-center">Resolvidos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricsCategoryTable">
+                                <tr><td colspan="4" class="text-center text-gray-500 py-4">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// Helper para pegar CSRF token
+function getCsrfToken() {
+    const token = document.querySelector('[name=csrfmiddlewaretoken]');
+    return token ? token.value : '';
+}
+
+// Variável global para armazenar se é agente
+const isCurrentUserAgent = {{ is_support_agent|yesno:"true,false" }};
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== Dashboard de Suporte Carregado ===');
+    console.log('Usuário é agente:', isCurrentUserAgent);
+    console.log('CSRF Token disponível:', getCsrfToken() ? 'Sim' : 'Não');
+    
     loadSupportTickets();
     
     // Atualizar a cada 30 segundos
@@ -132,17 +415,38 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadSupportTickets() {
-    fetch('/projects/support/admin/')
-        .then(response => response.json())
+    console.log('Carregando tickets...');
+    fetch('/projects/support/admin/?format=json')
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            renderTickets(data.recent_chats);
+            console.log('Dados recebidos:', data);
+            console.log('Tickets:', data.recent_chats);
+            if (data.recent_chats && data.recent_chats.length > 0) {
+                renderTickets(data.recent_chats);
+            } else {
+                console.warn('Nenhum ticket encontrado');
+                // Limpar containers
+                ['open-tickets', 'progress-tickets', 'resolved-tickets', 'closed-tickets'].forEach(id => {
+                    const container = document.getElementById(id);
+                    if (container) container.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Nenhum ticket</div>';
+                });
+            }
         })
         .catch(error => {
             console.error('Erro ao carregar tickets:', error);
+            showToast('Erro ao carregar tickets: ' + error.message, 'error');
         });
 }
 
 function renderTickets(tickets) {
+    console.log('renderTickets chamado com', tickets.length, 'tickets');
+    
     const containers = {
         'ABERTO': document.getElementById('open-tickets'),
         'EM_ANDAMENTO': document.getElementById('progress-tickets'),
@@ -150,16 +454,22 @@ function renderTickets(tickets) {
         'FECHADO': document.getElementById('closed-tickets')
     };
     
+    console.log('Containers:', containers);
+    
     // Limpar containers
     Object.values(containers).forEach(container => {
         if (container) container.innerHTML = '';
     });
     
     tickets.forEach(ticket => {
+        console.log('Processando ticket:', ticket.id, 'Status:', ticket.status);
         const container = containers[ticket.status];
         if (container) {
             const ticketElement = createTicketElement(ticket);
             container.appendChild(ticketElement);
+            console.log('Ticket', ticket.id, 'adicionado ao container', ticket.status);
+        } else {
+            console.warn('Container não encontrado para status:', ticket.status);
         }
     });
     
@@ -168,6 +478,8 @@ function renderTickets(tickets) {
 }
 
 function createTicketElement(ticket) {
+    console.log('createTicketElement para ticket:', ticket);
+    
     const div = document.createElement('div');
     div.className = 'bg-white rounded-md p-3 mb-2 border border-gray-200 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-blue-400';
     div.onclick = () => openTicketModal(ticket.id);
@@ -181,25 +493,44 @@ function createTicketElement(ticket) {
     const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
     const timeAgo = getTimeAgo(ticket.created_at);
     
+    // Verificar se pode assumir usando a variável global
+    const canAssign = isCurrentUserAgent && !ticket.assigned_to;
+    
+    console.log('Ticket', ticket.id, '- isAgent:', isCurrentUserAgent, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
+    
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
-            <h4 class="font-medium text-sm text-gray-900 truncate flex-1 mr-2">${ticket.title}</h4>
+            <h4 class="font-medium text-sm text-gray-900 truncate flex-1 mr-2">${escapeHtml(ticket.title)}</h4>
             <span class="text-xs px-2 py-1 rounded-full font-medium ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
         </div>
         
         <div class="text-xs text-gray-600 space-y-1 mb-2">
-            <div><span class="font-medium">Cliente:</span> ${ticket.user.get_full_name}</div>
-            <div><span class="font-medium">Setor:</span> ${ticket.sector ? ticket.sector.name : 'N/A'}</div>
-            ${ticket.assigned_to ? `<div><span class="font-medium">Atendente:</span> ${ticket.assigned_to.get_full_name}</div>` : ''}
+            <div><span class="font-medium">Cliente:</span> ${escapeHtml(ticket.user.get_full_name)}</div>
+            <div><span class="font-medium">Setor:</span> ${ticket.sector ? escapeHtml(ticket.sector.name) : 'N/A'}</div>
+            ${ticket.assigned_to ? `<div><span class="font-medium">Atendente:</span> ${escapeHtml(ticket.assigned_to.get_full_name)}</div>` : ''}
         </div>
         
-        <div class="flex justify-between items-center text-xs text-gray-500">
-            <span>${timeAgo}</span>
-            <i class="fas fa-external-link-alt text-blue-500 hover:text-blue-700"></i>
+        <div class="flex justify-between items-center text-xs">
+            <span class="text-gray-500">${timeAgo}</span>
+            ${canAssign ? `
+                <button onclick="event.stopPropagation(); assignChatToMe(${ticket.id})" 
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors">
+                    <i class="fas fa-hand-paper mr-1"></i>Assumir
+                </button>
+            ` : `
+                <i class="fas fa-external-link-alt text-blue-500 hover:text-blue-700"></i>
+            `}
         </div>
     `;
     
     return div;
+}
+
+// Helper para escapar HTML e prevenir XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function updateTicketCounts(tickets) {
@@ -248,10 +579,17 @@ function closeTicketModal() {
 
 function renderTicketDetails(data) {
     const content = document.getElementById('ticketModalContent');
+    
+    // Verificar se o usuário é agente de suporte
+    const isAgent = data.is_support_agent || false;
+    const currentUserId = {{ request.user.id }};
+    const isAssignedToMe = data.chat.assigned_to && data.chat.assigned_to.id === currentUserId;
+    const canAssign = isAgent && !data.chat.assigned_to;
+    
     content.innerHTML = `
         <div class="flex h-full">
             <!-- Info do ticket -->
-            <div class="w-1/3 border-r bg-gray-50 p-4">
+            <div class="w-1/3 border-r bg-gray-50 p-4 overflow-y-auto">
                 <div class="space-y-4">
                     <div>
                         <h4 class="font-semibold text-gray-900">${data.chat.title}</h4>
@@ -270,39 +608,66 @@ function renderTicketDetails(data) {
                         <p class="text-sm text-gray-900">${data.chat.sector ? data.chat.sector.name : 'N/A'}</p>
                     </div>
                     
+                    ${data.chat.category ? `
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Categoria</label>
+                        <p class="text-sm text-gray-900">${data.chat.category.name}</p>
+                    </div>
+                    ` : ''}
+                    
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Prioridade</label>
-                        <span class="priority-badge priority-${data.chat.priority.toLowerCase()}">${data.chat.get_priority_display}</span>
+                        <span class="priority-badge priority-${data.chat.priority}">${data.chat.get_priority_display}</span>
                     </div>
                     
                     ${data.chat.assigned_to ? `
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Atendente</label>
-                        <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name}</p>
+                        <div class="flex items-center space-x-2">
+                            <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name}</p>
+                            ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">(Você)</span>' : ''}
+                        </div>
                     </div>
                     ` : ''}
                     
+                    ${canAssign ? `
                     <div class="pt-4 border-t">
-                        <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm">
-                            Assumir Atendimento
+                        <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <i class="fas fa-hand-paper mr-2"></i>Assumir Atendimento
                         </button>
                     </div>
+                    ` : ''}
+                    
+                    ${isAssignedToMe && data.chat.status !== 'FECHADO' ? `
+                    <div class="pt-4 border-t space-y-2">
+                        ${data.chat.status === 'ABERTO' || data.chat.status === 'EM_ANDAMENTO' ? `
+                        <button onclick="resolveChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <i class="fas fa-check-circle mr-2"></i>Marcar como Resolvido
+                        </button>
+                        ` : ''}
+                        ${data.chat.status === 'RESOLVIDO' ? `
+                        <button onclick="closeChat(${data.chat.id})" class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <i class="fas fa-times-circle mr-2"></i>Fechar Ticket
+                        </button>
+                        ` : ''}
+                    </div>
+                    ` : ''}
                 </div>
             </div>
             
             <!-- Chat -->
-            <div class="flex-1 flex flex-col">
-                <div class="flex-1 overflow-y-auto p-4" id="chatMessages">
+            <div class="flex-1 flex flex-col min-h-0">
+                <div class="flex-1 overflow-y-scroll p-4 min-h-0" id="chatMessages" style="scrollbar-width: thin; scrollbar-color: #CBD5E0 #F7FAFC;">
                     ${renderChatMessages(data.messages)}
                 </div>
                 
-                <div class="border-t p-4">
+                <div class="border-t p-4 flex-shrink-0 bg-white">
                     <div class="flex space-x-2">
                         <input type="text" id="messageInput" placeholder="Digite sua resposta..." 
-                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm">
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <button onclick="sendSupportMessage(${data.chat.id})" 
-                                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
-                            Enviar
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md text-sm whitespace-nowrap flex-shrink-0">
+                            <i class="fas fa-paper-plane mr-2"></i>Enviar
                         </button>
                     </div>
                 </div>
@@ -349,16 +714,20 @@ function getTimeAgo(dateString) {
 }
 
 function assignToMe(chatId) {
+    if (!confirm('Deseja assumir este atendimento?')) return;
+    
     fetch(`/projects/support/chat/${chatId}/assign/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-CSRFToken': getCsrfToken(),
         }
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            location.reload(); // Recarregar para atualizar o status
+            showToast('Atendimento assumido com sucesso!', 'success');
+            closeTicketModal();
+            setTimeout(() => loadSupportTickets(), 500);
         } else {
             alert('Erro: ' + data.error);
         }
@@ -366,6 +735,78 @@ function assignToMe(chatId) {
     .catch(error => {
         console.error('Erro:', error);
         alert('Erro ao assumir atendimento');
+    });
+}
+
+function assignChatToMe(chatId) {
+    if (!confirm('Deseja assumir este atendimento?')) return;
+    
+    fetch(`/projects/support/chat/${chatId}/assign/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Atendimento assumido com sucesso!', 'success');
+            setTimeout(() => loadSupportTickets(), 500);
+        } else {
+            showToast('Erro: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('Erro ao assumir atendimento', 'error');
+    });
+}
+
+function resolveChat(chatId) {
+    if (!confirm('Marcar este ticket como resolvido?')) return;
+    
+    fetch(`/projects/support/chat/${chatId}/resolve/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Ticket marcado como resolvido!', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao marcar como resolvido');
+    });
+}
+
+function closeChat(chatId) {
+    if (!confirm('Deseja fechar definitivamente este ticket? Esta ação não pode ser desfeita.')) return;
+    
+    fetch(`/projects/support/chat/${chatId}/close/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Ticket fechado com sucesso!', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao fechar ticket');
     });
 }
 
@@ -379,7 +820,7 @@ function sendSupportMessage(chatId) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            'X-CSRFToken': getCsrfToken()
         },
         body: JSON.stringify({ message: message })
     })
@@ -401,15 +842,461 @@ function sendSupportMessage(chatId) {
 
 // Funções para os modais de administração
 function openCategoriesModal() {
-    alert('Modal de categorias ainda não implementado');
+    document.getElementById('categoriesModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    loadCategories();
+    loadSectorsForCategories();
+}
+
+function closeCategoriesModal() {
+    document.getElementById('categoriesModal').classList.add('hidden');
+    document.body.style.overflow = '';
 }
 
 function openAgentsModal() {
-    alert('Modal de agentes ainda não implementado');
+    document.getElementById('agentsModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    loadAgents();
+    loadAvailableUsers();
+}
+
+function closeAgentsModal() {
+    document.getElementById('agentsModal').classList.add('hidden');
+    document.body.style.overflow = '';
 }
 
 function openMetricsModal() {
-    alert('Modal de métricas ainda não implementado');
+    document.getElementById('metricsModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    // Definir datas padrão (últimos 30 dias)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    
+    document.getElementById('metricsEndDate').valueAsDate = endDate;
+    document.getElementById('metricsStartDate').valueAsDate = startDate;
+    
+    loadMetrics();
+}
+
+function closeMetricsModal() {
+    document.getElementById('metricsModal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// ===== GERENCIAMENTO DE CATEGORIAS =====
+function loadSectorsForCategories() {
+    // Carregar apenas setores do usuário
+    fetch('/projects/support/sectors/')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('newCategorySector');
+            select.innerHTML = '<option value="">Selecione o setor</option>';
+            
+            if (data.success && data.sectors) {
+                // O backend já faz a filtragem por setor
+                data.sectors.forEach(sector => {
+                    const option = document.createElement('option');
+                    option.value = sector.id;
+                    option.textContent = sector.name;
+                    select.appendChild(option);
+                });
+            }
+        })
+        .catch(error => console.error('Erro ao carregar setores:', error));
+}
+
+function loadCategories() {
+    fetch('/projects/support/api/categories/')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('categoriesList');
+            
+            if (data.success && data.categories.length > 0) {
+                container.innerHTML = '';
+                
+                data.categories.forEach(category => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-between';
+                    div.innerHTML = `
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">${category.name}</div>
+                            <div class="text-sm text-gray-600">
+                                <span class="font-medium">Setor:</span> ${category.sector ? category.sector.name : 'N/A'}
+                                ${category.description ? `<br><span class="text-xs text-gray-500">${category.description}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="editCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}', '${(category.description || '').replace(/'/g, "\\'")}', ${category.sector ? category.sector.id : 'null'})" 
+                                    class="text-blue-600 hover:text-blue-800 px-2 py-1">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteCategory(${category.id})" 
+                                    class="text-red-600 hover:text-red-800 px-2 py-1">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                container.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhuma categoria encontrada</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar categorias:', error);
+            document.getElementById('categoriesList').innerHTML = 
+                '<div class="text-center text-red-500 py-4">Erro ao carregar categorias</div>';
+        });
+}
+
+document.getElementById('newCategoryForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        action: 'create',
+        sector_id: document.getElementById('newCategorySector').value,
+        name: document.getElementById('newCategoryName').value,
+        description: document.getElementById('newCategoryDescription').value
+    };
+    
+    fetch('/projects/support/api/categories/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('newCategoryForm').reset();
+            loadCategories();
+            showToast('Categoria criada com sucesso!', 'success');
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao criar categoria');
+    });
+});
+
+function editCategory(id, name, description, sectorId) {
+    const newName = prompt('Nome da categoria:', name);
+    if (newName && newName !== name) {
+        fetch('/projects/support/api/categories/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                action: 'update',
+                category_id: id,
+                name: newName,
+                description: description
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadCategories();
+                showToast('Categoria atualizada!', 'success');
+            } else {
+                alert('Erro: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao atualizar categoria');
+        });
+    }
+}
+
+function deleteCategory(id) {
+    if (!confirm('Deseja realmente excluir esta categoria?')) return;
+    
+    fetch('/projects/support/api/categories/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            action: 'delete',
+            category_id: id
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            loadCategories();
+            showToast('Categoria excluída!', 'success');
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao excluir categoria');
+    });
+}
+
+// ===== GERENCIAMENTO DE AGENTES =====
+function loadAvailableUsers() {
+    fetch('/projects/support/api/available-users/')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('newAgentUser');
+            select.innerHTML = '<option value="">Selecione o usuário</option>';
+            
+            if (data.success && data.users) {
+                data.users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.name} - ${user.sector}`;
+                    select.appendChild(option);
+                });
+            }
+        })
+        .catch(error => console.error('Erro ao carregar usuários:', error));
+}
+
+function loadAgents() {
+    fetch('/projects/support/api/agents/')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('agentsList');
+            
+            if (data.success && data.agents.length > 0) {
+                container.innerHTML = '';
+                
+                data.agents.forEach(agent => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-between';
+                    div.innerHTML = `
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">${agent.user.name}</div>
+                            <div class="text-sm text-gray-600">
+                                <span class="font-medium">Email:</span> ${agent.user.email}<br>
+                                <span class="font-medium">Setor:</span> ${agent.user.sector}
+                                ${agent.can_assign_tickets ? '<br><span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Pode atribuir tickets</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="toggleAgentAssignPermission(${agent.id}, ${!agent.can_assign_tickets})" 
+                                    class="text-blue-600 hover:text-blue-800 px-2 py-1" title="Alternar permissão">
+                                <i class="fas fa-${agent.can_assign_tickets ? 'user-check' : 'user'}"></i>
+                            </button>
+                            <button onclick="deleteAgent(${agent.id})" 
+                                    class="text-red-600 hover:text-red-800 px-2 py-1">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                container.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhum agente encontrado</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar agentes:', error);
+            document.getElementById('agentsList').innerHTML = 
+                '<div class="text-center text-red-500 py-4">Erro ao carregar agentes</div>';
+        });
+}
+
+document.getElementById('newAgentForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const userId = document.getElementById('newAgentUser').value;
+    if (!userId) {
+        alert('Selecione um usuário');
+        return;
+    }
+    
+    const data = {
+        action: 'create',
+        user_id: userId,
+        can_assign_tickets: document.getElementById('newAgentCanAssign').checked
+    };
+    
+    fetch('/projects/support/api/agents/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('newAgentForm').reset();
+            loadAgents();
+            loadAvailableUsers();
+            showToast('Agente adicionado com sucesso!', 'success');
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao adicionar agente');
+    });
+});
+
+function toggleAgentAssignPermission(agentId, canAssign) {
+    fetch('/projects/support/api/agents/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            action: 'update',
+            agent_id: agentId,
+            can_assign_tickets: canAssign
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            loadAgents();
+            showToast('Permissão atualizada!', 'success');
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atualizar permissão');
+    });
+}
+
+function deleteAgent(agentId) {
+    if (!confirm('Deseja realmente remover este agente?')) return;
+    
+    fetch('/projects/support/api/agents/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            action: 'delete',
+            agent_id: agentId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            loadAgents();
+            loadAvailableUsers();
+            showToast('Agente removido!', 'success');
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao remover agente');
+    });
+}
+
+// ===== MÉTRICAS E RELATÓRIOS =====
+function loadMetrics() {
+    const startDate = document.getElementById('metricsStartDate').value;
+    const endDate = document.getElementById('metricsEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Por favor, selecione o período');
+        return;
+    }
+    
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate
+    });
+    
+    fetch(`/projects/support/metrics/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderMetrics(data.metrics);
+            } else {
+                alert('Erro ao carregar métricas: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao carregar métricas');
+        });
+}
+
+function renderMetrics(metrics) {
+    // Estatísticas gerais
+    document.getElementById('metricTotalTickets').textContent = metrics.total_tickets || 0;
+    document.getElementById('metricResolved').textContent = metrics.resolved_tickets || 0;
+    document.getElementById('metricAvgTime').textContent = metrics.avg_resolution_time || '0h';
+    document.getElementById('metricSatisfaction').textContent = metrics.satisfaction_rate || '0%';
+    
+    // Tabela por Agente
+    const agentTable = document.getElementById('metricsAgentTable');
+    if (metrics.by_agent && metrics.by_agent.length > 0) {
+        agentTable.innerHTML = metrics.by_agent.map(agent => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-3 py-2">${agent.name}</td>
+                <td class="px-3 py-2 text-center">${agent.total}</td>
+                <td class="px-3 py-2 text-center">${agent.resolved}</td>
+                <td class="px-3 py-2 text-center">
+                    <span class="px-2 py-1 rounded-full text-xs font-medium ${
+                        agent.rate >= 80 ? 'bg-green-100 text-green-800' : 
+                        agent.rate >= 60 ? 'bg-yellow-100 text-yellow-800' : 
+                        'bg-red-100 text-red-800'
+                    }">
+                        ${agent.rate}%
+                    </span>
+                </td>
+            </tr>
+        `).join('');
+    } else {
+        agentTable.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+    }
+    
+    // Tabela por Categoria
+    const categoryTable = document.getElementById('metricsCategoryTable');
+    if (metrics.by_category && metrics.by_category.length > 0) {
+        categoryTable.innerHTML = metrics.by_category.map(category => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-3 py-2">${category.name}</td>
+                <td class="px-3 py-2 text-center">${category.total}</td>
+                <td class="px-3 py-2 text-center">${category.open}</td>
+                <td class="px-3 py-2 text-center">${category.resolved}</td>
+            </tr>
+        `).join('');
+    } else {
+        categoryTable.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg text-white shadow-lg transition-all duration-300 ${
+        type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+    }`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-2"></i>${message}`;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(100%)';
+        setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
 }
 </script>
 {% endblock %}

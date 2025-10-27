@@ -574,13 +574,6 @@
                                 </li>
                                 {% if user.hierarchy == 'SUPERADMIN' %}
                                 <li>
-                                    <a href="{% url 'projects:support_metrics' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Métricas de Suporte">
-                                        <i class="fas fa-chart-line text-pink-400 flex-shrink-0"></i>
-                                        <span>Métricas Suporte</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-pink-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                <li>
                                     <a href="{% url 'core:activity_history' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Histórico de Atividades">
                                         <i class="fas fa-history text-indigo-400 flex-shrink-0"></i>
                                         <span>Histórico</span>
@@ -1398,11 +1391,11 @@
 
         <!-- Chat Window -->
         <div id="supportChatWindow" 
-             class="absolute bottom-16 right-0 w-80 h-96 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50"
-             style="display: none;">
+             class="absolute bottom-16 right-0 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50"
+             style="display: none; height: 500px;">
             
             <!-- Chat Header -->
-            <div class="bg-blue-500 text-white p-4 flex items-center justify-between">
+            <div class="bg-blue-500 text-white p-4 flex items-center justify-between flex-shrink-0">
                 <div>
                     <h3 class="font-semibold">Suporte</h3>
                     <p class="text-xs text-blue-100">Como podemos ajudar?</p>
@@ -1418,7 +1411,7 @@
             </div>
 
             <!-- Chat Tabs -->
-            <div class="bg-gray-50 border-b border-gray-200">
+            <div class="bg-gray-50 border-b border-gray-200 flex-shrink-0">
                 <div class="flex">
                     <button id="newChatTab" class="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-white">
                         Novo Chat
@@ -1430,14 +1423,17 @@
             </div>
 
             <!-- New Chat Form -->
-            <div id="newChatForm" class="flex-1 p-4">
+            <div id="newChatForm" class="flex-1 overflow-y-auto p-4 min-h-0">
                 <form id="createSupportChatForm" class="space-y-3">
+                    {% csrf_token %}
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
-                        <select id="supportChatSector" required onchange="loadSectorCategories(this.value)"
+                        <select id="supportChatSector" required onchange="window.loadSectorCategories(this.value)"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Selecione o setor</option>
-                            <!-- Setores serão carregados dinamicamente -->
+                            {% for sector in user_support_sectors %}
+                                <option value="{{ sector.id }}">{{ sector.name }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     
@@ -1458,11 +1454,6 @@
                                   placeholder="Descreva detalhadamente o problema ou dúvida"></textarea>
                     </div>
                     
-                    <button type="button" onclick="loadSectors()" 
-                            class="w-full bg-gray-400 hover:bg-gray-500 text-white py-1 px-4 rounded-md text-xs font-medium transition-colors mb-2">
-                        <i class="fas fa-refresh mr-1"></i>Testar Carregamento de Setores
-                    </button>
-                    
                     <button type="submit" 
                             class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium transition-colors">
                         <i class="fas fa-paper-plane mr-2"></i>Iniciar Chat de Suporte
@@ -1471,16 +1462,16 @@
             </div>
 
             <!-- My Chats List -->
-            <div id="myChatsList" class="hidden flex-1 overflow-y-auto">
+            <div id="myChatsList" class="hidden flex-1 overflow-y-auto min-h-0">
                 <div id="supportChatList" class="p-2">
                     <!-- Chats will be loaded here -->
                 </div>
             </div>
 
             <!-- Active Chat View -->
-            <div id="activeChatView" class="hidden flex-1 flex flex-col">
+            <div id="activeChatView" class="hidden flex-1 flex flex-col min-h-0">
                 <!-- Chat Header -->
-                <div class="border-b border-gray-200 p-3">
+                <div class="border-b border-gray-200 p-3 flex-shrink-0">
                     <div class="flex items-center justify-between">
                         <div>
                             <h4 id="activeChatTitle" class="font-medium text-sm text-gray-900"></h4>
@@ -1493,7 +1484,7 @@
                 </div>
 
                 <!-- Messages -->
-                <div id="activeChatMessages" class="flex-1 overflow-y-auto p-3 space-y-2">
+                <div id="activeChatMessages" class="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
                     <!-- Messages will be loaded here -->
                 </div>
 
@@ -1516,6 +1507,10 @@
     {% block extra_js %}{% endblock %}
     
     <script>
+        // Dados pré-carregados do backend
+        window.userSupportSectors = {{ user_support_sectors_json|safe }};
+        console.log('Setores pré-carregados do backend:', window.userSupportSectors);
+        
         // Global functions for support chat (called from onclick)
         window.toggleSupportChat = function() {
             console.log('toggleSupportChat called'); // Debug log
@@ -1532,6 +1527,17 @@
                 if (chatWindow.style.display === 'none' || chatWindow.style.display === '') {
                     chatWindow.style.display = 'flex';
                     console.log('Chat window opened'); // Debug log
+                    // Verificar se os setores precisam ser carregados (só se não estiverem no HTML)
+                    const sectorSelect = document.getElementById('supportChatSector');
+                    const currentOptions = sectorSelect ? sectorSelect.querySelectorAll('option[value!=""]') : [];
+                    if (currentOptions.length === 0) {
+                        console.log('Setores não encontrados no HTML, tentando carregar...');
+                        if (typeof window.loadSectors === 'function') {
+                            window.loadSectors();
+                        }
+                    } else {
+                        console.log('Setores já estão carregados:', currentOptions.length);
+                    }
                 } else {
                     chatWindow.style.display = 'none';
                     console.log('Chat window closed'); // Debug log
@@ -1604,6 +1610,8 @@
 
         // Support Chat Widget JavaScript
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded - Initializing support chat');
+            
             const chatToggle = document.getElementById('supportChatToggle');
             const chatWindow = document.getElementById('supportChatWindow');
             const chatClose = document.getElementById('supportChatClose');
@@ -1614,6 +1622,15 @@
             const myChatsList = document.getElementById('myChatsList');
             const activeChatView = document.getElementById('activeChatView');
             const backToChatList = document.getElementById('backToChatList');
+
+            console.log('Elements found:', {
+                chatToggle: !!chatToggle,
+                chatWindow: !!chatWindow,
+                newChatTab: !!newChatTab,
+                myChatTab: !!myChatTab,
+                newChatForm: !!newChatForm,
+                myChatsList: !!myChatsList
+            });
 
             let currentChatId = null;
             let isMinimized = false;
@@ -1634,26 +1651,36 @@
             }
 
             // Close chat
-            chatClose.addEventListener('click', function() {
-                chatWindow.classList.add('hidden');
-                isMinimized = false;
-            });
+            if (chatClose) {
+                chatClose.addEventListener('click', function() {
+                    chatWindow.style.display = 'none';
+                    isMinimized = false;
+                });
+            }
 
             // Minimize chat
-            chatMinimize.addEventListener('click', function() {
-                chatWindow.classList.add('hidden');
-                isMinimized = true;
-            });
+            if (chatMinimize) {
+                chatMinimize.addEventListener('click', function() {
+                    chatWindow.style.display = 'none';
+                    isMinimized = true;
+                });
+            }
 
             // Tab switching
-            newChatTab.addEventListener('click', function() {
-                switchTab('new');
-            });
+            if (newChatTab) {
+                newChatTab.addEventListener('click', function() {
+                    console.log('New Chat tab clicked');
+                    switchTab('new');
+                });
+            }
 
-            myChatTab.addEventListener('click', function() {
-                switchTab('my');
-                loadMyChats();
-            });
+            if (myChatTab) {
+                myChatTab.addEventListener('click', function() {
+                    console.log('My Chats tab clicked');
+                    switchTab('my');
+                    window.loadMyChats();
+                });
+            }
 
             function switchTab(tab) {
                 if (tab === 'new') {
@@ -1665,7 +1692,7 @@
                     myChatsList.classList.add('hidden');
                     activeChatView.classList.add('hidden');
                     // Carregar setores quando mudar para aba de novo chat
-                    loadSectors();
+                    window.loadSectors();
                 } else {
                     myChatTab.classList.add('text-blue-600', 'border-blue-600', 'bg-white');
                     myChatTab.classList.remove('text-gray-600');
@@ -1681,8 +1708,17 @@
             document.getElementById('createSupportChatForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 
+                console.log('Form submitted');
+                
                 const sectorSelect = document.getElementById('supportChatSector');
                 const categorySelect = document.getElementById('supportChatCategory');
+                const messageInput = document.getElementById('supportChatMessage');
+                
+                console.log('Form values:', {
+                    sector: sectorSelect.value,
+                    category: categorySelect.value,
+                    message: messageInput.value
+                });
                 
                 // Create title based on sector and category
                 const sectorText = sectorSelect.options[sectorSelect.selectedIndex]?.text || '';
@@ -1693,37 +1729,47 @@
                 formData.append('title', title);
                 formData.append('sector_id', sectorSelect.value);
                 formData.append('category_id', categorySelect.value);
-                formData.append('message', document.getElementById('supportChatMessage').value);
+                formData.append('message', messageInput.value);
                 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
                 fetch('/projects/support/chat/create/', {
                     method: 'POST',
                     body: formData
                 })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Create chat response:', response.status);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Create chat data:', data);
                     if (data.success) {
                         // Clear form
                         this.reset();
+                        document.getElementById('categoryDiv').classList.add('hidden');
                         // Switch to my chats and load the new chat
                         switchTab('my');
-                        loadMyChats();
-                        setTimeout(() => openChat(data.chat_id), 1000);
+                        window.loadMyChats();
+                        setTimeout(() => window.openChat(data.chat_id), 1000);
                     } else {
                         alert('Erro ao criar chat: ' + data.error);
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Error creating chat:', error);
                     alert('Erro ao criar chat de suporte');
                 });
             });
 
             // Load my chats
-            function loadMyChats() {
+            window.loadMyChats = function() {
+                console.log('loadMyChats() called');
                 fetch('/projects/support/chats/')
-                .then(response => response.json())
+                .then(response => {
+                    console.log('My chats response:', response.status);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('My chats data:', data);
                     if (data.success) {
                         const chatList = document.getElementById('supportChatList');
                         chatList.innerHTML = '';
@@ -1747,15 +1793,18 @@
                                     <span class="text-xs px-1 py-0.5 rounded ${getPriorityColor(chat.priority)}">${chat.priority}</span>
                                 </div>
                             `;
-                            chatItem.addEventListener('click', () => openChat(chat.id));
+                            chatItem.addEventListener('click', () => window.openChat(chat.id));
                             chatList.appendChild(chatItem);
                         });
+                        console.log('Chats loaded:', data.chats.length);
+                    } else {
+                        console.error('Error in response:', data);
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Error loading chats:', error);
                 });
-            }
+            };
 
             function getStatusColor(status) {
                 switch (status) {
@@ -1778,12 +1827,17 @@
             }
 
             // Open specific chat
-            function openChat(chatId) {
+            window.openChat = function(chatId) {
+                console.log('openChat() called with chatId:', chatId);
                 currentChatId = chatId;
                 
                 fetch(`/projects/support/chat/${chatId}/`)
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Chat response:', response.status);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Chat data:', data);
                     if (data.success) {
                         // Update chat header
                         document.getElementById('activeChatTitle').textContent = data.chat.title;
@@ -1811,55 +1865,67 @@
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
                         
                         // Show chat view
+                        const myChatsList = document.getElementById('myChatsList');
+                        const activeChatView = document.getElementById('activeChatView');
                         myChatsList.classList.add('hidden');
                         activeChatView.classList.remove('hidden');
+                        
+                        console.log('Chat loaded successfully');
+                    } else {
+                        console.error('Error in chat response:', data);
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Error loading chat:', error);
+                });
+            };
+
+            // Back to chat list
+            if (backToChatList) {
+                backToChatList.addEventListener('click', function() {
+                    const activeChatView = document.getElementById('activeChatView');
+                    const myChatsList = document.getElementById('myChatsList');
+                    activeChatView.classList.add('hidden');
+                    myChatsList.classList.remove('hidden');
+                    currentChatId = null;
                 });
             }
 
-            // Back to chat list
-            backToChatList.addEventListener('click', function() {
-                activeChatView.classList.add('hidden');
-                myChatsList.classList.remove('hidden');
-                currentChatId = null;
-            });
-
             // Send message
-            document.getElementById('sendMessageForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                if (!currentChatId) return;
-                
-                const messageInput = document.getElementById('messageInput');
-                const message = messageInput.value.trim();
-                
-                if (!message) return;
-                
-                const formData = new FormData();
-                formData.append('message', message);
-                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+            const sendMessageForm = document.getElementById('sendMessageForm');
+            if (sendMessageForm) {
+                sendMessageForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    if (!currentChatId) return;
+                    
+                    const messageInput = document.getElementById('messageInput');
+                    const message = messageInput.value.trim();
+                    
+                    if (!message) return;
+                    
+                    const formData = new FormData();
+                    formData.append('message', message);
+                    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
-                fetch(`/projects/support/chat/${currentChatId}/send/`, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Add message to chat
-                        const messagesContainer = document.getElementById('activeChatMessages');
-                        const messageDiv = document.createElement('div');
-                        messageDiv.className = 'flex justify-end';
-                        messageDiv.innerHTML = `
-                            <div class="max-w-xs px-3 py-2 rounded-lg text-sm bg-blue-500 text-white">
-                                <div>${data.message.message}</div>
-                                <div class="text-xs text-blue-100 mt-1">${data.message.created_at}</div>
-                            </div>
-                        `;
-                        messagesContainer.appendChild(messageDiv);
+                    fetch(`/projects/support/chat/${currentChatId}/send/`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Add message to chat
+                            const messagesContainer = document.getElementById('activeChatMessages');
+                            const messageDiv = document.createElement('div');
+                            messageDiv.className = 'flex justify-end';
+                            messageDiv.innerHTML = `
+                                <div class="max-w-xs px-3 py-2 rounded-lg text-sm bg-blue-500 text-white">
+                                    <div>${data.message.message}</div>
+                                    <div class="text-xs text-blue-100 mt-1">${data.message.created_at}</div>
+                                </div>
+                            `;
+                            messagesContainer.appendChild(messageDiv);
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
                         
                         // Clear input
@@ -1872,11 +1938,12 @@
                     console.error('Error:', error);
                     alert('Erro ao enviar mensagem');
                 });
-            });
+                });
+            }
         });
 
-        // Load available sectors
-        function loadSectors() {
+        // Load available sectors (now pre-loaded from backend)
+        window.loadSectors = function() {
             console.log('loadSectors() called');
             const sectorSelect = document.getElementById('supportChatSector');
             console.log('sectorSelect element:', sectorSelect);
@@ -1886,62 +1953,110 @@
                 return;
             }
             
-            fetch('/projects/support/sectors/')
-                .then(response => {
-                    console.log('Response received:', response.status);
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Data received:', data);
-                    if (data.success) {
-                        sectorSelect.innerHTML = '<option value="">Selecione o setor</option>';
-                        
-                        data.sectors.forEach(sector => {
-                            const option = document.createElement('option');
-                            option.value = sector.id;
-                            option.textContent = sector.name;
-                            sectorSelect.appendChild(option);
-                        });
-                        console.log('Setores carregados:', data.sectors.length);
-                    } else {
-                        console.error('Erro na resposta:', data);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading sectors:', error);
-                });
-        }
+            // Setores já estão pré-carregados no template, mas podemos verificar se precisam ser atualizados
+            if (window.userSupportSectors && window.userSupportSectors.length > 0) {
+                console.log('Usando setores pré-carregados:', window.userSupportSectors.length);
+                // Os setores já estão no HTML, apenas verificamos
+                const currentOptions = sectorSelect.querySelectorAll('option[value!=""]');
+                console.log('Opções atuais no select:', currentOptions.length);
+                
+                if (currentOptions.length === 0) {
+                    // Se por algum motivo não estiver no HTML, adiciona via JS
+                    window.userSupportSectors.forEach(sector => {
+                        const option = document.createElement('option');
+                        option.value = sector.id;
+                        option.textContent = sector.name;
+                        sectorSelect.appendChild(option);
+                    });
+                    console.log('Setores adicionados via JS:', window.userSupportSectors.length);
+                }
+            } else {
+                console.warn('Nenhum setor pré-carregado, tentando buscar da API');
+                // Fallback: tentar buscar da API
+                fetch('/projects/support/sectors/')
+                    .then(response => {
+                        console.log('API Response received:', response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('API Data received:', data);
+                        if (data.success) {
+                            sectorSelect.innerHTML = '<option value="">Selecione o setor</option>';
+                            
+                            data.sectors.forEach(sector => {
+                                const option = document.createElement('option');
+                                option.value = sector.id;
+                                option.textContent = sector.name;
+                                sectorSelect.appendChild(option);
+                            });
+                            console.log('Setores carregados da API:', data.sectors.length);
+                        } else {
+                            console.error('Erro na resposta da API:', data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading sectors from API:', error);
+                    });
+            }
+        };
 
         // Load categories based on selected sector
-        function loadSectorCategories(sectorId) {
+        window.loadSectorCategories = function(sectorId) {
+            console.log('loadSectorCategories() called with sectorId:', sectorId);
             const categoryDiv = document.getElementById('categoryDiv');
             const categorySelect = document.getElementById('supportChatCategory');
             
-            if (!sectorId) {
-                categoryDiv.classList.add('hidden');
+            if (!categoryDiv || !categorySelect) {
+                console.error('Elementos de categoria não encontrados!');
                 return;
             }
             
+            if (!sectorId) {
+                categoryDiv.classList.add('hidden');
+                categorySelect.innerHTML = '<option value="">Selecione o assunto</option>';
+                return;
+            }
+            
+            console.log('Buscando categorias para setor:', sectorId);
+            
             fetch(`/projects/support/sectors/${sectorId}/categories/`)
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Categories response received:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Categories data received:', data);
                     if (data.success) {
                         categorySelect.innerHTML = '<option value="">Selecione o assunto</option>';
                         
-                        data.categories.forEach(category => {
-                            const option = document.createElement('option');
-                            option.value = category.id;
-                            option.textContent = category.name;
-                            categorySelect.appendChild(option);
-                        });
-                        
-                        categoryDiv.classList.remove('hidden');
+                        if (data.categories && data.categories.length > 0) {
+                            data.categories.forEach(category => {
+                                const option = document.createElement('option');
+                                option.value = category.id;
+                                option.textContent = category.name;
+                                categorySelect.appendChild(option);
+                            });
+                            
+                            categoryDiv.classList.remove('hidden');
+                            console.log('Categorias carregadas:', data.categories.length);
+                        } else {
+                            console.warn('Nenhuma categoria encontrada para este setor');
+                            categoryDiv.classList.add('hidden');
+                            alert('Nenhuma categoria disponível para este setor. Por favor, contate o administrador.');
+                        }
+                    } else {
+                        console.error('Erro na resposta de categorias:', data);
+                        alert('Erro ao carregar categorias: ' + (data.error || 'Erro desconhecido'));
                     }
                 })
                 .catch(error => {
                     console.error('Error loading categories:', error);
+                    alert('Erro ao carregar categorias. Verifique sua conexão.');
                 });
-        }
+        };
         
         // Helper functions
         function getTimeAgo(dateString) {
@@ -1990,7 +2105,15 @@
                 setTimeout(() => document.body.removeChild(toast), 300);
             }, 3000);
         }
-        }
+        
+        // Debug: Log available global functions
+        console.log('Support Chat Functions Loaded:', {
+            toggleSupportChat: typeof window.toggleSupportChat,
+            loadSectors: typeof window.loadSectors,
+            loadSectorCategories: typeof window.loadSectorCategories,
+            loadMyChats: typeof window.loadMyChats,
+            openChat: typeof window.openChat
+        });
     </script>
 </body>
 </html>

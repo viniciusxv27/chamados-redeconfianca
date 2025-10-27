@@ -102,9 +102,11 @@ def support_chat_list(request):
     """Listar chats de suporte do usuário"""
     user_chats = SupportChat.objects.filter(user=request.user).order_by('-updated_at')
     
-    # Se for agente de suporte, mostrar todos os chats
+    # Se for agente de suporte ou supervisor+, mostrar todos os chats
     is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
-    if is_support_agent or request.user.hierarchy == 'SUPERADMIN':
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    if is_support_agent or is_supervisor_or_higher:
         all_chats = SupportChat.objects.all().order_by('-updated_at')
     else:
         all_chats = user_chats
@@ -139,14 +141,16 @@ def get_support_chat(request, chat_id):
     
     # Verificar se o usuário pode acessar este chat
     is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
-    if not (chat.user == request.user or is_support_agent or request.user.hierarchy == 'SUPERADMIN'):
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    if not (chat.user == request.user or is_support_agent or is_supervisor_or_higher):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     # Buscar mensagens
     messages = SupportChatMessage.objects.filter(chat=chat).select_related('user')
     
-    # Filtrar mensagens internas se não for agente de suporte
-    if not (is_support_agent or request.user.hierarchy == 'SUPERADMIN'):
+    # Filtrar mensagens internas se não for agente de suporte ou supervisor+
+    if not (is_support_agent or is_supervisor_or_higher):
         messages = messages.filter(is_internal=False)
     
     messages_data = []
@@ -171,11 +175,26 @@ def get_support_chat(request, chat_id):
         'chat': {
             'id': chat.id,
             'title': chat.title,
-            'status': chat.get_status_display(),
-            'status_code': chat.status,
-            'priority': chat.get_priority_display(),
-            'user': chat.user.get_full_name(),
-            'assigned_to': chat.assigned_to.get_full_name() if chat.assigned_to else None,
+            'status': chat.status,
+            'get_status_display': chat.get_status_display(),
+            'priority': chat.priority.lower() if chat.priority else 'media',
+            'get_priority_display': chat.get_priority_display(),
+            'user': {
+                'id': chat.user.id,
+                'get_full_name': chat.user.get_full_name()
+            },
+            'sector': {
+                'id': chat.sector.id,
+                'name': chat.sector.name
+            } if chat.sector else None,
+            'category': {
+                'id': chat.category.id,
+                'name': chat.category.name
+            } if chat.category else None,
+            'assigned_to': {
+                'id': chat.assigned_to.id,
+                'get_full_name': chat.assigned_to.get_full_name()
+            } if chat.assigned_to else None,
             'is_own': chat.user == request.user
         },
         'is_support_agent': is_support_agent
@@ -237,15 +256,28 @@ def create_support_chat(request):
 @require_POST
 def send_support_message(request, chat_id):
     """Enviar mensagem no chat de suporte"""
+    import json
+    
     chat = get_object_or_404(SupportChat, id=chat_id)
     
     # Verificar se o usuário pode acessar este chat
     is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
-    if not (chat.user == request.user or is_support_agent or request.user.hierarchy == 'SUPERADMIN'):
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    if not (chat.user == request.user or is_support_agent or is_supervisor_or_higher):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
-    message_text = request.POST.get('message', '').strip()
-    is_internal = request.POST.get('is_internal') == 'true' and (is_support_agent or request.user.hierarchy == 'SUPERADMIN')
+    # Aceitar JSON ou form data
+    if request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body)
+            message_text = data.get('message', '').strip()
+            is_internal = data.get('is_internal') == True and (is_support_agent or is_supervisor_or_higher)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'JSON inválido'})
+    else:
+        message_text = request.POST.get('message', '').strip()
+        is_internal = request.POST.get('is_internal') == 'true' and (is_support_agent or is_supervisor_or_higher)
     
     if not message_text:
         return JsonResponse({'success': False, 'error': 'Mensagem não pode estar vazia'})
@@ -259,7 +291,7 @@ def send_support_message(request, chat_id):
     )
     
     # Atualizar status do chat se necessário
-    if chat.status == 'ABERTO' and (is_support_agent or request.user.hierarchy == 'SUPERADMIN'):
+    if chat.status == 'ABERTO' and (is_support_agent or is_supervisor_or_higher):
         chat.status = 'EM_ANDAMENTO'
         chat.assigned_to = request.user
         chat.save()
@@ -283,11 +315,18 @@ def send_support_message(request, chat_id):
 
 
 @login_required
+@login_required
 def get_sectors(request):
-    """Buscar todos os setores para o formulário de suporte"""
+    """Buscar setores do usuário para o formulário de suporte"""
     from users.models import Sector
     
-    sectors = Sector.objects.all().order_by('name')
+    # Se for SUPERADMIN, vê todos os setores
+    if request.user.hierarchy == 'SUPERADMIN':
+        sectors = Sector.objects.all().order_by('name')
+    else:
+        # Mostrar apenas os setores do usuário
+        sectors = request.user.sectors.all().order_by('name')
+    
     sectors_data = [{'id': s.id, 'name': s.name} for s in sectors]
     
     return JsonResponse({'success': True, 'sectors': sectors_data})
@@ -429,30 +468,89 @@ def rate_support_chat(request, chat_id):
 @login_required
 def support_admin_dashboard(request):
     """Dashboard administrativo do suporte"""
-    # Verificar permissões de admin
-    if not (request.user.hierarchy in ['ADMIN', 'SUPERADMIN'] or hasattr(request.user, 'support_agent')):
-        return JsonResponse({'success': False, 'error': 'Acesso negado'})
-    
     from django.db.models import Count, Q, Avg
     from .models_chat import SupportChat, SupportChatRating
     
-    # Estatísticas
-    total_chats = SupportChat.objects.count()
-    open_chats = SupportChat.objects.filter(status='ABERTO').count()
-    in_progress_chats = SupportChat.objects.filter(status='EM_ANDAMENTO').count()
-    resolved_chats = SupportChat.objects.filter(status='RESOLVIDO').count()
+    # Verificar se é agente de suporte
+    is_support_agent = SupportAgent.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
     
-    # Chats por prioridade
-    priority_stats = SupportChat.objects.values('priority').annotate(count=Count('id'))
+    # Verificar permissões de acesso: SUPERVISOR ou maior, ou agente de suporte
+    if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or is_support_agent or request.user.is_superuser):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
-    # Avaliação média
-    avg_rating = SupportChatRating.objects.aggregate(avg=Avg('rating'))['avg'] or 0
+    # Filtro base: Se for SUPERADMIN, vê tudo. Se não, vê apenas chats dos setores do usuário
+    if request.user.hierarchy == 'SUPERADMIN':
+        base_filter = Q()  # Sem filtro, vê tudo
+    else:
+        # Pegar todos os setores do usuário
+        user_sectors = request.user.sectors.all()
+        base_filter = Q(sector__in=user_sectors)
     
-    # Chats recentes
-    recent_chats = SupportChat.objects.select_related('user', 'assigned_to', 'sector').order_by('-created_at')[:20]
+    # Estatísticas filtradas por setor
+    total_chats = SupportChat.objects.filter(base_filter).count()
+    open_chats = SupportChat.objects.filter(base_filter, status='ABERTO').count()
+    in_progress_chats = SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count()
+    resolved_chats = SupportChat.objects.filter(base_filter, status='RESOLVIDO').count()
     
-    # Agentes de suporte
-    agents = SupportAgent.objects.filter(is_active=True).select_related('user')
+    # Chats por prioridade (filtrados)
+    priority_stats = SupportChat.objects.filter(base_filter).values('priority').annotate(count=Count('id'))
+    
+    # Avaliação média (filtrada)
+    avg_rating = SupportChatRating.objects.filter(chat__in=SupportChat.objects.filter(base_filter)).aggregate(avg=Avg('rating'))['avg'] or 0
+    
+    # Chats recentes (filtrados por setor)
+    recent_chats = SupportChat.objects.filter(base_filter).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')[:20]
+    
+    # Agentes de suporte (filtrados por setor)
+    if request.user.hierarchy == 'SUPERADMIN':
+        agents_qs = SupportAgent.objects.filter(is_active=True).select_related('user')
+    else:
+        agents_qs = SupportAgent.objects.filter(is_active=True, user__sectors__in=user_sectors).distinct().select_related('user')
+    
+    # Serializar agentes para JSON
+    agents_data = []
+    for agent in agents_qs:
+        agents_data.append({
+            'id': agent.id,
+            'user': {
+                'id': agent.user.id,
+                'name': agent.user.get_full_name(),
+                'email': agent.user.email
+            },
+            'can_assign_tickets': agent.can_assign_tickets
+        })
+    
+    # Serializar chats para JSON (se for AJAX request)
+    recent_chats_data = []
+    for chat in recent_chats:
+        recent_chats_data.append({
+            'id': chat.id,
+            'title': chat.title,
+            'status': chat.status,
+            'get_status_display': chat.get_status_display(),
+            'priority': chat.priority.lower() if chat.priority else 'media',
+            'get_priority_display': chat.get_priority_display(),
+            'user': {
+                'id': chat.user.id,
+                'get_full_name': chat.user.get_full_name()
+            },
+            'sector': {
+                'id': chat.sector.id,
+                'name': chat.sector.name
+            } if chat.sector else None,
+            'category': {
+                'id': chat.category.id,
+                'name': chat.category.name
+            } if chat.category else None,
+            'assigned_to': {
+                'id': chat.assigned_to.id,
+                'get_full_name': chat.assigned_to.get_full_name()
+            } if chat.assigned_to else None,
+            'created_at': chat.created_at.isoformat()
+        })
     
     context = {
         'stats': {
@@ -463,12 +561,14 @@ def support_admin_dashboard(request):
             'avg_rating': round(avg_rating, 1)
         },
         'priority_stats': list(priority_stats),
-        'recent_chats': recent_chats,
-        'agents': agents
+        'recent_chats': recent_chats_data,
+        'agents': agents_data,
+        'is_support_agent': is_support_agent,
+        'user_sectors': [{'id': s.id, 'name': s.name} for s in request.user.sectors.all()] if request.user.hierarchy != 'SUPERADMIN' else []
     }
     
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return JsonResponse(context)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('format') == 'json':
+        return JsonResponse(context, safe=False)
     
     return render(request, 'support/admin_dashboard.html', context)
 
@@ -476,8 +576,8 @@ def support_admin_dashboard(request):
 @login_required
 def manage_support_categories(request):
     """Gerenciar categorias de suporte"""
-    # Verificar permissões de admin
-    if not (request.user.hierarchy in ['ADMIN', 'SUPERADMIN']):
+    # Verificar permissões de admin: SUPERVISOR ou maior
+    if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     from .models_chat import SupportCategory
@@ -519,8 +619,8 @@ def manage_support_categories(request):
 @login_required
 def manage_support_agents(request):
     """Gerenciar agentes de suporte"""
-    # Verificar permissões de admin
-    if not (request.user.hierarchy in ['ADMIN', 'SUPERADMIN']):
+    # Verificar permissões de admin: SUPERVISOR ou maior
+    if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     from .models_chat import SupportAgent
@@ -563,22 +663,50 @@ def manage_support_agents(request):
 
 def support_admin_template(request):
     """Template do dashboard administrativo"""
-    if not request.user.is_staff:
+    # Permitir acesso para SUPERVISOR ou hierarquia maior, além de agentes de suporte
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    # Verificar se é agente de suporte
+    is_support_agent = SupportAgent.objects.filter(
+        user=request.user, 
+        is_active=True
+    ).exists()
+    
+    # Permitir acesso se for supervisor+ OU agente de suporte
+    if not (is_supervisor_or_higher or is_support_agent):
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('core:home')
+    
+    # Filtrar por setores do usuário
+    if request.user.hierarchy == 'SUPERADMIN':
+        chats_filter = Q()
+    else:
+        user_sectors = request.user.sectors.all()
+        chats_filter = Q(sector__in=user_sectors)
     
     # Estatísticas básicas para o template
     stats = {
-        'total': SupportChat.objects.count(),
-        'open': SupportChat.objects.filter(status='ABERTO').count(),
-        'in_progress': SupportChat.objects.filter(status='EM_ANDAMENTO').count(),
-        'resolved': SupportChat.objects.filter(status='RESOLVIDO').count(),
-        'avg_rating': round(SupportChatRating.objects.aggregate(
-            avg_rating=models.Avg('rating')
-        )['avg_rating'] or 0, 1)
+        'total': SupportChat.objects.filter(chats_filter).count(),
+        'open': SupportChat.objects.filter(chats_filter, status='ABERTO').count(),
+        'in_progress': SupportChat.objects.filter(chats_filter, status='EM_ANDAMENTO').count(),
+        'resolved': SupportChat.objects.filter(chats_filter, status='RESOLVIDO').count(),
+        'avg_rating': round(SupportChatRating.objects.filter(
+            chat__in=SupportChat.objects.filter(chats_filter)
+        ).aggregate(avg_rating=models.Avg('rating'))['avg_rating'] or 0, 1)
     }
     
+    # Obter setores do usuário
+    user_sectors_list = []
+    if request.user.hierarchy != 'SUPERADMIN':
+        user_sectors_list = [
+            {'id': sector.id, 'name': sector.name} 
+            for sector in request.user.sectors.all()
+        ]
+    
     return render(request, 'support/admin_dashboard.html', {
-        'stats': stats
+        'stats': stats,
+        'is_support_agent': is_support_agent,
+        'user_sectors': user_sectors_list
     })
 
 
@@ -603,7 +731,9 @@ def assign_chat_to_agent(request, chat_id):
 
 def support_metrics(request):
     """Métricas de suporte para supervisores"""
-    if not (request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN'):
+    # Permitir acesso para SUPERVISOR ou hierarquia maior
+    if not (request.user.is_superuser or request.user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']):
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('core:home')
     
     from datetime import datetime, timedelta
@@ -728,8 +858,484 @@ def support_metrics(request):
 
 def export_metrics_report(request):
     """Exporta relatório de métricas em PDF/Excel"""
-    if not (request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN'):
+    # Permitir acesso para SUPERVISOR ou maior
+    if not (request.user.is_superuser or request.user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']):
         return JsonResponse({'error': 'Acesso negado'}, status=403)
     
     # Implementar exportação
     return JsonResponse({'message': 'Exportação não implementada ainda'})
+
+
+@login_required
+def get_support_categories_api(request):
+    """API para listar categorias de suporte do setor do usuário"""
+    import json
+    
+    if request.method == 'GET':
+        # Se for SUPERADMIN, mostrar todas as categorias
+        if request.user.hierarchy == 'SUPERADMIN':
+            categories = SupportCategory.objects.filter(is_active=True).select_related('sector')
+        else:
+            # Mostrar apenas categorias dos setores do usuário
+            user_sectors = request.user.sectors.all()
+            categories = SupportCategory.objects.filter(
+                sector__in=user_sectors,
+                is_active=True
+            ).select_related('sector')
+        
+        categories_data = [{
+            'id': cat.id,
+            'name': cat.name,
+            'description': cat.description,
+            'sector': {
+                'id': cat.sector.id,
+                'name': cat.sector.name
+            } if cat.sector else None,
+            'is_active': cat.is_active
+        } for cat in categories]
+        
+        return JsonResponse({'success': True, 'categories': categories_data})
+    
+    elif request.method == 'POST':
+        # Apenas admins podem criar categorias
+        if request.user.hierarchy not in ['ADMIN', 'SUPERADMIN']:
+            return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+        
+        try:
+            data = json.loads(request.body)
+            action = data.get('action')
+            
+            if action == 'create':
+                from users.models import Sector
+                sector = get_object_or_404(Sector, id=data['sector_id'])
+                
+                # Validar que o setor pertence ao usuário (exceto SUPERADMIN)
+                if request.user.hierarchy != 'SUPERADMIN' and not request.user.sectors.filter(id=sector.id).exists():
+                    return JsonResponse({'success': False, 'error': 'Você não pode criar categorias para este setor'}, status=403)
+                
+                category = SupportCategory.objects.create(
+                    name=data['name'],
+                    sector=sector,
+                    description=data.get('description', ''),
+                    is_active=True
+                )
+                
+                return JsonResponse({
+                    'success': True,
+                    'category': {
+                        'id': category.id,
+                        'name': category.name,
+                        'description': category.description,
+                        'sector': {'id': sector.id, 'name': sector.name}
+                    }
+                })
+            
+            elif action == 'update':
+                category = get_object_or_404(SupportCategory, id=data['category_id'])
+                category.name = data.get('name', category.name)
+                category.description = data.get('description', category.description)
+                category.is_active = data.get('is_active', category.is_active)
+                category.save()
+                
+                return JsonResponse({'success': True})
+            
+            elif action == 'delete':
+                category = get_object_or_404(SupportCategory, id=data['category_id'])
+                category.delete()
+                return JsonResponse({'success': True})
+            
+            return JsonResponse({'success': False, 'error': 'Ação inválida'})
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
+    return JsonResponse({'success': False, 'error': 'Método não permitido'}, status=405)
+
+
+@login_required
+def get_support_agents_api(request):
+    """API para listar e gerenciar agentes de suporte"""
+    import json
+    
+    if request.method == 'GET':
+        # Listar agentes dos setores do usuário (se não for SUPERADMIN)
+        if request.user.hierarchy == 'SUPERADMIN':
+            agents = SupportAgent.objects.filter(is_active=True).select_related('user', 'user__sector')
+        else:
+            # Pegar apenas agentes dos setores do usuário
+            user_sectors = request.user.sectors.all()
+            agents = SupportAgent.objects.filter(
+                is_active=True,
+                user__sectors__in=user_sectors
+            ).distinct().select_related('user', 'user__sector')
+        
+        agents_data = [{
+            'id': agent.id,
+            'user': {
+                'id': agent.user.id,
+                'name': agent.user.get_full_name(),
+                'email': agent.user.email,
+                'sector': agent.user.sector.name if agent.user.sector else 'N/A'
+            },
+            'can_assign_tickets': agent.can_assign_tickets,
+            'is_active': agent.is_active
+        } for agent in agents]
+        
+        return JsonResponse({'success': True, 'agents': agents_data})
+    
+    elif request.method == 'POST':
+        # Apenas admins podem gerenciar agentes
+        if request.user.hierarchy not in ['ADMIN', 'SUPERADMIN']:
+            return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+        
+        try:
+            data = json.loads(request.body)
+            action = data.get('action')
+            
+            if action == 'create':
+                user = get_object_or_404(User, id=data['user_id'])
+                
+                # Verificar se já é agente
+                if hasattr(user, 'support_agent'):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Usuário já é um agente de suporte'
+                    }, status=400)
+                
+                # Validar que o usuário pertence aos setores do admin (exceto SUPERADMIN)
+                if request.user.hierarchy != 'SUPERADMIN':
+                    user_sectors = request.user.sectors.all()
+                    user_in_same_sector = user.sectors.filter(id__in=[s.id for s in user_sectors]).exists()
+                    if not user_in_same_sector:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Você só pode adicionar agentes dos seus setores'
+                        }, status=403)
+                
+                agent = SupportAgent.objects.create(
+                    user=user,
+                    can_assign_tickets=data.get('can_assign_tickets', False),
+                    is_active=True
+                )
+                
+                return JsonResponse({
+                    'success': True,
+                    'agent': {
+                        'id': agent.id,
+                        'user': {
+                            'id': user.id,
+                            'name': user.get_full_name(),
+                            'email': user.email,
+                            'sector': user.sector.name if user.sector else 'N/A'
+                        },
+                        'can_assign_tickets': agent.can_assign_tickets,
+                        'is_active': agent.is_active
+                    }
+                })
+            
+            elif action == 'update':
+                agent = get_object_or_404(SupportAgent, id=data['agent_id'])
+                agent.can_assign_tickets = data.get('can_assign_tickets', agent.can_assign_tickets)
+                agent.is_active = data.get('is_active', agent.is_active)
+                agent.save()
+                
+                return JsonResponse({'success': True})
+            
+            elif action == 'delete':
+                agent = get_object_or_404(SupportAgent, id=data['agent_id'])
+                agent.delete()
+                return JsonResponse({'success': True})
+            
+            return JsonResponse({'success': False, 'error': 'Ação inválida'})
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
+    return JsonResponse({'success': False, 'error': 'Método não permitido'}, status=405)
+
+
+@login_required
+def get_available_users_api(request):
+    """API para listar usuários que podem se tornar agentes"""
+    if request.user.hierarchy not in ["ADMIN", "SUPERADMIN"]:
+        return JsonResponse({"success": False, "error": "Acesso negado"}, status=403)
+    
+    # Filtrar usuários por setores do admin
+    if request.user.hierarchy == 'SUPERADMIN':
+        # SUPERADMIN vê todos os usuários
+        available_users = User.objects.filter(
+            is_active=True
+        ).exclude(
+            support_agent__isnull=False
+        ).select_related("sector").order_by("first_name")
+    else:
+        # Admin vê apenas usuários dos seus setores
+        user_sectors = request.user.sectors.all()
+        available_users = User.objects.filter(
+            is_active=True,
+            sectors__in=user_sectors
+        ).exclude(
+            support_agent__isnull=False
+        ).distinct().select_related("sector").order_by("first_name")
+    
+    users_data = [{
+        "id": user.id,
+        "name": user.get_full_name(),
+        "sector": user.sector.name if user.sector else "N/A"
+    } for user in available_users]
+    
+    return JsonResponse({"success": True, "users": users_data})
+
+
+@login_required
+@require_POST
+def assign_chat_to_agent(request, chat_id):
+    """Atribui um chat a um agente (Assumir Atendimento)"""
+    # Verificar se é agente de suporte
+    is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
+    
+    if not (is_support_agent or request.user.hierarchy in ['ADMIN', 'SUPERADMIN']):
+        return JsonResponse({'success': False, 'error': 'Apenas agentes de suporte podem assumir atendimentos'}, status=403)
+    
+    try:
+        chat = get_object_or_404(SupportChat, id=chat_id)
+        
+        # Validar que o chat pertence a um setor do agente (exceto SUPERADMIN)
+        if request.user.hierarchy != 'SUPERADMIN':
+            user_sectors = request.user.sectors.all()
+            if chat.sector not in user_sectors:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'Você só pode assumir atendimentos do seu setor'
+                }, status=403)
+        
+        # Verificar se já está atribuído
+        if chat.assigned_to and chat.assigned_to != request.user:
+            return JsonResponse({
+                'success': False,
+                'error': f'Este chat já está sendo atendido por {chat.assigned_to.get_full_name()}'
+            }, status=400)
+        
+        # Atribuir chat ao agente
+        chat.assigned_to = request.user
+        
+        # Atualizar status se ainda estiver ABERTO
+        if chat.status == 'ABERTO':
+            chat.status = 'EM_ANDAMENTO'
+        
+        chat.save()
+        
+        # Criar mensagem automática
+        SupportChatMessage.objects.create(
+            chat=chat,
+            user=request.user,
+            message=f'Atendimento assumido por {request.user.get_full_name()}',
+            is_internal=True
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Atendimento assumido com sucesso',
+            'assigned_to': request.user.get_full_name(),
+            'status': chat.get_status_display()
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Erro ao assumir atendimento: {traceback.format_exc()}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def resolve_support_chat(request, chat_id):
+    """Marca um chat como resolvido"""
+    try:
+        chat = get_object_or_404(SupportChat, id=chat_id)
+        
+        # Apenas o atendente responsável pode marcar como resolvido
+        if chat.assigned_to != request.user and request.user.hierarchy != 'SUPERADMIN':
+            return JsonResponse({
+                'success': False,
+                'error': 'Apenas o atendente responsável pode marcar como resolvido'
+            }, status=403)
+        
+        chat.status = 'RESOLVIDO'
+        chat.save()
+        
+        # Criar mensagem automática
+        SupportChatMessage.objects.create(
+            chat=chat,
+            user=request.user,
+            message='Ticket marcado como resolvido. Aguardando confirmação do cliente.',
+            is_internal=True
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Chat marcado como resolvido',
+            'status': chat.get_status_display()
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def close_support_chat(request, chat_id):
+    """Fecha um chat de suporte definitivamente"""
+    try:
+        chat = get_object_or_404(SupportChat, id=chat_id)
+        
+        # Apenas o atendente responsável ou admin pode fechar
+        if chat.assigned_to != request.user and request.user.hierarchy != 'SUPERADMIN':
+            return JsonResponse({
+                'success': False,
+                'error': 'Apenas o atendente responsável pode fechar o ticket'
+            }, status=403)
+        
+        chat.close_chat()  # Usa o método do model que define status e closed_at
+        
+        # Criar mensagem automática
+        SupportChatMessage.objects.create(
+            chat=chat,
+            user=request.user,
+            message='Ticket fechado.',
+            is_internal=True
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Chat fechado com sucesso',
+            'status': chat.get_status_display()
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@login_required
+def support_metrics(request):
+    """
+    Retorna métricas e estatísticas do suporte
+    """
+    # Verificar permissão: SUPERVISOR ou maior, ou agente de suporte
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    is_support_agent = SupportAgent.objects.filter(user=request.user, is_active=True).exists()
+    
+    if not (is_supervisor_or_higher or is_support_agent):
+        return JsonResponse({'success': False, 'error': 'Sem permissão para acessar métricas'}, status=403)
+    
+    try:
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        
+        if not start_date or not end_date:
+            return JsonResponse({'success': False, 'error': 'Datas obrigatórias'}, status=400)
+        
+        # Converter strings para datetime
+        from datetime import datetime, timedelta
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d')
+        end = end + timedelta(days=1)  # Incluir o dia final completo
+        
+        # Filtrar por setores do usuário
+        if request.user.hierarchy == 'SUPERADMIN':
+            base_filter = Q()
+        else:
+            user_sectors = request.user.sectors.all()
+            base_filter = Q(sector__in=user_sectors)
+        
+        # Tickets no período
+        tickets = SupportChat.objects.filter(
+            base_filter,
+            created_at__gte=start,
+            created_at__lt=end
+        )
+        
+        total_tickets = tickets.count()
+        resolved_tickets = tickets.filter(status='RESOLVIDO').count()
+        
+        # Tempo médio de resolução
+        resolved_with_time = tickets.filter(status='RESOLVIDO', resolved_at__isnull=False)
+        if resolved_with_time.exists():
+            total_time = sum([
+                (ticket.resolved_at - ticket.created_at).total_seconds() / 3600 
+                for ticket in resolved_with_time
+            ])
+            avg_time = total_time / resolved_with_time.count()
+            avg_time_str = f"{int(avg_time)}h"
+        else:
+            avg_time_str = "0h"
+        
+        # Taxa de satisfação (baseado em avaliações)
+        from django.db.models import Avg
+        rated_tickets = tickets.filter(rating__isnull=False)
+        if rated_tickets.exists():
+            avg_rating = rated_tickets.aggregate(Avg('rating'))['rating__avg']
+            satisfaction_rate = f"{int((avg_rating / 5) * 100)}%"
+        else:
+            satisfaction_rate = "N/A"
+        
+        # Métricas por agente
+        agents_stats = []
+        agents = SupportAgent.objects.filter(is_active=True)
+        
+        if request.user.hierarchy != 'SUPERADMIN':
+            agents = agents.filter(user__sectors__in=user_sectors).distinct()
+        
+        for agent in agents:
+            agent_tickets = tickets.filter(assigned_to=agent.user)
+            total = agent_tickets.count()
+            resolved = agent_tickets.filter(status='RESOLVIDO').count()
+            rate = int((resolved / total * 100)) if total > 0 else 0
+            
+            if total > 0:  # Só incluir agentes com tickets
+                agents_stats.append({
+                    'name': agent.user.get_full_name(),
+                    'total': total,
+                    'resolved': resolved,
+                    'rate': rate
+                })
+        
+        # Ordenar por total de tickets
+        agents_stats.sort(key=lambda x: x['total'], reverse=True)
+        
+        # Métricas por categoria
+        categories_stats = []
+        categories = SupportCategory.objects.all()
+        
+        if request.user.hierarchy != 'SUPERADMIN':
+            categories = categories.filter(sector__in=user_sectors)
+        
+        for category in categories:
+            cat_tickets = tickets.filter(category=category)
+            total = cat_tickets.count()
+            
+            if total > 0:  # Só incluir categorias com tickets
+                categories_stats.append({
+                    'name': category.name,
+                    'total': total,
+                    'open': cat_tickets.filter(status='ABERTO').count(),
+                    'resolved': cat_tickets.filter(status='RESOLVIDO').count()
+                })
+        
+        # Ordenar por total
+        categories_stats.sort(key=lambda x: x['total'], reverse=True)
+        
+        return JsonResponse({
+            'success': True,
+            'metrics': {
+                'total_tickets': total_tickets,
+                'resolved_tickets': resolved_tickets,
+                'avg_resolution_time': avg_time_str,
+                'satisfaction_rate': satisfaction_rate,
+                'by_agent': agents_stats,
+                'by_category': categories_stats
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

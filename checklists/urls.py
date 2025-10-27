@@ -14,6 +14,8 @@ urlpatterns = [
     path('api/template/<int:template_id>/', views.api_get_template_details, name='api_template_details'),
     path('api/search-users/', views.api_search_users, name='api_search_users'),
     path('api/group/<int:group_id>/members/', views.api_group_members, name='api_group_members'),
+    path('api/day-checklists/', views.api_get_day_checklists, name='api_day_checklists'),
+    path('api/unassign/<int:assignment_id>/', views.api_unassign_checklist, name='api_unassign_checklist'),
     
     # Admin - Templates
     path('admin/templates/', views.admin_templates, name='admin_templates'),

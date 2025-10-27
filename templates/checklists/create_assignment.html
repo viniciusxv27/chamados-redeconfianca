@@ -648,6 +648,10 @@ function preselectDatesForScheduleType(type, startDate, endDate) {
     }
     
     document.getElementById('custom_dates_input').value = JSON.stringify(selectedCustomDates);
+    document.getElementById('selected_dates_count').textContent = selectedCustomDates.length;
+    
+    // SEMPRE renderizar o calendário após pre-selecionar para dar feedback visual
+    renderCalendar();
 }
 
 // User search functionality
@@ -975,11 +979,33 @@ document.getElementById('group_select').addEventListener('change', function() {
 // Date validation
 document.getElementById('start_date').addEventListener('change', function() {
     document.getElementById('end_date').min = this.value;
+    
+    // Atualizar visualização do calendário quando as datas mudarem
+    if (selectedScheduleType && selectedScheduleType !== 'custom') {
+        const startDate = new Date(this.value);
+        const endDate = new Date(document.getElementById('end_date').value);
+        
+        if (startDate && endDate && endDate >= startDate) {
+            preselectDatesForScheduleType(selectedScheduleType, startDate, endDate);
+        }
+    }
+    
     checkFormValidity();
 });
 
 document.getElementById('end_date').addEventListener('change', function() {
     document.getElementById('start_date').max = this.value;
+    
+    // Atualizar visualização do calendário quando as datas mudarem
+    if (selectedScheduleType && selectedScheduleType !== 'custom') {
+        const startDate = new Date(document.getElementById('start_date').value);
+        const endDate = new Date(this.value);
+        
+        if (startDate && endDate && endDate >= startDate) {
+            preselectDatesForScheduleType(selectedScheduleType, startDate, endDate);
+        }
+    }
+    
     checkFormValidity();
 });
 

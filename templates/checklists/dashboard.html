@@ -791,7 +791,6 @@ function renderCalendar() {
 }
 
 function showDayDetails(dateStr, day) {
-    const dayData = calendarData[dateStr];
     const detailsSection = document.getElementById('dayDetails');
     const checklistsList = document.getElementById('dayChecklistsList');
     const selectedDateSpan = document.getElementById('selectedDate');
@@ -800,6 +799,107 @@ function showDayDetails(dateStr, day) {
                        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
     selectedDateSpan.textContent = `${day} de ${monthNames[currentDate.getMonth()]}`;
     
+    // Mostrar loading
+    checklistsList.innerHTML = `
+        <div class="text-center py-8">
+            <i class="fas fa-spinner fa-spin text-4xl text-primary mb-3"></i>
+            <p class="text-gray-500">Carregando checklists...</p>
+        </div>
+    `;
+    detailsSection.classList.remove('hidden');
+    
+    // Buscar checklists do dia via API (para supervisores, mostra TODOS os checklists)
+    {% if is_supervisor %}
+    fetch(`/checklists/api/day-checklists/?date=${dateStr}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                checklistsList.innerHTML = `
+                    <div class="text-center py-8 text-red-500">
+                        <i class="fas fa-exclamation-circle text-4xl mb-3"></i>
+                        <p>${data.error}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            if (data.checklists && data.checklists.length > 0) {
+                checklistsList.innerHTML = '';
+                data.checklists.forEach(checklist => {
+                    const statusColors = {
+                        'completed': 'bg-green-100 text-green-800',
+                        'awaiting_approval': 'bg-green-100 text-green-800',
+                        'overdue': 'bg-red-100 text-red-800',
+                        'in_progress': 'bg-blue-100 text-blue-800',
+                        'pending': 'bg-yellow-100 text-yellow-800'
+                    };
+                    
+                    const statusLabels = {
+                        'completed': '✅ Concluído',
+                        'awaiting_approval': '⏳ Aguardando Aprovação',
+                        'overdue': '❌ Atrasado',
+                        'in_progress': '🔄 Em Andamento',
+                        'pending': '⏰ Pendente'
+                    };
+                    
+                    const periodLabels = {
+                        'morning': '☀️ Manhã',
+                        'afternoon': '🌙 Tarde'
+                    };
+                    
+                    checklistsList.innerHTML += `
+                        <div class="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:border-primary transition-colors">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <h4 class="font-medium text-gray-900">${checklist.name}</h4>
+                                    <span class="text-xs px-2 py-1 rounded-full ${statusColors[checklist.status]}">
+                                        ${statusLabels[checklist.status]}
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-3 text-sm text-gray-600">
+                                    <span>${periodLabels[checklist.period]}</span>
+                                    <span>•</span>
+                                    <span>Atribuído a: <strong>${checklist.assigned_to}</strong></span>
+                                    <span>•</span>
+                                    <span>Progresso: ${checklist.progress}%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <a href="${checklist.url}" class="text-primary hover:text-orange-600 font-medium">
+                                    ${checklist.status === 'completed' || checklist.status === 'awaiting_approval' ? 'Ver' : 'Executar'} →
+                                </a>
+                                ${checklist.can_unassign ? `
+                                    <button onclick="unassignChecklist(${checklist.assignment_id}, '${checklist.name}', '${checklist.assigned_to}')" 
+                                            class="text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                            title="Desatribuir checklist">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                checklistsList.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-calendar-times text-4xl mb-3"></i>
+                        <p>Nenhum checklist para este dia</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar checklists:', error);
+            checklistsList.innerHTML = `
+                <div class="text-center py-8 text-red-500">
+                    <i class="fas fa-exclamation-circle text-4xl mb-3"></i>
+                    <p>Erro ao carregar checklists</p>
+                </div>
+            `;
+        });
+    {% else %}
+    // Para usuários normais, usar dados do calendário local
+    const dayData = calendarData[dateStr];
     if (dayData && dayData.checklists) {
         checklistsList.innerHTML = '';
         dayData.checklists.forEach(checklist => {
@@ -845,7 +945,6 @@ function showDayDetails(dateStr, day) {
                 </div>
             `;
         });
-        detailsSection.classList.remove('hidden');
     } else {
         checklistsList.innerHTML = `
             <div class="text-center py-8 text-gray-500">
@@ -853,8 +952,36 @@ function showDayDetails(dateStr, day) {
                 <p>Nenhum checklist para este dia</p>
             </div>
         `;
-        detailsSection.classList.remove('hidden');
     }
+    {% endif %}
+}
+
+function unassignChecklist(assignmentId, checklistName, assignedTo) {
+    if (!confirm(`Deseja realmente desatribuir o checklist "${checklistName}" de ${assignedTo}?`)) {
+        return;
+    }
+    
+    fetch(`/checklists/api/unassign/${assignmentId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ ' + data.message);
+            // Recarregar a página para atualizar os dados
+            window.location.reload();
+        } else {
+            alert('❌ Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao desatribuir:', error);
+        alert('❌ Erro ao desatribuir checklist');
+    });
 }
 
 function previousMonth() {
