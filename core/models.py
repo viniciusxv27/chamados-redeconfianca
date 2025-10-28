@@ -661,6 +661,91 @@ class TaskMessage(models.Model):
         return f"{self.task.title} - {self.user.full_name}: {self.message[:50]}"
 
 
+def upload_task_attachment(instance, filename):
+    """Define o caminho de upload para anexos de tarefas"""
+    import os
+    from datetime import datetime
+    
+    # Pegar extensão do arquivo
+    ext = filename.split('.')[-1]
+    # Criar nome único baseado em timestamp
+    new_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{instance.task.id}.{ext}"
+    
+    return os.path.join('task_attachments', str(instance.task.id), new_filename)
+
+
+class TaskAttachment(models.Model):
+    """Modelo para anexos das tarefas"""
+    
+    task = models.ForeignKey(
+        TaskActivity,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name="Tarefa"
+    )
+    file = models.FileField(
+        upload_to=upload_task_attachment,
+        verbose_name="Arquivo",
+        storage=get_media_storage()
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name="Enviado por"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Enviado em")
+    file_name = models.CharField(max_length=255, verbose_name="Nome do Arquivo")
+    file_size = models.BigIntegerField(verbose_name="Tamanho do Arquivo (bytes)")
+    
+    class Meta:
+        verbose_name = "Anexo da Tarefa"
+        verbose_name_plural = "Anexos das Tarefas"
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.task.title} - {self.file_name}"
+    
+    def save(self, *args, **kwargs):
+        if self.file and not self.file_name:
+            self.file_name = self.file.name
+        if self.file and not self.file_size:
+            self.file_size = self.file.size
+        super().save(*args, **kwargs)
+    
+    @property
+    def file_extension(self):
+        """Retorna a extensão do arquivo"""
+        return self.file_name.split('.')[-1].lower() if self.file_name else ''
+    
+    @property
+    def is_image(self):
+        """Verifica se o arquivo é uma imagem"""
+        image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg']
+        return self.file_extension in image_extensions
+    
+    @property
+    def is_video(self):
+        """Verifica se o arquivo é um vídeo"""
+        video_extensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv']
+        return self.file_extension in video_extensions
+    
+    @property
+    def is_document(self):
+        """Verifica se o arquivo é um documento"""
+        doc_extensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv']
+        return self.file_extension in doc_extensions
+    
+    @property
+    def file_size_formatted(self):
+        """Retorna o tamanho do arquivo formatado"""
+        size = self.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.2f} {unit}"
+            size /= 1024.0
+        return f"{size:.2f} TB"
+
+
 class TaskCategory(models.Model):
     """Categorias para organização das tarefas em Kanban"""
     

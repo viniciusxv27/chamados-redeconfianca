@@ -87,6 +87,8 @@ urlpatterns = [
     path('tasks/<int:task_id>/detail/', views.task_detail_view, name='task_detail'),
     path('tasks/<int:task_id>/messages/', views.task_messages_api, name='task_messages_api'),
     path('tasks/<int:task_id>/send-message/', views.send_task_message, name='send_task_message'),
+    path('tasks/<int:task_id>/add-attachment/', views.add_task_attachment, name='add_task_attachment'),
+    path('tasks/attachment/<int:attachment_id>/delete/', views.delete_task_attachment, name='delete_task_attachment'),
     
     # API Endpoints
     path('api/daily-automation/', views.daily_automation_api, name='daily_automation_api'),

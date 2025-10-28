@@ -209,6 +209,100 @@
                 </div>
             </div>
             {% endif %}
+            
+            <!-- Anexos -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-paperclip mr-2 text-blue-500"></i>
+                    Anexos
+                    <span class="text-sm font-normal text-gray-500 ml-2">({{ attachments.count }})</span>
+                </h3>
+                
+                <div class="space-y-3">
+                    {% if attachments %}
+                        <div id="attachments-list" class="space-y-2">
+                            {% for attachment in attachments %}
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
+                                <div class="flex items-center space-x-3 flex-1 min-w-0">
+                                    {% if attachment.is_image %}
+                                        <i class="fas fa-image text-blue-500 text-xl"></i>
+                                    {% elif attachment.is_video %}
+                                        <i class="fas fa-video text-purple-500 text-xl"></i>
+                                    {% elif attachment.is_document %}
+                                        {% if 'pdf' in attachment.file_extension %}
+                                            <i class="fas fa-file-pdf text-red-500 text-xl"></i>
+                                        {% elif 'xls' in attachment.file_extension %}
+                                            <i class="fas fa-file-excel text-green-500 text-xl"></i>
+                                        {% elif 'doc' in attachment.file_extension %}
+                                            <i class="fas fa-file-word text-blue-600 text-xl"></i>
+                                        {% elif 'ppt' in attachment.file_extension %}
+                                            <i class="fas fa-file-powerpoint text-orange-500 text-xl"></i>
+                                        {% else %}
+                                            <i class="fas fa-file-alt text-gray-500 text-xl"></i>
+                                        {% endif %}
+                                    {% else %}
+                                        <i class="fas fa-file text-gray-500 text-xl"></i>
+                                    {% endif %}
+                                    
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-medium text-gray-900 truncate">{{ attachment.file_name }}</div>
+                                        <div class="text-sm text-gray-500">
+                                            {{ attachment.file_size_formatted }} • {{ attachment.uploaded_by.get_full_name }} • {{ attachment.uploaded_at|date:"d/m/Y H:i" }}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center space-x-2 ml-2">
+                                    {% if attachment.is_image or attachment.is_video %}
+                                    <button onclick="viewAttachment('{{ attachment.file.url }}', '{{ attachment.file_name }}', {% if attachment.is_image %}true{% else %}false{% endif %})"
+                                            class="text-blue-600 hover:text-blue-800 transition-colors p-2"
+                                            title="Visualizar">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    {% endif %}
+                                    
+                                    <a href="{{ attachment.file.url }}" 
+                                       download="{{ attachment.file_name }}"
+                                       class="text-green-600 hover:text-green-800 transition-colors p-2"
+                                       title="Baixar">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                    
+                                    {% if attachment.uploaded_by == request.user or can_manage %}
+                                    <button onclick="deleteAttachment({{ attachment.id }})"
+                                            class="text-red-600 hover:text-red-800 transition-colors p-2"
+                                            title="Excluir">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-gray-500 text-sm text-center py-4">
+                            <i class="fas fa-paperclip text-2xl mb-2 block"></i>
+                            Nenhum anexo ainda
+                        </p>
+                    {% endif %}
+                    
+                    <!-- Botão para adicionar anexo -->
+                    <div class="mt-4">
+                        <label for="new-attachment" class="w-full cursor-pointer">
+                            <div class="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-primary hover:bg-orange-50 transition-colors text-center">
+                                <i class="fas fa-plus-circle text-primary text-xl mb-2"></i>
+                                <p class="text-sm text-gray-600">Clique para adicionar anexo</p>
+                                <p class="text-xs text-gray-500 mt-1">Máximo 50MB • Imagens, vídeos e documentos</p>
+                            </div>
+                            <input type="file" 
+                                   id="new-attachment" 
+                                   class="hidden"
+                                   accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                                   onchange="uploadAttachment(event)">
+                        </label>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <!-- Chat -->
@@ -702,5 +796,234 @@ setInterval(() => {
         }
     });
 }, 60000); // Update every minute
+
+// ===== GERENCIAMENTO DE ANEXOS =====
+
+// Upload de anexo
+async function uploadAttachment(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Validar tamanho
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+        alert('Arquivo muito grande. Máximo 50MB.');
+        event.target.value = '';
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('{% url "add_task_attachment" task.id %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Adicionar anexo à lista
+            addAttachmentToList(data.attachment);
+            event.target.value = '';
+            
+            // Mostrar notificação de sucesso
+            showNotification('Anexo adicionado com sucesso!', 'success');
+        } else {
+            alert('Erro ao enviar anexo: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao enviar anexo. Tente novamente.');
+    }
+}
+
+// Adicionar anexo à lista
+function addAttachmentToList(attachment) {
+    const list = document.getElementById('attachments-list');
+    
+    // Se não existe lista, criar
+    if (!list) {
+        const container = document.querySelector('.space-y-3');
+        const emptyMessage = container.querySelector('p.text-gray-500');
+        if (emptyMessage) {
+            emptyMessage.remove();
+        }
+        
+        const newList = document.createElement('div');
+        newList.id = 'attachments-list';
+        newList.className = 'space-y-2';
+        container.insertBefore(newList, container.firstChild);
+    }
+    
+    // Determinar ícone
+    let icon = 'fas fa-file text-gray-500';
+    if (attachment.is_image) {
+        icon = 'fas fa-image text-blue-500';
+    } else if (attachment.is_video) {
+        icon = 'fas fa-video text-purple-500';
+    } else if (attachment.is_document) {
+        const ext = attachment.file_name.split('.').pop().toLowerCase();
+        if (ext === 'pdf') icon = 'fas fa-file-pdf text-red-500';
+        else if (['xls', 'xlsx'].includes(ext)) icon = 'fas fa-file-excel text-green-500';
+        else if (['doc', 'docx'].includes(ext)) icon = 'fas fa-file-word text-blue-600';
+        else if (['ppt', 'pptx'].includes(ext)) icon = 'fas fa-file-powerpoint text-orange-500';
+    }
+    
+    const html = `
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
+            <div class="flex items-center space-x-3 flex-1 min-w-0">
+                <i class="${icon} text-xl"></i>
+                <div class="flex-1 min-w-0">
+                    <div class="font-medium text-gray-900 truncate">${attachment.file_name}</div>
+                    <div class="text-sm text-gray-500">
+                        ${attachment.file_size} • ${attachment.uploaded_by} • ${attachment.uploaded_at}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 ml-2">
+                ${attachment.is_image || attachment.is_video ? `
+                    <button onclick="viewAttachment('${attachment.file_url}', '${attachment.file_name}', ${attachment.is_image})"
+                            class="text-blue-600 hover:text-blue-800 transition-colors p-2"
+                            title="Visualizar">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                ` : ''}
+                
+                <a href="${attachment.file_url}" 
+                   download="${attachment.file_name}"
+                   class="text-green-600 hover:text-green-800 transition-colors p-2"
+                   title="Baixar">
+                    <i class="fas fa-download"></i>
+                </a>
+                
+                <button onclick="deleteAttachment(${attachment.id})"
+                        class="text-red-600 hover:text-red-800 transition-colors p-2"
+                        title="Excluir">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('attachments-list').insertAdjacentHTML('afterbegin', html);
+    
+    // Atualizar contador
+    const counter = document.querySelector('h3 .text-gray-500');
+    if (counter) {
+        const currentCount = parseInt(counter.textContent.match(/\d+/)[0]);
+        counter.textContent = `(${currentCount + 1})`;
+    }
+}
+
+// Visualizar anexo (imagem ou vídeo)
+function viewAttachment(url, filename, isImage) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4';
+    modal.onclick = function(e) {
+        if (e.target === this) {
+            this.remove();
+        }
+    };
+    
+    const content = isImage 
+        ? `<img src="${url}" alt="${filename}" class="max-w-full max-h-full object-contain rounded-lg">`
+        : `<video src="${url}" controls class="max-w-full max-h-full rounded-lg">Seu navegador não suporta vídeos.</video>`;
+    
+    modal.innerHTML = `
+        <div class="relative max-w-6xl max-h-screen">
+            <button onclick="this.closest('.fixed').remove()" 
+                    class="absolute -top-10 right-0 text-white hover:text-gray-300 text-2xl">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="text-white text-center mb-2 font-medium">${filename}</div>
+            ${content}
+            <div class="text-center mt-4">
+                <a href="${url}" download="${filename}" 
+                   class="inline-block bg-primary hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-download mr-2"></i>Baixar
+                </a>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+// Deletar anexo
+async function deleteAttachment(attachmentId) {
+    if (!confirm('Tem certeza que deseja excluir este anexo?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/users/tasks/attachment/${attachmentId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Remover da lista
+            const attachmentElement = event.target.closest('.flex.items-center.justify-between');
+            if (attachmentElement) {
+                attachmentElement.remove();
+            }
+            
+            // Atualizar contador
+            const counter = document.querySelector('h3 .text-gray-500');
+            if (counter) {
+                const currentCount = parseInt(counter.textContent.match(/\d+/)[0]);
+                counter.textContent = `(${currentCount - 1})`;
+            }
+            
+            // Se não há mais anexos, mostrar mensagem
+            const list = document.getElementById('attachments-list');
+            if (list && list.children.length === 0) {
+                list.remove();
+                const container = document.querySelector('.space-y-3');
+                container.insertAdjacentHTML('afterbegin', `
+                    <p class="text-gray-500 text-sm text-center py-4">
+                        <i class="fas fa-paperclip text-2xl mb-2 block"></i>
+                        Nenhum anexo ainda
+                    </p>
+                `);
+            }
+            
+            showNotification('Anexo excluído com sucesso!', 'success');
+        } else {
+            alert('Erro ao excluir anexo: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao excluir anexo. Tente novamente.');
+    }
+}
+
+// Notificação simples
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white ${
+        type === 'success' ? 'bg-green-500' : 
+        type === 'error' ? 'bg-red-500' : 
+        'bg-blue-500'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
 </script>
 {% endblock %}

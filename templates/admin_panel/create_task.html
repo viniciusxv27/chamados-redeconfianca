@@ -99,7 +99,7 @@
         </div>
     </div>
 
-    <form method="post" id="createTaskForm" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <form method="post" id="createTaskForm" class="grid grid-cols-1 lg:grid-cols-3 gap-8" enctype="multipart/form-data">
         {% csrf_token %}
         
         <!-- Formulário Principal -->
@@ -264,6 +264,43 @@
                         <p class="text-sm text-gray-600 mt-1">
                             Se não definido, a tarefa não terá prazo específico
                         </p>
+                    </div>
+
+                    <!-- Anexos -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Anexos (Opcional)
+                        </label>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary transition-colors">
+                            <div class="text-center">
+                                <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3"></i>
+                                <div class="mb-3">
+                                    <label for="attachments" class="cursor-pointer">
+                                        <span class="bg-primary hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg inline-block transition-colors">
+                                            <i class="fas fa-paperclip mr-2"></i>Selecionar Arquivos
+                                        </span>
+                                        <input type="file" 
+                                               id="attachments" 
+                                               name="attachments" 
+                                               multiple 
+                                               class="hidden"
+                                               accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                                               onchange="handleFileSelect(event)">
+                                    </label>
+                                </div>
+                                <p class="text-sm text-gray-600">
+                                    Arraste arquivos aqui ou clique para selecionar
+                                </p>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Máximo 50MB por arquivo • Imagens, vídeos e documentos
+                                </p>
+                            </div>
+                            
+                            <!-- Lista de arquivos selecionados -->
+                            <div id="selected-files" class="mt-4 space-y-2 hidden">
+                                <!-- Arquivos serão adicionados aqui via JavaScript -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -650,5 +687,157 @@ document.addEventListener('DOMContentLoaded', function() {
     today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
     document.getElementById('due_date').setAttribute('min', today.toISOString().slice(0, 16));
 });
+
+// Gerenciamento de anexos
+let selectedFiles = [];
+
+function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    
+    files.forEach(file => {
+        // Validar tamanho
+        if (file.size > maxSize) {
+            alert(`O arquivo "${file.name}" é muito grande. Máximo 50MB.`);
+            return;
+        }
+        
+        // Adicionar à lista se não existir
+        if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+            selectedFiles.push(file);
+        }
+    });
+    
+    updateFileList();
+    event.target.value = ''; // Limpar input para permitir selecionar o mesmo arquivo novamente
+}
+
+function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    updateFileList();
+    updateAttachmentsInput();
+}
+
+function updateFileList() {
+    const container = document.getElementById('selected-files');
+    
+    if (selectedFiles.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+    
+    container.classList.remove('hidden');
+    container.innerHTML = selectedFiles.map((file, index) => {
+        const fileSize = formatFileSize(file.size);
+        const fileIcon = getFileIcon(file.name);
+        
+        return `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div class="flex items-center space-x-3 flex-1 min-w-0">
+                    <i class="${fileIcon} text-2xl text-gray-600"></i>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium text-gray-900 truncate">${file.name}</div>
+                        <div class="text-sm text-gray-500">${fileSize}</div>
+                    </div>
+                </div>
+                <button type="button" 
+                        onclick="removeFile(${index})"
+                        class="ml-3 text-red-600 hover:text-red-800 transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    }).join('');
+    
+    updateAttachmentsInput();
+}
+
+function updateAttachmentsInput() {
+    const input = document.getElementById('attachments');
+    const dataTransfer = new DataTransfer();
+    
+    selectedFiles.forEach(file => {
+        dataTransfer.items.add(file);
+    });
+    
+    input.files = dataTransfer.files;
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function getFileIcon(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    
+    // Imagens
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) {
+        return 'fas fa-image text-blue-500';
+    }
+    // Vídeos
+    if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(ext)) {
+        return 'fas fa-video text-purple-500';
+    }
+    // PDFs
+    if (ext === 'pdf') {
+        return 'fas fa-file-pdf text-red-500';
+    }
+    // Excel
+    if (['xls', 'xlsx', 'csv'].includes(ext)) {
+        return 'fas fa-file-excel text-green-500';
+    }
+    // Word
+    if (['doc', 'docx'].includes(ext)) {
+        return 'fas fa-file-word text-blue-600';
+    }
+    // PowerPoint
+    if (['ppt', 'pptx'].includes(ext)) {
+        return 'fas fa-file-powerpoint text-orange-500';
+    }
+    // Texto
+    if (ext === 'txt') {
+        return 'fas fa-file-alt text-gray-500';
+    }
+    // Padrão
+    return 'fas fa-file text-gray-500';
+}
+
+// Drag and drop
+const dropZone = document.querySelector('.border-dashed');
+if (dropZone) {
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('border-primary', 'bg-orange-50');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('border-primary', 'bg-orange-50');
+        }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        
+        const input = document.getElementById('attachments');
+        input.files = files;
+        handleFileSelect({ target: input });
+    }, false);
+}
 </script>
 {% endblock %}

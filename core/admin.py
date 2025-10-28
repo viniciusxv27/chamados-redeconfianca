@@ -3,7 +3,7 @@ from django.utils import timezone
 from .models import (
     SystemLog, Tutorial, Report, ReportComment, Notification,
     AdminChecklistTemplate, DailyAdminChecklist, AdminChecklistTask, AdminChecklistAssignment,
-    AdminChecklistSectorTask
+    AdminChecklistSectorTask, TaskActivity, TaskMessage, TaskAttachment, TaskCategory
 )
 
 
@@ -178,3 +178,38 @@ class AdminChecklistSectorTaskAdmin(admin.ModelAdmin):
             obj.approved_by = request.user
             obj.approved_at = timezone.now()
         super().save_model(request, obj, form, change)
+
+
+@admin.register(TaskActivity)
+class TaskActivityAdmin(admin.ModelAdmin):
+    list_display = ('title', 'assigned_to', 'created_by', 'priority', 'status', 'due_date', 'created_at')
+    list_filter = ('status', 'priority', 'created_at', 'due_date')
+    search_fields = ('title', 'description', 'assigned_to__email', 'created_by__email')
+    readonly_fields = ('created_at', 'updated_at', 'completed_at')
+    ordering = ('-created_at',)
+
+
+@admin.register(TaskAttachment)
+class TaskAttachmentAdmin(admin.ModelAdmin):
+    list_display = ('file_name', 'task', 'uploaded_by', 'file_size_formatted', 'uploaded_at')
+    list_filter = ('uploaded_at',)
+    search_fields = ('file_name', 'task__title', 'uploaded_by__email')
+    readonly_fields = ('uploaded_at', 'file_size', 'file_name')
+    ordering = ('-uploaded_at',)
+
+
+@admin.register(TaskMessage)
+class TaskMessageAdmin(admin.ModelAdmin):
+    list_display = ('task', 'user', 'message_type', 'created_at', 'is_read')
+    list_filter = ('message_type', 'is_read', 'created_at')
+    search_fields = ('task__title', 'user__email', 'message')
+    readonly_fields = ('created_at',)
+    ordering = ('-created_at',)
+
+
+@admin.register(TaskCategory)
+class TaskCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name', 'description')
+    ordering = ('name',)

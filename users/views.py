@@ -3813,7 +3813,7 @@ def manage_tasks_view(request):
 @login_required
 def task_detail_view(request, task_id):
     """Visualizar detalhes da tarefa com chat"""
-    from core.models import TaskActivity, TaskMessage
+    from core.models import TaskActivity, TaskMessage, TaskAttachment
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
@@ -3827,12 +3827,16 @@ def task_detail_view(request, task_id):
     # Mensagens da tarefa
     task_messages = task.messages.select_related('user').order_by('created_at')
     
+    # Anexos da tarefa
+    task_attachments = task.attachments.select_related('uploaded_by').order_by('-uploaded_at')
+    
     # Marcar mensagens como lidas para o usuário atual
     task_messages.filter(is_read=False).exclude(user=request.user).update(is_read=True)
     
     context = {
         'task': task,
         'messages': task_messages,
+        'attachments': task_attachments,
         'can_manage': task.can_be_managed_by(request.user),
     }
     
@@ -3917,13 +3921,93 @@ def send_task_message(request, task_id):
 
 
 @login_required
+@require_POST
+def add_task_attachment(request, task_id):
+    """Adicionar anexo a uma tarefa existente"""
+    from core.models import TaskActivity, TaskAttachment
+    
+    task = get_object_or_404(TaskActivity, id=task_id)
+    
+    # Verificar permissão
+    if not (task.can_be_managed_by(request.user) or 
+            task.assigned_to == request.user or 
+            task.created_by == request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    # Verificar se há arquivo
+    if 'file' not in request.FILES:
+        return JsonResponse({'success': False, 'error': 'Nenhum arquivo enviado'})
+    
+    file = request.FILES['file']
+    
+    # Validar tamanho (máximo 50MB)
+    if file.size > 50 * 1024 * 1024:
+        return JsonResponse({'success': False, 'error': 'Arquivo muito grande. Máximo 50MB.'})
+    
+    try:
+        # Criar anexo
+        attachment = TaskAttachment.objects.create(
+            task=task,
+            file=file,
+            uploaded_by=request.user,
+            file_name=file.name,
+            file_size=file.size
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'attachment': {
+                'id': attachment.id,
+                'file_name': attachment.file_name,
+                'file_size': attachment.file_size_formatted,
+                'file_url': attachment.file.url,
+                'uploaded_by': request.user.get_full_name(),
+                'uploaded_at': attachment.uploaded_at.strftime('%d/%m/%Y %H:%M'),
+                'is_image': attachment.is_image,
+                'is_video': attachment.is_video,
+                'is_document': attachment.is_document,
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Erro ao salvar arquivo: {str(e)}'})
+
+
+@login_required
+@require_POST
+def delete_task_attachment(request, attachment_id):
+    """Deletar anexo de uma tarefa"""
+    from core.models import TaskAttachment
+    
+    attachment = get_object_or_404(TaskAttachment, id=attachment_id)
+    task = attachment.task
+    
+    # Verificar permissão (apenas quem enviou ou quem pode gerenciar a tarefa)
+    if not (attachment.uploaded_by == request.user or 
+            task.can_be_managed_by(request.user)):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    try:
+        # Deletar arquivo físico
+        if attachment.file:
+            attachment.file.delete()
+        
+        # Deletar registro
+        attachment.delete()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Erro ao deletar arquivo: {str(e)}'})
+
+
+
+@login_required
 def create_task_view(request):
     """Criar nova tarefa/atividade"""
     if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('dashboard')
     """Criar nova tarefa/atividade"""
-    from core.models import TaskActivity
+    from core.models import TaskActivity, TaskAttachment
     from datetime import datetime
     
     if request.method == 'POST':
@@ -3948,6 +4032,17 @@ def create_task_view(request):
                 priority=priority,
                 due_date=datetime.fromisoformat(due_date) if due_date else None
             )
+            
+            # Processar anexos
+            attachments = request.FILES.getlist('attachments')
+            for attachment in attachments:
+                TaskAttachment.objects.create(
+                    task=task,
+                    file=attachment,
+                    uploaded_by=request.user,
+                    file_name=attachment.name,
+                    file_size=attachment.size
+                )
             
             messages.success(request, f'Tarefa "{title}" criada com sucesso!')
             return redirect('manage_tasks')
