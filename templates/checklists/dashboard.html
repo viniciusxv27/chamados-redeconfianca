@@ -538,22 +538,40 @@
 
 <script>
 // Dados de execuções do calendário (enviados pelo Django)
-const calendarData = {
-    {% for execution in calendar_executions %}
-    "{{ execution.execution_date|date:'Y-m-d' }}": {
+// Agrupar checklists por data
+const calendarData = {};
+{% for execution in calendar_executions %}
+{
+    const dateKey = "{{ execution.execution_date|date:'Y-m-d' }}";
+    const checklistData = {
+        name: "{{ execution.assignment.template.name|escapejs }}",
+        period: "{{ execution.period }}",
         status: "{{ execution.status }}",
-        checklists: [
-            {
-                name: "{{ execution.assignment.template.name|escapejs }}",
-                period: "{{ execution.period }}",
-                status: "{{ execution.status }}",
-                progress: {{ execution.progress_percentage }},
-                url: "{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}"
-            }
-        ]
-    }{% if not forloop.last %},{% endif %}
-    {% endfor %}
-};
+        progress: {{ execution.progress_percentage }},
+        url: "{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}",
+        assigned_to: "{{ execution.assignment.assigned_to.get_full_name|escapejs }}"
+    };
+    
+    if (!calendarData[dateKey]) {
+        calendarData[dateKey] = {
+            status: "{{ execution.status }}",
+            checklists: []
+        };
+    }
+    
+    calendarData[dateKey].checklists.push(checklistData);
+    
+    // Atualizar status: priorizar overdue > pending/in_progress > completed
+    const currentStatus = calendarData[dateKey].status;
+    const newStatus = "{{ execution.status }}";
+    
+    if (newStatus === 'overdue' || 
+        (currentStatus !== 'overdue' && (newStatus === 'pending' || newStatus === 'in_progress')) ||
+        (currentStatus !== 'overdue' && currentStatus !== 'pending' && currentStatus !== 'in_progress' && (newStatus === 'completed' || newStatus === 'awaiting_approval'))) {
+        calendarData[dateKey].status = newStatus;
+    }
+}
+{% endfor %}
 
 let currentDate = new Date();
 
@@ -616,13 +634,22 @@ function renderCalendar() {
             borderClass = 'border-purple-500 border-2';
         }
         
+        const checklistCount = dayData && dayData.checklists ? dayData.checklists.length : 0;
+        
         dayElement.className = `relative h-16 ${bgClass} border ${borderClass} rounded-lg p-2 cursor-pointer transition-all transform hover:scale-105 hover:shadow-md`;
         dayElement.innerHTML = `
             <div class="flex flex-col h-full">
                 <span class="text-sm font-semibold ${isToday ? 'text-purple-600' : 'text-gray-700'}">${day}</span>
-                ${dayData ? `<div class="flex-1 flex items-center justify-center">
-                    <div class="w-3 h-3 ${dotClass} rounded-full animate-pulse"></div>
-                </div>` : ''}
+                ${dayData ? `
+                    <div class="flex-1 flex items-center justify-center">
+                        <div class="w-3 h-3 ${dotClass} rounded-full animate-pulse"></div>
+                    </div>
+                    ${checklistCount > 1 ? `
+                        <span class="absolute top-1 right-1 bg-primary text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
+                            ${checklistCount}
+                        </span>
+                    ` : ''}
+                ` : ''}
             </div>
         `;
         
@@ -776,6 +803,10 @@ function showDayDetails(dateStr, day) {
                         </div>
                         <div class="flex items-center gap-3 text-sm text-gray-600">
                             <span>${periodLabels[checklist.period]}</span>
+                            ${checklist.assigned_to ? `
+                                <span>•</span>
+                                <span>Atribuído a: <strong>${checklist.assigned_to}</strong></span>
+                            ` : ''}
                             <span>•</span>
                             <span>Progresso: ${checklist.progress}%</span>
                         </div>
