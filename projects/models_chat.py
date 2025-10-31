@@ -137,6 +137,12 @@ class SupportAgent(models.Model):
         on_delete=models.CASCADE,
         related_name='support_agent'
     )
+    sectors = models.ManyToManyField(
+        'users.Sector',
+        related_name='support_agents',
+        blank=True,
+        verbose_name="Setores atendidos"
+    )
     is_active = models.BooleanField(default=True)
     can_assign_tickets = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

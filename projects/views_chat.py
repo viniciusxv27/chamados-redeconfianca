@@ -470,6 +470,7 @@ def support_admin_dashboard(request):
     """Dashboard administrativo do suporte"""
     from django.db.models import Count, Q, Avg
     from .models_chat import SupportChat, SupportChatRating
+    from users.models import Sector
     
     # Verificar se é agente de suporte
     is_support_agent = SupportAgent.objects.filter(
@@ -481,12 +482,15 @@ def support_admin_dashboard(request):
     if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or is_support_agent or request.user.is_superuser):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
-    # Filtro base: Se for SUPERADMIN, vê tudo. Se não, vê apenas chats dos setores do usuário
-    if request.user.hierarchy == 'SUPERADMIN':
-        base_filter = Q()  # Sem filtro, vê tudo
+    # Obter setores do usuário
+    if request.user.is_superuser:
+        user_sectors = Sector.objects.filter(is_active=True)
+        base_filter = Q()  # Superuser vê tudo
     else:
-        # Pegar todos os setores do usuário
-        user_sectors = request.user.sectors.all()
+        user_sectors_list = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors_list.append(request.user.sector)
+        user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list], is_active=True)
         base_filter = Q(sector__in=user_sectors)
     
     # Estatísticas filtradas por setor
@@ -505,10 +509,12 @@ def support_admin_dashboard(request):
     recent_chats = SupportChat.objects.filter(base_filter).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')[:20]
     
     # Agentes de suporte (filtrados por setor)
-    if request.user.hierarchy == 'SUPERADMIN':
-        agents_qs = SupportAgent.objects.filter(is_active=True).select_related('user')
+    if request.user.is_superuser:
+        agents_qs = SupportAgent.objects.filter(is_active=True)
     else:
-        agents_qs = SupportAgent.objects.filter(is_active=True, user__sectors__in=user_sectors).distinct().select_related('user')
+        agents_qs = SupportAgent.objects.filter(is_active=True, sectors__in=user_sectors).distinct()
+    
+    agents_qs = agents_qs.select_related('user').prefetch_related('sectors')
     
     # Serializar agentes para JSON
     agents_data = []
@@ -520,7 +526,8 @@ def support_admin_dashboard(request):
                 'name': agent.user.get_full_name(),
                 'email': agent.user.email
             },
-            'can_assign_tickets': agent.can_assign_tickets
+            'can_assign_tickets': agent.can_assign_tickets,
+            'sectors': [{'id': s.id, 'name': s.name} for s in agent.sectors.all()]
         })
     
     # Serializar chats para JSON (se for AJAX request)
@@ -564,7 +571,7 @@ def support_admin_dashboard(request):
         'recent_chats': recent_chats_data,
         'agents': agents_data,
         'is_support_agent': is_support_agent,
-        'user_sectors': [{'id': s.id, 'name': s.name} for s in request.user.sectors.all()] if request.user.hierarchy != 'SUPERADMIN' else []
+        'user_sectors': [{'id': s.id, 'name': s.name} for s in user_sectors]
     }
     
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('format') == 'json':
@@ -581,22 +588,42 @@ def manage_support_categories(request):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     from .models_chat import SupportCategory
-    from core.models import Sector
+    from users.models import Sector
+    
+    # Obter setores do usuário
+    if request.user.is_superuser:
+        user_sectors = Sector.objects.filter(is_active=True)
+    else:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors], is_active=True)
     
     if request.method == 'POST':
         import json
         data = json.loads(request.body)
         
         if data.get('action') == 'create':
+            sector = get_object_or_404(Sector, id=data['sector_id'])
+            
+            # Verificar se o usuário pode criar categoria neste setor
+            if not request.user.is_superuser and sector not in user_sectors:
+                return JsonResponse({'success': False, 'error': 'Você não pode criar categorias neste setor'})
+            
             category = SupportCategory.objects.create(
                 name=data['name'],
-                sector_id=data['sector_id'],
+                sector=sector,
                 description=data.get('description', '')
             )
             return JsonResponse({'success': True, 'category_id': category.id})
         
         elif data.get('action') == 'update':
             category = get_object_or_404(SupportCategory, id=data['category_id'])
+            
+            # Verificar se o usuário pode editar categoria deste setor
+            if not request.user.is_superuser and category.sector not in user_sectors:
+                return JsonResponse({'success': False, 'error': 'Você não pode editar categorias deste setor'})
+            
             category.name = data['name']
             category.description = data.get('description', '')
             category.save()
@@ -604,15 +631,20 @@ def manage_support_categories(request):
         
         elif data.get('action') == 'delete':
             category = get_object_or_404(SupportCategory, id=data['category_id'])
+            
+            # Verificar se o usuário pode deletar categoria deste setor
+            if not request.user.is_superuser and category.sector not in user_sectors:
+                return JsonResponse({'success': False, 'error': 'Você não pode deletar categorias deste setor'})
+            
             category.delete()
             return JsonResponse({'success': True})
     
-    categories = SupportCategory.objects.select_related('sector').order_by('sector__name', 'name')
-    sectors = Sector.objects.filter(is_active=True).order_by('name')
+    # Filtrar categorias pelos setores do usuário
+    categories = SupportCategory.objects.filter(sector__in=user_sectors).select_related('sector').order_by('sector__name', 'name')
     
     return render(request, 'support/manage_categories.html', {
         'categories': categories,
-        'sectors': sectors
+        'sectors': user_sectors.order_by('name')
     })
 
 
@@ -624,6 +656,16 @@ def manage_support_agents(request):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     from .models_chat import SupportAgent
+    from users.models import Sector
+    
+    # Obter setores do usuário
+    if request.user.is_superuser:
+        user_sectors = Sector.objects.filter(is_active=True)
+    else:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors], is_active=True)
     
     if request.method == 'POST':
         import json
@@ -631,33 +673,82 @@ def manage_support_agents(request):
         
         if data.get('action') == 'create':
             user = get_object_or_404(User, id=data['user_id'])
+            sector_ids = data.get('sector_ids', [])
+            
+            # Verificar se o supervisor pode atribuir para esses setores
+            if not request.user.is_superuser:
+                user_sector_ids = [s.id for s in user_sectors]
+                if not all(sid in user_sector_ids for sid in sector_ids):
+                    return JsonResponse({'success': False, 'error': 'Você não pode atribuir agentes para setores que não gerencia'})
+            
             agent, created = SupportAgent.objects.get_or_create(
                 user=user,
                 defaults={'can_assign_tickets': data.get('can_assign_tickets', False)}
             )
+            
+            # Adicionar setores
+            if sector_ids:
+                agent.sectors.set(sector_ids)
+            
             return JsonResponse({'success': True, 'created': created})
         
         elif data.get('action') == 'update':
             agent = get_object_or_404(SupportAgent, id=data['agent_id'])
+            sector_ids = data.get('sector_ids', [])
+            
+            # Verificar se o supervisor pode editar agente desses setores
+            if not request.user.is_superuser:
+                user_sector_ids = [s.id for s in user_sectors]
+                if not all(sid in user_sector_ids for sid in sector_ids):
+                    return JsonResponse({'success': False, 'error': 'Você não pode editar agentes de setores que não gerencia'})
+            
             agent.can_assign_tickets = data.get('can_assign_tickets', False)
             agent.is_active = data.get('is_active', True)
             agent.save()
+            
+            # Atualizar setores
+            if sector_ids:
+                agent.sectors.set(sector_ids)
+            
             return JsonResponse({'success': True})
         
         elif data.get('action') == 'delete':
             agent = get_object_or_404(SupportAgent, id=data['agent_id'])
+            
+            # Verificar se o supervisor pode deletar agente
+            if not request.user.is_superuser:
+                agent_sector_ids = [s.id for s in agent.sectors.all()]
+                user_sector_ids = [s.id for s in user_sectors]
+                if not any(sid in user_sector_ids for sid in agent_sector_ids):
+                    return JsonResponse({'success': False, 'error': 'Você não pode deletar agentes de setores que não gerencia'})
+            
             agent.delete()
             return JsonResponse({'success': True})
     
-    agents = SupportAgent.objects.select_related('user').order_by('user__first_name')
+    # Filtrar agentes que atendem os setores do supervisor
+    if request.user.is_superuser:
+        agents = SupportAgent.objects.all()
+    else:
+        agents = SupportAgent.objects.filter(sectors__in=user_sectors).distinct()
+    
+    agents = agents.select_related('user').prefetch_related('sectors').order_by('user__first_name')
+    
+    # Usuários disponíveis dos setores do supervisor
     available_users = User.objects.filter(
         is_active=True,
         hierarchy__in=['ADMIN', 'SUPERVISOR', 'FUNCIONARIO']
     ).exclude(support_agent__isnull=False).order_by('first_name')
     
+    # Filtrar usuários pelos setores se não for superuser
+    if not request.user.is_superuser:
+        available_users = available_users.filter(
+            Q(sectors__in=user_sectors) | Q(sector__in=user_sectors)
+        ).distinct()
+    
     return render(request, 'support/manage_agents.html', {
         'agents': agents,
-        'available_users': available_users
+        'available_users': available_users,
+        'user_sectors': user_sectors.order_by('name')
     })
 
 
@@ -677,14 +768,23 @@ def support_admin_template(request):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('core:home')
     
-    # Filtrar por setores do usuário
-    if request.user.hierarchy == 'SUPERADMIN':
+    # Obter setores do usuário
+    from users.models import Sector
+    if request.user.is_superuser:
+        user_sectors = Sector.objects.filter(is_active=True)
+    else:
+        user_sectors_list = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors_list.append(request.user.sector)
+        user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list], is_active=True)
+    
+    # Filtrar chats por setores do usuário
+    if request.user.is_superuser:
         chats_filter = Q()
     else:
-        user_sectors = request.user.sectors.all()
         chats_filter = Q(sector__in=user_sectors)
     
-    # Estatísticas básicas para o template
+    # Estatísticas básicas para o template (filtradas por setor)
     stats = {
         'total': SupportChat.objects.filter(chats_filter).count(),
         'open': SupportChat.objects.filter(chats_filter, status='ABERTO').count(),
@@ -695,18 +795,16 @@ def support_admin_template(request):
         ).aggregate(avg_rating=models.Avg('rating'))['avg_rating'] or 0, 1)
     }
     
-    # Obter setores do usuário
-    user_sectors_list = []
-    if request.user.hierarchy != 'SUPERADMIN':
-        user_sectors_list = [
-            {'id': sector.id, 'name': sector.name} 
-            for sector in request.user.sectors.all()
-        ]
+    # Lista de setores do usuário para o template
+    user_sectors_data = [
+        {'id': sector.id, 'name': sector.name} 
+        for sector in user_sectors
+    ]
     
     return render(request, 'support/admin_dashboard.html', {
         'stats': stats,
         'is_support_agent': is_support_agent,
-        'user_sectors': user_sectors_list
+        'user_sectors': user_sectors_data
     })
 
 
