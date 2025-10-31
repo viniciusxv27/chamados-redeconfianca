@@ -264,16 +264,33 @@
             </div>
             
             <!-- Formulário de novo agente -->
-            <div class="w-1/3 p-4">
+            <div class="w-1/3 p-4 overflow-y-auto">
                 <h4 class="font-semibold mb-4">Adicionar Agente</h4>
                 <form id="newAgentForm" class="space-y-4">
                     {% csrf_token %}
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
+                        <select id="newAgentSector" required onchange="loadUsersForSector(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                            <option value="">Selecione o setor</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Selecione o setor primeiro</p>
+                    </div>
+                    
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
                         <select id="newAgentUser" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                            <option value="">Selecione o usuário</option>
+                            <option value="">Selecione o setor primeiro</option>
                         </select>
-                        <p class="text-xs text-gray-500 mt-1">Apenas usuários dos seus setores</p>
+                        <p class="text-xs text-gray-500 mt-1">Usuários do setor selecionado</p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Setores que irá atender</label>
+                        <div id="agentSectorsList" class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded p-2">
+                            <!-- Checkboxes dos setores serão carregados aqui -->
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Selecione os setores que este agente irá atender</p>
                     </div>
                     
                     <div>
@@ -891,7 +908,7 @@ function openAgentsModal() {
     document.getElementById('agentsModal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     loadAgents();
-    loadAvailableUsers();
+    loadSectorsForAgents();
 }
 
 function closeAgentsModal() {
@@ -920,15 +937,15 @@ function closeMetricsModal() {
 
 // ===== GERENCIAMENTO DE CATEGORIAS =====
 function loadSectorsForCategories() {
-    // Carregar apenas setores do usuário
-    fetch('/projects/support/sectors/')
+    // Carregar apenas setores do supervisor
+    fetch('/projects/support/user-sectors/')
         .then(response => response.json())
         .then(data => {
             const select = document.getElementById('newCategorySector');
             select.innerHTML = '<option value="">Selecione o setor</option>';
             
             if (data.success && data.sectors) {
-                // O backend já faz a filtragem por setor
+                // O backend já faz a filtragem por setores do supervisor
                 data.sectors.forEach(sector => {
                     const option = document.createElement('option');
                     option.value = sector.id;
@@ -1080,23 +1097,80 @@ function deleteCategory(id) {
 }
 
 // ===== GERENCIAMENTO DE AGENTES =====
-function loadAvailableUsers() {
-    fetch('/projects/support/api/available-users/')
+function loadSectorsForAgents() {
+    // Carregar apenas setores do supervisor (não todos)
+    fetch('/projects/support/user-sectors/')
         .then(response => response.json())
         .then(data => {
-            const select = document.getElementById('newAgentUser');
-            select.innerHTML = '<option value="">Selecione o usuário</option>';
+            const select = document.getElementById('newAgentSector');
+            const checkboxContainer = document.getElementById('agentSectorsList');
             
-            if (data.success && data.users) {
-                data.users.forEach(user => {
+            select.innerHTML = '<option value="">Selecione o setor</option>';
+            checkboxContainer.innerHTML = '';
+            
+            if (data.success && data.sectors) {
+                if (data.sectors.length === 0) {
+                    select.innerHTML = '<option value="">Você não está vinculado a nenhum setor</option>';
+                    checkboxContainer.innerHTML = '<p class="text-sm text-red-500 p-2">Você não está vinculado a nenhum setor</p>';
+                    return;
+                }
+                
+                data.sectors.forEach(sector => {
+                    // Adicionar ao select
                     const option = document.createElement('option');
-                    option.value = user.id;
-                    option.textContent = `${user.name} - ${user.sector}`;
+                    option.value = sector.id;
+                    option.textContent = sector.name;
                     select.appendChild(option);
+                    
+                    // Adicionar checkbox para setores de atendimento
+                    const label = document.createElement('label');
+                    label.className = 'flex items-center space-x-2 cursor-pointer';
+                    label.innerHTML = `
+                        <input type="checkbox" name="agent_sectors" value="${sector.id}" class="rounded border-gray-300">
+                        <span class="text-sm text-gray-700">${sector.name}</span>
+                    `;
+                    checkboxContainer.appendChild(label);
                 });
             }
         })
-        .catch(error => console.error('Erro ao carregar usuários:', error));
+        .catch(error => console.error('Erro ao carregar setores:', error));
+}
+
+function loadUsersForSector(sectorId) {
+    const select = document.getElementById('newAgentUser');
+    
+    if (!sectorId) {
+        select.innerHTML = '<option value="">Selecione o setor primeiro</option>';
+        return;
+    }
+    
+    select.innerHTML = '<option value="">Carregando...</option>';
+    
+    fetch(`/projects/support/api/available-users/?sector_id=${sectorId}`)
+        .then(response => response.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Selecione o usuário</option>';
+            
+            if (data.success && data.users) {
+                if (data.users.length === 0) {
+                    select.innerHTML = '<option value="">Nenhum usuário disponível neste setor</option>';
+                    return;
+                }
+                
+                data.users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.name} (${user.email})`;
+                    select.appendChild(option);
+                });
+            } else {
+                select.innerHTML = '<option value="">Erro ao carregar usuários</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar usuários:', error);
+            select.innerHTML = '<option value="">Erro ao carregar usuários</option>';
+        });
 }
 
 function loadAgents() {
@@ -1109,14 +1183,19 @@ function loadAgents() {
                 container.innerHTML = '';
                 
                 data.agents.forEach(agent => {
+                    // Construir lista de setores
+                    const sectorsHtml = agent.sectors && agent.sectors.length > 0
+                        ? `<br><span class="font-medium">Setores:</span> ${agent.sectors.map(s => s.name).join(', ')}`
+                        : '';
+                    
                     const div = document.createElement('div');
                     div.className = 'bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-between';
                     div.innerHTML = `
                         <div class="flex-1">
                             <div class="font-medium text-gray-900">${agent.user.name}</div>
                             <div class="text-sm text-gray-600">
-                                <span class="font-medium">Email:</span> ${agent.user.email}<br>
-                                <span class="font-medium">Setor:</span> ${agent.user.sector}
+                                <span class="font-medium">Email:</span> ${agent.user.email}
+                                ${sectorsHtml}
                                 ${agent.can_assign_tickets ? '<br><span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Pode atribuir tickets</span>' : ''}
                             </div>
                         </div>
@@ -1153,13 +1232,23 @@ document.getElementById('newAgentForm').addEventListener('submit', function(e) {
         return;
     }
     
+    // Coletar setores selecionados
+    const sectorCheckboxes = document.querySelectorAll('input[name="agent_sectors"]:checked');
+    const sectorIds = Array.from(sectorCheckboxes).map(cb => parseInt(cb.value));
+    
+    if (sectorIds.length === 0) {
+        alert('Selecione pelo menos um setor que o agente irá atender');
+        return;
+    }
+    
     const data = {
         action: 'create',
-        user_id: userId,
+        user_id: parseInt(userId),
+        sector_ids: sectorIds,
         can_assign_tickets: document.getElementById('newAgentCanAssign').checked
     };
     
-    fetch('/projects/support/api/agents/', {
+    fetch('/projects/support/admin/agents/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1171,8 +1260,8 @@ document.getElementById('newAgentForm').addEventListener('submit', function(e) {
     .then(data => {
         if (data.success) {
             document.getElementById('newAgentForm').reset();
+            document.getElementById('newAgentUser').innerHTML = '<option value="">Selecione o setor primeiro</option>';
             loadAgents();
-            loadAvailableUsers();
             showToast('Agente adicionado com sucesso!', 'success');
         } else {
             alert('Erro: ' + data.error);

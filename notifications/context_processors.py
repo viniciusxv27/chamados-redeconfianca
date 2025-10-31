@@ -17,11 +17,14 @@ def unread_notifications_count(request):
 
 def user_support_sectors(request):
     """
-    Context processor para disponibilizar os setores do usuário para o chat de suporte
+    Context processor para disponibilizar TODOS os setores para o chat de suporte.
+    Qualquer usuário autenticado pode abrir chat de suporte para qualquer setor.
     """
     if request.user.is_authenticated:
-        user_sectors = request.user.sectors.all()
-        sectors_data = [{'id': sector.id, 'name': sector.name} for sector in user_sectors]
+        from users.models import Sector
+        # Retornar TODOS os setores - usuários podem abrir chat para qualquer setor
+        all_sectors = Sector.objects.all().order_by('name')
+        sectors_data = [{'id': sector.id, 'name': sector.name} for sector in all_sectors]
         return {
             'user_support_sectors': sectors_data,
             'user_support_sectors_json': json.dumps(sectors_data)

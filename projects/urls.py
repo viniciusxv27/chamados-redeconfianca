@@ -43,6 +43,7 @@ urlpatterns = [
     path('support/chat/create/', views_chat.create_support_chat, name='create_support_chat'),
     path('support/chat/<int:chat_id>/send/', views_chat.send_support_message, name='send_support_message'),
     path('support/sectors/', views_chat.get_sectors, name='get_sectors'),
+    path('support/user-sectors/', views_chat.get_user_sectors, name='get_user_sectors'),
     path('support/sectors/<int:sector_id>/categories/', views_chat.get_sector_categories, name='get_sector_categories'),
     path('support/chat/<int:chat_id>/files/upload/', views_chat.upload_chat_file, name='upload_chat_file'),
     path('support/chat/<int:chat_id>/rate/', views_chat.rate_support_chat, name='rate_support_chat'),
