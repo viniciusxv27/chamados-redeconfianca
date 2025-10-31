@@ -944,12 +944,15 @@ def delete_template(request, template_id):
 
 @login_required
 def admin_approvals(request):
-    """Área de aprovação de checklists para super admins"""
+    """Área de aprovação de checklists para supervisores e hierarquias superiores"""
     # Verificar se o usuário tem permissão para acessar aprovações
-    allowed_sectors = ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERUSER']
-    user_sector = request.user.sector.name if request.user.sector else None
+    # SUPERVISOR, ADMIN, SUPERADMIN, ADMINISTRATIVO ou superuser
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
     
-    if not request.user.is_superuser and user_sector not in allowed_sectors:
+    if not is_authorized:
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('checklists:dashboard')
     
@@ -968,6 +971,18 @@ def admin_approvals(request):
         'task_executions__task'
     )
     
+    # Filtrar por setores do usuário (exceto superuser que vê tudo)
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if user_sectors:
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        else:
+            # Se usuário não tem setores, não pode aprovar nada
+            executions = executions.none()
+    
     if status_filter:
         executions = executions.filter(status=status_filter)
     
@@ -982,18 +997,33 @@ def admin_approvals(request):
     
     executions = executions.order_by('-submitted_at', 'execution_date')
     
-    # Estatísticas
+    # Estatísticas (também filtradas por setor)
+    stats_filter = {}
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        if user_sectors:
+            stats_filter['assignment__template__sector__in'] = user_sectors
+    
     stats = {
-        'awaiting_approval': ChecklistExecution.objects.filter(status='awaiting_approval').count(),
+        'awaiting_approval': ChecklistExecution.objects.filter(status='awaiting_approval', **stats_filter).count(),
         'approved_today': ChecklistExecution.objects.filter(
             status='completed',
-            completed_at__date=timezone.now().date()
+            completed_at__date=timezone.now().date(),
+            **stats_filter
         ).count(),
     }
     
-    # Setores para filtro
+    # Setores para filtro (apenas os setores do usuário)
     from users.models import Sector
-    sectors = Sector.objects.all().order_by('name')
+    if request.user.is_superuser:
+        sectors = Sector.objects.all().order_by('name')
+    else:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
     
     context = {
         'executions': executions,
@@ -1012,14 +1042,26 @@ def admin_approvals(request):
 def approve_checklist(request, execution_id):
     """Aprovar checklist executado"""
     # Verificar se o usuário tem permissão para aprovar
-    allowed_sectors = ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERUSER']
-    user_sector = request.user.sector.name if request.user.sector else None
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
     
-    if not request.user.is_superuser and user_sector not in allowed_sectors:
+    if not is_authorized:
         messages.error(request, 'Você não tem permissão para aprovar checklists.')
         return redirect('checklists:dashboard')
     
     execution = get_object_or_404(ChecklistExecution, id=execution_id)
+    
+    # Verificar se o checklist é de um setor do usuário
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if execution.assignment.template.sector not in user_sectors:
+            messages.error(request, 'Você só pode aprovar checklists dos seus setores.')
+            return redirect('checklists:admin_approvals')
     
     if execution.status != 'awaiting_approval':
         messages.error(request, 'Este checklist não está aguardando aprovação.')
@@ -1036,14 +1078,26 @@ def approve_checklist(request, execution_id):
 def reject_checklist(request, execution_id):
     """Rejeitar checklist executado"""
     # Verificar se o usuário tem permissão para rejeitar
-    allowed_sectors = ['SUPERVISOR', 'ADMINISTRATIVO', 'ADMIN', 'SUPERUSER']
-    user_sector = request.user.sector.name if request.user.sector else None
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
     
-    if not request.user.is_superuser and user_sector not in allowed_sectors:
+    if not is_authorized:
         messages.error(request, 'Você não tem permissão para rejeitar checklists.')
         return redirect('checklists:dashboard')
     
     execution = get_object_or_404(ChecklistExecution, id=execution_id)
+    
+    # Verificar se o checklist é de um setor do usuário
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if execution.assignment.template.sector not in user_sectors:
+            messages.error(request, 'Você só pode rejeitar checklists dos seus setores.')
+            return redirect('checklists:admin_approvals')
     
     if execution.status != 'awaiting_approval':
         messages.error(request, 'Este checklist não está aguardando aprovação.')
