@@ -2,7 +2,42 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from users.models import User, Sector
 from django.utils import timezone
+from django.conf import settings
 import json
+
+
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
+
+def upload_checklist_evidence_image(instance, filename):
+    """Define o caminho de upload para imagens de evidência de checklist"""
+    import os
+    from datetime import datetime
+    
+    # Pegar extensão do arquivo
+    ext = filename.split('.')[-1]
+    # Criar nome único baseado em timestamp e ID da execução
+    new_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{instance.execution.id}_{instance.task.id}.{ext}"
+    
+    return os.path.join('checklists', 'evidences', 'images', new_filename)
+
+
+def upload_checklist_evidence_video(instance, filename):
+    """Define o caminho de upload para vídeos de evidência de checklist"""
+    import os
+    from datetime import datetime
+    
+    # Pegar extensão do arquivo
+    ext = filename.split('.')[-1]
+    # Criar nome único baseado em timestamp e ID da execução
+    new_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{instance.execution.id}_{instance.task.id}.{ext}"
+    
+    return os.path.join('checklists', 'evidences', 'videos', new_filename)
 
 
 class ChecklistTemplate(models.Model):
@@ -357,14 +392,16 @@ class ChecklistTaskExecution(models.Model):
     
     # Evidências
     evidence_image = models.ImageField(
-        upload_to='checklists/evidences/images/',
+        upload_to=upload_checklist_evidence_image,
+        storage=get_media_storage(),
         blank=True,
         null=True,
         verbose_name='Imagem de Evidência',
         help_text='Foto como prova de execução da tarefa'
     )
     evidence_video = models.FileField(
-        upload_to='checklists/evidences/videos/',
+        upload_to=upload_checklist_evidence_video,
+        storage=get_media_storage(),
         blank=True,
         null=True,
         verbose_name='Vídeo de Evidência',
