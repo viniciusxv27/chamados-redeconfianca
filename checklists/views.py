@@ -31,6 +31,7 @@ def checklist_dashboard(request):
     
     # Verificar se é supervisor ou hierarquia maior
     is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_superuser
+    is_superadmin = user.hierarchy == 'SUPERADMIN' or user.is_superuser
     
     # Checklists atribuídos ao usuário
     my_assignments = ChecklistAssignment.objects.filter(
@@ -38,15 +39,30 @@ def checklist_dashboard(request):
         is_active=True
     ).select_related('template', 'assigned_by')
     
-    # Para supervisores: também mostrar checklists que eles atribuíram
-    assigned_by_me = ChecklistAssignment.objects.none()
-    if is_supervisor:
-        assigned_by_me = ChecklistAssignment.objects.filter(
-            assigned_by=user,
+    # Para supervisores: mostrar checklists dos seus setores
+    # Para superadmin: mostrar todos
+    sector_assignments = ChecklistAssignment.objects.none()
+    if is_superadmin:
+        # SUPERADMIN vê todos os checklists
+        sector_assignments = ChecklistAssignment.objects.filter(
             is_active=True
         ).exclude(
             assigned_to=user  # Não duplicar os que já estão em my_assignments
         ).select_related('template', 'assigned_to', 'assigned_by')
+    elif is_supervisor:
+        # SUPERVISOR vê checklists dos seus setores
+        from django.db.models import Q
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        if user_sectors:
+            sector_assignments = ChecklistAssignment.objects.filter(
+                Q(assigned_to__sector__in=user_sectors) | Q(assigned_to__sectors__in=user_sectors),
+                is_active=True
+            ).exclude(
+                assigned_to=user  # Não duplicar
+            ).distinct().select_related('template', 'assigned_to', 'assigned_by')
     
     # Execuções pendentes de hoje
     today = timezone.now().date()
@@ -55,10 +71,10 @@ def checklist_dashboard(request):
         execution_date=today
     ).select_related('assignment__template')
     
-    # Para supervisores: também incluir execuções dos checklists que atribuíram
-    if is_supervisor:
+    # Para supervisores: incluir execuções dos usuários dos seus setores
+    # Para superadmin: incluir todas as execuções
+    if is_superadmin:
         supervisor_executions = ChecklistExecution.objects.filter(
-            assignment__assigned_by=user,
             execution_date=today
         ).exclude(
             assignment__assigned_to=user  # Não duplicar
@@ -67,6 +83,24 @@ def checklist_dashboard(request):
         # Combinar as querysets
         from itertools import chain
         today_executions = list(chain(today_executions, supervisor_executions))
+    elif is_supervisor:
+        from django.db.models import Q
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        if user_sectors:
+            supervisor_executions = ChecklistExecution.objects.filter(
+                Q(assignment__assigned_to__sector__in=user_sectors) | 
+                Q(assignment__assigned_to__sectors__in=user_sectors),
+                execution_date=today
+            ).exclude(
+                assignment__assigned_to=user  # Não duplicar
+            ).distinct().select_related('assignment__template', 'assignment__assigned_to')
+            
+            # Combinar as querysets
+            from itertools import chain
+            today_executions = list(chain(today_executions, supervisor_executions))
     
     # Separar por status apenas (combinando manhã e tarde)
     if isinstance(today_executions, list):
@@ -91,7 +125,7 @@ def checklist_dashboard(request):
         total_completed = today_executions.filter(status__in=['completed', 'awaiting_approval']).count()
     
     stats = {
-        'total_assignments': my_assignments.count() + (assigned_by_me.count() if is_supervisor else 0),
+        'total_assignments': my_assignments.count() + (sector_assignments.count() if is_supervisor else 0),
         'today_pending': total_pending,
         'today_completed': total_completed,
         'overdue': ChecklistExecution.objects.filter(
@@ -123,24 +157,42 @@ def checklist_dashboard(request):
         execution_date__lte=calendar_end
     ).select_related('assignment__template').order_by('execution_date')
     
-    # Para supervisores: também incluir execuções dos checklists que atribuíram no calendário
-    if is_supervisor:
+    # Para supervisores: incluir execuções dos usuários dos seus setores no calendário
+    # Para superadmin: incluir todas as execuções
+    if is_superadmin:
         supervisor_calendar_executions = ChecklistExecution.objects.filter(
-            assignment__assigned_by=user,
             execution_date__gte=calendar_start,
             execution_date__lte=calendar_end
         ).exclude(
             assignment__assigned_to=user  # Não duplicar
         ).select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
         
-        # Combinar as querysets
+        from itertools import chain
         calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
-        # Ordenar manualmente por execution_date
         calendar_executions.sort(key=lambda x: x.execution_date)
+    elif is_supervisor:
+        from django.db.models import Q
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        if user_sectors:
+            supervisor_calendar_executions = ChecklistExecution.objects.filter(
+                Q(assignment__assigned_to__sector__in=user_sectors) | 
+                Q(assignment__assigned_to__sectors__in=user_sectors),
+                execution_date__gte=calendar_start,
+                execution_date__lte=calendar_end
+            ).exclude(
+                assignment__assigned_to=user  # Não duplicar
+            ).distinct().select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
+            
+            from itertools import chain
+            calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
+            calendar_executions.sort(key=lambda x: x.execution_date)
     
     context = {
         'my_assignments': my_assignments[:5],  # Primeiros 5
-        'assigned_by_me': assigned_by_me[:5] if is_supervisor else [],  # Primeiros 5 atribuídos por mim
+        'sector_assignments': sector_assignments[:5] if is_supervisor else [],  # Primeiros 5 do setor
         'today_executions': today_executions,
         'pending_checklists': pending_checklists,
         'completed_checklists': completed_checklists,
@@ -148,6 +200,7 @@ def checklist_dashboard(request):
         'available_templates': available_templates,
         'calendar_executions': calendar_executions,
         'is_supervisor': is_supervisor,
+        'is_superadmin': is_superadmin,
     }
     return render(request, 'checklists/dashboard.html', context)
 
@@ -335,13 +388,24 @@ def create_executions_for_assignment(assignment):
                 defaults={'status': 'pending'}
             )
             
-            if created:
-                # Criar execuções das tarefas
-                for task in assignment.template.tasks.all():
-                    ChecklistTaskExecution.objects.create(
-                        execution=execution,
-                        task=task
-                    )
+            # Criar task_executions se não existirem
+            # Verificar se há tarefas no template
+            template_tasks = assignment.template.tasks.all()
+            if template_tasks.exists():
+                # Verificar quais tasks já têm execução
+                existing_task_ids = set(
+                    ChecklistTaskExecution.objects.filter(
+                        execution=execution
+                    ).values_list('task_id', flat=True)
+                )
+                
+                # Criar task_executions para tarefas que ainda não têm
+                for task in template_tasks:
+                    if task.id not in existing_task_ids:
+                        ChecklistTaskExecution.objects.create(
+                            execution=execution,
+                            task=task
+                        )
 
 
 @login_required

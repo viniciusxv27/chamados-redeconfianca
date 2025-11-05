@@ -381,6 +381,83 @@
             </div>
         </div>
 
+        <!-- Checklists do Setor (Supervisor/Superadmin) -->
+        {% if is_supervisor and sector_assignments %}
+        <div class="bg-white rounded-lg shadow-sm border border-purple-200">
+            <div class="p-6 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-semibold text-gray-900">
+                        <i class="fas fa-users-cog mr-2 text-purple-600"></i>
+                        {% if is_superadmin %}
+                            Todos os Checklists (Administração)
+                        {% else %}
+                            Checklists dos Meus Setores
+                        {% endif %}
+                    </h2>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        <i class="fas fa-shield-alt mr-1"></i> 
+                        {% if is_superadmin %}SUPERADMIN{% else %}SUPERVISOR{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="space-y-4">
+                    {% for assignment in sector_assignments %}
+                    <div class="checklist-card border border-purple-200 rounded-lg p-4 hover:border-purple-400 transition-colors bg-purple-50/30">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                    <h3 class="font-medium text-gray-900">{{ assignment.template.name }}</h3>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                                        <i class="fas fa-user mr-1"></i> {{ assignment.assigned_to.get_full_name }}
+                                    </span>
+                                    {% if assignment.period != 'both' %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                        {% if assignment.period == 'morning' %}bg-yellow-100 text-yellow-800
+                                        {% else %}bg-orange-100 text-orange-800{% endif %}">
+                                        {% if assignment.period == 'morning' %}
+                                            <i class="fas fa-sun mr-1"></i> Manhã
+                                        {% else %}
+                                            <i class="fas fa-moon mr-1"></i> Tarde
+                                        {% endif %}
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                        <i class="fas fa-sun mr-1"></i><i class="fas fa-moon mr-1"></i> Ambos
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <p class="text-sm text-gray-600">
+                                    <i class="fas fa-building text-purple-500 mr-1"></i>
+                                    {{ assignment.assigned_to.sector.name|default:"Sem setor" }}
+                                    • Atribuído por {{ assignment.assigned_by.get_full_name }}
+                                </p>
+                            </div>
+                            <span class="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
+                                {{ assignment.get_schedule_type_display }}
+                            </span>
+                        </div>
+                        
+                        <div class="flex justify-between items-center text-sm text-gray-500">
+                            <span>{{ assignment.start_date|date:"d/m" }} - {{ assignment.end_date|date:"d/m" }}</span>
+                            <span>{{ assignment.template.tasks.count }} tarefas</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                {% if sector_assignments|length >= 5 %}
+                <div class="text-center pt-4">
+                    <a href="{% url 'checklists:my_checklists' %}" 
+                       class="text-purple-600 hover:text-purple-700 font-medium">
+                        Ver todos os checklists do setor →
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Checklists Pendentes -->
         <div class="bg-white rounded-lg shadow-sm border">
             <div class="p-6 border-b border-gray-200">
