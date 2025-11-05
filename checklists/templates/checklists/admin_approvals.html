@@ -162,7 +162,7 @@
                                                 </h4>
                                                 
                                                 {% if task_exec.task.description %}
-                                                    <p class="text-gray-600 mb-3">{{ task_exec.task.description }}</p>
+                                                    <div class="text-gray-600 mb-3">{{ task_exec.task.description|markdown_simple }}</div>
                                                 {% endif %}
 
                                                 <!-- Notes -->

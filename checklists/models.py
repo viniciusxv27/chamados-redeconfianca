@@ -87,6 +87,7 @@ class ChecklistTask(models.Model):
     # Mídia de instrução
     instruction_image = models.ImageField(
         upload_to='checklists/instructions/images/',
+        storage=get_media_storage(),
         blank=True,
         null=True,
         verbose_name='Imagem de Instrução',
@@ -94,6 +95,7 @@ class ChecklistTask(models.Model):
     )
     instruction_video = models.FileField(
         upload_to='checklists/instructions/videos/',
+        storage=get_media_storage(),
         blank=True,
         null=True,
         verbose_name='Vídeo de Instrução',
@@ -101,6 +103,7 @@ class ChecklistTask(models.Model):
     )
     instruction_document = models.FileField(
         upload_to='checklists/instructions/documents/',
+        storage=get_media_storage(),
         blank=True,
         null=True,
         verbose_name='Documento de Instrução',

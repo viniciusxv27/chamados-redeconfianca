@@ -86,7 +86,7 @@
                                     <h6 class="text-lg font-semibold text-gray-900 mb-2">{{ task.title }}</h6>
                                 </label>
                                 {% if task.description %}
-                                    <p class="text-gray-600 mb-3">{{ task.description }}</p>
+                                    <div class="text-gray-600 mb-3">{{ task.description|markdown_simple }}</div>
                                 {% endif %}
                                 
                                 <!-- Observações da Tarefa -->
