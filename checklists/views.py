@@ -50,19 +50,18 @@ def checklist_dashboard(request):
             assigned_to=user  # Não duplicar os que já estão em my_assignments
         ).select_related('template', 'assigned_to', 'assigned_by')
     elif is_supervisor:
-        # SUPERVISOR vê checklists dos seus setores
-        from django.db.models import Q
+        # SUPERVISOR vê checklists cujo TEMPLATE é do seu setor
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         if user_sectors:
             sector_assignments = ChecklistAssignment.objects.filter(
-                Q(assigned_to__sector__in=user_sectors) | Q(assigned_to__sectors__in=user_sectors),
+                template__sector__in=user_sectors,
                 is_active=True
             ).exclude(
                 assigned_to=user  # Não duplicar
-            ).distinct().select_related('template', 'assigned_to', 'assigned_by')
+            ).select_related('template', 'assigned_to', 'assigned_by')
     
     # Execuções pendentes de hoje
     today = timezone.now().date()
@@ -71,7 +70,7 @@ def checklist_dashboard(request):
         execution_date=today
     ).select_related('assignment__template')
     
-    # Para supervisores: incluir execuções dos usuários dos seus setores
+    # Para supervisores: incluir execuções dos checklists cujo TEMPLATE é do seu setor
     # Para superadmin: incluir todas as execuções
     if is_superadmin:
         supervisor_executions = ChecklistExecution.objects.filter(
@@ -84,19 +83,17 @@ def checklist_dashboard(request):
         from itertools import chain
         today_executions = list(chain(today_executions, supervisor_executions))
     elif is_supervisor:
-        from django.db.models import Q
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         if user_sectors:
             supervisor_executions = ChecklistExecution.objects.filter(
-                Q(assignment__assigned_to__sector__in=user_sectors) | 
-                Q(assignment__assigned_to__sectors__in=user_sectors),
+                assignment__template__sector__in=user_sectors,
                 execution_date=today
             ).exclude(
                 assignment__assigned_to=user  # Não duplicar
-            ).distinct().select_related('assignment__template', 'assignment__assigned_to')
+            ).select_related('assignment__template', 'assignment__assigned_to')
             
             # Combinar as querysets
             from itertools import chain
@@ -157,7 +154,7 @@ def checklist_dashboard(request):
         execution_date__lte=calendar_end
     ).select_related('assignment__template').order_by('execution_date')
     
-    # Para supervisores: incluir execuções dos usuários dos seus setores no calendário
+    # Para supervisores: incluir execuções dos checklists cujo TEMPLATE é do seu setor
     # Para superadmin: incluir todas as execuções
     if is_superadmin:
         supervisor_calendar_executions = ChecklistExecution.objects.filter(
@@ -171,20 +168,18 @@ def checklist_dashboard(request):
         calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
         calendar_executions.sort(key=lambda x: x.execution_date)
     elif is_supervisor:
-        from django.db.models import Q
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         if user_sectors:
             supervisor_calendar_executions = ChecklistExecution.objects.filter(
-                Q(assignment__assigned_to__sector__in=user_sectors) | 
-                Q(assignment__assigned_to__sectors__in=user_sectors),
+                assignment__template__sector__in=user_sectors,
                 execution_date__gte=calendar_start,
                 execution_date__lte=calendar_end
             ).exclude(
                 assignment__assigned_to=user  # Não duplicar
-            ).distinct().select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
+            ).select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
             
             from itertools import chain
             calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
@@ -691,6 +686,7 @@ def api_get_day_checklists(request):
     
     # Verificar se é supervisor ou hierarquia maior
     is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_superuser
+    is_superadmin = user.hierarchy == 'SUPERADMIN' or user.is_superuser
     
     if not is_supervisor:
         return JsonResponse({'error': 'Sem permissão'}, status=403)
@@ -704,18 +700,47 @@ def api_get_day_checklists(request):
     except ValueError:
         return JsonResponse({'error': 'Formato de data inválido'}, status=400)
     
-    # Buscar todas as execuções daquele dia que o usuário pode visualizar
-    # Inclui: checklists atribuídos ao usuário + checklists que ele atribuiu
-    executions = ChecklistExecution.objects.filter(
-        Q(assignment__assigned_to=user) | Q(assignment__assigned_by=user),
-        execution_date=target_date
-    ).select_related(
-        'assignment__template',
-        'assignment__assigned_to',
-        'assignment__assigned_by'
-    ).prefetch_related(
-        'task_executions__task'
-    ).order_by('period', 'assignment__template__name')
+    # Buscar execuções baseadas no nível de permissão
+    if is_superadmin:
+        # SUPERADMIN vê todas as execuções do dia
+        executions = ChecklistExecution.objects.filter(
+            execution_date=target_date
+        ).select_related(
+            'assignment__template',
+            'assignment__assigned_to',
+            'assignment__assigned_by'
+        ).prefetch_related(
+            'task_executions__task'
+        ).order_by('period', 'assignment__template__name')
+    else:
+        # SUPERVISOR vê execuções dos checklists cujo TEMPLATE é do seu setor + suas próprias
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        if user_sectors:
+            executions = ChecklistExecution.objects.filter(
+                Q(assignment__assigned_to=user) | Q(assignment__template__sector__in=user_sectors),
+                execution_date=target_date
+            ).select_related(
+                'assignment__template',
+                'assignment__assigned_to',
+                'assignment__assigned_by'
+            ).prefetch_related(
+                'task_executions__task'
+            ).order_by('period', 'assignment__template__name')
+        else:
+            # Se não tem setores, vê apenas os próprios
+            executions = ChecklistExecution.objects.filter(
+                assignment__assigned_to=user,
+                execution_date=target_date
+            ).select_related(
+                'assignment__template',
+                'assignment__assigned_to',
+                'assignment__assigned_by'
+            ).prefetch_related(
+                'task_executions__task'
+            ).order_by('period', 'assignment__template__name')
     
     checklists_data = []
     for execution in executions:
