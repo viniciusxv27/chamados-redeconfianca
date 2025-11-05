@@ -420,6 +420,35 @@ def execute_today_checklists(request):
         'task_executions__task'
     ).order_by('period', 'assignment__template__name')
     
+    # IMPORTANTE: Garantir que todas as execuções tenham suas task_executions criadas
+    # Isso corrige um bug onde execuções eram criadas sem task_executions
+    for execution in today_executions:
+        template_tasks = execution.assignment.template.tasks.all()
+        if template_tasks.exists():
+            existing_task_ids = set(
+                execution.task_executions.values_list('task_id', flat=True)
+            )
+            
+            # Criar task_executions para tarefas que ainda não têm
+            for task in template_tasks:
+                if task.id not in existing_task_ids:
+                    ChecklistTaskExecution.objects.create(
+                        execution=execution,
+                        task=task
+                    )
+    
+    # Recarregar execuções para pegar as task_executions recém-criadas
+    if any(execution.task_executions.count() == 0 for execution in today_executions):
+        today_executions = ChecklistExecution.objects.filter(
+            assignment__assigned_to=user,
+            execution_date=today,
+            status__in=['pending', 'in_progress']
+        ).select_related(
+            'assignment__template'
+        ).prefetch_related(
+            'task_executions__task'
+        ).order_by('period', 'assignment__template__name')
+    
     if request.method == 'POST':
         # Processar submissão de todos os checklists
         all_completed = True
@@ -886,7 +915,7 @@ def create_template(request):
             task_descriptions = request.POST.getlist('task_description[]')
             task_required = request.POST.getlist('task_required[]')
             
-            # Arquivos de instrução
+            # Arquivos de instrução - obter todas as listas
             task_images = request.FILES.getlist('task_image[]')
             task_videos = request.FILES.getlist('task_video[]')
             task_documents = request.FILES.getlist('task_document[]')
@@ -901,19 +930,20 @@ def create_template(request):
                         order=i
                     )
                     
-                    # Adicionar imagem se fornecida
-                    if i < len(task_images) and task_images[i]:
+                    # Adicionar imagem se fornecida (verificar índice)
+                    if i < len(task_images) and task_images[i] and task_images[i].size > 0:
                         task.instruction_image = task_images[i]
+                        task.save()
                     
-                    # Adicionar vídeo se fornecido
-                    if i < len(task_videos) and task_videos[i]:
+                    # Adicionar vídeo se fornecido (verificar índice)
+                    if i < len(task_videos) and task_videos[i] and task_videos[i].size > 0:
                         task.instruction_video = task_videos[i]
+                        task.save()
                     
-                    # Adicionar documento se fornecido
-                    if i < len(task_documents) and task_documents[i]:
+                    # Adicionar documento se fornecido (verificar índice)
+                    if i < len(task_documents) and task_documents[i] and task_documents[i].size > 0:
                         task.instruction_document = task_documents[i]
-                    
-                    task.save()
+                        task.save()
             
             messages.success(request, f'Template "{template.name}" criado com sucesso!')
             return redirect('checklists:admin_templates')
@@ -969,6 +999,11 @@ def edit_template(request, template_id):
             task_descriptions = request.POST.getlist('task_description[]')
             task_required = request.POST.getlist('task_required[]')
             
+            # Arquivos de instrução - obter todas as listas
+            task_images = request.FILES.getlist('task_image[]')
+            task_videos = request.FILES.getlist('task_video[]')
+            task_documents = request.FILES.getlist('task_document[]')
+            
             for i, title in enumerate(task_titles):
                 if title.strip():
                     task = ChecklistTask.objects.create(
@@ -979,17 +1014,20 @@ def edit_template(request, template_id):
                         order=i
                     )
                     
-                    # Adicionar mídia de instrução se fornecida
-                    if request.FILES.get(f'task_instruction_image_{i}'):
-                        task.instruction_image = request.FILES.get(f'task_instruction_image_{i}')
+                    # Adicionar imagem se fornecida (verificar índice e tamanho)
+                    if i < len(task_images) and task_images[i] and task_images[i].size > 0:
+                        task.instruction_image = task_images[i]
+                        task.save()
                     
-                    if request.FILES.get(f'task_instruction_video_{i}'):
-                        task.instruction_video = request.FILES.get(f'task_instruction_video_{i}')
+                    # Adicionar vídeo se fornecido (verificar índice e tamanho)
+                    if i < len(task_videos) and task_videos[i] and task_videos[i].size > 0:
+                        task.instruction_video = task_videos[i]
+                        task.save()
                     
-                    if request.FILES.get(f'task_instruction_document_{i}'):
-                        task.instruction_document = request.FILES.get(f'task_instruction_document_{i}')
-                    
-                    task.save()
+                    # Adicionar documento se fornecido (verificar índice e tamanho)
+                    if i < len(task_documents) and task_documents[i] and task_documents[i].size > 0:
+                        task.instruction_document = task_documents[i]
+                        task.save()
             
             messages.success(request, f'Template "{template.name}" atualizado com sucesso!')
             return redirect('checklists:admin_templates')
