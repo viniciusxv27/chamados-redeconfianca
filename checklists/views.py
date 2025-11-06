@@ -634,7 +634,7 @@ def execute_checklist(request, assignment_id):
     
     execution, created = ChecklistExecution.objects.get_or_create(
         assignment=assignment,
-        date=execution_date,
+        execution_date=execution_date,
         period=period,
         defaults={'status': 'pending'}
     )
