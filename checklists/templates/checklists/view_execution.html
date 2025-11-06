@@ -2,30 +2,35 @@
 {% load static %}
 {% load checklist_tags %}
 
-{% block title %}Visualizar Execução{% endblock %}
+{% block title %}{% if can_execute %}Executar{% else %}Visualizar{% endif %} Checklist{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-6">
     <div class="max-w-5xl mx-auto">
-        <!-- Header -->
+        
+        {% if can_execute %}
+        <form method="post" enctype="multipart/form-data" id="executeChecklistForm">
+            {% csrf_token %}
+        {% endif %}
+        
         <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
             <div class="flex items-center justify-between mb-6">
                 <div>
                     <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
-                        📋 {{ template.name }}
+                        {% if can_execute %}Executar Checklist{% else %}📋 Visualizar Execução{% endif %}
                     </h1>
+                    <h2 class="text-xl font-semibold text-gray-700 mb-2">{{ template.name }}</h2>
                     <p class="text-gray-600">
                         Execução de {{ execution.execution_date|date:"d/m/Y" }} - 
                         {% if execution.period == 'morning' %}🌞 Manhã{% else %}🌙 Tarde{% endif %}
                     </p>
                 </div>
-                <a href="{% url 'checklists:admin_approvals' %}" 
+                <a href="{% url 'checklists:dashboard' %}" 
                    class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
                     ← Voltar
                 </a>
             </div>
 
-            <!-- Info Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-blue-50 rounded-xl p-4">
                     <div class="text-sm text-blue-600 font-semibold mb-1">Executor</div>
@@ -42,181 +47,222 @@
             </div>
 
             {% if template.description %}
-                <div class="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-l-4 border-blue-500">
-                    <div class="text-sm font-semibold text-blue-800 mb-2">📝 Descrição do Checklist</div>
-                    <div class="text-gray-700">{{ template.description|markdown_simple }}</div>
-                </div>
+            <div class="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-l-4 border-blue-500">
+                <div class="text-sm font-semibold text-blue-800 mb-2">📝 Descrição do Checklist</div>
+                <div class="text-gray-700">{{ template.description|markdown_simple }}</div>
+            </div>
             {% endif %}
         </div>
 
-        <!-- Tasks -->
         <div class="space-y-6">
             {% for task_exec in task_executions %}
-                <div class="bg-white rounded-2xl shadow-xl p-6 border-l-4 
-                    {% if task_exec.is_completed %}border-green-500{% else %}border-gray-300{% endif %}">
-                    
-                    <!-- Task Header -->
-                    <div class="flex items-start gap-4 mb-4">
-                        <div class="flex-shrink-0 pt-1">
-                            {% if task_exec.is_completed %}
-                                <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center">
-                                    <i class="fas fa-check text-white text-sm"></i>
-                                </div>
-                            {% else %}
-                                <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                                    <i class="fas fa-circle text-white text-xs"></i>
-                                </div>
-                            {% endif %}
+            <div class="bg-white rounded-2xl shadow-xl p-6 border-l-4 {% if task_exec.is_completed %}border-green-500{% else %}border-gray-300{% endif %}" id="task_{{ execution.id }}_{{ task_exec.task.id }}">
+                <div class="flex items-start gap-4 mb-4">
+                    <div class="flex-shrink-0 pt-1">
+                        {% if can_execute %}
+                        <label class="relative inline-block w-14 h-8 cursor-pointer">
+                            <input type="checkbox" name="task_{{ execution.id }}_{{ task_exec.task.id }}" class="peer sr-only task-checkbox" {% if task_exec.is_completed %}checked{% endif %} data-execution="{{ execution.id }}" data-task="{{ task_exec.task.id }}">
+                            <span class="absolute inset-0 bg-gray-300 rounded-full transition-all peer-checked:bg-gradient-to-r peer-checked:from-green-400 peer-checked:to-green-600"></span>
+                            <span class="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all peer-checked:translate-x-6"></span>
+                        </label>
+                        {% else %}
+                        {% if task_exec.is_completed %}
+                        <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                            <i class="fas fa-check text-white text-sm"></i>
                         </div>
+                        {% else %}
+                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                            <i class="fas fa-circle text-white text-xs"></i>
+                        </div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
 
-                        <div class="flex-1">
-                            <h3 class="text-xl font-bold text-gray-800 mb-2">
-                                {{ task_exec.task.title }}
-                                {% if task_exec.task.is_required %}
-                                    <span class="text-red-500 text-sm">*</span>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">
+                            {{ task_exec.task.title }}
+                            {% if task_exec.task.is_required %}<span class="text-red-500 text-sm">*</span>{% endif %}
+                        </h3>
+
+                        {% if task_exec.task.description %}
+                        <div class="text-gray-600 mb-4">{{ task_exec.task.description|markdown_simple }}</div>
+                        {% endif %}
+
+                        {% if task_exec.task.instruction_image or task_exec.task.instruction_video or task_exec.task.instruction_document or task_exec.task.instruction_media.exists %}
+                        <div class="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
+                            <p class="text-sm font-bold text-blue-800 mb-3">📖 Material de Instrução</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {% if task_exec.task.instruction_image %}
+                                <div>
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                    <img src="{{ task_exec.task.instruction_image.url }}" alt="Instrução" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
+                                </div>
                                 {% endif %}
-                            </h3>
-
-                            {% if task_exec.task.description %}
-                                <div class="text-gray-600 mb-4">{{ task_exec.task.description|markdown_simple }}</div>
-                            {% endif %}
-
-                            <!-- Instruction Media -->
-                            {% if task_exec.task.instruction_image or task_exec.task.instruction_video or task_exec.task.instruction_document or task_exec.task.instruction_media.exists %}
-                                <div class="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
-                                    <p class="text-sm font-bold text-blue-800 mb-3">📖 Material de Instrução</p>
-                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <!-- Old single files (legacy support) -->
-                                        {% if task_exec.task.instruction_image %}
-                                            <div>
-                                                <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
-                                                <img src="{{ task_exec.task.instruction_image.url }}" 
-                                                     alt="Instrução" 
-                                                     class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
-                                            </div>
-                                        {% endif %}
-                                        {% if task_exec.task.instruction_video %}
-                                            <div>
-                                                <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
-                                                <video controls class="w-full rounded-lg shadow-md">
-                                                    <source src="{{ task_exec.task.instruction_video.url }}">
-                                                </video>
-                                            </div>
-                                        {% endif %}
-                                        {% if task_exec.task.instruction_document %}
-                                            <div>
-                                                <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento</p>
-                                                <a href="{{ task_exec.task.instruction_document.url }}" target="_blank" class="block p-4 bg-white rounded-lg shadow-md hover:shadow-lg text-center">
-                                                    <i class="fas fa-file-alt text-4xl text-blue-600 mb-2"></i>
-                                                    <span class="text-xs text-gray-700 block">Abrir documento</span>
-                                                </a>
-                                            </div>
-                                        {% endif %}
-                                        
-                                        <!-- New multiple files from ChecklistTaskInstructionMedia -->
-                                        {% for media in task_exec.task.instruction_media.all %}
-                                            <div>
-                                                {% if media.media_type == 'image' %}
-                                                    <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem {{ forloop.counter }}</p>
-                                                    <img src="{{ media.file.url }}" 
-                                                         alt="Instrução {{ forloop.counter }}" 
-                                                         class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
-                                                {% elif media.media_type == 'video' %}
-                                                    <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo {{ forloop.counter }}</p>
-                                                    <video controls class="w-full rounded-lg shadow-md">
-                                                        <source src="{{ media.file.url }}">
-                                                    </video>
-                                                {% elif media.media_type == 'document' %}
-                                                    <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento {{ forloop.counter }}</p>
-                                                    <a href="{{ media.file.url }}" target="_blank" class="block p-4 bg-white rounded-lg shadow-md hover:shadow-lg text-center">
-                                                        <i class="fas fa-file-alt text-4xl text-blue-600 mb-2"></i>
-                                                        <span class="text-xs text-gray-700 block">Documento {{ forloop.counter }}</span>
-                                                    </a>
-                                                {% endif %}
-                                            </div>
-                                        {% endfor %}
-                                    </div>
+                                {% if task_exec.task.instruction_video %}
+                                <div>
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                    <video controls class="w-full rounded-lg shadow-md">
+                                        <source src="{{ task_exec.task.instruction_video.url }}">
+                                    </video>
                                 </div>
-                            {% endif %}
-
-                            <!-- Notes -->
-                            {% if task_exec.notes %}
-                                <div class="mb-4 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
-                                    <p class="text-sm font-semibold text-yellow-800 mb-2">💬 Observações</p>
-                                    <p class="text-gray-700">{{ task_exec.notes }}</p>
+                                {% endif %}
+                                {% if task_exec.task.instruction_document %}
+                                <div>
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento</p>
+                                    <a href="{{ task_exec.task.instruction_document.url }}" target="_blank" class="block p-4 bg-white rounded-lg shadow-md hover:shadow-lg text-center">
+                                        <i class="fas fa-file-alt text-4xl text-blue-600 mb-2"></i>
+                                        <span class="text-xs text-gray-700 block">Abrir documento</span>
+                                    </a>
                                 </div>
-                            {% endif %}
-
-                            <!-- Evidence -->
-                            {% if task_exec.evidence_image or task_exec.evidence_video %}
-                                <div class="p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
-                                    <p class="text-sm font-semibold text-green-800 mb-3">✅ Evidências</p>
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {% if task_exec.evidence_image %}
-                                            <div>
-                                                <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
-                                                <img src="{{ task_exec.evidence_image.url }}" 
-                                                     alt="Evidência" 
-                                                     class="w-full rounded-lg shadow-md">
-                                            </div>
-                                        {% endif %}
-                                        {% if task_exec.evidence_video %}
-                                            <div>
-                                                <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
-                                                <video controls class="w-full rounded-lg shadow-md">
-                                                    <source src="{{ task_exec.evidence_video.url }}">
-                                                </video>
-                                            </div>
-                                        {% endif %}
-                                    </div>
+                                {% endif %}
+                                {% for media in task_exec.task.instruction_media.all %}
+                                <div>
+                                    {% if media.media_type == 'image' %}
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem {{ forloop.counter }}</p>
+                                    <img src="{{ media.file.url }}" alt="Instrução {{ forloop.counter }}" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
+                                    {% elif media.media_type == 'video' %}
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo {{ forloop.counter }}</p>
+                                    <video controls class="w-full rounded-lg shadow-md">
+                                        <source src="{{ media.file.url }}">
+                                    </video>
+                                    {% elif media.media_type == 'document' %}
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento {{ forloop.counter }}</p>
+                                    <a href="{{ media.file.url }}" target="_blank" class="block p-4 bg-white rounded-lg shadow-md hover:shadow-lg text-center">
+                                        <i class="fas fa-file-alt text-4xl text-blue-600 mb-2"></i>
+                                        <span class="text-xs text-gray-700 block">Documento {{ forloop.counter }}</span>
+                                    </a>
+                                    {% endif %}
                                 </div>
-                            {% endif %}
-
-                            <!-- Completion Info -->
-                            {% if task_exec.completed_at %}
-                                <div class="mt-4 text-sm text-gray-500">
-                                    <i class="fas fa-clock mr-1"></i>
-                                    Concluída em {{ task_exec.completed_at|date:"d/m/Y H:i" }}
-                                </div>
-                            {% endif %}
+                                {% endfor %}
+                            </div>
                         </div>
+                        {% endif %}
+
+                        {% if can_execute %}
+                        <div class="mb-4">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">💬 Observações</label>
+                            <textarea name="notes_{{ execution.id }}_{{ task_exec.task.id }}" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="Adicione observações sobre esta tarefa...">{{ task_exec.notes|default:'' }}</textarea>
+                        </div>
+                        {% elif task_exec.notes %}
+                        <div class="mb-4 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
+                            <p class="text-sm font-semibold text-yellow-800 mb-2">💬 Observações</p>
+                            <p class="text-gray-700">{{ task_exec.notes }}</p>
+                        </div>
+                        {% endif %}
+
+                        {% if can_execute %}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">📷 Evidência (Imagem)</label>
+                                <input type="file" name="evidence_image_{{ execution.id }}_{{ task_exec.task.id }}" accept="image/*" class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer">
+                                {% if task_exec.evidence_image %}
+                                <img src="{{ task_exec.evidence_image.url }}" alt="Evidência atual" class="mt-2 max-w-xs rounded-lg shadow-md">
+                                {% endif %}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">🎥 Evidência (Vídeo)</label>
+                                <input type="file" name="evidence_video_{{ execution.id }}_{{ task_exec.task.id }}" accept="video/*" class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer">
+                                {% if task_exec.evidence_video %}
+                                <video controls class="mt-2 max-w-xs rounded-lg shadow-md">
+                                    <source src="{{ task_exec.evidence_video.url }}">
+                                </video>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% elif task_exec.evidence_image or task_exec.evidence_video %}
+                        <div class="p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
+                            <p class="text-sm font-semibold text-green-800 mb-3">✅ Evidências</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {% if task_exec.evidence_image %}
+                                <div>
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                    <img src="{{ task_exec.evidence_image.url }}" alt="Evidência" class="w-full rounded-lg shadow-md">
+                                </div>
+                                {% endif %}
+                                {% if task_exec.evidence_video %}
+                                <div>
+                                    <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                    <video controls class="w-full rounded-lg shadow-md">
+                                        <source src="{{ task_exec.evidence_video.url }}">
+                                    </video>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if task_exec.completed_at and not can_execute %}
+                        <div class="mt-4 text-sm text-gray-500">
+                            <i class="fas fa-clock mr-1"></i>
+                            Concluída em {{ task_exec.completed_at|date:"d/m/Y H:i" }}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
+            </div>
             {% endfor %}
         </div>
 
-        <!-- Approval Actions -->
-        {% if can_approve and execution.status == 'awaiting_approval' %}
-            <div class="bg-white rounded-2xl shadow-xl p-8 mt-8">
-                <h3 class="text-xl font-bold text-gray-800 mb-4">⚖️ Ações de Aprovação</h3>
-                <p class="text-gray-600 mb-6">Como supervisor, você pode aprovar ou reprovar esta execução.</p>
-                
-                <div class="flex gap-4">
-                    <form method="post" action="{% url 'checklists:approve_checklist' execution.id %}" class="flex-1">
-                        {% csrf_token %}
-                        <button type="submit" 
-                                onclick="return confirm('✅ Confirma a aprovação deste checklist?')"
-                                class="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-lg rounded-xl hover:from-green-600 hover:to-green-700 transform hover:scale-105 transition-all shadow-lg">
-                            ✅ Aprovar Checklist
-                        </button>
-                    </form>
-                    
-                    <form method="post" action="{% url 'checklists:reject_checklist' execution.id %}" class="flex-1">
-                        {% csrf_token %}
-                        <button type="submit" 
-                                onclick="return confirm('❌ Confirma a reprovação deste checklist? O executor precisará refazer.')"
-                                class="w-full px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white font-bold text-lg rounded-xl hover:from-red-600 hover:to-red-700 transform hover:scale-105 transition-all shadow-lg">
-                            ❌ Reprovar Checklist
-                        </button>
-                    </form>
+        {% if can_execute %}
+        <div class="bg-white rounded-2xl shadow-xl p-8 sticky bottom-6 mt-8">
+            <div class="flex items-center justify-between">
+                <div class="text-gray-700">
+                    <p class="text-sm mb-1">Ao enviar, seu checklist será enviado para aprovação</p>
+                    <p class="text-xs text-gray-500">Certifique-se de completar todas as tarefas obrigatórias</p>
                 </div>
+                <button type="submit" class="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:from-purple-700 hover:to-indigo-700 transform hover:scale-105 transition-all shadow-lg">
+                    ✅ Enviar para Aprovação
+                </button>
             </div>
-        {% elif execution.status == 'completed' %}
-            <div class="bg-green-50 rounded-2xl border-2 border-green-300 p-8 mt-8 text-center">
-                <div class="text-6xl mb-4">✅</div>
-                <h3 class="text-2xl font-bold text-green-800 mb-2">Checklist Aprovado</h3>
-                <p class="text-green-600">Este checklist foi aprovado com sucesso.</p>
+        </div>
+        </form>
+        
+        <script>
+        document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const taskCard = this.closest('[id^="task_"]');
+                if (this.checked) {
+                    taskCard.classList.remove('border-gray-300');
+                    taskCard.classList.add('border-green-500');
+                } else {
+                    taskCard.classList.remove('border-green-500');
+                    taskCard.classList.add('border-gray-300');
+                }
+            });
+        });
+        document.getElementById('executeChecklistForm').addEventListener('submit', function(e) {
+            if (!confirm('✅ Enviar checklist para aprovação?\n\nCertifique-se de que todas as tarefas obrigatórias foram concluídas.')) {
+                e.preventDefault();
+            }
+        });
+        </script>
+        {% endif %}
+
+        {% if can_approve and execution.status == 'awaiting_approval' %}
+        <div class="bg-white rounded-2xl shadow-xl p-8 mt-8">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">⚖️ Ações de Aprovação</h3>
+            <p class="text-gray-600 mb-6">Como supervisor, você pode aprovar ou reprovar esta execução.</p>
+            <div class="flex gap-4">
+                <form method="post" action="{% url 'checklists:approve_checklist' execution.id %}" class="flex-1">
+                    {% csrf_token %}
+                    <button type="submit" onclick="return confirm('✅ Confirma a aprovação deste checklist?')" class="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-lg rounded-xl hover:from-green-600 hover:to-green-700 transform hover:scale-105 transition-all shadow-lg">
+                        ✅ Aprovar Checklist
+                    </button>
+                </form>
+                <form method="post" action="{% url 'checklists:reject_checklist' execution.id %}" class="flex-1">
+                    {% csrf_token %}
+                    <button type="submit" onclick="return confirm('❌ Confirma a reprovação deste checklist? O executor precisará refazer.')" class="w-full px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white font-bold text-lg rounded-xl hover:from-red-600 hover:to-red-700 transform hover:scale-105 transition-all shadow-lg">
+                        ❌ Reprovar Checklist
+                    </button>
+                </form>
             </div>
+        </div>
+        {% elif execution.status == 'completed' and not can_execute %}
+        <div class="bg-green-50 rounded-2xl border-2 border-green-300 p-8 mt-8 text-center">
+            <div class="text-6xl mb-4">✅</div>
+            <h3 class="text-2xl font-bold text-green-800 mb-2">Checklist Aprovado</h3>
+            <p class="text-green-600">Este checklist foi aprovado com sucesso.</p>
+        </div>
         {% endif %}
     </div>
 </div>

@@ -553,7 +553,9 @@ def execute_today_checklists(request):
 @login_required
 @login_required
 def view_execution(request, execution_id):
-    """Visualizar execução específica de checklist com opção de aprovar"""
+    """Visualizar/executar execução específica de checklist"""
+    from django.utils import timezone
+    
     # Buscar execução
     execution = get_object_or_404(
         ChecklistExecution.objects.select_related(
@@ -578,14 +580,86 @@ def view_execution(request, execution_id):
         messages.error(request, 'Você não tem permissão para visualizar esta execução.')
         return redirect('checklists:dashboard')
     
+    # Verificar se pode executar (é o executor e status é pending ou in_progress)
+    can_execute = (
+        user == execution.assignment.assigned_to and 
+        execution.status in ['pending', 'in_progress']
+    )
+    
     # Verificar se pode aprovar (supervisor+ e não é o executor)
     can_approve = (
         user != execution.assignment.assigned_to and
         (user.is_superuser or (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO']))
     )
     
+    # Se for POST e pode executar, processar o formulário
+    if request.method == 'POST' and can_execute:
+        # Processar cada tarefa
+        for task_exec in execution.task_executions.all():
+            task = task_exec.task
+            
+            # Verificar se a tarefa foi marcada como completa
+            task_field_name = f'task_{execution.id}_{task.id}'
+            is_completed = request.POST.get(task_field_name) == 'on'
+            
+            # Pegar observações
+            notes_field_name = f'notes_{execution.id}_{task.id}'
+            notes = request.POST.get(notes_field_name, '').strip()
+            
+            # Pegar evidências
+            evidence_image_field = f'evidence_image_{execution.id}_{task.id}'
+            evidence_video_field = f'evidence_video_{execution.id}_{task.id}'
+            evidence_image = request.FILES.get(evidence_image_field)
+            evidence_video = request.FILES.get(evidence_video_field)
+            
+            # Validação: se marcou como completa, deve ter observações OU evidências
+            if is_completed:
+                has_notes = bool(notes)
+                has_evidence = bool(evidence_image or evidence_video or task_exec.evidence_image or task_exec.evidence_video)
+                
+                if not has_notes and not has_evidence:
+                    messages.error(
+                        request,
+                        f'❌ Tarefa "{task.title}": você deve preencher a descrição OU anexar alguma evidência'
+                    )
+                    # Renderizar novamente o formulário com os dados
+                    context = {
+                        'execution': execution,
+                        'can_execute': can_execute,
+                        'can_approve': can_approve,
+                        'assignment': execution.assignment,
+                        'template': execution.assignment.template,
+                        'task_executions': execution.task_executions.all(),
+                    }
+                    return render(request, 'checklists/view_execution.html', context)
+            
+            # Atualizar task_execution
+            task_exec.is_completed = is_completed
+            task_exec.notes = notes
+            
+            # Atualizar evidências se foram enviadas
+            if evidence_image:
+                task_exec.evidence_image = evidence_image
+            if evidence_video:
+                task_exec.evidence_video = evidence_video
+            
+            # Marcar quando foi completada
+            if is_completed and not task_exec.completed_at:
+                task_exec.completed_at = timezone.now()
+            
+            task_exec.save()
+        
+        # Atualizar status da execução
+        execution.status = 'awaiting_approval'
+        execution.submitted_at = timezone.now()
+        execution.save()
+        
+        messages.success(request, f'✅ Checklist "{execution.assignment.template.name}" enviado para aprovação com sucesso!')
+        return redirect('checklists:dashboard')
+    
     context = {
         'execution': execution,
+        'can_execute': can_execute,
         'can_approve': can_approve,
         'assignment': execution.assignment,
         'template': execution.assignment.template,
