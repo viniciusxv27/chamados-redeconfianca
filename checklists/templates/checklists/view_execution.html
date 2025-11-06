@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load checklist_tags %}
+
+{% block title %}Visualizar Execução{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-6">
+    <div class="max-w-5xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+                        📋 {{ template.name }}
+                    </h1>
+                    <p class="text-gray-600">
+                        Execução de {{ execution.execution_date|date:"d/m/Y" }} - 
+                        {% if execution.period == 'morning' %}🌞 Manhã{% else %}🌙 Tarde{% endif %}
+                    </p>
+                </div>
+                <a href="{% url 'checklists:admin_approvals' %}" 
+                   class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
+                    ← Voltar
+                </a>
+            </div>
+
+            <!-- Info Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-blue-50 rounded-xl p-4">
+                    <div class="text-sm text-blue-600 font-semibold mb-1">Executor</div>
+                    <div class="text-lg font-bold text-gray-800">{{ assignment.assigned_to.get_full_name }}</div>
+                </div>
+                <div class="bg-purple-50 rounded-xl p-4">
+                    <div class="text-sm text-purple-600 font-semibold mb-1">Setor</div>
+                    <div class="text-lg font-bold text-gray-800">{{ template.sector.name }}</div>
+                </div>
+                <div class="bg-{% if execution.status == 'completed' %}green{% elif execution.status == 'awaiting_approval' %}yellow{% else %}gray{% endif %}-50 rounded-xl p-4">
+                    <div class="text-sm text-{% if execution.status == 'completed' %}green{% elif execution.status == 'awaiting_approval' %}yellow{% else %}gray{% endif %}-600 font-semibold mb-1">Status</div>
+                    <div class="text-lg font-bold text-gray-800">{{ execution.get_status_display }}</div>
+                </div>
+            </div>
+
+            {% if template.description %}
+                <div class="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-l-4 border-blue-500">
+                    <div class="text-sm font-semibold text-blue-800 mb-2">📝 Descrição do Checklist</div>
+                    <div class="text-gray-700">{{ template.description|markdown_simple }}</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Tasks -->
+        <div class="space-y-6">
+            {% for task_exec in task_executions %}
+                <div class="bg-white rounded-2xl shadow-xl p-6 border-l-4 
+                    {% if task_exec.is_completed %}border-green-500{% else %}border-gray-300{% endif %}">
+                    
+                    <!-- Task Header -->
+                    <div class="flex items-start gap-4 mb-4">
+                        <div class="flex-shrink-0 pt-1">
+                            {% if task_exec.is_completed %}
+                                <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check text-white text-sm"></i>
+                                </div>
+                            {% else %}
+                                <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-circle text-white text-xs"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="flex-1">
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">
+                                {{ task_exec.task.title }}
+                                {% if task_exec.task.is_required %}
+                                    <span class="text-red-500 text-sm">*</span>
+                                {% endif %}
+                            </h3>
+
+                            {% if task_exec.task.description %}
+                                <div class="text-gray-600 mb-4">{{ task_exec.task.description|markdown_simple }}</div>
+                            {% endif %}
+
+                            <!-- Instruction Media -->
+                            {% if task_exec.task.instruction_image or task_exec.task.instruction_video or task_exec.task.instruction_document or task_exec.task.instruction_media.exists %}
+                                <div class="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
+                                    <p class="text-sm font-bold text-blue-800 mb-3">📖 Material de Instrução</p>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {% if task_exec.task.instruction_image %}
+                                            <div>
+                                                <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                                <img src="{{ task_exec.task.instruction_image.url }}" 
+                                                     alt="Instrução" 
+                                                     class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
+                                            </div>
+                                        {% endif %}
+                                        {% if task_exec.task.instruction_video %}
+                                            <div>
+                                                <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                                <video controls class="w-full rounded-lg shadow-md">
+                                                    <source src="{{ task_exec.task.instruction_video.url }}">
+                                                </video>
+                                            </div>
+                                        {% endif %}
+                                        {% if task_exec.task.instruction_document %}
+                                            <div>
+                                                <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento</p>
+                                                <a href="{{ task_exec.task.instruction_document.url }}" target="_blank" class="block p-4 bg-white rounded-lg shadow-md hover:shadow-lg text-center">
+                                                    <i class="fas fa-file-alt text-4xl text-blue-600 mb-2"></i>
+                                                    <span class="text-xs text-gray-700 block">Abrir documento</span>
+                                                </a>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            <!-- Notes -->
+                            {% if task_exec.notes %}
+                                <div class="mb-4 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
+                                    <p class="text-sm font-semibold text-yellow-800 mb-2">💬 Observações</p>
+                                    <p class="text-gray-700">{{ task_exec.notes }}</p>
+                                </div>
+                            {% endif %}
+
+                            <!-- Evidence -->
+                            {% if task_exec.evidence_image or task_exec.evidence_video %}
+                                <div class="p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
+                                    <p class="text-sm font-semibold text-green-800 mb-3">✅ Evidências</p>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {% if task_exec.evidence_image %}
+                                            <div>
+                                                <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                                <img src="{{ task_exec.evidence_image.url }}" 
+                                                     alt="Evidência" 
+                                                     class="w-full rounded-lg shadow-md">
+                                            </div>
+                                        {% endif %}
+                                        {% if task_exec.evidence_video %}
+                                            <div>
+                                                <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                                <video controls class="w-full rounded-lg shadow-md">
+                                                    <source src="{{ task_exec.evidence_video.url }}">
+                                                </video>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            <!-- Completion Info -->
+                            {% if task_exec.completed_at %}
+                                <div class="mt-4 text-sm text-gray-500">
+                                    <i class="fas fa-clock mr-1"></i>
+                                    Concluída em {{ task_exec.completed_at|date:"d/m/Y H:i" }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Approval Actions -->
+        {% if can_approve and execution.status == 'awaiting_approval' %}
+            <div class="bg-white rounded-2xl shadow-xl p-8 mt-8">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">⚖️ Ações de Aprovação</h3>
+                <p class="text-gray-600 mb-6">Como supervisor, você pode aprovar ou reprovar esta execução.</p>
+                
+                <div class="flex gap-4">
+                    <form method="post" action="{% url 'checklists:approve_checklist' execution.id %}" class="flex-1">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                onclick="return confirm('✅ Confirma a aprovação deste checklist?')"
+                                class="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-lg rounded-xl hover:from-green-600 hover:to-green-700 transform hover:scale-105 transition-all shadow-lg">
+                            ✅ Aprovar Checklist
+                        </button>
+                    </form>
+                    
+                    <form method="post" action="{% url 'checklists:reject_checklist' execution.id %}" class="flex-1">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                onclick="return confirm('❌ Confirma a reprovação deste checklist? O executor precisará refazer.')"
+                                class="w-full px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white font-bold text-lg rounded-xl hover:from-red-600 hover:to-red-700 transform hover:scale-105 transition-all shadow-lg">
+                            ❌ Reprovar Checklist
+                        </button>
+                    </form>
+                </div>
+            </div>
+        {% elif execution.status == 'completed' %}
+            <div class="bg-green-50 rounded-2xl border-2 border-green-300 p-8 mt-8 text-center">
+                <div class="text-6xl mb-4">✅</div>
+                <h3 class="text-2xl font-bold text-green-800 mb-2">Checklist Aprovado</h3>
+                <p class="text-green-600">Este checklist foi aprovado com sucesso.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

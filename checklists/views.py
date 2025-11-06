@@ -468,9 +468,22 @@ def execute_today_checklists(request):
                 video_key = f'evidence_video_{execution.id}_{task_exec.task.id}'
                 
                 is_completed = request.POST.get(task_key) == 'on'
-                notes = request.POST.get(notes_key, '')
+                notes = request.POST.get(notes_key, '').strip()
                 evidence_image = request.FILES.get(image_key)
                 evidence_video = request.FILES.get(video_key)
+                
+                # VALIDAÇÃO: Se marcado como completo, deve ter descrição OU evidência
+                if is_completed:
+                    has_notes = bool(notes)
+                    has_evidence = bool(evidence_image or evidence_video or task_exec.evidence_image or task_exec.evidence_video)
+                    
+                    if not has_notes and not has_evidence:
+                        messages.error(
+                            request,
+                            f'❌ Tarefa "{task_exec.task.title}" do checklist "{execution.assignment.template.name}": '
+                            f'você deve preencher a descrição OU anexar alguma evidência (imagem/vídeo).'
+                        )
+                        return redirect('checklists:today_checklists')
                 
                 # Atualizar task execution
                 task_exec.is_completed = is_completed
@@ -535,6 +548,50 @@ def execute_today_checklists(request):
     }
     
     return render(request, 'checklists/today_checklists.html', context)
+
+
+@login_required
+@login_required
+def view_execution(request, execution_id):
+    """Visualizar execução específica de checklist com opção de aprovar"""
+    # Buscar execução
+    execution = get_object_or_404(
+        ChecklistExecution.objects.select_related(
+            'assignment__template',
+            'assignment__assigned_to',
+            'assignment__assigned_by'
+        ).prefetch_related(
+            'task_executions__task'
+        ),
+        id=execution_id
+    )
+    
+    # Verificar se o usuário tem permissão para ver
+    user = request.user
+    can_view = (
+        user == execution.assignment.assigned_to or  # É o executor
+        user.is_superuser or  # É superuser
+        (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])  # É supervisor+
+    )
+    
+    if not can_view:
+        messages.error(request, 'Você não tem permissão para visualizar esta execução.')
+        return redirect('checklists:dashboard')
+    
+    # Verificar se pode aprovar (supervisor+ e não é o executor)
+    can_approve = (
+        user != execution.assignment.assigned_to and
+        (user.is_superuser or (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO']))
+    )
+    
+    context = {
+        'execution': execution,
+        'can_approve': can_approve,
+        'assignment': execution.assignment,
+        'template': execution.assignment.template,
+        'task_executions': execution.task_executions.all(),
+    }
+    return render(request, 'checklists/view_execution.html', context)
 
 
 @login_required

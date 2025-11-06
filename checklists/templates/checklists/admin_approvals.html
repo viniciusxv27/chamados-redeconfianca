@@ -207,19 +207,26 @@
                             </div>
 
                             <!-- Actions -->
-                            {% if execution.status == 'awaiting_approval' %}
-                                <div class="mt-8 flex items-center justify-end gap-4">
-                                    <button onclick="showRejectModal({{ execution.id }}, '{{ execution.assignment.template.name|escapejs }}')"
-                                            class="px-6 py-3 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-semibold">
-                                        ❌ Rejeitar
-                                    </button>
-                                    <a href="{% url 'checklists:approve_checklist' execution.id %}"
-                                       onclick="return confirm('✅ Aprovar este checklist?')"
-                                       class="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-bold shadow-lg">
-                                        ✅ Aprovar Checklist
-                                    </a>
-                                </div>
-                            {% endif %}
+                            <div class="mt-8 flex items-center justify-between">
+                                <a href="{% url 'checklists:view_execution' execution.id %}"
+                                   class="px-6 py-3 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors font-semibold">
+                                    👁️ Ver Detalhes
+                                </a>
+                                
+                                {% if execution.status == 'awaiting_approval' %}
+                                    <div class="flex items-center gap-4">
+                                        <button onclick="showRejectModal({{ execution.id }}, '{{ execution.assignment.template.name|escapejs }}')"
+                                                class="px-6 py-3 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-semibold">
+                                            ❌ Rejeitar
+                                        </button>
+                                        <a href="{% url 'checklists:approve_checklist' execution.id %}"
+                                           onclick="return confirm('✅ Aprovar este checklist?')"
+                                           class="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-bold shadow-lg">
+                                            ✅ Aprovar Checklist
+                                        </a>
+                                    </div>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                 {% endfor %}
