@@ -417,7 +417,7 @@ def execute_today_checklists(request):
     ).select_related(
         'assignment__template'
     ).prefetch_related(
-        'task_executions__task'
+        'task_executions__task__instruction_media'
     ).order_by('period', 'assignment__template__name')
     
     # IMPORTANTE: Garantir que todas as execuções tenham suas task_executions criadas
@@ -446,7 +446,7 @@ def execute_today_checklists(request):
         ).select_related(
             'assignment__template'
         ).prefetch_related(
-            'task_executions__task'
+            'task_executions__task__instruction_media'
         ).order_by('period', 'assignment__template__name')
     
     if request.method == 'POST':
@@ -561,7 +561,7 @@ def view_execution(request, execution_id):
             'assignment__assigned_to',
             'assignment__assigned_by'
         ).prefetch_related(
-            'task_executions__task'
+            'task_executions__task__instruction_media'
         ),
         id=execution_id
     )
@@ -596,18 +596,68 @@ def view_execution(request, execution_id):
 
 @login_required
 def execute_checklist(request, assignment_id):
-    """Executar checklist individual (view antiga - redirecionar para nova)"""
+    """Executar/visualizar checklist individual por assignment_id e period"""
     from datetime import date
     
+    # Pegar o período da query string
+    period = request.GET.get('period', 'morning')
+    
+    # Buscar o assignment
     assignment = get_object_or_404(
-        ChecklistAssignment,
-        id=assignment_id,
-        assigned_to=request.user
+        ChecklistAssignment.objects.select_related('template', 'assigned_to', 'assigned_by'),
+        id=assignment_id
     )
     
-    # Redirecionar para a nova view unificada
-    messages.info(request, '📋 Use o formulário unificado "Checklists de Hoje" para executar todos os seus checklists.')
-    return redirect('checklists:today_checklists')
+    # Verificar permissão de visualização
+    user = request.user
+    can_view = (
+        user == assignment.assigned_to or  # É o executor
+        user.is_superuser or  # É superuser
+        (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])  # É supervisor+
+    )
+    
+    if not can_view:
+        messages.error(request, 'Você não tem permissão para visualizar esta atribuição.')
+        return redirect('checklists:dashboard')
+    
+    # Buscar ou criar a execução para a data e período especificados
+    # Verificar se há data específica na query string, senão usar hoje
+    date_str = request.GET.get('date')
+    if date_str:
+        try:
+            from datetime import datetime
+            execution_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            execution_date = date.today()
+    else:
+        execution_date = date.today()
+    
+    execution, created = ChecklistExecution.objects.get_or_create(
+        assignment=assignment,
+        date=execution_date,
+        period=period,
+        defaults={'status': 'pending'}
+    )
+    
+    # Certificar que todas as task_executions existem
+    existing_tasks = set(execution.task_executions.values_list('task_id', flat=True))
+    template_tasks = assignment.template.tasks.all()
+    
+    for task in template_tasks:
+        if task.id not in existing_tasks:
+            ChecklistTaskExecution.objects.create(
+                execution=execution,
+                task=task,
+                is_completed=False
+            )
+    
+    # Se o usuário for o executor e o status for pending, redirecionar para today_checklists para executar
+    if user == assignment.assigned_to and execution.status == 'pending' and execution_date == date.today():
+        messages.info(request, f'📋 Execute seu checklist "{assignment.template.name}" abaixo.')
+        return redirect('checklists:today_checklists')
+    
+    # Caso contrário, redirecionar para a view de visualização
+    return redirect('checklists:view_execution', execution_id=execution.id)
 
 
 @login_required

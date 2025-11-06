@@ -7,7 +7,8 @@ urlpatterns = [
     path('', views.checklist_dashboard, name='dashboard'),
     path('today/', views.execute_today_checklists, name='today_checklists'),
     path('create/', views.create_assignment, name='create_assignment'),
-    path('execute/<int:execution_id>/', views.view_execution, name='view_execution'),
+    path('execute/<int:assignment_id>/', views.execute_checklist, name='execute_checklist'),  # Compatibilidade com URLs antigas (assignment_id + ?period=)
+    path('view/<int:execution_id>/', views.view_execution, name='view_execution'),  # Nova URL para visualização (execution_id direto)
     path('my/', views.my_checklists, name='my_checklists'),
     
     # API
