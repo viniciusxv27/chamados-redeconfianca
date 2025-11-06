@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'purchases',
     'compliments',  # Sistema de elogios
     'checklists',  # Sistema de checklists
+    'benefits',  # Clube de Benefícios
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

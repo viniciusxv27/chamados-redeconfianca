@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if action == 'create' %}Criar{% else %}Editar{% endif %} Benefício{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
+    <div class="max-w-4xl mx-auto">
+        
+        <!-- Header -->
+        <div class="mb-6">
+            <a href="{% url 'benefits:admin_list' %}" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 transition-colors shadow-md">
+                <i class="fas fa-arrow-left"></i>
+                Voltar
+            </a>
+        </div>
+
+        <!-- Form Card -->
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                    <i class="fas fa-{% if action == 'create' %}plus{% else %}edit{% endif %} mr-2"></i>
+                    {% if action == 'create' %}Criar Novo Benefício{% else %}Editar Benefício{% endif %}
+                </h1>
+                <p class="text-gray-600">Preencha as informações do benefício abaixo</p>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Title -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        <i class="fas fa-heading text-purple-500 mr-1"></i>
+                        Título *
+                    </label>
+                    <input type="text" 
+                           name="title" 
+                           value="{{ benefit.title|default:'' }}"
+                           required
+                           maxlength="200"
+                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                           placeholder="Ex: 50% de desconto em pizzas">
+                </div>
+
+                <!-- Description (short) -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        <i class="fas fa-align-left text-purple-500 mr-1"></i>
+                        Descrição Resumida *
+                    </label>
+                    <textarea name="description" 
+                              required
+                              rows="2"
+                              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                              placeholder="Descrição curta que aparece no card (até 150 caracteres)">{{ benefit.description|default:'' }}</textarea>
+                    <p class="text-xs text-gray-500 mt-1">Esta descrição aparece nos cards da lista de benefícios</p>
+                </div>
+
+                <!-- Full Description -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        <i class="fas fa-file-alt text-purple-500 mr-1"></i>
+                        Descrição Completa *
+                    </label>
+                    <textarea name="full_description" 
+                              required
+                              rows="6"
+                              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                              placeholder="Descrição detalhada com todas as informações do benefício, como usar, onde usar, etc.">{{ benefit.full_description|default:'' }}</textarea>
+                    <p class="text-xs text-gray-500 mt-1">Esta descrição aparece na página de detalhes do benefício</p>
+                </div>
+
+                <!-- Coupon Code -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        <i class="fas fa-ticket-alt text-purple-500 mr-1"></i>
+                        Código do Cupom *
+                    </label>
+                    <input type="text" 
+                           name="coupon_code" 
+                           value="{{ benefit.coupon_code|default:'' }}"
+                           required
+                           maxlength="100"
+                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono uppercase"
+                           placeholder="Ex: PIZZA50OFF"
+                           style="text-transform: uppercase;">
+                    <p class="text-xs text-gray-500 mt-1">Este código será exibido ao usuário após resgatar o benefício</p>
+                </div>
+
+                <!-- Image -->
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        <i class="fas fa-image text-purple-500 mr-1"></i>
+                        Imagem do Benefício
+                    </label>
+                    
+                    {% if benefit.image %}
+                        <div class="mb-4">
+                            <p class="text-sm text-gray-600 mb-2">Imagem atual:</p>
+                            <img src="{{ benefit.image.url }}" 
+                                 alt="Imagem atual"
+                                 class="w-64 h-48 object-cover rounded-lg shadow-md">
+                        </div>
+                    {% endif %}
+                    
+                    <input type="file" 
+                           name="image" 
+                           accept="image/*"
+                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer">
+                    <p class="text-xs text-gray-500 mt-1">Recomendado: 800x600px (JPG, PNG ou WebP)</p>
+                </div>
+
+                <!-- Settings Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Status -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">
+                            <i class="fas fa-toggle-on text-purple-500 mr-1"></i>
+                            Status
+                        </label>
+                        <select name="status" 
+                                class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                            <option value="active" {% if benefit.status == 'active' or not benefit %}selected{% endif %}>Ativo</option>
+                            <option value="inactive" {% if benefit.status == 'inactive' %}selected{% endif %}>Inativo</option>
+                            <option value="expired" {% if benefit.status == 'expired' %}selected{% endif %}>Expirado</option>
+                        </select>
+                    </div>
+
+                    <!-- Featured -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">
+                            <i class="fas fa-star text-purple-500 mr-1"></i>
+                            Destaque
+                        </label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" 
+                                   name="is_featured" 
+                                   class="sr-only peer"
+                                   {% if benefit.is_featured %}checked{% endif %}>
+                            <div class="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+                            <span class="ml-3 text-sm font-medium text-gray-700">Benefício em destaque aparece primeiro</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Validity Dates -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Valid From -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">
+                            <i class="fas fa-calendar-alt text-purple-500 mr-1"></i>
+                            Válido de
+                        </label>
+                        <input type="date" 
+                               name="valid_from" 
+                               value="{{ benefit.valid_from|date:'Y-m-d'|default:'' }}"
+                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                        <p class="text-xs text-gray-500 mt-1">Deixe vazio para sem data inicial</p>
+                    </div>
+
+                    <!-- Valid Until -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">
+                            <i class="fas fa-calendar-times text-purple-500 mr-1"></i>
+                            Válido até
+                        </label>
+                        <input type="date" 
+                               name="valid_until" 
+                               value="{{ benefit.valid_until|date:'Y-m-d'|default:'' }}"
+                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                        <p class="text-xs text-gray-500 mt-1">Deixe vazio para sem data limite</p>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center justify-end gap-4 pt-6 border-t-2 border-gray-200">
+                    <a href="{% url 'benefits:admin_list' %}" 
+                       class="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-semibold">
+                        <i class="fas fa-times mr-2"></i>
+                        Cancelar
+                    </a>
+                    <button type="submit" 
+                            class="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all transform hover:scale-105 shadow-lg font-semibold">
+                        <i class="fas fa-{% if action == 'create' %}plus{% else %}save{% endif %} mr-2"></i>
+                        {% if action == 'create' %}Criar Benefício{% else %}Salvar Alterações{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+    </div>
+</div>
+
+<script>
+// Auto uppercase coupon code
+document.querySelector('input[name="coupon_code"]').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+</script>
+{% endblock %}

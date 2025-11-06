@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ benefit.title }} - Clube de Benefícios{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-6">
+    <div class="max-w-5xl mx-auto">
+        
+        <!-- Back Button -->
+        <div class="mb-6">
+            <a href="{% url 'benefits:list' %}" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 transition-colors shadow-md">
+                <i class="fas fa-arrow-left"></i>
+                Voltar
+            </a>
+        </div>
+
+        <!-- Main Card -->
+        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+            
+            <!-- Image Header -->
+            <div class="relative h-96 bg-gradient-to-br from-purple-100 to-pink-100 overflow-hidden">
+                {% if benefit.image %}
+                    <img src="{{ benefit.image.url }}" 
+                         alt="{{ benefit.title }}"
+                         class="w-full h-full object-cover">
+                {% else %}
+                    <div class="w-full h-full flex items-center justify-center">
+                        <i class="fas fa-gift text-9xl text-purple-300"></i>
+                    </div>
+                {% endif %}
+                
+                <!-- Gradient Overlay -->
+                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                
+                <!-- Title Overlay -->
+                <div class="absolute bottom-0 left-0 right-0 p-8">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex-1">
+                            <h1 class="text-4xl font-bold text-white mb-2 drop-shadow-lg">
+                                {{ benefit.title }}
+                            </h1>
+                            <p class="text-white/90 text-lg drop-shadow">
+                                {{ benefit.description }}
+                            </p>
+                        </div>
+                        
+                        {% if benefit.is_featured %}
+                            <div class="flex-shrink-0 animate-pulse">
+                                <span class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold rounded-full shadow-xl">
+                                    <i class="fas fa-star"></i>
+                                    DESTAQUE
+                                </span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Content -->
+            <div class="p-8">
+                
+                <!-- Stats Bar -->
+                <div class="flex items-center justify-between mb-8 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl">
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-2 text-gray-700">
+                            <i class="fas fa-eye text-purple-500"></i>
+                            <span class="font-semibold">{{ benefit.views_count }}</span>
+                            <span class="text-sm">visualizações</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-gray-700">
+                            <i class="fas fa-ticket-alt text-pink-500"></i>
+                            <span class="font-semibold">{{ benefit.redeems_count }}</span>
+                            <span class="text-sm">resgates</span>
+                        </div>
+                    </div>
+                    
+                    {% if benefit.valid_until %}
+                        <div class="flex items-center gap-2 px-4 py-2 bg-orange-100 border-2 border-orange-300 rounded-lg">
+                            <i class="fas fa-clock text-orange-600"></i>
+                            <span class="text-orange-700 font-semibold text-sm">
+                                Válido até {{ benefit.valid_until|date:"d/m/Y" }}
+                            </span>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Full Description -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-info-circle text-purple-500"></i>
+                        Sobre este benefício
+                    </h2>
+                    <div class="prose max-w-none text-gray-700 leading-relaxed text-lg">
+                        {{ benefit.full_description|linebreaks }}
+                    </div>
+                </div>
+                
+                <!-- Coupon Section -->
+                {% if has_redeemed %}
+                    <div id="couponSection" class="mb-8 p-8 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border-2 border-green-300 relative overflow-hidden">
+                        <div class="relative z-10">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center animate-pulse">
+                                    <i class="fas fa-check text-white text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-2xl font-bold text-green-800">Benefício Resgatado!</h3>
+                                    <p class="text-green-600">Seu cupom está pronto para uso</p>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-xl p-6 shadow-lg border-2 border-dashed border-green-400">
+                                <p class="text-sm text-gray-600 mb-2 uppercase tracking-wide font-semibold">Seu código:</p>
+                                <div class="flex items-center justify-between gap-4">
+                                    <code id="couponCode" class="text-3xl font-bold text-green-700 tracking-wider bg-green-50 px-6 py-3 rounded-lg flex-1 text-center select-all">
+                                        {{ benefit.coupon_code }}
+                                    </code>
+                                    <button onclick="copyCoupon()" 
+                                            class="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 font-semibold shadow-md">
+                                        <i class="fas fa-copy"></i>
+                                        Copiar
+                                    </button>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-4 text-center">
+                                    <i class="fas fa-lightbulb mr-1"></i>
+                                    Clique no código ou no botão copiar para usar este cupom
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Decorative Elements -->
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-green-300/20 rounded-full -translate-y-16 translate-x-16"></div>
+                        <div class="absolute bottom-0 left-0 w-40 h-40 bg-emerald-300/20 rounded-full translate-y-16 -translate-x-16"></div>
+                    </div>
+                {% else %}
+                    <!-- Redeem Button -->
+                    <div class="mb-8">
+                        <form method="post" action="{% url 'benefits:redeem' benefit.id %}" id="redeemForm">
+                            {% csrf_token %}
+                            <button type="submit"
+                                    class="w-full px-8 py-6 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white font-bold text-2xl rounded-2xl hover:from-purple-700 hover:via-pink-700 hover:to-orange-600 transition-all transform hover:scale-105 shadow-2xl relative overflow-hidden group">
+                                <span class="relative z-10 flex items-center justify-center gap-3">
+                                    <i class="fas fa-gift text-3xl animate-bounce"></i>
+                                    Resgatar Benefício Agora
+                                </span>
+                                
+                                <!-- Animated Background -->
+                                <div class="absolute inset-0 bg-gradient-to-r from-purple-400 to-pink-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                
+                                <!-- Shine Effect -->
+                                <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent transform -skew-x-12 translate-x-full group-hover:translate-x-[-200%] transition-transform duration-1000"></div>
+                            </button>
+                        </form>
+                        
+                        <p class="text-center text-gray-500 mt-4 text-sm">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Ao resgatar, você receberá o código do cupom para usar este benefício
+                        </p>
+                    </div>
+                {% endif %}
+                
+                <!-- How to Use -->
+                <div class="p-6 bg-blue-50 rounded-xl border-2 border-blue-200">
+                    <h3 class="text-lg font-bold text-blue-800 mb-3 flex items-center gap-2">
+                        <i class="fas fa-question-circle"></i>
+                        Como usar este benefício?
+                    </h3>
+                    <ol class="list-decimal list-inside space-y-2 text-blue-700">
+                        {% if not has_redeemed %}
+                            <li>Clique no botão "Resgatar Benefício Agora"</li>
+                            <li>Copie o código do cupom que será exibido</li>
+                        {% else %}
+                            <li>Copie o código do cupom acima</li>
+                        {% endif %}
+                        <li>Use o código na parceira indicada</li>
+                        <li>Aproveite seu desconto ou benefício!</li>
+                    </ol>
+                </div>
+                
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<script>
+function copyCoupon() {
+    const couponCode = document.getElementById('couponCode').textContent.trim();
+    
+    navigator.clipboard.writeText(couponCode).then(() => {
+        // Show success message
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        
+        button.innerHTML = '<i class="fas fa-check mr-2"></i>Copiado!';
+        button.classList.remove('bg-green-500', 'hover:bg-green-600');
+        button.classList.add('bg-green-600');
+        
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-green-500', 'hover:bg-green-600');
+        }, 2000);
+        
+        // Show toast notification
+        showToast('✅ Cupom copiado para a área de transferência!');
+    }).catch(err => {
+        console.error('Erro ao copiar:', err);
+        showToast('❌ Erro ao copiar o cupom', 'error');
+    });
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 px-6 py-4 rounded-lg shadow-xl text-white font-semibold z-50 transform transition-all duration-300 ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+    toast.textContent = message;
+    toast.style.transform = 'translateX(400px)';
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.transform = 'translateX(0)';
+    }, 100);
+    
+    setTimeout(() => {
+        toast.style.transform = 'translateX(400px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Confirmation before redeem
+{% if not has_redeemed %}
+document.getElementById('redeemForm').addEventListener('submit', function(e) {
+    if (!confirm('🎁 Deseja resgatar este benefício?\n\nVocê receberá o código do cupom após confirmar.')) {
+        e.preventDefault();
+    }
+});
+{% endif %}
+</script>
+{% endblock %}
