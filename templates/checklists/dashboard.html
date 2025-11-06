@@ -293,7 +293,7 @@
                                     {{ execution.task_executions.count }} tarefas
                                 </span>
                                 {% if execution.assignment.assigned_to == user %}
-                                <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
+                                <a href="{% url 'checklists:view_execution' execution.id %}" 
                                    class="text-primary hover:text-orange-600 font-medium text-sm">
                                     {% if execution.status == 'completed' %}
                                         Ver Detalhes →
@@ -517,7 +517,7 @@
                                     {{ execution.task_executions.count }} tarefas
                                 </span>
                                 {% if execution.assignment.assigned_to == user %}
-                                <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
+                                <a href="{% url 'checklists:view_execution' execution.id %}" 
                                    class="text-primary hover:text-orange-600 font-medium text-sm">
                                     Executar →
                                 </a>
@@ -596,7 +596,7 @@
                                     {{ execution.task_executions.count }} tarefas
                                 </span>
                                 {% if execution.assignment.assigned_to == user %}
-                                <a href="{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}" 
+                                <a href="{% url 'checklists:view_execution' execution.id %}" 
                                    class="text-primary hover:text-orange-600 font-medium text-sm">
                                     Ver Detalhes →
                                 </a>
@@ -667,7 +667,7 @@ const calendarData = {};
         period: "{{ execution.period }}",
         status: "{{ execution.status }}",
         progress: {{ execution.progress_percentage }},
-        url: "{% url 'checklists:execute_checklist' execution.assignment.id %}?period={{ execution.period }}",
+        url: "{% url 'checklists:view_execution' execution.id %}",
         assigned_to: "{{ execution.assignment.assigned_to.get_full_name|escapejs }}",
         assignment_id: {{ execution.assignment.id }},
         can_unassign: {% if execution.assignment.assigned_by.id == user.id or user.is_superuser %}true{% else %}false{% endif %}
