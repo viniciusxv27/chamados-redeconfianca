@@ -167,31 +167,48 @@
                     
                     <!-- Seção de Mídia de Instrução -->
                     <div class="border-t border-gray-200 pt-3 mt-3">
-                        <h6 class="text-sm font-medium text-gray-700 mb-2">
+                        <h6 class="text-sm font-medium text-gray-700 mb-3">
                             <i class="fas fa-photo-video mr-1 text-blue-500"></i>
-                            Mídia de Instrução (Opcional)
+                            Mídia de Instrução (Opcional) - Você pode anexar múltiplos arquivos
                         </h6>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs text-gray-600 mb-1">
-                                    <i class="fas fa-image mr-1"></i> Imagem
-                                </label>
-                                <input type="file" 
-                                       class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors" 
-                                       name="task_image[]" 
-                                       accept="image/*">
-                                <p class="text-xs text-gray-500 mt-1">JPG, PNG ou GIF</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs text-gray-600 mb-1">
-                                    <i class="fas fa-video mr-1"></i> Vídeo
-                                </label>
-                                <input type="file" 
-                                       class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 transition-colors" 
-                                       name="task_video[]" 
-                                       accept="video/*">
-                                <p class="text-xs text-gray-500 mt-1">MP4, AVI ou MOV</p>
-                            </div>
+                        
+                        <!-- Imagens -->
+                        <div class="mb-3">
+                            <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-images mr-1 text-blue-600"></i> Imagens (múltiplas)
+                            </label>
+                            <input type="file" 
+                                   class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors" 
+                                   name="task_images_TASK_INDEX[]" 
+                                   accept="image/*"
+                                   multiple>
+                            <p class="text-xs text-gray-500 mt-1">JPG, PNG ou GIF - Você pode selecionar vários arquivos</p>
+                        </div>
+                        
+                        <!-- Vídeos -->
+                        <div class="mb-3">
+                            <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-film mr-1 text-purple-600"></i> Vídeos (múltiplos)
+                            </label>
+                            <input type="file" 
+                                   class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 transition-colors" 
+                                   name="task_videos_TASK_INDEX[]" 
+                                   accept="video/*"
+                                   multiple>
+                            <p class="text-xs text-gray-500 mt-1">MP4, AVI ou MOV - Você pode selecionar vários arquivos</p>
+                        </div>
+                        
+                        <!-- Documentos -->
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-file-pdf mr-1 text-red-600"></i> Documentos (múltiplos)
+                            </label>
+                            <input type="file" 
+                                   class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 transition-colors" 
+                                   name="task_documents_TASK_INDEX[]" 
+                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                                   multiple>
+                            <p class="text-xs text-gray-500 mt-1">PDF, DOC, XLS, PPT, TXT - Você pode selecionar vários arquivos</p>
                         </div>
                     </div>
                 </div>
@@ -218,6 +235,12 @@ function addTask() {
     // Atualizar o value do checkbox com o índice atual
     const checkbox = clone.querySelector('input[type="checkbox"]');
     checkbox.value = taskCounter;
+    
+    // Atualizar os nomes dos inputs de arquivo com o índice correto
+    const fileInputs = clone.querySelectorAll('input[type="file"]');
+    fileInputs.forEach(input => {
+        input.name = input.name.replace('TASK_INDEX', taskCounter);
+    });
     
     document.getElementById('tasksList').appendChild(clone);
     document.getElementById('noTasksAlert').style.display = 'none';

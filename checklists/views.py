@@ -972,23 +972,6 @@ def create_template(request):
             task_descriptions = request.POST.getlist('task_description[]')
             task_required = request.POST.getlist('task_required[]')
             
-            # Arquivos de instrução - obter todas as listas
-            task_images = request.FILES.getlist('task_image[]')
-            task_videos = request.FILES.getlist('task_video[]')
-            task_documents = request.FILES.getlist('task_document[]')
-            
-            # DEBUG: Log de arquivos recebidos
-            print(f"DEBUG - Arquivos recebidos:")
-            print(f"  task_images: {len(task_images)} arquivos")
-            print(f"  task_videos: {len(task_videos)} arquivos")
-            print(f"  task_documents: {len(task_documents)} arquivos")
-            for i, img in enumerate(task_images):
-                print(f"    Image {i}: {img.name}, size: {img.size}")
-            for i, vid in enumerate(task_videos):
-                print(f"    Video {i}: {vid.name}, size: {vid.size}")
-            for i, doc in enumerate(task_documents):
-                print(f"    Document {i}: {doc.name}, size: {doc.size}")
-            
             for i, title in enumerate(task_titles):
                 if title.strip():
                     task = ChecklistTask.objects.create(
@@ -999,29 +982,42 @@ def create_template(request):
                         order=i
                     )
                     
-                    # DEBUG: Log antes de processar arquivos
-                    print(f"DEBUG - Processando tarefa {i}: {title}")
+                    # Processar múltiplos arquivos de instrução para esta tarefa
+                    # Imagens
+                    task_images = request.FILES.getlist(f'task_images_{i}[]')
+                    for order, image_file in enumerate(task_images):
+                        if image_file and image_file.size > 0:
+                            from checklists.models import ChecklistTaskInstructionMedia
+                            ChecklistTaskInstructionMedia.objects.create(
+                                task=task,
+                                media_type='image',
+                                file=image_file,
+                                order=order
+                            )
                     
-                    # Adicionar imagem se fornecida (verificar índice)
-                    if i < len(task_images) and task_images[i] and task_images[i].size > 0:
-                        print(f"  Salvando imagem: {task_images[i].name}")
-                        task.instruction_image = task_images[i]
-                        task.save()
-                        print(f"  Imagem salva: {task.instruction_image.name}")
+                    # Vídeos
+                    task_videos = request.FILES.getlist(f'task_videos_{i}[]')
+                    for order, video_file in enumerate(task_videos):
+                        if video_file and video_file.size > 0:
+                            from checklists.models import ChecklistTaskInstructionMedia
+                            ChecklistTaskInstructionMedia.objects.create(
+                                task=task,
+                                media_type='video',
+                                file=video_file,
+                                order=order
+                            )
                     
-                    # Adicionar vídeo se fornecido (verificar índice)
-                    if i < len(task_videos) and task_videos[i] and task_videos[i].size > 0:
-                        print(f"  Salvando vídeo: {task_videos[i].name}")
-                        task.instruction_video = task_videos[i]
-                        task.save()
-                        print(f"  Vídeo salvo: {task.instruction_video.name}")
-                    
-                    # Adicionar documento se fornecido (verificar índice)
-                    if i < len(task_documents) and task_documents[i] and task_documents[i].size > 0:
-                        print(f"  Salvando documento: {task_documents[i].name}")
-                        task.instruction_document = task_documents[i]
-                        task.save()
-                        print(f"  Documento salvo: {task.instruction_document.name}")
+                    # Documentos
+                    task_documents = request.FILES.getlist(f'task_documents_{i}[]')
+                    for order, doc_file in enumerate(task_documents):
+                        if doc_file and doc_file.size > 0:
+                            from checklists.models import ChecklistTaskInstructionMedia
+                            ChecklistTaskInstructionMedia.objects.create(
+                                task=task,
+                                media_type='document',
+                                file=doc_file,
+                                order=order
+                            )
             
             messages.success(request, f'Template "{template.name}" criado com sucesso!')
             return redirect('checklists:admin_templates')
@@ -1077,11 +1073,6 @@ def edit_template(request, template_id):
             task_descriptions = request.POST.getlist('task_description[]')
             task_required = request.POST.getlist('task_required[]')
             
-            # Arquivos de instrução - obter todas as listas
-            task_images = request.FILES.getlist('task_image[]')
-            task_videos = request.FILES.getlist('task_video[]')
-            task_documents = request.FILES.getlist('task_document[]')
-            
             for i, title in enumerate(task_titles):
                 if title.strip():
                     task = ChecklistTask.objects.create(
@@ -1092,20 +1083,42 @@ def edit_template(request, template_id):
                         order=i
                     )
                     
-                    # Adicionar imagem se fornecida (verificar índice e tamanho)
-                    if i < len(task_images) and task_images[i] and task_images[i].size > 0:
-                        task.instruction_image = task_images[i]
-                        task.save()
+                    # Processar múltiplos arquivos de instrução para esta tarefa
+                    # Imagens
+                    task_images = request.FILES.getlist(f'task_images_{i}[]')
+                    for order, image_file in enumerate(task_images):
+                        if image_file and image_file.size > 0:
+                            from checklists.models import ChecklistTaskInstructionMedia
+                            ChecklistTaskInstructionMedia.objects.create(
+                                task=task,
+                                media_type='image',
+                                file=image_file,
+                                order=order
+                            )
                     
-                    # Adicionar vídeo se fornecido (verificar índice e tamanho)
-                    if i < len(task_videos) and task_videos[i] and task_videos[i].size > 0:
-                        task.instruction_video = task_videos[i]
-                        task.save()
+                    # Vídeos
+                    task_videos = request.FILES.getlist(f'task_videos_{i}[]')
+                    for order, video_file in enumerate(task_videos):
+                        if video_file and video_file.size > 0:
+                            from checklists.models import ChecklistTaskInstructionMedia
+                            ChecklistTaskInstructionMedia.objects.create(
+                                task=task,
+                                media_type='video',
+                                file=video_file,
+                                order=order
+                            )
                     
-                    # Adicionar documento se fornecido (verificar índice e tamanho)
-                    if i < len(task_documents) and task_documents[i] and task_documents[i].size > 0:
-                        task.instruction_document = task_documents[i]
-                        task.save()
+                    # Documentos
+                    task_documents = request.FILES.getlist(f'task_documents_{i}[]')
+                    for order, doc_file in enumerate(task_documents):
+                        if doc_file and doc_file.size > 0:
+                            from checklists.models import ChecklistTaskInstructionMedia
+                            ChecklistTaskInstructionMedia.objects.create(
+                                task=task,
+                                media_type='document',
+                                file=doc_file,
+                                order=order
+                            )
             
             messages.success(request, f'Template "{template.name}" atualizado com sucesso!')
             return redirect('checklists:admin_templates')

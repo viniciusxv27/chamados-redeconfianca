@@ -136,44 +136,84 @@
                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">{{ task.description }}</textarea>
                                         <p class="text-xs text-gray-500 mt-1">Suporta formatação markdown</p>
                                     </div>
-                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-2">📷 Instrução (Imagem)</label>
-                                            <input type="file" 
-                                                   name="task_image[]"
-                                                   accept="image/*"
-                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
-                                            {% if task.instruction_image %}
-                                                <p class="text-xs text-gray-600 mt-1 mb-1">Imagem atual:</p>
-                                                <img src="{{ task.instruction_image.url }}" alt="Instrução" class="mt-2 max-w-xs rounded-lg shadow-md">
-                                            {% endif %}
+                                    
+                                    <!-- Mídia de Instrução Existente -->
+                                    {% if task.instruction_media.exists %}
+                                        <div class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                            <h6 class="text-sm font-semibold text-blue-800 mb-3">📎 Arquivos Atuais de Instrução</h6>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                {% for media in task.instruction_media.all %}
+                                                    <div class="bg-white p-3 rounded-lg border border-gray-200">
+                                                        <div class="flex items-center justify-between mb-2">
+                                                            <span class="text-xs font-semibold text-gray-700">
+                                                                {% if media.media_type == 'image' %}📷 Imagem
+                                                                {% elif media.media_type == 'video' %}🎥 Vídeo
+                                                                {% else %}📄 Documento{% endif %}
+                                                            </span>
+                                                        </div>
+                                                        {% if media.media_type == 'image' %}
+                                                            <img src="{{ media.file.url }}" class="w-full rounded shadow-sm">
+                                                        {% elif media.media_type == 'video' %}
+                                                            <video controls class="w-full rounded shadow-sm">
+                                                                <source src="{{ media.file.url }}">
+                                                            </video>
+                                                        {% else %}
+                                                            <a href="{{ media.file.url }}" target="_blank" class="block text-center py-2 text-blue-600 hover:underline text-sm">
+                                                                <i class="fas fa-file-alt mr-1"></i> Abrir
+                                                            </a>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-2">🎥 Instrução (Vídeo)</label>
-                                            <input type="file" 
-                                                   name="task_video[]"
-                                                   accept="video/*"
-                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
-                                            {% if task.instruction_video %}
-                                                <p class="text-xs text-gray-600 mt-1 mb-1">Vídeo atual:</p>
-                                                <video controls class="mt-2 max-w-xs rounded-lg shadow-md">
-                                                    <source src="{{ task.instruction_video.url }}">
-                                                </video>
-                                            {% endif %}
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-2">📄 Instrução (Documento)</label>
-                                            <input type="file" 
-                                                   name="task_document[]"
-                                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
-                                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
-                                            {% if task.instruction_document %}
-                                                <p class="text-xs text-gray-600 mt-1 mb-1">Documento atual:</p>
-                                                <a href="{{ task.instruction_document.url }}" target="_blank" class="inline-flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 mt-2">
-                                                    <i class="fas fa-file-alt mr-2"></i>
-                                                    <span class="text-sm">{{ task.instruction_document.name|slice:"-30:" }}</span>
-                                                </a>
-                                            {% endif %}
+                                    {% endif %}
+                                    
+                                    <!-- Upload de Novos Arquivos (Múltiplos) -->
+                                    <div class="border-t border-gray-200 pt-4">
+                                        <h6 class="text-sm font-semibold text-gray-700 mb-3">
+                                            <i class="fas fa-upload mr-1 text-purple-600"></i>
+                                            Adicionar Novos Arquivos de Instrução (múltiplos permitidos)
+                                        </h6>
+                                        
+                                        <div class="space-y-3">
+                                            <!-- Imagens -->
+                                            <div>
+                                                <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                                    <i class="fas fa-images mr-1 text-blue-600"></i> Imagens
+                                                </label>
+                                                <input type="file" 
+                                                       name="task_images_{{ forloop.counter0 }}[]"
+                                                       accept="image/*"
+                                                       multiple
+                                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                                <p class="text-xs text-gray-500 mt-1">JPG, PNG ou GIF - Selecione vários arquivos</p>
+                                            </div>
+                                            
+                                            <!-- Vídeos -->
+                                            <div>
+                                                <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                                    <i class="fas fa-film mr-1 text-purple-600"></i> Vídeos
+                                                </label>
+                                                <input type="file" 
+                                                       name="task_videos_{{ forloop.counter0 }}[]"
+                                                       accept="video/*"
+                                                       multiple
+                                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                                                <p class="text-xs text-gray-500 mt-1">MP4, AVI ou MOV - Selecione vários arquivos</p>
+                                            </div>
+                                            
+                                            <!-- Documentos -->
+                                            <div>
+                                                <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                                    <i class="fas fa-file-pdf mr-1 text-red-600"></i> Documentos
+                                                </label>
+                                                <input type="file" 
+                                                       name="task_documents_{{ forloop.counter0 }}[]"
+                                                       accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                                                       multiple
+                                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                                                <p class="text-xs text-gray-500 mt-1">PDF, DOC, XLS, PPT, TXT - Selecione vários arquivos</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
