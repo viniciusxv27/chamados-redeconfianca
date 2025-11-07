@@ -56,13 +56,83 @@
 
                 <div class="mt-6 space-y-2">
                     <label for="default_description" class="block text-sm font-medium text-gray-700">Descrição Padrão</label>
-                    <textarea class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
-                              id="default_description" 
-                              name="default_description" 
-                              rows="4" 
-                              placeholder="Descrição que será preenchida automaticamente nos chamados desta categoria">{{ category.default_description }}</textarea>
+                    <div class="border border-gray-300 rounded-lg overflow-hidden">
+                        <!-- Toolbar do editor -->
+                        <div class="flex items-center space-x-1 px-3 py-2 border-b border-gray-200 bg-gray-50">
+                            <button type="button" onclick="formatText('bold')" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Negrito">
+                                <i class="fas fa-bold text-gray-700"></i>
+                            </button>
+                            <button type="button" onclick="formatText('italic')" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Itálico">
+                                <i class="fas fa-italic text-gray-700"></i>
+                            </button>
+                            <button type="button" onclick="formatText('underline')" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Sublinhado">
+                                <i class="fas fa-underline text-gray-700"></i>
+                            </button>
+                            <div class="border-l border-gray-300 h-6 mx-2"></div>
+                            <button type="button" onclick="formatText('insertUnorderedList')" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Lista com marcadores">
+                                <i class="fas fa-list-ul text-gray-700"></i>
+                            </button>
+                            <button type="button" onclick="formatText('insertOrderedList')" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Lista numerada">
+                                <i class="fas fa-list-ol text-gray-700"></i>
+                            </button>
+                            <div class="border-l border-gray-300 h-6 mx-2"></div>
+                            <button type="button" onclick="formatText('strikeThrough')" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Tachado">
+                                <i class="fas fa-strikethrough text-gray-700"></i>
+                            </button>
+                            <button type="button" onclick="insertLink()" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Inserir link">
+                                <i class="fas fa-link text-gray-700"></i>
+                            </button>
+                            <div class="border-l border-gray-300 h-6 mx-2"></div>
+                            <button type="button" onclick="clearFormatting()" class="p-2 hover:bg-gray-200 rounded transition-colors" title="Limpar formatação">
+                                <i class="fas fa-remove-format text-gray-700"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Área editável -->
+                        <div id="editor" 
+                             contenteditable="true" 
+                             class="w-full px-3 py-2 min-h-[120px] max-h-[300px] overflow-y-auto focus:outline-none focus:ring-0"
+                             style="white-space: pre-wrap;">{{ category.default_description }}</div>
+                        
+                        <!-- Campo hidden para enviar o conteúdo -->
+                        <input type="hidden" id="default_description" name="default_description" value="{{ category.default_description }}">
+                    </div>
                     <p class="text-sm text-gray-500">Esta descrição aparecerá automaticamente quando um usuário selecionar esta categoria</p>
                 </div>
+
+<script>
+// Função para formatar texto no editor
+function formatText(command) {
+    document.execCommand(command, false, null);
+    document.getElementById('editor').focus();
+}
+
+// Função para inserir link
+function insertLink() {
+    const url = prompt('Digite a URL do link:');
+    if (url) {
+        document.execCommand('createLink', false, url);
+    }
+    document.getElementById('editor').focus();
+}
+
+// Função para limpar formatação
+function clearFormatting() {
+    document.execCommand('removeFormat', false, null);
+    document.getElementById('editor').focus();
+}
+
+// Atualizar o campo hidden antes de enviar o formulário
+document.querySelector('form').addEventListener('submit', function(e) {
+    const editorContent = document.getElementById('editor').innerHTML;
+    document.getElementById('default_description').value = editorContent;
+});
+
+// Sincronizar mudanças do editor com o campo hidden
+document.getElementById('editor').addEventListener('input', function() {
+    document.getElementById('default_description').value = this.innerHTML;
+});
+</script>
 
                 <div class="mt-6 space-y-2">
                     <label for="default_solution_time_hours" class="block text-sm font-medium text-gray-700">Tempo Padrão para Solução (horas) *</label>

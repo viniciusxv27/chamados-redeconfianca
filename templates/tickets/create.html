@@ -4,6 +4,26 @@
 {% block title %}Novo Chamado - Rede Confiança{% endblock %}
 
 {% block content %}
+<style>
+/* Placeholder para o editor contenteditable */
+#description-editor:empty:before {
+    content: attr(data-placeholder);
+    color: #9CA3AF;
+}
+
+#description-editor:focus:before {
+    content: '';
+}
+
+/* Prevenir que o conteúdo protegido seja editável visualmente */
+#description-editor .protected-content {
+    background-color: #F3F4F6;
+    padding: 2px 4px;
+    border-radius: 3px;
+    user-select: none;
+}
+</style>
+
 <div class="max-w-4xl mx-auto">
     <!-- Page Header -->
     <div class="mb-6 sm:mb-8 px-4 sm:px-0">
@@ -202,15 +222,15 @@
                         </div>
                     </div>
                     
-                    <!-- Textarea -->
-                    <textarea 
-                        name="description" 
-                        id="description" 
-                        rows="8"
-                        required
-                        class="w-full px-3 py-2 border-0 focus:outline-none focus:ring-0 resize-none"
-                        placeholder="Descreva detalhadamente o problema ou solicitação..."
-                    ></textarea>
+                    <!-- Editor contenteditable com HTML -->
+                    <div id="description-editor" 
+                         contenteditable="true"
+                         class="w-full px-3 py-2 min-h-[200px] max-h-[400px] overflow-y-auto focus:outline-none focus:ring-0"
+                         style="white-space: pre-wrap;"
+                         data-placeholder="Descreva detalhadamente o problema ou solicitação..."></div>
+                    
+                    <!-- Campo hidden que será enviado -->
+                    <input type="hidden" name="description" id="description" required>
                 </div>
                 
                 <!-- Upload de arquivos -->
@@ -305,14 +325,32 @@ function loadCategories() {
     }
 }
 
+// Variável para armazenar a descrição padrão da categoria (HTML)
+let categoryDefaultDescription = '';
+let categoryDefaultDescriptionLength = 0;
+
 function updateCategoryDefaults() {
     const categorySelect = document.getElementById('category');
-    const descriptionTextarea = document.getElementById('description');
+    const descriptionEditor = document.getElementById('description-editor');
     const solutionTimeInput = document.getElementById('solution_time_hours');
     const selectedOption = categorySelect.options[categorySelect.selectedIndex];
     
     if (selectedOption && selectedOption.dataset.defaultDescription) {
-        descriptionTextarea.value = selectedOption.dataset.defaultDescription;
+        categoryDefaultDescription = selectedOption.dataset.defaultDescription;
+        
+        // Inserir o conteúdo HTML no editor
+        descriptionEditor.innerHTML = categoryDefaultDescription;
+        
+        // Calcular o tamanho do conteúdo padrão para proteção
+        categoryDefaultDescriptionLength = descriptionEditor.textContent.length;
+        
+        // Sincronizar com o campo hidden
+        document.getElementById('description').value = categoryDefaultDescription;
+    } else {
+        categoryDefaultDescription = '';
+        categoryDefaultDescriptionLength = 0;
+        descriptionEditor.innerHTML = '';
+        document.getElementById('description').value = '';
     }
     
     if (selectedOption && selectedOption.dataset.defaultSolutionTime) {
@@ -479,6 +517,67 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('file-input');
     const dropZone = document.getElementById('file-drop-zone');
     const form = document.querySelector('form');
+    const descriptionEditor = document.getElementById('description-editor');
+    const descriptionInput = document.getElementById('description');
+    
+    // Sincronizar editor com campo hidden
+    descriptionEditor.addEventListener('input', function() {
+        descriptionInput.value = this.innerHTML;
+    });
+    
+    // Proteger descrição padrão - não permitir apagar o texto da categoria
+    descriptionEditor.addEventListener('keydown', function(e) {
+        if (categoryDefaultDescription && categoryDefaultDescriptionLength > 0) {
+            const currentText = this.textContent;
+            const selection = window.getSelection();
+            
+            // Detectar se está tentando apagar conteúdo protegido
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+                const range = selection.getRangeAt(0);
+                const cursorPosition = range.startOffset;
+                
+                // Se está no início ou tentando apagar antes do fim do conteúdo protegido
+                if (currentText.length <= categoryDefaultDescriptionLength) {
+                    e.preventDefault();
+                    // Mover cursor para o final
+                    this.focus();
+                    const newRange = document.createRange();
+                    newRange.selectNodeContents(this);
+                    newRange.collapse(false);
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                    return false;
+                }
+            }
+        }
+    });
+    
+    // Prevenir corte do texto protegido
+    descriptionEditor.addEventListener('cut', function(e) {
+        if (categoryDefaultDescription && categoryDefaultDescriptionLength > 0) {
+            const selection = window.getSelection();
+            const selectedText = selection.toString();
+            
+            // Se tentar cortar parte do conteúdo protegido
+            if (this.textContent.length - selectedText.length < categoryDefaultDescriptionLength) {
+                e.preventDefault();
+                return false;
+            }
+        }
+    });
+    
+    // Ao focar, se não há conteúdo adicional, posicionar no final
+    descriptionEditor.addEventListener('focus', function() {
+        if (categoryDefaultDescription && this.innerHTML === categoryDefaultDescription) {
+            // Mover cursor para o final
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(this);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    });
     
     // Event listeners para aprovação
     const approvalRadios = document.querySelectorAll('input[name="requires_approval"]');
