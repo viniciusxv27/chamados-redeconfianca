@@ -99,6 +99,11 @@ class Ticket(models.Model):
     # Denúncia anônima
     is_anonymous = models.BooleanField(default=False, verbose_name="Denúncia Anônima")
     
+    # Campos opcionais adicionais
+    store_location = models.CharField(max_length=200, blank=True, null=True, verbose_name="Loja/Local")
+    responsible_person = models.CharField(max_length=200, blank=True, null=True, verbose_name="Responsável")
+    phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Telefone")
+    
     class Meta:
         verbose_name = "Chamado"
         verbose_name_plural = "Chamados"

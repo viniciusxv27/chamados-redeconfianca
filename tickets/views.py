@@ -804,8 +804,26 @@ def ticket_create_view(request):
         requires_approval = request.POST.get('requires_approval') == 'on'
         approval_user_id = request.POST.get('approval_user')
         
+        # Validar que a descrição não está vazia
+        if not description or description.strip() == '':
+            messages.error(request, 'O campo Mensagem é obrigatório.')
+            sectors = Sector.objects.all()
+            users = User.objects.filter(is_active=True).exclude(id=request.user.id).order_by('sector__name', 'first_name')
+            return render(request, 'tickets/create.html', {
+                'sectors': sectors,
+                'users': users,
+                'title': title,
+                'sector_id': sector_id,
+                'category_id': category_id,
+            })
+        
         sector = get_object_or_404(Sector, id=sector_id)
         category = get_object_or_404(Category, id=category_id)
+        
+        # Novos campos opcionais
+        store_location = request.POST.get('store_location', '').strip() or None
+        responsible_person = request.POST.get('responsible_person', '').strip() or None
+        phone = request.POST.get('phone', '').strip() or None
         
         # Criar ticket
         ticket = Ticket.objects.create(
@@ -817,7 +835,10 @@ def ticket_create_view(request):
             requires_approval=requires_approval or category.requires_approval,
             approval_user_id=approval_user_id if requires_approval else None,
             solution_time_hours=int(request.POST.get('solution_time_hours', 24)),
-            priority=request.POST.get('priority', 'MEDIA')
+            priority=request.POST.get('priority', 'MEDIA'),
+            store_location=store_location,
+            responsible_person=responsible_person,
+            phone=phone
         )
         
         # Processar arquivos anexados

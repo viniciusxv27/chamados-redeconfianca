@@ -155,10 +155,21 @@ def dashboard_view(request):
         status__in=['ABERTO', 'EM_ANDAMENTO']
     ).order_by('due_date')[:5]
     
+    # Stats para o template (compatível com o formato antigo)
+    stats = {
+        'total_tickets': ticket_stats['total'],
+        'open_tickets': ticket_stats['abertos'],
+        'pending_tickets': ticket_stats['em_andamento'],
+        'closed_tickets': ticket_stats['fechados'],
+        'overdue_tickets': ticket_stats['overdue'],
+        'active_users': User.objects.filter(is_active=True).count(),
+    }
+    
     context = {
         'user': user,
         'user_balance': user.balance_cs,
         'ticket_stats': ticket_stats,
+        'stats': stats,
         'unread_communications': unread_communications,
         'recent_tickets': recent_tickets,
         'overdue_tickets': overdue_tickets,
