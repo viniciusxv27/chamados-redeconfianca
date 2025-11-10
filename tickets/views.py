@@ -1864,3 +1864,197 @@ def export_tickets_xlsx(tickets):
     wb.save(response)
     
     return response
+
+
+@login_required
+def tickets_export_view(request):
+    """View dedicada para exportação de chamados com todos os filtros aplicados"""
+    user = request.user
+    
+    # Coletar todos os filtros da URL (mesma lógica da tickets_list_view)
+    search = request.GET.get('search', '')
+    status_filter = request.GET.getlist('status')
+    origem_filter = request.GET.get('origem', '')
+    categoria_filter = request.GET.get('categoria', '')
+    setor_filter = request.GET.get('setor', '')
+    prioridade_filter = request.GET.get('prioridade', '')
+    carteira_filter = request.GET.get('carteira', '')
+    atribuidos_filter = request.GET.get('atribuidos', '')
+    
+    # Filtros avançados para SUPERADMIN
+    created_by_filter = request.GET.get('created_by', '')
+    created_by_sector_filter = request.GET.get('created_by_sector', '')
+    assigned_to_filter = request.GET.get('assigned_to', '')
+    date_from_filter = request.GET.get('date_from', '')
+    date_to_filter = request.GET.get('date_to', '')
+    user_hierarchy_filter = request.GET.get('user_hierarchy', '')
+    has_attachments_filter = request.GET.get('has_attachments', '')
+    has_comments_filter = request.GET.get('has_comments', '')
+    overdue_filter = request.GET.get('overdue', '')
+    
+    # Filtro base
+    base_filter = models.Q(created_by=user)
+    
+    # Filtrar tickets baseado na hierarquia do usuário (mesma lógica)
+    if user.can_view_all_tickets():
+        tickets = Ticket.objects.all()
+    elif user.can_view_sector_tickets():
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        tickets = Ticket.objects.filter(
+            base_filter |
+            models.Q(sector__in=user_sectors) |
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).distinct()
+    else:
+        tickets = Ticket.objects.filter(
+            base_filter |
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).exclude(status='FECHADO').distinct()
+    
+    # Aplicar filtros (copiado da tickets_list_view)
+    
+    # Filtro por origem
+    if origem_filter == 'meus':
+        tickets = tickets.filter(created_by=user)
+    elif origem_filter == 'setor':
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        tickets = tickets.filter(sector__in=user_sectors).exclude(created_by=user)
+    
+    # Filtro por chamados atribuídos
+    if atribuidos_filter == 'sim':
+        tickets = tickets.filter(
+            models.Q(assigned_to=user) |
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+        ).distinct()
+    
+    # Filtro por status
+    if status_filter:
+        if 'abertos' in status_filter:
+            tickets = tickets.filter(status='ABERTO')
+        elif 'nao_resolvidos' in status_filter:
+            tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO'])
+        else:
+            valid_statuses = [s for s in status_filter if s in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']]
+            if valid_statuses:
+                tickets = tickets.filter(status__in=valid_statuses)
+    
+    # Filtro por categoria
+    if categoria_filter:
+        tickets = tickets.filter(category_id=categoria_filter)
+    
+    # Filtro por setor
+    if setor_filter:
+        if user.hierarchy == 'SUPERADMIN' or user.can_view_all_tickets():
+            tickets = tickets.filter(sector_id=setor_filter)
+        else:
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            sector_ids = [s.id for s in user_sectors] if user_sectors else []
+            if int(setor_filter) in sector_ids:
+                tickets = tickets.filter(sector_id=setor_filter)
+    
+    # Filtro por prioridade
+    if prioridade_filter:
+        tickets = tickets.filter(priority=prioridade_filter)
+    
+    # Filtro por carteira
+    if carteira_filter:
+        from communications.models import CommunicationGroup
+        try:
+            carteira_group = CommunicationGroup.objects.get(id=carteira_filter)
+            carteira_users = carteira_group.members.filter(is_active=True)
+            carteira_sectors = Sector.objects.filter(
+                models.Q(users__in=carteira_users) |
+                models.Q(primary_users__in=carteira_users)
+            ).distinct()
+            
+            tickets = tickets.filter(
+                models.Q(sector__in=carteira_sectors) |
+                models.Q(assigned_to__in=carteira_users) |
+                models.Q(additional_assignments__user__in=carteira_users, additional_assignments__is_active=True)
+            ).distinct()
+        except CommunicationGroup.DoesNotExist:
+            pass
+    
+    # Filtro por pesquisa
+    if search:
+        tickets = tickets.filter(
+            models.Q(title__icontains=search) |
+            models.Q(description__icontains=search) |
+            models.Q(id__icontains=search)
+        )
+    
+    # Aplicar filtros avançados apenas para SUPERADMIN
+    if user.hierarchy == 'SUPERADMIN':
+        if created_by_filter:
+            tickets = tickets.filter(created_by_id=created_by_filter)
+        
+        if created_by_sector_filter:
+            tickets = tickets.filter(
+                models.Q(created_by__sector_id=created_by_sector_filter) |
+                models.Q(created_by__sectors__id=created_by_sector_filter)
+            ).distinct()
+        
+        if assigned_to_filter:
+            if assigned_to_filter == 'unassigned':
+                tickets = tickets.filter(assigned_to__isnull=True)
+            else:
+                tickets = tickets.filter(assigned_to_id=assigned_to_filter)
+        
+        if date_from_filter:
+            from django.utils.dateparse import parse_date
+            date_from = parse_date(date_from_filter)
+            if date_from:
+                tickets = tickets.filter(created_at__date__gte=date_from)
+        
+        if date_to_filter:
+            from django.utils.dateparse import parse_date
+            date_to = parse_date(date_to_filter)
+            if date_to:
+                tickets = tickets.filter(created_at__date__lte=date_to)
+        
+        if user_hierarchy_filter:
+            tickets = tickets.filter(created_by__hierarchy=user_hierarchy_filter)
+        
+        if has_attachments_filter == 'yes':
+            tickets = tickets.filter(attachments__isnull=False).distinct()
+        elif has_attachments_filter == 'no':
+            tickets = tickets.filter(attachments__isnull=True)
+        
+        if has_comments_filter == 'yes':
+            tickets = tickets.filter(comments__isnull=False).distinct()
+        elif has_comments_filter == 'no':
+            tickets = tickets.filter(comments__isnull=True)
+        
+        if overdue_filter:
+            from django.utils import timezone
+            now = timezone.now()
+            if overdue_filter == 'yes':
+                tickets = tickets.filter(
+                    models.Q(due_date__lt=now) & 
+                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                )
+            elif overdue_filter == 'no':
+                tickets = tickets.filter(
+                    models.Q(due_date__gte=now) | 
+                    models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                )
+    
+    # Ordenar
+    tickets = tickets.order_by('-created_at')
+    
+    # Verificar formato de exportação (padrão: Excel)
+    export_format = request.GET.get('export', 'excel')
+    
+    if export_format == 'csv':
+        return export_tickets_csv(tickets)
+    else:
+        return export_tickets_xlsx(tickets)

@@ -4,6 +4,7 @@ from . import purchase_views
 
 urlpatterns = [
     path('', views.tickets_list_view, name='tickets_list'),
+    path('export/', views.tickets_export_view, name='tickets_export'),
     path('history/', views.tickets_history_view, name='tickets_history'),
     path('create/', views.ticket_create_fixed_view, name='ticket_create'),
     path('<int:ticket_id>/', views.ticket_detail_view, name='ticket_detail'),

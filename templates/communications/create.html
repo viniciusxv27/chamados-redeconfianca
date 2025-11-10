@@ -147,6 +147,27 @@
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
     }
+    
+    /* Estilos para drag and drop de reordenação */
+    .draggable-item {
+        transition: all 0.2s ease;
+        cursor: move;
+    }
+    
+    .draggable-item:hover {
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        transform: translateY(-2px);
+    }
+    
+    .draggable-item.dragging {
+        opacity: 0.4;
+    }
+    
+    .draggable-item.drag-over {
+        border-color: #f97316 !important;
+        border-width: 2px !important;
+        background-color: #fff7ed;
+    }
 </style>
 {% endblock %}
 
@@ -220,8 +241,14 @@
                         <!-- Preview das imagens -->
                         <div id="photos-preview" class="hidden mt-4">
                             <div class="bg-gray-100 rounded-lg p-4">
-                                <div class="flex items-center justify-between mb-3">
-                                    <p class="text-sm text-gray-600">Imagens selecionadas: <span id="images-count">0</span></p>
+                                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 space-y-2 sm:space-y-0">
+                                    <div>
+                                        <p class="text-sm text-gray-600">Imagens selecionadas: <span id="images-count">0</span></p>
+                                        <p class="text-xs text-blue-600 mt-1">
+                                            <i class="fas fa-info-circle mr-1"></i>
+                                            Arraste as imagens ou use as setas para ajustar a ordem do carrossel
+                                        </p>
+                                    </div>
                                     <button type="button" onclick="removeAllPhotos()" class="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600 transition-colors">
                                         <i class="fas fa-trash mr-1"></i>
                                         Remover Todas
@@ -688,9 +715,22 @@ function previewImages(input) {
                 
                 // Criar preview da imagem
                 const imageContainer = document.createElement('div');
-                imageContainer.className = 'relative bg-white rounded border p-2';
+                imageContainer.className = 'relative bg-white rounded border p-2 draggable-item';
+                imageContainer.draggable = true;
+                imageContainer.dataset.index = index;
                 imageContainer.innerHTML = `
-                    <div class="aspect-w-16 aspect-h-9 mb-2">
+                    <div class="absolute top-1 left-1 bg-primary text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold z-10">
+                        ${index + 1}
+                    </div>
+                    <div class="absolute top-1 right-1 flex space-x-1 z-10">
+                        <button type="button" onclick="moveImage(${index}, 'left')" class="bg-blue-500 hover:bg-blue-600 text-white rounded px-2 py-1 text-xs" title="Mover para esquerda">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <button type="button" onclick="moveImage(${index}, 'right')" class="bg-blue-500 hover:bg-blue-600 text-white rounded px-2 py-1 text-xs" title="Mover para direita">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div class="aspect-w-16 aspect-h-9 mb-2 cursor-move" title="Arraste para reordenar">
                         <img src="${e.target.result}" alt="Preview ${index + 1}" class="w-full h-32 object-cover rounded">
                     </div>
                     <div class="flex items-center justify-between">
@@ -703,6 +743,13 @@ function previewImages(input) {
                         <input type="text" placeholder="Legenda (opcional)" class="w-full text-xs border border-gray-200 rounded px-2 py-1" id="caption-${index}">
                     </div>
                 `;
+                
+                // Adicionar eventos de drag and drop
+                imageContainer.addEventListener('dragstart', handleDragStart);
+                imageContainer.addEventListener('dragover', handleDragOver);
+                imageContainer.addEventListener('dragleave', handleDragLeave);
+                imageContainer.addEventListener('drop', handleDrop);
+                imageContainer.addEventListener('dragend', handleDragEnd);
                 
                 imagesGrid.appendChild(imageContainer);
                 loadedCount++;
@@ -759,6 +806,151 @@ function removeAllPhotos() {
     if (popupCheckbox) {
         popupCheckbox.disabled = false;
     }
+}
+
+// Funções de reordenação com botões
+function moveImage(index, direction) {
+    const newIndex = direction === 'left' ? index - 1 : index + 1;
+    
+    // Verificar limites
+    if (newIndex < 0 || newIndex >= selectedFiles.length) {
+        return;
+    }
+    
+    // Salvar legendas antes de reordenar
+    const captions = {};
+    selectedFiles.forEach((file, idx) => {
+        const captionInput = document.getElementById(`caption-${idx}`);
+        if (captionInput) {
+            captions[idx] = captionInput.value;
+        }
+    });
+    
+    // Trocar posições nos arrays
+    [selectedFiles[index], selectedFiles[newIndex]] = [selectedFiles[newIndex], selectedFiles[index]];
+    [imageDataArray[index], imageDataArray[newIndex]] = [imageDataArray[newIndex], imageDataArray[index]];
+    
+    // Recriar o preview
+    const input = document.getElementById('photo');
+    const dt = new DataTransfer();
+    selectedFiles.forEach(file => dt.items.add(file));
+    input.files = dt.files;
+    previewImages(input);
+    
+    // Restaurar legendas nas novas posições
+    setTimeout(() => {
+        const caption1 = captions[index] || '';
+        const caption2 = captions[newIndex] || '';
+        
+        const captionInput1 = document.getElementById(`caption-${newIndex}`);
+        const captionInput2 = document.getElementById(`caption-${index}`);
+        
+        if (captionInput1) captionInput1.value = caption1;
+        if (captionInput2) captionInput2.value = caption2;
+    }, 100);
+}
+
+// Variáveis para drag and drop
+let draggedElement = null;
+let draggedIndex = null;
+
+function handleDragStart(e) {
+    draggedElement = this;
+    draggedIndex = parseInt(this.dataset.index);
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    
+    // Adicionar indicador visual
+    if (this !== draggedElement) {
+        this.classList.add('drag-over');
+    }
+    
+    return false;
+}
+
+function handleDragLeave(e) {
+    // Remover indicador visual
+    this.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    const dropIndex = parseInt(this.dataset.index);
+    
+    if (draggedElement !== this && draggedIndex !== dropIndex) {
+        // Salvar legendas antes de reordenar
+        const captions = {};
+        selectedFiles.forEach((file, idx) => {
+            const captionInput = document.getElementById(`caption-${idx}`);
+            if (captionInput) {
+                captions[idx] = captionInput.value;
+            }
+        });
+        
+        // Reordenar arrays
+        const draggedFile = selectedFiles[draggedIndex];
+        const draggedData = imageDataArray[draggedIndex];
+        const draggedCaption = captions[draggedIndex] || '';
+        
+        // Remover da posição original
+        selectedFiles.splice(draggedIndex, 1);
+        imageDataArray.splice(draggedIndex, 1);
+        
+        // Inserir na nova posição
+        selectedFiles.splice(dropIndex, 0, draggedFile);
+        imageDataArray.splice(dropIndex, 0, draggedData);
+        
+        // Recriar o preview
+        const input = document.getElementById('photo');
+        const dt = new DataTransfer();
+        selectedFiles.forEach(file => dt.items.add(file));
+        input.files = dt.files;
+        previewImages(input);
+        
+        // Restaurar legendas
+        setTimeout(() => {
+            Object.keys(captions).forEach(oldIdx => {
+                let newIdx = oldIdx;
+                if (oldIdx == draggedIndex) {
+                    newIdx = dropIndex;
+                } else if (draggedIndex < dropIndex) {
+                    if (oldIdx > draggedIndex && oldIdx <= dropIndex) {
+                        newIdx = oldIdx - 1;
+                    }
+                } else {
+                    if (oldIdx >= dropIndex && oldIdx < draggedIndex) {
+                        newIdx = parseInt(oldIdx) + 1;
+                    }
+                }
+                
+                const captionInput = document.getElementById(`caption-${newIdx}`);
+                if (captionInput && captions[oldIdx]) {
+                    captionInput.value = captions[oldIdx];
+                }
+            });
+        }, 100);
+    }
+    
+    this.classList.remove('drag-over');
+    return false;
+}
+
+function handleDragEnd(e) {
+    // Resetar estilos
+    document.querySelectorAll('.draggable-item').forEach(item => {
+        item.classList.remove('dragging', 'drag-over');
+    });
 }
 
 function openCropModal() {

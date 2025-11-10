@@ -18,6 +18,10 @@
                 <p class="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Gerencie seus chamados e solicitações</p>
             </div>
             <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <button id="exportExcelBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium text-center text-sm sm:text-base">
+                    <i class="fas fa-file-excel mr-2"></i>
+                    Exportar
+                </button>
                 <a href="{% url 'tickets_history' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium text-center text-sm sm:text-base">
                     <i class="fas fa-history mr-2"></i>
                     Histórico
@@ -1004,4 +1008,30 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 {% endif %}
+
+<script>
+// Botão de exportar no header
+document.getElementById('exportExcelBtn')?.addEventListener('click', function() {
+    // Coletar todos os filtros ativos
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('export', 'excel');
+    
+    // Criar URL de exportação
+    const exportUrl = '{% url "tickets_export" %}?' + urlParams.toString();
+    
+    // Mostrar loading
+    const originalText = this.innerHTML;
+    this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Exportando...';
+    this.disabled = true;
+    
+    // Fazer download
+    window.location.href = exportUrl;
+    
+    // Restaurar botão após 2 segundos
+    setTimeout(() => {
+        this.innerHTML = originalText;
+        this.disabled = false;
+    }, 2000);
+});
+</script>
 {% endblock %}
