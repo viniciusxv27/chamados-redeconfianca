@@ -1334,6 +1334,7 @@ def admin_approvals(request):
     # Filtros
     status_filter = request.GET.get('status', 'awaiting_approval')
     sector_filter = request.GET.get('sector', '')
+    category_filter = request.GET.get('category', '')  # Novo filtro por template/categoria
     user_filter = request.GET.get('user', '')
     date_filter = request.GET.get('date', '')
     
@@ -1363,6 +1364,9 @@ def admin_approvals(request):
     
     if sector_filter:
         executions = executions.filter(assignment__template__sector_id=sector_filter)
+    
+    if category_filter:
+        executions = executions.filter(assignment__template_id=category_filter)
     
     if user_filter:
         executions = executions.filter(assignment__assigned_to_id=user_filter)
@@ -1400,12 +1404,28 @@ def admin_approvals(request):
             user_sectors.append(request.user.sector)
         sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
     
+    # Templates/Categorias para filtro (baseado no setor selecionado ou todos os setores do usuário)
+    if sector_filter:
+        categories = ChecklistTemplate.objects.filter(sector_id=sector_filter, is_active=True).order_by('name')
+    elif not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        if user_sectors:
+            categories = ChecklistTemplate.objects.filter(sector__in=user_sectors, is_active=True).order_by('name')
+        else:
+            categories = ChecklistTemplate.objects.none()
+    else:
+        categories = ChecklistTemplate.objects.filter(is_active=True).order_by('name')
+    
     context = {
         'executions': executions,
         'stats': stats,
         'sectors': sectors,
+        'categories': categories,
         'status_filter': status_filter,
         'sector_filter': sector_filter,
+        'category_filter': category_filter,
         'user_filter': user_filter,
         'date_filter': date_filter,
     }
