@@ -446,7 +446,7 @@ class ChecklistTaskExecution(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Concluída em')
     notes = models.TextField(blank=True, verbose_name='Observações')
     
-    # Evidências
+    # Evidências (mantidos para compatibilidade)
     evidence_image = models.ImageField(
         upload_to=upload_checklist_evidence_image,
         storage=get_media_storage(),
@@ -475,7 +475,7 @@ class ChecklistTaskExecution(models.Model):
     
     def has_evidence(self):
         """Verifica se possui evidência anexada"""
-        return bool(self.evidence_image or self.evidence_video)
+        return bool(self.evidence_image or self.evidence_video) or self.evidences.exists()
     
     def complete_task(self, notes='', evidence_image=None, evidence_video=None):
         """Marca a tarefa como concluída com evidências"""
@@ -500,3 +500,49 @@ class ChecklistTaskExecution(models.Model):
             execution.completed_at = timezone.now()
             execution.status = 'completed'
             execution.save()
+
+
+class ChecklistTaskEvidence(models.Model):
+    """Múltiplas evidências (fotos/vídeos) para uma tarefa executada"""
+    
+    EVIDENCE_TYPE_CHOICES = [
+        ('image', 'Imagem'),
+        ('video', 'Vídeo'),
+    ]
+    
+    task_execution = models.ForeignKey(
+        ChecklistTaskExecution,
+        on_delete=models.CASCADE,
+        related_name='evidences',
+        verbose_name='Execução da Tarefa'
+    )
+    
+    evidence_type = models.CharField(
+        max_length=10,
+        choices=EVIDENCE_TYPE_CHOICES,
+        verbose_name='Tipo de Evidência'
+    )
+    
+    file = models.FileField(
+        upload_to='checklists/evidences/',
+        storage=get_media_storage(),
+        verbose_name='Arquivo'
+    )
+    
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Enviado em'
+    )
+    
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Ordem'
+    )
+    
+    class Meta:
+        verbose_name = 'Evidência de Tarefa'
+        verbose_name_plural = 'Evidências de Tarefa'
+        ordering = ['order', 'uploaded_at']
+    
+    def __str__(self):
+        return f'{self.get_evidence_type_display()} - {self.task_execution}'

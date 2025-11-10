@@ -210,43 +210,70 @@
                                             </div>
 
                                             <!-- Evidence Upload -->
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <!-- Image Evidence -->
-                                                <div>
-                                                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                                        📷 Evidência (Imagem)
-                                                    </label>
-                                                    <div class="relative">
-                                                        <input type="file" 
-                                                               name="evidence_image_{{ execution.id }}_{{ task_exec.task.id }}"
-                                                               accept="image/*"
-                                                               class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
-                                                    </div>
-                                                    {% if task_exec.evidence_image %}
-                                                        <img src="{{ task_exec.evidence_image.url }}" 
-                                                             alt="Evidência atual" 
-                                                             class="mt-2 max-w-xs rounded-lg shadow-md">
-                                                    {% endif %}
-                                                </div>
+                                            <div class="mb-4">
+                                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                                    📷 Evidências - Imagens (múltiplas)
+                                                </label>
+                                                <input type="file" 
+                                                       name="evidence_images_{{ execution.id }}_{{ task_exec.task.id }}"
+                                                       accept="image/*"
+                                                       multiple
+                                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                                                <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplas imagens de uma vez</p>
+                                            </div>
 
-                                                <!-- Video Evidence -->
-                                                <div>
-                                                    <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                                        🎥 Evidência (Vídeo)
-                                                    </label>
-                                                    <div class="relative">
-                                                        <input type="file" 
-                                                               name="evidence_video_{{ execution.id }}_{{ task_exec.task.id }}"
-                                                               accept="video/*"
-                                                               class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                                            <div class="mb-4">
+                                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                                    🎥 Evidências - Vídeos (múltiplos)
+                                                </label>
+                                                <input type="file" 
+                                                       name="evidence_videos_{{ execution.id }}_{{ task_exec.task.id }}"
+                                                       accept="video/*"
+                                                       multiple
+                                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                                                <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplos vídeos de uma vez</p>
+                                            </div>
+                                            
+                                            {% if task_exec.evidence_image or task_exec.evidence_video or task_exec.evidences.exists %}
+                                            <div class="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                                                <p class="text-sm font-semibold text-blue-800 mb-3">📎 Evidências Já Enviadas</p>
+                                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                    {% if task_exec.evidence_image %}
+                                                    <div>
+                                                        <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                                        <img src="{{ task_exec.evidence_image.url }}" 
+                                                             alt="Evidência" 
+                                                             onclick="openImageModal(this.src)"
+                                                             class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
                                                     </div>
+                                                    {% endif %}
                                                     {% if task_exec.evidence_video %}
-                                                        <video controls class="mt-2 max-w-xs rounded-lg shadow-md">
+                                                    <div>
+                                                        <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                                        <video controls class="w-full rounded-lg shadow-md">
                                                             <source src="{{ task_exec.evidence_video.url }}">
                                                         </video>
+                                                    </div>
                                                     {% endif %}
+                                                    {% for evidence in task_exec.evidences.all %}
+                                                    <div>
+                                                        {% if evidence.evidence_type == 'image' %}
+                                                        <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem {{ forloop.counter }}</p>
+                                                        <img src="{{ evidence.file.url }}" 
+                                                             alt="Evidência {{ forloop.counter }}" 
+                                                             onclick="openImageModal(this.src)"
+                                                             class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90">
+                                                        {% elif evidence.evidence_type == 'video' %}
+                                                        <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo {{ forloop.counter }}</p>
+                                                        <video controls class="w-full rounded-lg shadow-md">
+                                                            <source src="{{ evidence.file.url }}">
+                                                        </video>
+                                                        {% endif %}
+                                                    </div>
+                                                    {% endfor %}
                                                 </div>
                                             </div>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 </div>

@@ -450,6 +450,8 @@ def execute_today_checklists(request):
         ).order_by('period', 'assignment__template__name')
     
     if request.method == 'POST':
+        from checklists.models import ChecklistTaskEvidence
+        
         # Processar submissão de todos os checklists
         all_completed = True
         
@@ -464,20 +466,21 @@ def execute_today_checklists(request):
             for task_exec in execution.task_executions.all():
                 task_key = f'task_{execution.id}_{task_exec.task.id}'
                 notes_key = f'notes_{execution.id}_{task_exec.task.id}'
-                image_key = f'evidence_image_{execution.id}_{task_exec.task.id}'
-                video_key = f'evidence_video_{execution.id}_{task_exec.task.id}'
+                images_key = f'evidence_images_{execution.id}_{task_exec.task.id}'
+                videos_key = f'evidence_videos_{execution.id}_{task_exec.task.id}'
                 
                 is_completed = request.POST.get(task_key) == 'on'
                 notes = request.POST.get(notes_key, '').strip()
-                evidence_image = request.FILES.get(image_key)
-                evidence_video = request.FILES.get(video_key)
+                evidence_images = request.FILES.getlist(images_key)
+                evidence_videos = request.FILES.getlist(videos_key)
                 
                 # VALIDAÇÃO: Se marcado como completo, deve ter descrição OU evidência
                 if is_completed:
                     has_notes = bool(notes)
-                    has_evidence = bool(evidence_image or evidence_video or task_exec.evidence_image or task_exec.evidence_video)
+                    has_existing_evidence = bool(task_exec.evidence_image or task_exec.evidence_video) or task_exec.evidences.exists()
+                    has_new_evidence = bool(evidence_images or evidence_videos)
                     
-                    if not has_notes and not has_evidence:
+                    if not has_notes and not has_existing_evidence and not has_new_evidence:
                         messages.error(
                             request,
                             f'❌ Tarefa "{task_exec.task.title}" do checklist "{execution.assignment.template.name}": '
@@ -489,15 +492,28 @@ def execute_today_checklists(request):
                 task_exec.is_completed = is_completed
                 task_exec.notes = notes
                 
-                if evidence_image:
-                    task_exec.evidence_image = evidence_image
-                if evidence_video:
-                    task_exec.evidence_video = evidence_video
-                
                 if is_completed and not task_exec.completed_at:
                     task_exec.completed_at = timezone.now()
                 
                 task_exec.save()
+                
+                # Salvar múltiplas imagens
+                for order, image in enumerate(evidence_images):
+                    ChecklistTaskEvidence.objects.create(
+                        task_execution=task_exec,
+                        evidence_type='image',
+                        file=image,
+                        order=order
+                    )
+                
+                # Salvar múltiplos vídeos
+                for order, video in enumerate(evidence_videos):
+                    ChecklistTaskEvidence.objects.create(
+                        task_execution=task_exec,
+                        evidence_type='video',
+                        file=video,
+                        order=order
+                    )
                 
                 # Verificar se todas as tarefas obrigatórias estão completas
                 if task_exec.task.is_required and not is_completed:
@@ -594,6 +610,8 @@ def view_execution(request, execution_id):
     
     # Se for POST e pode executar, processar o formulário
     if request.method == 'POST' and can_execute:
+        from checklists.models import ChecklistTaskEvidence
+        
         # Processar cada tarefa
         for task_exec in execution.task_executions.all():
             task = task_exec.task
@@ -606,18 +624,21 @@ def view_execution(request, execution_id):
             notes_field_name = f'notes_{execution.id}_{task.id}'
             notes = request.POST.get(notes_field_name, '').strip()
             
-            # Pegar evidências
-            evidence_image_field = f'evidence_image_{execution.id}_{task.id}'
-            evidence_video_field = f'evidence_video_{execution.id}_{task.id}'
-            evidence_image = request.FILES.get(evidence_image_field)
-            evidence_video = request.FILES.get(evidence_video_field)
+            # Pegar múltiplas evidências de imagem
+            evidence_images_field = f'evidence_images_{execution.id}_{task.id}'
+            evidence_images = request.FILES.getlist(evidence_images_field)
+            
+            # Pegar múltiplos vídeos de evidência
+            evidence_videos_field = f'evidence_videos_{execution.id}_{task.id}'
+            evidence_videos = request.FILES.getlist(evidence_videos_field)
             
             # Validação: se marcou como completa, deve ter observações OU evidências
             if is_completed:
                 has_notes = bool(notes)
-                has_evidence = bool(evidence_image or evidence_video or task_exec.evidence_image or task_exec.evidence_video)
+                has_existing_evidence = bool(task_exec.evidence_image or task_exec.evidence_video) or task_exec.evidences.exists()
+                has_new_evidence = bool(evidence_images or evidence_videos)
                 
-                if not has_notes and not has_evidence:
+                if not has_notes and not has_existing_evidence and not has_new_evidence:
                     messages.error(
                         request,
                         f'❌ Tarefa "{task.title}": você deve preencher a descrição OU anexar alguma evidência'
@@ -637,17 +658,29 @@ def view_execution(request, execution_id):
             task_exec.is_completed = is_completed
             task_exec.notes = notes
             
-            # Atualizar evidências se foram enviadas
-            if evidence_image:
-                task_exec.evidence_image = evidence_image
-            if evidence_video:
-                task_exec.evidence_video = evidence_video
-            
             # Marcar quando foi completada
             if is_completed and not task_exec.completed_at:
                 task_exec.completed_at = timezone.now()
             
             task_exec.save()
+            
+            # Salvar múltiplas imagens
+            for order, image in enumerate(evidence_images):
+                ChecklistTaskEvidence.objects.create(
+                    task_execution=task_exec,
+                    evidence_type='image',
+                    file=image,
+                    order=order
+                )
+            
+            # Salvar múltiplos vídeos
+            for order, video in enumerate(evidence_videos):
+                ChecklistTaskEvidence.objects.create(
+                    task_execution=task_exec,
+                    evidence_type='video',
+                    file=video,
+                    order=order
+                )
         
         # Atualizar status da execução
         execution.status = 'awaiting_approval'
