@@ -596,10 +596,11 @@ def view_execution(request, execution_id):
         messages.error(request, 'Você não tem permissão para visualizar esta execução.')
         return redirect('checklists:dashboard')
     
-    # Verificar se pode executar (é o executor e status é pending ou in_progress)
+    # Verificar se pode executar (é o executor e status permite execução)
+    # Permite executar mesmo se a atribuição foi desativada, para finalizar execuções pendentes
     can_execute = (
         user == execution.assignment.assigned_to and 
-        execution.status in ['pending', 'in_progress']
+        execution.status in ['pending', 'in_progress', 'overdue']
     )
     
     # Verificar se pode aprovar (supervisor+ e não é o executor)

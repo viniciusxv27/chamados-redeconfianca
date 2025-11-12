@@ -52,9 +52,25 @@
                 <div class="text-gray-700">{{ template.description|markdown_simple }}</div>
             </div>
             {% endif %}
+            
+            <!-- Debug Info - pode remover depois -->
+            {% if user.is_superuser %}
+            <div class="mt-6 p-4 bg-orange-50 rounded-xl border-l-4 border-orange-500">
+                <div class="text-sm font-semibold text-orange-800 mb-2">🐛 Debug Info (apenas superuser)</div>
+                <div class="text-gray-700 text-xs space-y-1">
+                    <p><strong>Status:</strong> {{ execution.status }} ({{ execution.get_status_display }})</p>
+                    <p><strong>Can Execute:</strong> {{ can_execute }}</p>
+                    <p><strong>Can Approve:</strong> {{ can_approve }}</p>
+                    <p><strong>User ID:</strong> {{ user.id }}</p>
+                    <p><strong>Executor ID:</strong> {{ assignment.assigned_to.id }}</p>
+                    <p><strong>Is Executor:</strong> {% if user == assignment.assigned_to %}Sim{% else %}Não{% endif %}</p>
+                    <p><strong>Assignment Active:</strong> {{ assignment.is_active }}</p>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
-        <div class="space-y-6">
+        <div class="space-y-6"
             {% for task_exec in task_executions %}
             <div class="bg-white rounded-2xl shadow-xl p-6 border-l-4 {% if task_exec.is_completed %}border-green-500{% else %}border-gray-300{% endif %}" id="task_{{ execution.id }}_{{ task_exec.task.id }}">
                 <div class="flex items-start gap-4 mb-4">
