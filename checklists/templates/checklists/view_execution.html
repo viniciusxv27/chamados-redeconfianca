@@ -295,45 +295,6 @@
                 e.preventDefault();
             }
         });
-        
-        // Modal para visualizar imagens ampliadas
-        function openImageModal(src, alt) {
-            const modal = document.createElement('div');
-            modal.id = 'imageModal';
-            modal.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4';
-            modal.onclick = function() { closeImageModal(); };
-            
-            const img = document.createElement('img');
-            img.src = src;
-            img.alt = alt;
-            img.className = 'max-w-full max-h-full rounded-lg shadow-2xl';
-            img.onclick = function(e) { e.stopPropagation(); };
-            
-            const closeBtn = document.createElement('button');
-            closeBtn.innerHTML = '<i class="fas fa-times"></i>';
-            closeBtn.className = 'absolute top-4 right-4 text-white text-3xl hover:text-gray-300 transition-colors';
-            closeBtn.onclick = function() { closeImageModal(); };
-            
-            modal.appendChild(img);
-            modal.appendChild(closeBtn);
-            document.body.appendChild(modal);
-            document.body.style.overflow = 'hidden';
-        }
-        
-        function closeImageModal() {
-            const modal = document.getElementById('imageModal');
-            if (modal) {
-                modal.remove();
-                document.body.style.overflow = 'auto';
-            }
-        }
-        
-        // Fechar modal com ESC
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeImageModal();
-            }
-        });
         </script>
         {% endif %}
 
@@ -419,4 +380,45 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+// Modal para visualizar imagens ampliadas - GLOBAL
+function openImageModal(src, alt) {
+    const modal = document.createElement('div');
+    modal.id = 'imageModal';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4';
+    modal.onclick = function() { closeImageModal(); };
+    
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = alt;
+    img.className = 'max-w-full max-h-full rounded-lg shadow-2xl';
+    img.onclick = function(e) { e.stopPropagation(); };
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    closeBtn.className = 'absolute top-4 right-4 text-white text-3xl hover:text-gray-300 transition-colors';
+    closeBtn.onclick = function() { closeImageModal(); };
+    
+    modal.appendChild(img);
+    modal.appendChild(closeBtn);
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeImageModal();
+    }
+});
+</script>
 {% endblock %}
