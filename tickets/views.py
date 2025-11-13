@@ -820,7 +820,7 @@ def ticket_create_view(request):
             })
         
         # Validar categoria: obrigatória apenas se não houver usuário específico
-        if not specific_user_id and not category_id:
+        if not specific_user_id and (not category_id or category_id.strip() == ''):
             messages.error(request, 'Categoria é obrigatória quando o chamado é para o setor inteiro.')
             sectors = Sector.objects.all()
             users = User.objects.filter(is_active=True).exclude(id=request.user.id).order_by('sector__name', 'first_name')
@@ -833,7 +833,7 @@ def ticket_create_view(request):
             })
         
         sector = get_object_or_404(Sector, id=sector_id)
-        category = get_object_or_404(Category, id=category_id) if category_id else None
+        category = get_object_or_404(Category, id=category_id) if category_id and category_id.strip() else None
         
         # Novos campos opcionais
         store_location = request.POST.get('store_location', '').strip() or None
