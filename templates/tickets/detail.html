@@ -4,6 +4,43 @@
 {% block title %}Chamado #{{ ticket.id }} - Rede Confiança{% endblock %}
 
 {% block content %}
+<style>
+/* Estilos para a descrição do ticket manter a formatação HTML */
+.ticket-description {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.ticket-description div {
+    display: block;
+    margin-bottom: 0.5em;
+}
+
+.ticket-description br {
+    display: block;
+    content: "";
+    margin-top: 0.5em;
+}
+
+.ticket-description b,
+.ticket-description strong {
+    font-weight: 700;
+}
+
+.ticket-description i,
+.ticket-description em {
+    font-style: italic;
+}
+
+.ticket-description u {
+    text-decoration: underline;
+}
+
+.ticket-description p {
+    margin-bottom: 0.5em;
+}
+</style>
+
 <div class="max-w-6xl mx-auto">
     <!-- Page Header -->
     <div class="mb-6 sm:mb-8 px-4 sm:px-0">
@@ -96,7 +133,7 @@
                     </div>
                     
                     <div class="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
-                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed">{{ ticket.description|safe }}</div>
+                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed ticket-description">{{ ticket.description|safe }}</div>
                     </div>
                     
                     <!-- Attachments Section -->

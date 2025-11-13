@@ -1500,7 +1500,8 @@ def reject_checklist(request, execution_id):
         return redirect('checklists:admin_approvals')
     
     if request.method == 'POST':
-        rejection_note = request.POST.get('rejection_note', '')
+        # Aceitar tanto rejection_reason (do formulário) quanto rejection_note (legado)
+        rejection_note = request.POST.get('rejection_reason') or request.POST.get('rejection_note', '')
         
         execution.status = 'in_progress'
         execution.submitted_at = None
