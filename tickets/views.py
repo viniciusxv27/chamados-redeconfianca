@@ -54,24 +54,25 @@ def tickets_list_view(request):
         # Admin vê todos os tickets (incluindo fechados)
         tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem: seus próprios tickets + tickets dos setores + tickets atribuídos
+        # Supervisores veem: seus próprios tickets + tickets dos setores (sem atribuição específica) + tickets atribuídos
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         tickets = Ticket.objects.filter(
             base_filter |  # Sempre inclui próprios tickets
-            models.Q(sector__in=user_sectors) |
-            models.Q(assigned_to=user) |
-            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+            models.Q(sector__in=user_sectors, assigned_to__isnull=True) |  # Tickets do setor SEM atribuição específica
+            models.Q(assigned_to=user) |  # Tickets atribuídos diretamente a mim
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)  # Atribuições adicionais
         ).distinct()
     else:
-        # Usuários comuns veem: seus próprios tickets + tickets atribuídos
+        # Usuários comuns veem: seus próprios tickets + tickets do setor (sem atribuição específica) + tickets atribuídos
         # Excluindo tickets fechados
         tickets = Ticket.objects.filter(
             base_filter |  # Sempre inclui próprios tickets
-            models.Q(assigned_to=user) |
-            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)
+            models.Q(sector=user.sector, assigned_to__isnull=True) |  # Tickets do setor SEM atribuição específica
+            models.Q(assigned_to=user) |  # Tickets atribuídos diretamente a mim
+            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)  # Atribuições adicionais
         ).exclude(status='FECHADO').distinct()
     
     # Aplicar filtros adicionais
@@ -801,6 +802,7 @@ def ticket_create_view(request):
         description = request.POST.get('description')
         sector_id = request.POST.get('sector')
         category_id = request.POST.get('category')
+        specific_user_id = request.POST.get('specific_user', '').strip() or None
         requires_approval = request.POST.get('requires_approval') == 'on'
         approval_user_id = request.POST.get('approval_user')
         
@@ -817,14 +819,26 @@ def ticket_create_view(request):
                 'category_id': category_id,
             })
         
+        # Validar categoria: obrigatória apenas se não houver usuário específico
+        if not specific_user_id and not category_id:
+            messages.error(request, 'Categoria é obrigatória quando o chamado é para o setor inteiro.')
+            sectors = Sector.objects.all()
+            users = User.objects.filter(is_active=True).exclude(id=request.user.id).order_by('sector__name', 'first_name')
+            return render(request, 'tickets/create.html', {
+                'sectors': sectors,
+                'users': users,
+                'title': title,
+                'sector_id': sector_id,
+                'category_id': category_id,
+            })
+        
         sector = get_object_or_404(Sector, id=sector_id)
-        category = get_object_or_404(Category, id=category_id)
+        category = get_object_or_404(Category, id=category_id) if category_id else None
         
         # Novos campos opcionais
         store_location = request.POST.get('store_location', '').strip() or None
         responsible_person = request.POST.get('responsible_person', '').strip() or None
         phone = request.POST.get('phone', '').strip() or None
-        specific_user_id = request.POST.get('specific_user', '').strip() or None
         
         # Criar ticket
         ticket = Ticket.objects.create(
@@ -833,7 +847,7 @@ def ticket_create_view(request):
             sector=sector,
             category=category,
             created_by=request.user,
-            requires_approval=requires_approval or category.requires_approval,
+            requires_approval=requires_approval or (category.requires_approval if category else False),
             approval_user_id=approval_user_id if requires_approval else None,
             solution_time_hours=int(request.POST.get('solution_time_hours', 24)),
             priority=request.POST.get('priority', 'MEDIA'),
@@ -949,15 +963,6 @@ def tickets_list_view_duplicate(request):
         'user': user,
     }
     return render(request, 'tickets/list.html', context)
-
-
-def get_categories_by_sector(request):
-    sector_id = request.GET.get('sector_id')
-    if sector_id:
-        categories = Category.objects.filter(sector_id=sector_id, is_active=True)
-        data = [{'id': cat.id, 'name': cat.name, 'default_description': cat.default_description, 'default_solution_time_hours': cat.default_solution_time_hours} for cat in categories]
-        return JsonResponse({'categories': data})
-    return JsonResponse({'categories': []})
 
 
 class TicketViewSet(viewsets.ModelViewSet):
