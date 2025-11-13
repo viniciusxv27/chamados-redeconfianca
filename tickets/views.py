@@ -54,14 +54,14 @@ def tickets_list_view(request):
         # Admin vê todos os tickets (incluindo fechados)
         tickets = Ticket.objects.all()
     elif user.can_view_sector_tickets():
-        # Supervisores veem: seus próprios tickets + tickets dos setores (sem atribuição específica) + tickets atribuídos
+        # Supervisores veem: seus próprios tickets + TODOS os tickets dos setores (independente de atribuição) + tickets atribuídos
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
         
         tickets = Ticket.objects.filter(
             base_filter |  # Sempre inclui próprios tickets
-            models.Q(sector__in=user_sectors, assigned_to__isnull=True) |  # Tickets do setor SEM atribuição específica
+            models.Q(sector__in=user_sectors) |  # TODOS os tickets dos setores
             models.Q(assigned_to=user) |  # Tickets atribuídos diretamente a mim
             models.Q(additional_assignments__user=user, additional_assignments__is_active=True)  # Atribuições adicionais
         ).distinct()
