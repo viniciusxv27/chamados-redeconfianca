@@ -48,7 +48,7 @@ class Ticket(models.Model):
     title = models.CharField(max_length=200, verbose_name="Título")
     description = models.TextField(verbose_name="Descrição")
     sector = models.ForeignKey(Sector, on_delete=models.CASCADE, verbose_name="Setor")
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, verbose_name="Categoria")
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Categoria")
     status = models.CharField(max_length=25, choices=STATUS_CHOICES, default='ABERTO', verbose_name="Status")
     priority = models.CharField(max_length=15, choices=PRIORITY_CHOICES, default='MEDIA', verbose_name="Prioridade")
     solution = models.TextField(blank=True, verbose_name="Solução")
