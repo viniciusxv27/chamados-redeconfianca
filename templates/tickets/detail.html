@@ -39,6 +39,46 @@
 .ticket-description p {
     margin-bottom: 0.5em;
 }
+
+/* Modal de zoom de imagem */
+#imageModal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.9);
+}
+
+#imageModal img {
+    margin: auto;
+    display: block;
+    max-width: 90%;
+    max-height: 90%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+#imageModal .close-modal {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10000;
+}
+
+#imageModal .close-modal:hover,
+#imageModal .close-modal:focus {
+    color: #bbb;
+}
 </style>
 
 <div class="max-w-6xl mx-auto">
@@ -150,7 +190,7 @@
                                             <!-- File Icon -->
                                             <div class="flex-shrink-0">
                                                 {% if attachment.is_image %}
-                                                    <i class="fas fa-image text-blue-500"></i>
+                                                    <img src="{{ attachment.file.url }}" alt="{{ attachment.original_filename }}" class="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-90" onclick="openImageModal('{{ attachment.file.url }}', '{{ attachment.original_filename }}')">
                                                 {% elif attachment.file_extension == '.pdf' %}
                                                     <i class="fas fa-file-pdf text-red-500"></i>
                                                 {% elif attachment.file_extension in '.doc,.docx' %}
@@ -947,5 +987,41 @@ function updateFileInfo(input) {
 document.addEventListener('DOMContentLoaded', function() {
     toggleAssignField();
 });
+
+// Função para abrir modal de zoom de imagem
+window.openImageModal = function(imageSrc, imageAlt) {
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImage');
+    
+    modal.style.display = 'block';
+    modalImg.src = imageSrc;
+    modalImg.alt = imageAlt;
+    
+    // Fechar ao clicar fora da imagem
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeImageModal();
+        }
+    };
+    
+    // Fechar com tecla ESC
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeImageModal();
+        }
+    });
+};
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    modal.style.display = 'none';
+}
 </script>
+
+<!-- Modal de Zoom de Imagem -->
+<div id="imageModal">
+    <span class="close-modal" onclick="closeImageModal()">&times;</span>
+    <img id="modalImage" src="" alt="">
+</div>
+
 {% endblock %}
