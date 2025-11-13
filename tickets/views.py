@@ -824,6 +824,7 @@ def ticket_create_view(request):
         store_location = request.POST.get('store_location', '').strip() or None
         responsible_person = request.POST.get('responsible_person', '').strip() or None
         phone = request.POST.get('phone', '').strip() or None
+        specific_user_id = request.POST.get('specific_user', '').strip() or None
         
         # Criar ticket
         ticket = Ticket.objects.create(
@@ -838,7 +839,8 @@ def ticket_create_view(request):
             priority=request.POST.get('priority', 'MEDIA'),
             store_location=store_location,
             responsible_person=responsible_person,
-            phone=phone
+            phone=phone,
+            assigned_to_id=specific_user_id if specific_user_id else None
         )
         
         # Processar arquivos anexados
@@ -892,6 +894,18 @@ def get_categories_by_sector(request):
         data = [{'id': cat.id, 'name': cat.name, 'default_description': cat.default_description, 'default_solution_time_hours': cat.default_solution_time_hours} for cat in categories]
         return JsonResponse({'categories': data})
     return JsonResponse({'categories': []})
+
+
+def get_users_by_sector(request):
+    """API para retornar todos os usuários de um setor específico"""
+    sector_id = request.GET.get('sector_id')
+    if sector_id:
+        users = User.objects.filter(sector_id=sector_id, is_active=True).order_by('first_name', 'last_name')
+        data = [{'id': user.id, 'name': f'{user.first_name} {user.last_name}'} for user in users]
+        return JsonResponse({'users': data})
+    return JsonResponse({'users': []})
+
+
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
