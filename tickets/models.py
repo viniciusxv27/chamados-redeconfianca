@@ -136,14 +136,14 @@ class Ticket(models.Model):
         # Disparar webhooks
         if is_new:
             self.trigger_webhooks('TICKET_CREATED')
-            if self.category.webhook_url:
+            if self.category and self.category.webhook_url:
                 self.trigger_webhook()
             
             # Enviar notificação push para novo ticket
             self._send_push_notification_new_ticket()
             
             # Verificar se é ordem de compra e iniciar fluxo de aprovação
-            if self.category.name.lower() == 'ordem de compra':
+            if self.category and self.category.name.lower() == 'ordem de compra':
                 self._start_purchase_approval_flow()
         elif old_status != self.status:
             if self.status == 'RESOLVIDO':
@@ -208,7 +208,7 @@ class Ticket(models.Model):
                     'title': self.title,
                     'description': self.description,
                     'sector': self.sector.name if self.sector else '',
-                    'category': self.category.name,
+                    'category': self.category.name if self.category else 'Sem categoria',
                     'created_by': {
                         'id': self.created_by.id,
                         'name': self.created_by.get_full_name(),
@@ -222,7 +222,8 @@ class Ticket(models.Model):
                 'sector_users': sector_users,
                 'timestamp': timezone.now().isoformat()
             }
-            requests.post(self.category.webhook_url, json=payload, timeout=10)
+            if self.category and self.category.webhook_url:
+                requests.post(self.category.webhook_url, json=payload, timeout=10)
         except Exception as e:
             # Log do erro (implementar logging posteriormente)
             pass
