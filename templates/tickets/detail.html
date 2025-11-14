@@ -419,15 +419,32 @@
                             <span class="text-gray-600">Categoria:</span>
                             <span class="text-gray-900">{{ ticket.category.name }}</span>
                         </div>
-                        <div class="flex justify-between">
+                        <div class="flex justify-between items-center">
                             <span class="text-gray-600">Prioridade:</span>
-                            <span class="text-gray-900 
-                                {% if ticket.priority == 'CRITICA' %}text-red-600
-                                {% elif ticket.priority == 'ALTA' %}text-orange-600
-                                {% elif ticket.priority == 'MEDIA' %}text-yellow-600
-                                {% else %}text-green-600{% endif %}">
-                                {{ ticket.get_priority_display }}
-                            </span>
+                            {% if ticket.assigned_to == user or user in ticket.get_all_assigned_users %}
+                                <form method="POST" action="{% url 'ticket_update_priority' ticket.id %}" class="flex items-center gap-2">
+                                    {% csrf_token %}
+                                    <select name="priority" class="text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 
+                                        {% if ticket.priority == 'CRITICA' %}text-red-600
+                                        {% elif ticket.priority == 'ALTA' %}text-orange-600
+                                        {% elif ticket.priority == 'MEDIA' %}text-yellow-600
+                                        {% else %}text-green-600{% endif %}"
+                                        onchange="this.form.submit()">
+                                        <option value="BAIXA" {% if ticket.priority == 'BAIXA' %}selected{% endif %}>Baixa</option>
+                                        <option value="MEDIA" {% if ticket.priority == 'MEDIA' %}selected{% endif %}>Média</option>
+                                        <option value="ALTA" {% if ticket.priority == 'ALTA' %}selected{% endif %}>Alta</option>
+                                        <option value="CRITICA" {% if ticket.priority == 'CRITICA' %}selected{% endif %}>Crítica</option>
+                                    </select>
+                                </form>
+                            {% else %}
+                                <span class="text-gray-900 
+                                    {% if ticket.priority == 'CRITICA' %}text-red-600
+                                    {% elif ticket.priority == 'ALTA' %}text-orange-600
+                                    {% elif ticket.priority == 'MEDIA' %}text-yellow-600
+                                    {% else %}text-green-600{% endif %}">
+                                    {{ ticket.get_priority_display }}
+                                </span>
+                            {% endif %}
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-600">Criado por:</span>

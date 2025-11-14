@@ -11,6 +11,7 @@ urlpatterns = [
     path('<int:ticket_id>/assume/', views.assume_ticket_view, name='assume_ticket'),
     path('<int:ticket_id>/comment/', views.add_comment_view, name='add_comment'),
     path('<int:ticket_id>/update-status/', views.update_ticket_status_view, name='update_ticket_status'),
+    path('<int:ticket_id>/update-priority/', views.update_priority_view, name='ticket_update_priority'),
     path('api/categories-by-sector/', views.get_categories_by_sector, name='categories_by_sector'),
     path('api/users-by-sector/', views.get_users_by_sector, name='users_by_sector'),
     

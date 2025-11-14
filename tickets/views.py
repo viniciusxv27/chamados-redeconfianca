@@ -637,6 +637,53 @@ def assume_ticket_view(request, ticket_id):
 
 
 @login_required
+def update_priority_view(request, ticket_id):
+    """Atualizar prioridade do chamado (apenas para o responsável)"""
+    if request.method == 'POST':
+        ticket = get_object_or_404(Ticket, id=ticket_id)
+        user = request.user
+        
+        # Verificar se o usuário é o responsável ou auxiliar do chamado
+        is_assigned = (ticket.assigned_to == user or user in ticket.get_all_assigned_users())
+        
+        if not is_assigned:
+            messages.error(request, 'Apenas o responsável pelo chamado pode alterar a prioridade.')
+            return redirect('ticket_detail', ticket_id=ticket.id)
+        
+        new_priority = request.POST.get('priority', '').strip()
+        
+        # Validar prioridade
+        valid_priorities = ['BAIXA', 'MEDIA', 'ALTA', 'CRITICA']
+        if new_priority not in valid_priorities:
+            messages.error(request, 'Prioridade inválida.')
+            return redirect('ticket_detail', ticket_id=ticket.id)
+        
+        old_priority = ticket.get_priority_display()
+        ticket.priority = new_priority
+        ticket.save()
+        
+        # Registrar no log
+        TicketComment.objects.create(
+            ticket=ticket,
+            user=user,
+            comment=f'Prioridade alterada de {old_priority} para {ticket.get_priority_display()}',
+            comment_type='PRIORITY_CHANGE'
+        )
+        
+        messages.success(request, f'Prioridade alterada para {ticket.get_priority_display()}.')
+        log_action(
+            user, 
+            'TICKET_PRIORITY_CHANGE', 
+            f'Prioridade do chamado #{ticket.id} alterada para {ticket.get_priority_display()}',
+            request
+        )
+        
+        return redirect('ticket_detail', ticket_id=ticket.id)
+    
+    return redirect('tickets_list')
+
+
+@login_required
 def add_comment_view(request, ticket_id):
     """Adicionar comentário ao chamado"""
     if request.method == 'POST':
@@ -1355,6 +1402,19 @@ def ticket_create_fixed_view(request):
         store_location = request.POST.get('store_location', '').strip() or None
         responsible_person = request.POST.get('responsible_person', '').strip() or None
         phone = request.POST.get('phone', '').strip() or None
+        
+        # Validar Loja/Local obrigatório para setor Manutenção
+        if sector.name.lower() in ['manutenção', 'manutencao'] and not store_location:
+            messages.error(request, 'O campo Loja/Local é obrigatório para o setor de Manutenção.')
+            sectors = Sector.objects.all()
+            users = User.objects.filter(is_active=True).exclude(id=request.user.id).order_by('sector__name', 'first_name')
+            return render(request, 'tickets/create.html', {
+                'sectors': sectors,
+                'users': users,
+                'title': title,
+                'sector_id': sector_id,
+                'category_id': category_id,
+            })
         
         # Criar ticket
         ticket = Ticket.objects.create(

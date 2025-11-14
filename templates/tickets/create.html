@@ -86,7 +86,7 @@
                         id="sector" 
                         required
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        onchange="loadCategories(); loadSectorUsers();"
+                        onchange="loadCategories(); loadSectorUsers(); toggleStoreLocationRequirement();"
                     >
                         <option value="">Selecione o setor</option>
                         {% for sector in sectors %}
@@ -165,7 +165,7 @@
                 <div>
                     <label for="store_location" class="block text-sm font-medium text-gray-700 mb-2">
                         <i class="fas fa-store mr-1 text-gray-400"></i>
-                        Loja/Local <span class="text-xs text-gray-400">(opcional)</span>
+                        Loja/Local <span id="store_location_required_label" class="text-xs text-gray-400">(opcional)</span>
                     </label>
                     <input 
                         type="text" 
@@ -440,6 +440,29 @@ function toggleCategoryRequirement() {
         categoryHelpText.textContent = 'Categoria obrigatória para chamados de setor';
         categoryHelpText.classList.remove('text-blue-500');
         categoryHelpText.classList.add('text-gray-500');
+    }
+}
+
+// Função para controlar se Loja/Local é obrigatório para setor Manutenção
+function toggleStoreLocationRequirement() {
+    const sectorSelect = document.getElementById('sector');
+    const storeLocationInput = document.getElementById('store_location');
+    const storeLocationLabel = document.getElementById('store_location_required_label');
+    const selectedOption = sectorSelect.options[sectorSelect.selectedIndex];
+    const sectorName = selectedOption ? selectedOption.textContent.trim() : '';
+    
+    if (sectorName.toLowerCase() === 'manutenção' || sectorName.toLowerCase() === 'manutencao') {
+        // Setor Manutenção - Loja/Local obrigatório
+        storeLocationInput.setAttribute('required', 'required');
+        storeLocationLabel.innerHTML = '<span class="text-red-500">*</span>';
+        storeLocationLabel.classList.remove('text-gray-400');
+        storeLocationLabel.classList.add('text-red-500');
+    } else {
+        // Outros setores - Loja/Local opcional
+        storeLocationInput.removeAttribute('required');
+        storeLocationLabel.textContent = '(opcional)';
+        storeLocationLabel.classList.remove('text-red-500');
+        storeLocationLabel.classList.add('text-gray-400');
     }
 }
 

@@ -471,6 +471,7 @@ class TicketComment(models.Model):
         ('ASSIGNMENT', 'Atribuição'),
         ('STATUS_CHANGE', 'Mudança de Status'),
         ('ASSUMPTION', 'Assumir Chamado'),
+        ('PRIORITY_CHANGE', 'Mudança de Prioridade'),
     ]
     
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='comments', verbose_name="Chamado")
