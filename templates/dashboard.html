@@ -162,7 +162,7 @@
                 <div class="flex justify-between items-start">
                     <div class="flex-1">
                         <h4 class="font-medium text-gray-900">{{ comm.title }}</h4>
-                        <p class="text-sm text-gray-600 mt-1">{{ comm.message|truncatechars:100 }}</p>
+                        <div class="text-sm text-gray-600 mt-1 line-clamp-2">{{ comm.message|striptags|truncatechars:100 }}</div>
                         <div class="flex items-center mt-2 text-xs text-gray-500">
                             <span>Por {{ comm.sender.full_name }}</span>
                             <span class="mx-2">•</span>
