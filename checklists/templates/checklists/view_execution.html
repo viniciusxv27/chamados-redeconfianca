@@ -52,24 +52,6 @@
                 <div class="text-gray-700">{{ template.description|markdown_simple }}</div>
             </div>
             {% endif %}
-            
-            <!-- Debug Info -->
-            <div class="mt-6 p-4 bg-orange-50 rounded-xl border-l-4 border-orange-500">
-                <div class="text-sm font-semibold text-orange-800 mb-2">🐛 Debug Info (para diagnosticar)</div>
-                <div class="text-gray-700 text-xs space-y-1">
-                    <p><strong>Status:</strong> {{ execution.status }} ({{ execution.get_status_display }})</p>
-                    <p><strong>Can Execute:</strong> {{ can_execute }} {% if can_execute %}<span class="text-green-600">✓ Pode executar</span>{% else %}<span class="text-red-600">✗ Não pode executar</span>{% endif %}</p>
-                    <p><strong>Can Approve:</strong> {{ can_approve }}</p>
-                    <p><strong>User ID:</strong> {{ user.id }} ({{ user.get_full_name }})</p>
-                    <p><strong>Executor ID:</strong> {{ assignment.assigned_to.id }} ({{ assignment.assigned_to.get_full_name }})</p>
-                    <p><strong>Is Executor:</strong> {% if user == assignment.assigned_to %}<span class="text-green-600">Sim ✓</span>{% else %}<span class="text-red-600">Não ✗</span>{% endif %}</p>
-                    <p><strong>Assignment Active:</strong> {{ assignment.is_active }}</p>
-                    <p><strong>Execution Date:</strong> {{ execution.execution_date }}</p>
-                    <p><strong>Period:</strong> {{ execution.period }} ({{ execution.get_period_display }})</p>
-                    <p><strong>Total Tasks:</strong> {{ task_executions|length }}</p>
-                    <p><strong>Status válido?</strong> {% if execution.status in 'pending,in_progress,overdue' %}<span class="text-green-600">Sim ✓</span>{% else %}<span class="text-red-600">Não ✗ ({{ execution.status }})</span>{% endif %}</p>
-                </div>
-            </div>
         </div>
 
         <div class="space-y-6">

@@ -450,6 +450,18 @@
                             <span class="text-gray-600">Criado por:</span>
                             <span class="text-gray-900">{{ ticket.created_by.full_name }}</span>
                         </div>
+                        {% if ticket.store_location %}
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Loja/Local:</span>
+                            <span class="text-gray-900">{{ ticket.store_location }}</span>
+                        </div>
+                        {% endif %}
+                        {% if ticket.phone %}
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Telefone:</span>
+                            <span class="text-gray-900">{{ ticket.phone }}</span>
+                        </div>
+                        {% endif %}
                         {% if ticket.assigned_to %}
                         <div class="flex justify-between">
                             <span class="text-gray-600">Responsável:</span>
