@@ -600,6 +600,7 @@ def view_execution(request, execution_id):
     existing_tasks = set(execution.task_executions.values_list('task_id', flat=True))
     template_tasks = execution.assignment.template.tasks.all()
     
+    tasks_created = False
     for task in template_tasks:
         if task.id not in existing_tasks:
             ChecklistTaskExecution.objects.create(
@@ -607,10 +608,18 @@ def view_execution(request, execution_id):
                 task=task,
                 is_completed=False
             )
+            tasks_created = True
     
-    # Recarregar as task_executions após criação
-    if len(existing_tasks) < template_tasks.count():
-        execution.refresh_from_db()
+    # Se criamos novas tasks, recarregar a execução com todas as relações
+    if tasks_created:
+        execution = ChecklistExecution.objects.select_related(
+            'assignment__template',
+            'assignment__assigned_to',
+            'assignment__assigned_by'
+        ).prefetch_related(
+            'task_executions__task__instruction_media',
+            'task_executions__evidences'
+        ).get(id=execution_id)
     
     # Verificar se pode executar (é o executor e status permite execução)
     # Permite executar mesmo se a atribuição foi desativada, para finalizar execuções pendentes
