@@ -4382,6 +4382,7 @@ def daily_automation_api(request):
             'full_name': user.get_full_name(),
             'first_name': user.first_name,
             'last_name': user.last_name,
+            'phone': getattr(user, 'phone', '') or '',
             'hierarchy': user.hierarchy,
             'is_active': user.is_active,
             'sector': {

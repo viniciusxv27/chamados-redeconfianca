@@ -201,6 +201,19 @@ class Ticket(models.Model):
                     for user in sector_users_qs
                 ]
             
+            # Buscar grupos do usuário que criou o ticket
+            user_groups = []
+            if hasattr(self.created_by, 'communication_groups'):
+                user_groups_qs = self.created_by.communication_groups.values('id', 'name', 'description')
+                user_groups = [
+                    {
+                        'id': group['id'],
+                        'name': group['name'],
+                        'description': group['description'] or ''
+                    }
+                    for group in user_groups_qs
+                ]
+            
             payload = {
                 'event': 'ticket_created',
                 'ticket': {
@@ -214,7 +227,8 @@ class Ticket(models.Model):
                         'name': self.created_by.get_full_name(),
                         'email': self.created_by.email,
                         'phone': getattr(self.created_by, 'phone', '') or '',
-                        'hierarchy': self.created_by.hierarchy
+                        'hierarchy': self.created_by.hierarchy,
+                        'groups': user_groups
                     },
                     'created_at': self.created_at.isoformat(),
                     'status': self.status
@@ -703,6 +717,19 @@ class Webhook(models.Model):
                     for user in sector_users_qs
                 ]
             
+            # Buscar grupos do usuário que criou o ticket
+            user_groups = []
+            if hasattr(instance.created_by, 'communication_groups'):
+                user_groups_qs = instance.created_by.communication_groups.values('id', 'name', 'description')
+                user_groups = [
+                    {
+                        'id': group['id'],
+                        'name': group['name'],
+                        'description': group['description'] or ''
+                    }
+                    for group in user_groups_qs
+                ]
+            
             payload['ticket'] = {
                 'id': instance.id,
                 'title': instance.title,
@@ -716,7 +743,8 @@ class Webhook(models.Model):
                     'name': instance.created_by.get_full_name(),
                     'email': instance.created_by.email,
                     'phone': getattr(instance.created_by, 'phone', '') or '',
-                    'hierarchy': instance.created_by.hierarchy
+                    'hierarchy': instance.created_by.hierarchy,
+                    'groups': user_groups
                 },
                 'created_at': instance.created_at.isoformat(),
                 'due_date': instance.due_date.isoformat() if instance.due_date else None,

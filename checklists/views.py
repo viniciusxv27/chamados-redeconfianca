@@ -596,6 +596,22 @@ def view_execution(request, execution_id):
         messages.error(request, 'Você não tem permissão para visualizar esta execução.')
         return redirect('checklists:dashboard')
     
+    # Certificar que todas as task_executions existem
+    existing_tasks = set(execution.task_executions.values_list('task_id', flat=True))
+    template_tasks = execution.assignment.template.tasks.all()
+    
+    for task in template_tasks:
+        if task.id not in existing_tasks:
+            ChecklistTaskExecution.objects.create(
+                execution=execution,
+                task=task,
+                is_completed=False
+            )
+    
+    # Recarregar as task_executions após criação
+    if len(existing_tasks) < template_tasks.count():
+        execution.refresh_from_db()
+    
     # Verificar se pode executar (é o executor e status permite execução)
     # Permite executar mesmo se a atribuição foi desativada, para finalizar execuções pendentes
     can_execute = (
