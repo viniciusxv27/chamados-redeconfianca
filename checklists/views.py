@@ -617,9 +617,26 @@ def view_execution(request, execution_id):
         for task_exec in execution.task_executions.all():
             task = task_exec.task
             
-            # Verificar se a tarefa foi marcada como completa
-            task_field_name = f'task_{execution.id}_{task.id}'
-            is_completed = request.POST.get(task_field_name) == 'on'
+            # Processar de acordo com o tipo de tarefa
+            if task.task_type == 'yes_no':
+                # Pergunta Sim/Não
+                yes_no_field_name = f'yes_no_{execution.id}_{task.id}'
+                yes_no_value = request.POST.get(yes_no_field_name)
+                
+                if yes_no_value == 'yes':
+                    task_exec.yes_no_answer = True
+                    task_exec.is_completed = True
+                elif yes_no_value == 'no':
+                    task_exec.yes_no_answer = False
+                    task_exec.is_completed = True
+                else:
+                    task_exec.yes_no_answer = None
+                    task_exec.is_completed = False
+            else:
+                # Tarefa normal - verificar se foi marcada como completa
+                task_field_name = f'task_{execution.id}_{task.id}'
+                is_completed = request.POST.get(task_field_name) == 'on'
+                task_exec.is_completed = is_completed
             
             # Pegar observações
             notes_field_name = f'notes_{execution.id}_{task.id}'
@@ -633,8 +650,9 @@ def view_execution(request, execution_id):
             evidence_videos_field = f'evidence_videos_{execution.id}_{task.id}'
             evidence_videos = request.FILES.getlist(evidence_videos_field)
             
-            # Validação: se marcou como completa, deve ter observações OU evidências
-            if is_completed:
+            # Validação: tarefas normais marcadas como completas devem ter observações OU evidências
+            # Perguntas sim/não não precisam de evidências
+            if task.task_type != 'yes_no' and task_exec.is_completed:
                 has_notes = bool(notes)
                 has_existing_evidence = bool(task_exec.evidence_image or task_exec.evidence_video) or task_exec.evidences.exists()
                 has_new_evidence = bool(evidence_images or evidence_videos)
@@ -655,8 +673,7 @@ def view_execution(request, execution_id):
                     }
                     return render(request, 'checklists/view_execution.html', context)
             
-            # Atualizar task_execution
-            task_exec.is_completed = is_completed
+            # Atualizar observações
             task_exec.notes = notes
             
             # Marcar quando foi completada
@@ -1128,6 +1145,8 @@ def create_template(request):
             # Processar tarefas
             task_titles = request.POST.getlist('task_title[]')
             task_descriptions = request.POST.getlist('task_description[]')
+            task_types = request.POST.getlist('task_type[]')
+            task_points = request.POST.getlist('task_points[]')
             task_required = request.POST.getlist('task_required[]')
             
             for i, title in enumerate(task_titles):
@@ -1136,6 +1155,8 @@ def create_template(request):
                         template=template,
                         title=title.strip(),
                         description=task_descriptions[i].strip() if i < len(task_descriptions) else '',
+                        task_type=task_types[i] if i < len(task_types) else 'normal',
+                        points=int(task_points[i]) if i < len(task_points) and task_points[i].isdigit() else 0,
                         is_required=str(i) in task_required,
                         order=i
                     )
@@ -1229,6 +1250,8 @@ def edit_template(request, template_id):
             # Processar novas tarefas
             task_titles = request.POST.getlist('task_title[]')
             task_descriptions = request.POST.getlist('task_description[]')
+            task_types = request.POST.getlist('task_type[]')
+            task_points = request.POST.getlist('task_points[]')
             task_required = request.POST.getlist('task_required[]')
             
             for i, title in enumerate(task_titles):
@@ -1237,6 +1260,8 @@ def edit_template(request, template_id):
                         template=template,
                         title=title.strip(),
                         description=task_descriptions[i].strip() if i < len(task_descriptions) else '',
+                        task_type=task_types[i] if i < len(task_types) else 'normal',
+                        points=int(task_points[i]) if i < len(task_points) and task_points[i].isdigit() else 0,
                         is_required=str(i) in task_required,
                         order=i
                     )
@@ -1520,4 +1545,119 @@ def reject_checklist(request, execution_id):
         return redirect('checklists:admin_approvals')
     
     return redirect('checklists:admin_approvals')
-    return redirect('checklists:admin_templates')
+
+
+@login_required
+def approve_task(request, task_exec_id):
+    """Aprovar tarefa individual"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para aprovar tarefas.')
+        return redirect('checklists:dashboard')
+    
+    from checklists.models import ChecklistTaskExecution
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    
+    # Verificar setor
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if task_exec.execution.assignment.template.sector not in user_sectors:
+            messages.error(request, 'Você só pode aprovar tarefas dos seus setores.')
+            return redirect('checklists:admin_approvals')
+    
+    # Aprovar tarefa
+    task_exec.approval_status = 'approved'
+    task_exec.approved_by = request.user
+    task_exec.approved_at = timezone.now()
+    task_exec.approval_notes = ''
+    task_exec.save()
+    
+    messages.success(request, f'✅ Tarefa "{task_exec.task.title}" aprovada com sucesso!')
+    return redirect('checklists:admin_approvals')
+
+
+@login_required
+def reject_task(request, task_exec_id):
+    """Reprovar tarefa individual"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para reprovar tarefas.')
+        return redirect('checklists:dashboard')
+    
+    from checklists.models import ChecklistTaskExecution
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    
+    # Verificar setor
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if task_exec.execution.assignment.template.sector not in user_sectors:
+            messages.error(request, 'Você só pode reprovar tarefas dos seus setores.')
+            return redirect('checklists:admin_approvals')
+    
+    if request.method == 'POST':
+        rejection_note = request.POST.get('rejection_note', '')
+        
+        # Reprovar tarefa
+        task_exec.approval_status = 'rejected'
+        task_exec.approved_by = request.user
+        task_exec.approved_at = timezone.now()
+        task_exec.approval_notes = rejection_note
+        task_exec.save()
+        
+        messages.warning(request, f'❌ Tarefa "{task_exec.task.title}" reprovada.')
+        return redirect('checklists:admin_approvals')
+    
+    return redirect('checklists:admin_approvals')
+
+
+@login_required
+def unapprove_task(request, task_exec_id):
+    """Desfazer aprovação/reprovação de tarefa"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para modificar tarefas.')
+        return redirect('checklists:dashboard')
+    
+    from checklists.models import ChecklistTaskExecution
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    
+    # Verificar setor
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if task_exec.execution.assignment.template.sector not in user_sectors:
+            messages.error(request, 'Você só pode modificar tarefas dos seus setores.')
+            return redirect('checklists:admin_approvals')
+    
+    # Resetar status
+    task_exec.approval_status = 'pending'
+    task_exec.approved_by = None
+    task_exec.approved_at = None
+    task_exec.approval_notes = ''
+    task_exec.save()
+    
+    messages.info(request, f'↩️ Status da tarefa "{task_exec.task.title}" foi resetado para pendente.')
+    return redirect('checklists:admin_approvals')

@@ -127,7 +127,7 @@
                     </div>
                 </div>
                 <div class="flex-1 space-y-3">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                         <div class="md:col-span-2">
                             <label class="block text-sm font-medium text-gray-700 mb-1">
                                 Título da Tarefa
@@ -140,8 +140,29 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">
-                                Status
+                                Tipo
                             </label>
+                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                    name="task_type[]"
+                                    onchange="toggleTaskType(this)">
+                                <option value="normal">Tarefa Normal</option>
+                                <option value="yes_no">Pergunta Sim/Não</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Pontos
+                            </label>
+                            <input type="number" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent" 
+                                   name="task_points[]" 
+                                   min="0"
+                                   value="0"
+                                   placeholder="0">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                        <div>
                             <div class="flex items-center pt-2">
                                 <input class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500" 
                                        type="checkbox" 
@@ -256,6 +277,21 @@ function removeTask(button) {
     const tasksList = document.getElementById('tasksList');
     if (tasksList.children.length === 0) {
         document.getElementById('noTasksAlert').style.display = 'block';
+    }
+}
+
+function toggleTaskType(select) {
+    // Futuramente pode adicionar lógica especial para perguntas sim/não
+    const taskItem = select.closest('.task-item');
+    const taskType = select.value;
+    
+    if (taskType === 'yes_no') {
+        // Adicionar indicador visual de pergunta
+        taskItem.classList.remove('border-green-500');
+        taskItem.classList.add('border-blue-500');
+    } else {
+        taskItem.classList.remove('border-blue-500');
+        taskItem.classList.add('border-green-500');
     }
 }
 

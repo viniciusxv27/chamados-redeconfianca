@@ -72,6 +72,11 @@ class ChecklistTemplate(models.Model):
 class ChecklistTask(models.Model):
     """Tarefas do template de checklist"""
     
+    TASK_TYPE_CHOICES = [
+        ('normal', 'Tarefa Normal'),
+        ('yes_no', 'Pergunta Sim/Não'),
+    ]
+    
     template = models.ForeignKey(
         ChecklistTemplate, 
         on_delete=models.CASCADE, 
@@ -83,6 +88,20 @@ class ChecklistTask(models.Model):
     description = models.TextField(blank=True, verbose_name='Descrição')
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
     is_required = models.BooleanField(default=True, verbose_name='Obrigatória')
+    
+    # Novos campos
+    task_type = models.CharField(
+        max_length=10,
+        choices=TASK_TYPE_CHOICES,
+        default='normal',
+        verbose_name='Tipo de Tarefa',
+        help_text='Tipo de tarefa: normal (checkbox) ou pergunta sim/não'
+    )
+    points = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Pontos',
+        help_text='Quantidade de pontos que esta tarefa vale'
+    )
     
     # Mídia de instrução
     instruction_image = models.ImageField(
@@ -445,6 +464,44 @@ class ChecklistTaskExecution(models.Model):
     is_completed = models.BooleanField(default=False, verbose_name='Concluída')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Concluída em')
     notes = models.TextField(blank=True, verbose_name='Observações')
+    
+    # Campo para resposta de pergunta sim/não
+    yes_no_answer = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name='Resposta Sim/Não',
+        help_text='True = Sim, False = Não, None = Não respondida'
+    )
+    
+    # Status de aprovação por tarefa
+    approval_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pendente'),
+            ('approved', 'Aprovada'),
+            ('rejected', 'Reprovada'),
+        ],
+        default='pending',
+        verbose_name='Status de Aprovação'
+    )
+    approval_notes = models.TextField(
+        blank=True,
+        verbose_name='Observações da Aprovação',
+        help_text='Motivo da aprovação/reprovação'
+    )
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_tasks',
+        verbose_name='Aprovado por'
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Aprovado em'
+    )
     
     # Evidências (mantidos para compatibilidade)
     evidence_image = models.ImageField(

@@ -166,12 +166,35 @@
 
                                             <!-- Task Info -->
                                             <div class="flex-1">
-                                                <h4 class="text-lg font-bold text-gray-800 mb-2">
-                                                    {{ task_exec.task.title }}
-                                                    {% if task_exec.task.is_required %}
-                                                        <span class="text-red-500">*</span>
+                                                <div class="flex items-start justify-between mb-2">
+                                                    <h4 class="text-lg font-bold text-gray-800">
+                                                        {{ task_exec.task.title }}
+                                                        {% if task_exec.task.is_required %}
+                                                            <span class="text-red-500">*</span>
+                                                        {% endif %}
+                                                        {% if task_exec.task.points > 0 %}
+                                                            <span class="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                                                                {{ task_exec.task.points }} pts
+                                                            </span>
+                                                        {% endif %}
+                                                        {% if task_exec.task.task_type == 'yes_no' %}
+                                                            <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                                                Sim/Não
+                                                            </span>
+                                                        {% endif %}
+                                                    </h4>
+                                                    
+                                                    <!-- Task Approval Status -->
+                                                    {% if task_exec.approval_status == 'approved' %}
+                                                        <span class="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-semibold">
+                                                            ✅ Aprovada
+                                                        </span>
+                                                    {% elif task_exec.approval_status == 'rejected' %}
+                                                        <span class="px-3 py-1 bg-red-100 text-red-700 text-sm rounded-full font-semibold">
+                                                            ❌ Reprovada
+                                                        </span>
                                                     {% endif %}
-                                                </h4>
+                                                </div>
                                                 
                                                 {% if task_exec.task.description %}
                                                     <div class="text-gray-600 mb-3">{{ task_exec.task.description|markdown_simple }}</div>
@@ -209,6 +232,38 @@
                                                                 </div>
                                                             {% endif %}
                                                         </div>
+                                                    </div>
+                                                {% endif %}
+                                                
+                                                <!-- Task Approval Actions -->
+                                                {% if execution.status == 'awaiting_approval' %}
+                                                    <div class="mt-4 flex items-center gap-3">
+                                                        {% if task_exec.approval_status == 'pending' %}
+                                                            <button onclick="approveTask({{ task_exec.id }}, '{{ task_exec.task.title|escapejs }}')"
+                                                                    class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold">
+                                                                ✅ Aprovar Tarefa
+                                                            </button>
+                                                            <button onclick="showRejectTaskModal({{ task_exec.id }}, '{{ task_exec.task.title|escapejs }}')"
+                                                                    class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-semibold">
+                                                                ❌ Reprovar Tarefa
+                                                            </button>
+                                                        {% elif task_exec.approval_status == 'approved' %}
+                                                            <button onclick="unapproveTask({{ task_exec.id }})"
+                                                                    class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
+                                                                ↩️ Desfazer Aprovação
+                                                            </button>
+                                                        {% elif task_exec.approval_status == 'rejected' %}
+                                                            <button onclick="unapproveTask({{ task_exec.id }})"
+                                                                    class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
+                                                                ↩️ Desfazer Reprovação
+                                                            </button>
+                                                        {% endif %}
+                                                        
+                                                        {% if task_exec.approval_notes %}
+                                                            <span class="text-xs text-gray-600 italic">
+                                                                Observação: {{ task_exec.approval_notes }}
+                                                            </span>
+                                                        {% endif %}
                                                     </div>
                                                 {% endif %}
                                             </div>
@@ -282,6 +337,36 @@
     </div>
 </div>
 
+<!-- Reject Task Modal -->
+<div id="rejectTaskModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full m-4 p-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">❌ Reprovar Tarefa</h2>
+        <p class="text-gray-600 mb-4" id="rejectTaskName"></p>
+        
+        <form method="post" id="rejectTaskForm">
+            {% csrf_token %}
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Motivo da Reprovação</label>
+            <textarea name="rejection_note" 
+                      rows="4" 
+                      required
+                      placeholder="Descreva o motivo da reprovação desta tarefa..."
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 mb-4"></textarea>
+            
+            <div class="flex items-center justify-end gap-3">
+                <button type="button" 
+                        onclick="closeRejectTaskModal()"
+                        class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold">
+                    Reprovar Tarefa
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function showRejectModal(executionId, checklistName) {
     const confirmed = confirm(`❌ Tem certeza que deseja REJEITAR o checklist "${checklistName}"?\n\nVocê poderá adicionar uma justificativa na próxima tela.`);
@@ -334,10 +419,43 @@ function updateCategoryFilter() {
     }
 }
 
+// Task approval functions
+function approveTask(taskExecId, taskTitle) {
+    const confirmed = confirm(`✅ Tem certeza que deseja APROVAR a tarefa "${taskTitle}"?`);
+    if (confirmed) {
+        window.location.href = `/checklists/admin/approve-task/${taskExecId}/`;
+    }
+}
+
+function showRejectTaskModal(taskExecId, taskTitle) {
+    document.getElementById('rejectTaskName').textContent = `Tarefa: ${taskTitle}`;
+    document.getElementById('rejectTaskForm').action = `/checklists/admin/reject-task/${taskExecId}/`;
+    document.getElementById('rejectTaskModal').classList.remove('hidden');
+    document.getElementById('rejectTaskModal').classList.add('flex');
+}
+
+function closeRejectTaskModal() {
+    document.getElementById('rejectTaskModal').classList.add('hidden');
+    document.getElementById('rejectTaskModal').classList.remove('flex');
+}
+
+function unapproveTask(taskExecId) {
+    const confirmed = confirm('↩️ Tem certeza que deseja DESFAZER a aprovação/reprovação desta tarefa?');
+    if (confirmed) {
+        window.location.href = `/checklists/admin/unapprove-task/${taskExecId}/`;
+    }
+}
+
 // Fechar modal ao clicar fora
 document.getElementById('rejectModal').addEventListener('click', function(e) {
     if (e.target === this) {
         closeRejectModal();
+    }
+});
+
+document.getElementById('rejectTaskModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeRejectTaskModal();
     }
 });
 </script>

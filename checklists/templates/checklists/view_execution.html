@@ -78,21 +78,48 @@
                 <div class="flex items-start gap-4 mb-4">
                     <div class="flex-shrink-0 pt-1">
                         {% if can_execute %}
-                        <label class="relative inline-block w-14 h-8 cursor-pointer">
-                            <input type="checkbox" name="task_{{ execution.id }}_{{ task_exec.task.id }}" class="peer sr-only task-checkbox" {% if task_exec.is_completed %}checked{% endif %} data-execution="{{ execution.id }}" data-task="{{ task_exec.task.id }}">
-                            <span class="absolute inset-0 bg-gray-300 rounded-full transition-all peer-checked:bg-gradient-to-r peer-checked:from-green-400 peer-checked:to-green-600"></span>
-                            <span class="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all peer-checked:translate-x-6"></span>
-                        </label>
+                            {% if task_exec.task.task_type == 'yes_no' %}
+                                <!-- Pergunta Sim/Não -->
+                                <div class="flex flex-col gap-2">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="yes_no_{{ execution.id }}_{{ task_exec.task.id }}" value="yes" class="w-5 h-5 text-green-600" {% if task_exec.yes_no_answer == True %}checked{% endif %}>
+                                        <span class="ml-2 text-sm font-semibold text-green-600">Sim</span>
+                                    </label>
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="yes_no_{{ execution.id }}_{{ task_exec.task.id }}" value="no" class="w-5 h-5 text-red-600" {% if task_exec.yes_no_answer == False %}checked{% endif %}>
+                                        <span class="ml-2 text-sm font-semibold text-red-600">Não</span>
+                                    </label>
+                                </div>
+                            {% else %}
+                                <!-- Checkbox normal -->
+                                <label class="relative inline-block w-14 h-8 cursor-pointer">
+                                    <input type="checkbox" name="task_{{ execution.id }}_{{ task_exec.task.id }}" class="peer sr-only task-checkbox" {% if task_exec.is_completed %}checked{% endif %} data-execution="{{ execution.id }}" data-task="{{ task_exec.task.id }}">
+                                    <span class="absolute inset-0 bg-gray-300 rounded-full transition-all peer-checked:bg-gradient-to-r peer-checked:from-green-400 peer-checked:to-green-600"></span>
+                                    <span class="absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-all peer-checked:translate-x-6"></span>
+                                </label>
+                            {% endif %}
                         {% else %}
-                        {% if task_exec.is_completed %}
-                        <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center">
-                            <i class="fas fa-check text-white text-sm"></i>
-                        </div>
-                        {% else %}
-                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                            <i class="fas fa-circle text-white text-xs"></i>
-                        </div>
-                        {% endif %}
+                            {% if task_exec.task.task_type == 'yes_no' %}
+                                <!-- Visualização Sim/Não -->
+                                {% if task_exec.yes_no_answer == True %}
+                                    <div class="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-semibold">✓ Sim</div>
+                                {% elif task_exec.yes_no_answer == False %}
+                                    <div class="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-semibold">✗ Não</div>
+                                {% else %}
+                                    <div class="px-4 py-2 bg-gray-100 text-gray-500 rounded-lg">Não respondido</div>
+                                {% endif %}
+                            {% else %}
+                                <!-- Visualização Checkbox -->
+                                {% if task_exec.is_completed %}
+                                <div class="w-8 h-8 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check text-white text-sm"></i>
+                                </div>
+                                {% else %}
+                                <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-circle text-white text-xs"></i>
+                                </div>
+                                {% endif %}
+                            {% endif %}
                         {% endif %}
                     </div>
 
@@ -100,6 +127,12 @@
                         <h3 class="text-xl font-bold text-gray-800 mb-2">
                             {{ task_exec.task.title }}
                             {% if task_exec.task.is_required %}<span class="text-red-500 text-sm">*</span>{% endif %}
+                            {% if task_exec.task.points > 0 %}
+                                <span class="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">{{ task_exec.task.points }} pts</span>
+                            {% endif %}
+                            {% if task_exec.task.task_type == 'yes_no' %}
+                                <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Pergunta</span>
+                            {% endif %}
                         </h3>
 
                         {% if task_exec.task.description %}
