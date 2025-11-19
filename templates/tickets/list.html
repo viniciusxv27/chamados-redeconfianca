@@ -225,10 +225,16 @@
                         <i class="fas fa-crown mr-2"></i>
                         Filtros Avançados (Superadmin)
                     </h4>
-                    <button type="button" id="toggleAdvancedFilters" class="text-blue-600 hover:text-blue-800 text-sm">
-                        <i class="fas fa-chevron-down"></i>
-                        <span>Mostrar</span>
-                    </button>
+                    <div class="flex items-center space-x-3">
+                        <button type="button" onclick="toggleQuickFiltersFromAdvanced()" class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
+                            <i class="fas fa-filter mr-1"></i>
+                            <span id="quickFiltersToggleText">Mostrar Filtros Rápidos</span>
+                        </button>
+                        <button type="button" id="toggleAdvancedFilters" class="text-blue-600 hover:text-blue-800 text-sm">
+                            <i class="fas fa-chevron-down"></i>
+                            <span>Mostrar</span>
+                        </button>
+                    </div>
                 </div>
                 
                 <div id="advancedFilters" class="hidden grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -934,12 +940,55 @@ function toggleQuickFilters() {
         icon.classList.add('fa-chevron-down');
         localStorage.setItem('quickFiltersExpanded', 'false');
     }
+    updateQuickFiltersToggleText();
+}
+
+// Toggle Quick Filters from Advanced Filters section
+function toggleQuickFiltersFromAdvanced() {
+    const quickFiltersBox = document.querySelector('.fixed.bottom-6.right-6');
+    const toggleText = document.getElementById('quickFiltersToggleText');
+    
+    if (quickFiltersBox) {
+        if (quickFiltersBox.classList.contains('hidden')) {
+            quickFiltersBox.classList.remove('hidden');
+            toggleText.textContent = 'Ocultar Filtros Rápidos';
+            localStorage.setItem('quickFiltersVisible', 'true');
+        } else {
+            quickFiltersBox.classList.add('hidden');
+            toggleText.textContent = 'Mostrar Filtros Rápidos';
+            localStorage.setItem('quickFiltersVisible', 'false');
+        }
+    }
+}
+
+// Update toggle text based on visibility
+function updateQuickFiltersToggleText() {
+    const quickFiltersBox = document.querySelector('.fixed.bottom-6.right-6');
+    const toggleText = document.getElementById('quickFiltersToggleText');
+    
+    if (toggleText && quickFiltersBox) {
+        if (quickFiltersBox.classList.contains('hidden')) {
+            toggleText.textContent = 'Mostrar Filtros Rápidos';
+        } else {
+            toggleText.textContent = 'Ocultar Filtros Rápidos';
+        }
+    }
 }
 
 // Restore Quick Filters state on page load
 document.addEventListener('DOMContentLoaded', function() {
     const quickFiltersContent = document.getElementById('quickFiltersContent');
     const quickFiltersIcon = document.getElementById('quickFiltersIcon');
+    const quickFiltersBox = document.querySelector('.fixed.bottom-6.right-6');
+    
+    // Iniciar filtros rápidos ocultos por padrão
+    if (quickFiltersBox) {
+        const isVisible = localStorage.getItem('quickFiltersVisible');
+        if (isVisible !== 'true') {
+            quickFiltersBox.classList.add('hidden');
+        }
+        updateQuickFiltersToggleText();
+    }
     
     if (quickFiltersContent && quickFiltersIcon) {
         const isExpanded = localStorage.getItem('quickFiltersExpanded');
