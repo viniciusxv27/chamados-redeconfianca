@@ -452,6 +452,27 @@ def execute_today_checklists(request):
     if request.method == 'POST':
         from checklists.models import ChecklistTaskEvidence
         
+        # VALIDAÇÃO PRÉVIA: Verificar se todas as tarefas obrigatórias estão marcadas como completas
+        missing_required_tasks = []
+        for execution in today_executions:
+            for task_exec in execution.task_executions.all():
+                if task_exec.task.is_required:
+                    task_key = f'task_{execution.id}_{task_exec.task.id}'
+                    is_completed = request.POST.get(task_key) == 'on'
+                    if not is_completed:
+                        missing_required_tasks.append({
+                            'checklist': execution.assignment.template.name,
+                            'task': task_exec.task.title,
+                            'period': execution.get_period_display()
+                        })
+        
+        # Se houver tarefas obrigatórias faltando, não permitir o envio
+        if missing_required_tasks:
+            messages.error(request, '❌ Não é possível enviar! As seguintes tarefas obrigatórias não foram concluídas:')
+            for missing in missing_required_tasks:
+                messages.error(request, f'• {missing["checklist"]} ({missing["period"]}) - {missing["task"]}')
+            return redirect('checklists:today_checklists')
+        
         # Processar submissão de todos os checklists
         all_completed = True
         
@@ -637,6 +658,37 @@ def view_execution(request, execution_id):
     # Se for POST e pode executar, processar o formulário
     if request.method == 'POST' and can_execute:
         from checklists.models import ChecklistTaskEvidence
+        
+        # VALIDAÇÃO PRÉVIA: Verificar se todas as tarefas obrigatórias foram concluídas
+        missing_required_tasks = []
+        for task_exec in execution.task_executions.all():
+            if task_exec.task.is_required:
+                # Verificar se está marcada como concluída
+                if task_exec.task.task_type == 'yes_no':
+                    yes_no_field_name = f'yes_no_{execution.id}_{task_exec.task.id}'
+                    yes_no_value = request.POST.get(yes_no_field_name)
+                    if not yes_no_value or yes_no_value == 'none':
+                        missing_required_tasks.append(task_exec.task.title)
+                else:
+                    task_field_name = f'task_{execution.id}_{task_exec.task.id}'
+                    is_completed = request.POST.get(task_field_name) == 'on'
+                    if not is_completed:
+                        missing_required_tasks.append(task_exec.task.title)
+        
+        # Se houver tarefas obrigatórias faltando, não permitir o envio
+        if missing_required_tasks:
+            messages.error(request, '❌ Não é possível enviar! As seguintes tarefas obrigatórias não foram concluídas:')
+            for task_title in missing_required_tasks:
+                messages.error(request, f'• {task_title}')
+            context = {
+                'execution': execution,
+                'can_execute': can_execute,
+                'can_approve': can_approve,
+                'assignment': execution.assignment,
+                'template': execution.assignment.template,
+                'task_executions': execution.task_executions.all(),
+            }
+            return render(request, 'checklists/view_execution.html', context)
         
         # Processar cada tarefa
         for task_exec in execution.task_executions.all():
@@ -1606,6 +1658,12 @@ def approve_task(request, task_exec_id):
     task_exec.save()
     
     messages.success(request, f'✅ Tarefa "{task_exec.task.title}" aprovada com sucesso!')
+    
+    # Verificar se deve redirecionar para a página de detalhes
+    redirect_to = request.GET.get('redirect_to')
+    if redirect_to == 'detail':
+        return redirect('checklists:view_execution', execution_id=task_exec.execution.id)
+    
     return redirect('checklists:admin_approvals')
 
 
@@ -1636,7 +1694,7 @@ def reject_task(request, task_exec_id):
             return redirect('checklists:admin_approvals')
     
     if request.method == 'POST':
-        rejection_note = request.POST.get('rejection_note', '')
+        rejection_note = request.POST.get('rejection_reason') or request.POST.get('rejection_note', '')
         
         # Reprovar tarefa
         task_exec.approval_status = 'rejected'
@@ -1646,6 +1704,12 @@ def reject_task(request, task_exec_id):
         task_exec.save()
         
         messages.warning(request, f'❌ Tarefa "{task_exec.task.title}" reprovada.')
+        
+        # Verificar se deve redirecionar para a página de detalhes
+        redirect_to = request.GET.get('redirect_to')
+        if redirect_to == 'detail':
+            return redirect('checklists:view_execution', execution_id=task_exec.execution.id)
+        
         return redirect('checklists:admin_approvals')
     
     return redirect('checklists:admin_approvals')
@@ -1685,4 +1749,10 @@ def unapprove_task(request, task_exec_id):
     task_exec.save()
     
     messages.info(request, f'↩️ Status da tarefa "{task_exec.task.title}" foi resetado para pendente.')
+    
+    # Verificar se deve redirecionar para a página de detalhes
+    redirect_to = request.GET.get('redirect_to')
+    if redirect_to == 'detail':
+        return redirect('checklists:view_execution', execution_id=task_exec.execution.id)
+    
     return redirect('checklists:admin_approvals')
