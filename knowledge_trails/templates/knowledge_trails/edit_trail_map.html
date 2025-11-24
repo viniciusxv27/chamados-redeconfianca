@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Editor de Minimapa - {{ trail.title }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <div class="mb-6">
+        <div class="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl text-white p-8">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-3xl font-bold mb-2 flex items-center gap-3">
+                        <i class="fas fa-map-marked-alt"></i>
+                        Editor de Minimapa
+                    </h3>
+                    <p class="text-white text-opacity-90">{{ trail.icon }} {{ trail.title }}</p>
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" class="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg" onclick="savePositions()">
+                        <i class="fas fa-save"></i> Salvar Posições
+                    </button>
+                    <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="px-6 py-3 bg-white bg-opacity-10 hover:bg-opacity-20 border-2 border-white border-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="lg:col-span-3">
+            <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+                <div class="bg-white border-b-2 border-gray-100 p-6">
+                    <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-edit text-purple-600"></i>
+                        Arraste os Módulos
+                    </h5>
+                </div>
+                <div class="p-0">
+                    <div id="minimapa-editor" class="w-full h-[600px] relative overflow-hidden cursor-crosshair" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <!-- Grade de fundo -->
+                        <svg class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                            <defs>
+                                <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="white" stroke-width="1"/>
+                                </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#grid)" />
+                        </svg>
+                        
+                        <!-- Linhas de conexão entre módulos -->
+                        <svg id="connections" class="absolute top-0 left-0 w-full h-full pointer-events-none z-[1]">
+                        </svg>
+                        
+                        <!-- Módulos -->
+                        {% for module in modules %}
+                        <div class="module-draggable absolute cursor-move z-10 select-none transition-transform duration-100" 
+                             data-id="{{ module.id }}"
+                             data-x="{{ module.map_x }}"
+                             data-y="{{ module.map_y }}"
+                             style="left: {{ module.map_x }}%; 
+                                    top: {{ module.map_y }}%; 
+                                    transform: translate(-50%, -50%);
+                                    background: white;
+                                    border: 4px solid {{ trail.color }};
+                                    border-radius: 50%;
+                                    width: 80px;
+                                    height: 80px;
+                                    display: flex;
+                                    flex-direction: column;
+                                    align-items: center;
+                                    justify-content: center;
+                                    font-size: 2rem;
+                                    box-shadow: 0 6px 20px rgba(0,0,0,0.4);">
+                            <span>{{ module.icon_emoji }}</span>
+                            <small class="text-xs text-gray-600 mt-0.5">{{ module.order }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="lg:col-span-1 space-y-6">
+            <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+                <div class="bg-white border-b-2 border-gray-100 p-6">
+                    <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-list text-purple-600"></i>
+                        Módulos
+                    </h5>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-2">
+                        {% for module in modules %}
+                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all duration-300" id="module-info-{{ module.id }}">
+                            <span class="text-2xl">{{ module.icon_emoji }}</span>
+                            <div class="flex-1 min-w-0">
+                                <strong class="text-sm text-gray-800 block truncate">{{ module.title }}</strong>
+                                <div class="text-xs text-gray-500">
+                                    <span id="pos-{{ module.id }}">X: {{ module.map_x }} Y: {{ module.map_y }}</span>
+                                </div>
+                            </div>
+                            <span class="px-2 py-1 bg-purple-600 text-white text-xs rounded-full font-semibold">{{ module.order }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mt-4">
+                        <i class="fas fa-info-circle mr-2 text-blue-600"></i>
+                        <strong class="text-gray-800">Dica:</strong>
+                        <span class="text-gray-700"> Arraste os módulos para reorganizar o minimapa. Os módulos serão conectados pela ordem.</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+                <div class="bg-white border-b-2 border-gray-100 p-6">
+                    <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-keyboard text-purple-600"></i>
+                        Atalhos
+                    </h5>
+                </div>
+                <div class="p-6">
+                    <ul class="space-y-3">
+                        <li class="flex items-center gap-3 text-gray-700">
+                            <i class="fas fa-mouse text-gray-400 w-5"></i>
+                            <div>
+                                <strong class="text-gray-800">Arrastar:</strong>
+                                <span class="text-sm">Mover módulo</span>
+                            </div>
+                        </li>
+                        <li class="flex items-center gap-3 text-gray-700">
+                            <i class="fas fa-undo text-gray-400 w-5"></i>
+                            <div>
+                                <strong class="text-gray-800">Ctrl+Z:</strong>
+                                <span class="text-sm">Desfazer</span>
+                            </div>
+                        </li>
+                        <li class="flex items-center gap-3 text-gray-700">
+                            <i class="fas fa-save text-gray-400 w-5"></i>
+                            <div>
+                                <strong class="text-gray-800">Ctrl+S:</strong>
+                                <span class="text-sm">Salvar</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form id="saveForm" method="post" style="display: none;">
+    {% csrf_token %}
+    <input type="hidden" name="modules_data" id="modules_data">
+</form>
+
+<script>
+let draggedElement = null;
+let offsetX = 0;
+let offsetY = 0;
+let history = [];
+let currentHistoryIndex = -1;
+
+// Salvar estado inicial
+saveState();
+
+// Arrastar módulos
+document.querySelectorAll('.module-draggable').forEach(module => {
+    module.addEventListener('mousedown', function(e) {
+        draggedElement = this;
+        const rect = this.getBoundingClientRect();
+        const parent = document.getElementById('minimapa-editor').getBoundingClientRect();
+        
+        offsetX = e.clientX - rect.left - rect.width / 2;
+        offsetY = e.clientY - rect.top - rect.height / 2;
+        
+        this.style.transform = 'translate(-50%, -50%) scale(1.1)';
+        this.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+        this.style.zIndex = '1000';
+        
+        e.preventDefault();
+    });
+});
+
+document.addEventListener('mousemove', function(e) {
+    if (draggedElement) {
+        const parent = document.getElementById('minimapa-editor').getBoundingClientRect();
+        
+        let x = ((e.clientX - parent.left) / parent.width) * 100;
+        let y = ((e.clientY - parent.top) / parent.height) * 100;
+        
+        // Limitar aos limites
+        x = Math.max(5, Math.min(95, x));
+        y = Math.max(5, Math.min(95, y));
+        
+        draggedElement.style.left = x + '%';
+        draggedElement.style.top = y + '%';
+        draggedElement.dataset.x = x.toFixed(1);
+        draggedElement.dataset.y = y.toFixed(1);
+        
+        // Atualizar info
+        const moduleId = draggedElement.dataset.id;
+        document.getElementById('pos-' + moduleId).textContent = `X: ${x.toFixed(0)} Y: ${y.toFixed(0)}`;
+        
+        drawConnections();
+    }
+});
+
+document.addEventListener('mouseup', function(e) {
+    if (draggedElement) {
+        draggedElement.style.transform = 'translate(-50%, -50%) scale(1)';
+        draggedElement.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
+        draggedElement.style.zIndex = '10';
+        
+        saveState();
+        draggedElement = null;
+    }
+});
+
+// Desenhar conexões
+function drawConnections() {
+    const svg = document.getElementById('connections');
+    svg.innerHTML = '';
+    
+    const modules = Array.from(document.querySelectorAll('.module-draggable')).sort((a, b) => {
+        return parseInt(a.querySelector('small').textContent) - parseInt(b.querySelector('small').textContent);
+    });
+    
+    for (let i = 0; i < modules.length - 1; i++) {
+        const current = modules[i];
+        const next = modules[i + 1];
+        
+        const x1 = parseFloat(current.dataset.x);
+        const y1 = parseFloat(current.dataset.y);
+        const x2 = parseFloat(next.dataset.x);
+        const y2 = parseFloat(next.dataset.y);
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1 + '%');
+        line.setAttribute('y1', y1 + '%');
+        line.setAttribute('x2', x2 + '%');
+        line.setAttribute('y2', y2 + '%');
+        line.setAttribute('stroke', 'white');
+        line.setAttribute('stroke-width', '3');
+        line.setAttribute('stroke-dasharray', '5,5');
+        line.setAttribute('opacity', '0.5');
+        
+        svg.appendChild(line);
+    }
+}
+
+// Salvar estado para desfazer
+function saveState() {
+    const state = [];
+    document.querySelectorAll('.module-draggable').forEach(module => {
+        state.push({
+            id: module.dataset.id,
+            x: module.dataset.x,
+            y: module.dataset.y
+        });
+    });
+    
+    history = history.slice(0, currentHistoryIndex + 1);
+    history.push(state);
+    currentHistoryIndex++;
+    
+    if (history.length > 50) {
+        history.shift();
+        currentHistoryIndex--;
+    }
+}
+
+// Desfazer
+function undo() {
+    if (currentHistoryIndex > 0) {
+        currentHistoryIndex--;
+        const state = history[currentHistoryIndex];
+        
+        state.forEach(item => {
+            const module = document.querySelector(`[data-id="${item.id}"]`);
+            module.style.left = item.x + '%';
+            module.style.top = item.y + '%';
+            module.dataset.x = item.x;
+            module.dataset.y = item.y;
+            
+            document.getElementById('pos-' + item.id).textContent = `X: ${Math.round(item.x)} Y: ${Math.round(item.y)}`;
+        });
+        
+        drawConnections();
+    }
+}
+
+// Salvar posições
+function savePositions() {
+    const modulesData = [];
+    
+    document.querySelectorAll('.module-draggable').forEach(module => {
+        modulesData.push({
+            id: parseInt(module.dataset.id),
+            x: parseFloat(module.dataset.x),
+            y: parseFloat(module.dataset.y)
+        });
+    });
+    
+    document.getElementById('modules_data').value = JSON.stringify(modulesData);
+    document.getElementById('saveForm').submit();
+}
+
+// Atalhos de teclado
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') {
+            e.preventDefault();
+            undo();
+        } else if (e.key === 's') {
+            e.preventDefault();
+            savePositions();
+        }
+    }
+});
+
+// Desenhar conexões iniciais
+drawConnections();
+
+// Hover effect
+document.querySelectorAll('.module-draggable').forEach(module => {
+    module.addEventListener('mouseenter', function() {
+        if (!draggedElement) {
+            this.style.transform = 'translate(-50%, -50%) scale(1.05)';
+        }
+    });
+    
+    module.addEventListener('mouseleave', function() {
+        if (!draggedElement) {
+            this.style.transform = 'translate(-50%, -50%) scale(1)';
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ trail.title }} - Trilhas de Conhecimento{% endblock %}
+
+{% block extra_css %}
+<style>
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+.module-card {
+    transition: all 0.3s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}
+
+.lesson-item {
+    transition: all 0.2s ease;
+}
+
+.lesson-item:hover {
+    background-color: rgba(139, 92, 246, 0.05);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header da Trilha -->
+        <div class="bg-white rounded-3xl shadow-2xl p-8 mb-8 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-96 h-96 rounded-full opacity-10" 
+                 style="background: {{ trail.color }}; filter: blur(60px);"></div>
+            
+            <div class="relative">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center">
+                        <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-5xl mr-6"
+                             style="background-color: {{ trail.color }}20;">
+                            {{ trail.icon }}
+                        </div>
+                        <div>
+                            <h1 class="text-4xl font-bold text-gray-800 mb-2">{{ trail.title }}</h1>
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">
+                                    <i class="fas fa-building mr-1"></i> {{ trail.sector.name }}
+                                </span>
+                                <span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-semibold">
+                                    {{ trail.get_difficulty_display }}
+                                </span>
+                                <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full font-semibold">
+                                    <i class="fas fa-clock mr-1"></i> {{ trail.estimated_hours }}h
+                                </span>
+                                <span class="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full font-semibold">
+                                    <i class="fas fa-star mr-1"></i> {{ trail.total_points }} pts
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        {% if can_manage %}
+                        <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" 
+                           class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all">
+                            <i class="fas fa-edit mr-1"></i> Editar
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'knowledge_trails:dashboard' %}" 
+                           class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all">
+                            <i class="fas fa-arrow-left mr-1"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+                
+                {% if trail.description %}
+                <p class="text-gray-600 text-lg mb-4">{{ trail.description }}</p>
+                {% endif %}
+                
+                <!-- Barra de Progresso -->
+                <div class="bg-gray-100 rounded-2xl p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-semibold text-gray-700">Seu Progresso</span>
+                        <span class="text-lg font-bold" style="color: {{ trail.color }};">{{ completion }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                        <div class="h-4 rounded-full transition-all duration-500" 
+                             style="width: {{ completion }}%; background: linear-gradient(to right, {{ trail.color }}, {{ trail.color }}dd);">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Minimapa -->
+        <div class="bg-white rounded-3xl shadow-2xl p-8 mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                <i class="fas fa-map text-purple-600 mr-3"></i>
+                Mapa da Trilha
+            </h2>
+            
+            <div class="relative bg-gradient-to-br from-purple-600 via-pink-600 to-red-500 rounded-2xl p-8" 
+                 style="min-height: 400px;">
+                <!-- Grade de fundo -->
+                <svg class="absolute inset-0 w-full h-full opacity-10" style="pointer-events: none;">
+                    <defs>
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="1"/>
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                </svg>
+                
+                <!-- Módulos no minimapa -->
+                {% for item in modules_data %}
+                <div class="absolute" 
+                     style="left: {{ item.module.map_x }}%; top: {{ item.module.map_y }}%; transform: translate(-50%, -50%);">
+                    <div class="relative group">
+                        <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-2xl transition-all cursor-pointer
+                                    {% if item.is_unlocked %}bg-white{% else %}bg-gray-400 opacity-60{% endif %}"
+                             style="{% if item.is_unlocked %}border: 3px solid {{ trail.color }};{% endif %}">
+                            {{ item.module.icon_emoji }}
+                        </div>
+                        
+                        <!-- Tooltip -->
+                        <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg
+                                    opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                            {{ item.module.title }}
+                            <br>
+                            <span class="text-green-400">{{ item.completed_lessons }}/{{ item.total_lessons }} lições</span>
+                        </div>
+                        
+                        {% if not item.is_unlocked %}
+                        <div class="absolute top-0 right-0 -mt-1 -mr-1">
+                            <i class="fas fa-lock text-white text-xs bg-gray-600 rounded-full p-1"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Módulos e Lições -->
+        <div class="space-y-6">
+            {% for item in modules_data %}
+            <div class="module-card bg-white rounded-3xl shadow-xl overflow-hidden {% if not item.is_unlocked %}opacity-60{% endif %}">
+                <div class="bg-gradient-to-r from-purple-500 to-pink-500 p-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="text-4xl mr-4">{{ item.module.icon_emoji }}</span>
+                            <div>
+                                <h3 class="text-2xl font-bold text-white">{{ item.module.title }}</h3>
+                                {% if item.module.description %}
+                                <p class="text-white text-opacity-90 mt-1">{{ item.module.description }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="text-right">
+                            {% if not item.is_unlocked %}
+                            <span class="px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg font-semibold">
+                                <i class="fas fa-lock mr-1"></i> Bloqueado
+                            </span>
+                            {% else %}
+                            <div class="text-white">
+                                <div class="text-3xl font-bold">{{ item.completion_percentage }}%</div>
+                                <div class="text-sm opacity-90">{{ item.completed_lessons }}/{{ item.total_lessons }} lições</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="p-6">
+                    {% if item.lessons %}
+                    <div class="space-y-3">
+                        {% for lesson_data in item.lessons %}
+                        <div class="lesson-item p-4 rounded-xl border-2 
+                                    {% if lesson_data.completed %}border-green-300 bg-green-50{% elif lesson_data.is_unlocked %}border-gray-200{% else %}border-gray-100 bg-gray-50{% endif %}">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center flex-1">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center mr-4
+                                                {% if lesson_data.completed %}bg-green-500{% elif lesson_data.is_unlocked %}bg-purple-500{% else %}bg-gray-400{% endif %}">
+                                        {% if lesson_data.completed %}
+                                        <i class="fas fa-check text-white"></i>
+                                        {% elif lesson_data.is_unlocked %}
+                                        <i class="fas fa-play text-white"></i>
+                                        {% else %}
+                                        <i class="fas fa-lock text-white"></i>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-800">{{ lesson_data.lesson.title }}</h4>
+                                        <div class="flex items-center gap-3 mt-1 text-sm">
+                                            <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+                                                {{ lesson_data.lesson.get_lesson_type_display }}
+                                            </span>
+                                            {% if lesson_data.lesson.points %}
+                                            <span class="text-yellow-600">
+                                                <i class="fas fa-star mr-1"></i> {{ lesson_data.lesson.points }} pts
+                                            </span>
+                                            {% endif %}
+                                            {% if lesson_data.lesson.duration_minutes %}
+                                            <span class="text-gray-600">
+                                                <i class="fas fa-clock mr-1"></i> {{ lesson_data.lesson.duration_minutes }} min
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {% if lesson_data.is_unlocked %}
+                                <a href="{% url 'knowledge_trails:lesson_view' lesson_data.lesson.id %}" 
+                                   class="px-4 py-2 rounded-lg font-semibold transition-all
+                                          {% if lesson_data.completed %}bg-green-100 text-green-700 hover:bg-green-200{% else %}bg-purple-600 text-white hover:bg-purple-700{% endif %}">
+                                    {% if lesson_data.completed %}
+                                    <i class="fas fa-redo mr-1"></i> Revisar
+                                    {% else %}
+                                    <i class="fas fa-arrow-right mr-1"></i> Iniciar
+                                    {% endif %}
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-info-circle text-4xl mb-3 opacity-30"></i>
+                        <p>Nenhuma lição disponível neste módulo</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="bg-white rounded-3xl shadow-xl p-12 text-center">
+                <i class="fas fa-folder-open text-6xl text-gray-300 mb-4"></i>
+                <p class="text-xl text-gray-600">Nenhum módulo disponível nesta trilha ainda</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

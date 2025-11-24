@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Editar {{ trail.title }} - Trilhas de Conhecimento{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <!-- Cabeçalho -->
+    <div class="mb-6">
+        <div class="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl text-white p-8">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-3xl font-bold mb-2 flex items-center gap-3">
+                        <span class="text-5xl">{{ trail.icon }}</span>
+                        {{ trail.title }}
+                    </h3>
+                    <p class="text-white text-opacity-90 flex items-center gap-4">
+                        <span class="flex items-center gap-2">
+                            <i class="fas fa-building"></i> {{ trail.sector.name }}
+                        </span>
+                        <span>•</span>
+                        <span class="flex items-center gap-2">
+                            <i class="fas fa-signal"></i> {{ trail.get_difficulty_display }}
+                        </span>
+                    </p>
+                </div>
+                <div class="flex gap-3">
+                    <a href="{% url 'knowledge_trails:manage_trail' trail.id %}" class="px-6 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
+                        <i class="fas fa-chart-bar"></i> Estatísticas
+                    </a>
+                    <a href="{% url 'knowledge_trails:dashboard' %}" class="px-6 py-3 bg-white bg-opacity-10 hover:bg-opacity-20 border-2 border-white border-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Editar Informações -->
+        <div>
+            <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+                <div class="bg-white border-b-2 border-gray-100 p-6">
+                    <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-edit text-purple-600"></i>
+                        Informações da Trilha
+                    </h5>
+                </div>
+                <div class="p-6">
+                    <form method="post" class="space-y-4">
+                        {% csrf_token %}
+                        
+                        <div>
+                            <label for="title" class="block text-sm font-semibold text-gray-700 mb-2">Título</label>
+                            <input type="text" 
+                                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300" 
+                                   id="title" 
+                                   name="title" 
+                                   value="{{ trail.title }}" 
+                                   required>
+                        </div>
+                        
+                        <div>
+                            <label for="description" class="block text-sm font-semibold text-gray-700 mb-2">Descrição</label>
+                            <textarea class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300 resize-none" 
+                                      id="description" 
+                                      name="description" 
+                                      rows="3">{{ trail.description }}</textarea>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="sector" class="block text-sm font-semibold text-gray-700 mb-2">Setor</label>
+                                <select class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300" 
+                                        id="sector" 
+                                        name="sector">
+                                    {% for sector in sectors %}
+                                    <option value="{{ sector.id }}" {% if sector.id == trail.sector.id %}selected{% endif %}>
+                                        {{ sector.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label for="difficulty" class="block text-sm font-semibold text-gray-700 mb-2">Dificuldade</label>
+                                <select class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300" 
+                                        id="difficulty" 
+                                        name="difficulty">
+                                    {% for value, label in difficulty_choices %}
+                                    <option value="{{ value }}" {% if value == trail.difficulty %}selected{% endif %}>
+                                        {{ label }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label for="icon" class="block text-sm font-semibold text-gray-700 mb-2">Ícone</label>
+                                <input type="text" 
+                                       class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300 text-center text-2xl" 
+                                       id="icon" 
+                                       name="icon" 
+                                       value="{{ trail.icon }}">
+                            </div>
+                            
+                            <div>
+                                <label for="color" class="block text-sm font-semibold text-gray-700 mb-2">Cor</label>
+                                <input type="color" 
+                                       class="w-full h-12 border-2 border-gray-200 rounded-xl focus:border-purple-500 outline-none transition-all duration-300 cursor-pointer" 
+                                       id="color" 
+                                       name="color" 
+                                       value="{{ trail.color }}">
+                            </div>
+                            
+                            <div>
+                                <label for="estimated_hours" class="block text-sm font-semibold text-gray-700 mb-2">Horas</label>
+                                <input type="number" 
+                                       class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300" 
+                                       id="estimated_hours" 
+                                       name="estimated_hours" 
+                                       value="{{ trail.estimated_hours }}">
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-2 pt-2">
+                            <div class="flex items-center">
+                                <input type="checkbox" 
+                                       class="w-5 h-5 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
+                                       id="enable_certificate" 
+                                       name="enable_certificate" 
+                                       {% if trail.enable_certificate %}checked{% endif %}>
+                                <label class="ml-3 text-gray-700 font-medium" for="enable_certificate">
+                                    Emitir Certificado
+                                </label>
+                            </div>
+                            
+                            <div class="flex items-center">
+                                <input type="checkbox" 
+                                       class="w-5 h-5 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
+                                       id="is_active" 
+                                       name="is_active" 
+                                       {% if trail.is_active %}checked{% endif %}>
+                                <label class="ml-3 text-gray-700 font-medium" for="is_active">
+                                    Trilha Ativa
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-3 pt-4">
+                            <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+                                <i class="fas fa-save"></i> Salvar Alterações
+                            </button>
+                            <button type="button" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl" onclick="document.getElementById('deleteModal').classList.remove('hidden')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Visualizar Minimapa -->
+        <div>
+            <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+                <div class="bg-white border-b-2 border-gray-100 p-6 flex justify-between items-center">
+                    <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-map text-purple-600"></i>
+                        Minimapa da Trilha
+                    </h5>
+                    <a href="{% url 'knowledge_trails:edit_trail_map' trail.id %}" class="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                        <i class="fas fa-edit"></i> Editar Posições
+                    </a>
+                </div>
+                <div class="p-6">
+                    <div id="minimapa" class="w-full h-96 rounded-2xl relative overflow-hidden" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <!-- Grade de fundo -->
+                        <svg class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                            <defs>
+                                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="1"/>
+                                </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#grid)" />
+                        </svg>
+                        
+                        <!-- Módulos -->
+                        {% for module in modules %}
+                        <div class="module-marker absolute cursor-pointer transition-all duration-300 hover:scale-110" 
+                             style="left: {{ module.map_x }}%; 
+                                    top: {{ module.map_y }}%; 
+                                    transform: translate(-50%, -50%);
+                                    background: white;
+                                    border: 3px solid {{ trail.color }};
+                                    border-radius: 50%;
+                                    width: 60px;
+                                    height: 60px;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    font-size: 1.5rem;
+                                    box-shadow: 0 4px 15px rgba(0,0,0,0.3);"
+                             title="{{ module.title }}"
+                             onclick="showModuleInfo({{ module.id }}, '{{ module.title|escapejs }}', {{ module.lessons.count }})">
+                            {{ module.icon_emoji }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mt-4">
+                        <i class="fas fa-info-circle mr-2 text-blue-600"></i>
+                        <strong>{{ modules.count }}</strong> módulo{{ modules.count|pluralize }} criado{{ modules.count|pluralize }}
+                        {% if modules.count == 0 %}
+                        <br>
+                        <small class="text-gray-600">Adicione módulos para começar a construir sua trilha!</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Módulos e Lições -->
+    <div class="mt-6">
+        <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+            <div class="bg-white border-b-2 border-gray-100 p-6 flex justify-between items-center">
+                <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <i class="fas fa-list text-purple-600"></i>
+                    Módulos e Lições
+                </h5>
+                <a href="{% url 'knowledge_trails:create_module' trail.id %}" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                    <i class="fas fa-plus"></i> Novo Módulo
+                </a>
+            </div>
+            <div class="p-6">
+                {% if modules %}
+                <div class="space-y-3">
+                    {% for module in modules %}
+                    <div class="border-2 border-gray-200 rounded-xl overflow-hidden">
+                        <button class="w-full px-6 py-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-all duration-300" 
+                                onclick="toggleModule('module{{ module.id }}')">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl">{{ module.icon_emoji }}</span>
+                                <strong class="text-lg text-gray-800">{{ module.title }}</strong>
+                                <span class="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">
+                                    {{ module.lessons.count }} liç{{ module.lessons.count|pluralize:"ão,ões" }}
+                                </span>
+                            </div>
+                            <i class="fas fa-chevron-down transition-transform duration-300" id="icon-module{{ module.id }}"></i>
+                        </button>
+                        <div id="module{{ module.id }}" class="{% if not forloop.first %}hidden{% endif %} p-6 bg-white border-t-2 border-gray-100">
+                            <p class="text-gray-600 mb-4">{{ module.description|default:"Sem descrição" }}</p>
+                            
+                            {% if module.lessons.all %}
+                            <div class="space-y-2">
+                                {% for lesson in module.lessons.all %}
+                                <div class="flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all duration-300">
+                                    <div class="flex items-center gap-3">
+                                        <i class="fas fa-book-open text-purple-600"></i>
+                                        <strong class="text-gray-800">{{ lesson.title }}</strong>
+                                        <span class="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-full">
+                                            {{ lesson.get_lesson_type_display }}
+                                        </span>
+                                        {% if lesson.points %}
+                                        <span class="px-2 py-1 bg-yellow-400 text-yellow-900 text-xs rounded-full font-semibold">
+                                            {{ lesson.points }} pts
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                                <i class="fas fa-exclamation-triangle mr-2 text-yellow-600"></i>
+                                Nenhuma lição criada. Use o Django Admin para adicionar lições.
+                            </div>
+                            {% endif %}
+                            
+                            <div class="mt-4">
+                                <form method="post" action="{% url 'knowledge_trails:delete_module' module.id %}" 
+                                      onsubmit="return confirm('Tem certeza que deseja excluir este módulo e todas as suas lições?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                                        <i class="fas fa-trash"></i> Excluir Módulo
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-folder-open text-gray-300 text-6xl mb-4"></i>
+                    <p class="text-gray-500 mb-4">Nenhum módulo criado ainda.</p>
+                    <a href="{% url 'knowledge_trails:create_module' trail.id %}" class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl">
+                        <i class="fas fa-plus"></i> Criar Primeiro Módulo
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+        <div class="bg-red-500 text-white p-6">
+            <div class="flex justify-between items-center">
+                <h5 class="text-xl font-bold flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Confirmar Exclusão
+                </h5>
+                <button type="button" class="text-white hover:text-gray-200 transition-colors" onclick="document.getElementById('deleteModal').classList.add('hidden')">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+        </div>
+        <div class="p-6">
+            <p class="text-gray-800 mb-3">Tem certeza que deseja excluir a trilha <strong>"{{ trail.title }}"</strong>?</p>
+            <p class="text-gray-600 text-sm flex items-start gap-2">
+                <i class="fas fa-info-circle mt-0.5"></i>
+                <span>Se houver usuários com progresso, a trilha será apenas desativada.</span>
+            </p>
+        </div>
+        <div class="border-t-2 border-gray-100 p-6 flex justify-end gap-3">
+            <button type="button" class="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-all duration-300" onclick="document.getElementById('deleteModal').classList.add('hidden')">
+                Cancelar
+            </button>
+            <form method="post" action="{% url 'knowledge_trails:delete_trail' trail.id %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2">
+                    <i class="fas fa-trash"></i> Sim, Excluir
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function showModuleInfo(id, title, lessonCount) {
+    alert(`📚 ${title}\n\n${lessonCount} lição(ões) criada(s)`);
+}
+
+function toggleModule(moduleId) {
+    const module = document.getElementById(moduleId);
+    const icon = document.getElementById('icon-' + moduleId);
+    module.classList.toggle('hidden');
+    icon.classList.toggle('rotate-180');
+}
+
+// Hover effect nos módulos
+document.querySelectorAll('.module-marker').forEach(marker => {
+    marker.addEventListener('mouseenter', function() {
+        this.style.transform = 'translate(-50%, -50%) scale(1.2)';
+        this.style.zIndex = '1000';
+    });
+    
+    marker.addEventListener('mouseleave', function() {
+        this.style.transform = 'translate(-50%, -50%) scale(1)';
+        this.style.zIndex = '1';
+    });
+});
+</script>
+{% endblock %}

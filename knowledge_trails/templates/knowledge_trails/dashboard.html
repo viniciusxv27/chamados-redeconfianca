@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Trilhas de Conhecimento{% endblock %}
+
+{% block extra_css %}
+<style>
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.trail-card {
+    transition: all 0.3s ease;
+}
+
+.trail-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}
+
+.stat-card {
+    animation: float 3s ease-in-out infinite;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        {% if can_create %}
+        <div class="mb-4 flex justify-between items-center">
+            <a href="/admin/knowledge_trails/" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all shadow-lg hover:shadow-xl">
+                <i class="fas fa-cog mr-2"></i>
+                Gerenciar no Admin
+            </a>
+            <a href="{% url 'knowledge_trails:create_trail' %}" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-lg hover:shadow-xl">
+                <i class="fas fa-plus-circle mr-2"></i>
+                Nova Trilha
+            </a>
+        </div>
+        {% endif %}
+        
+        <!-- Header Original -->
+        <div class="bg-white rounded-3xl shadow-2xl p-8 mb-8 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-purple-200 to-pink-200 rounded-full opacity-20 -mr-32 -mt-32"></div>
+            <div class="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-blue-200 to-indigo-200 rounded-full opacity-20 -ml-24 -mb-24"></div>
+            
+            <div class="relative">
+                <h1 class="text-5xl font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-red-500 bg-clip-text text-transparent mb-3">
+                    🎓 Trilhas de Conhecimento
+                </h1>
+                <p class="text-xl text-gray-600">Desenvolva suas habilidades e conquiste certificados!</p>
+            </div>
+        </div>
+
+        <!-- Estatísticas do Usuário -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="stat-card bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white" style="animation-delay: 0s;">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm opacity-90 mb-1">Trilhas Iniciadas</p>
+                        <p class="text-4xl font-bold">{{ user_stats.total_trails_started }}</p>
+                    </div>
+                    <div class="text-5xl opacity-30">🚀</div>
+                </div>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 text-white" style="animation-delay: 0.2s;">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm opacity-90 mb-1">Trilhas Concluídas</p>
+                        <p class="text-4xl font-bold">{{ user_stats.total_trails_completed }}</p>
+                    </div>
+                    <div class="text-5xl opacity-30">✅</div>
+                </div>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-xl p-6 text-white" style="animation-delay: 0.4s;">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm opacity-90 mb-1">Pontos Totais</p>
+                        <p class="text-4xl font-bold">{{ user_stats.total_points }}</p>
+                    </div>
+                    <div class="text-5xl opacity-30">⭐</div>
+                </div>
+            </div>
+            
+            <div class="stat-card bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl shadow-xl p-6 text-white" style="animation-delay: 0.6s;">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm opacity-90 mb-1">Lições Concluídas</p>
+                        <p class="text-4xl font-bold">{{ user_stats.total_lessons_completed }}</p>
+                    </div>
+                    <div class="text-5xl opacity-30">📚</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trilhas Disponíveis -->
+        <div class="bg-white rounded-3xl shadow-2xl p-8 mb-8">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6 flex items-center">
+                <span class="text-4xl mr-3">🗺️</span>
+                Trilhas Disponíveis
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for item in trail_data %}
+                <div class="trail-card bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg p-6 border-2 border-transparent hover:border-purple-300">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="flex items-center">
+                            {% if item.trail.icon %}
+                                <img src="{{ item.trail.icon.url }}" alt="{{ item.trail.title }}" class="w-16 h-16 rounded-full mr-4">
+                            {% else %}
+                                <div class="w-16 h-16 rounded-full mr-4 flex items-center justify-center text-3xl" style="background-color: {{ item.trail.color }}20;">
+                                    🎯
+                                </div>
+                            {% endif %}
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-800">{{ item.trail.title }}</h3>
+                                <p class="text-sm text-gray-500">{{ item.trail.sector.name }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p class="text-gray-600 text-sm mb-4 line-clamp-2">{{ item.trail.description }}</p>
+                    
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold">
+                            {{ item.trail.get_difficulty_display }}
+                        </span>
+                        <span class="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-semibold">
+                            ⏱️ {{ item.trail.estimated_hours }}h
+                        </span>
+                        <span class="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full font-semibold">
+                            ⭐ {{ item.trail.total_points }} pts
+                        </span>
+                    </div>
+                    
+                    <!-- Barra de Progresso -->
+                    <div class="mb-4">
+                        <div class="flex items-center justify-between text-sm mb-2">
+                            <span class="text-gray-600">Progresso</span>
+                            <span class="font-bold text-purple-600">{{ item.completion }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                            <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-500" 
+                                 style="width: {{ item.completion }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <a href="{% url 'knowledge_trails:trail_detail' item.trail.id %}" 
+                           class="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-center hover:from-purple-700 hover:to-pink-700 transition-all font-semibold">
+                            {% if item.completion == 0 %}
+                                🚀 Começar
+                            {% elif item.completion == 100 %}
+                                ✅ Revisar
+                            {% else %}
+                                ▶️ Continuar
+                            {% endif %}
+                        </a>
+                        {% if item.can_manage %}
+                        <a href="{% url 'knowledge_trails:manage_trail' item.trail.id %}" 
+                           class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all">
+                            ⚙️
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-span-full text-center py-12">
+                    <p class="text-6xl mb-4">📚</p>
+                    <p class="text-xl text-gray-600">Nenhuma trilha disponível no momento</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Certificados Recentes -->
+        {% if certificates %}
+        <div class="bg-white rounded-3xl shadow-2xl p-8">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6 flex items-center">
+                <span class="text-4xl mr-3">🏆</span>
+                Meus Certificados
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for cert in certificates %}
+                <div class="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl shadow-lg p-6 border-2 border-yellow-200">
+                    <div class="text-center mb-4">
+                        <div class="text-5xl mb-3">🎓</div>
+                        <h3 class="font-bold text-gray-800 mb-1">{{ cert.trail.title }}</h3>
+                        <p class="text-sm text-gray-600">{{ cert.issued_at|date:"d/m/Y" }}</p>
+                    </div>
+                    <a href="{% url 'knowledge_trails:certificate_view' cert.id %}" 
+                       class="block w-full px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg text-center hover:from-yellow-600 hover:to-orange-600 transition-all font-semibold">
+                        👁️ Ver Certificado
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
