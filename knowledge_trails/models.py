@@ -347,7 +347,12 @@ class QuizQuestion(models.Model):
         related_name='quiz_questions',
         verbose_name='Lição'
     )
-    question = models.TextField(verbose_name='Pergunta')
+    question_text = models.TextField(verbose_name='Pergunta')
+    points = models.PositiveIntegerField(
+        default=10,
+        verbose_name='Pontos',
+        help_text='Pontos ganhos ao acertar esta questão'
+    )
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
     
     class Meta:
@@ -368,7 +373,7 @@ class QuizOption(models.Model):
         related_name='options',
         verbose_name='Pergunta'
     )
-    text = models.CharField(max_length=500, verbose_name='Texto da Opção')
+    option_text = models.CharField(max_length=500, verbose_name='Texto da Opção')
     is_correct = models.BooleanField(default=False, verbose_name='É a Resposta Correta')
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
     
@@ -378,7 +383,7 @@ class QuizOption(models.Model):
         ordering = ['order']
         
     def __str__(self):
-        return self.text
+        return self.option_text
 
 
 class TrailProgress(models.Model):

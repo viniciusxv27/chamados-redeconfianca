@@ -20,7 +20,7 @@ class LessonInline(admin.TabularInline):
 class QuizOptionInline(admin.TabularInline):
     model = QuizOption
     extra = 4
-    fields = ['text', 'is_correct', 'order']
+    fields = ['option_text', 'is_correct', 'order']
 
 
 @admin.register(KnowledgeTrail)
@@ -91,9 +91,9 @@ class LessonAdmin(admin.ModelAdmin):
 
 @admin.register(QuizQuestion)
 class QuizQuestionAdmin(admin.ModelAdmin):
-    list_display = ['question', 'lesson', 'order']
+    list_display = ['question_text', 'lesson', 'points', 'order']
     list_filter = ['lesson__module__trail']
-    search_fields = ['question']
+    search_fields = ['question_text']
     inlines = [QuizOptionInline]
 
 
