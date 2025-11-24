@@ -232,6 +232,7 @@ class Lesson(models.Model):
     LESSON_TYPE_CHOICES = [
         ('text', 'Texto'),
         ('video', 'Vídeo'),
+        ('document', 'Documento'),
         ('quiz', 'Quiz'),
         ('interactive', 'Interativo'),
     ]
@@ -262,12 +263,26 @@ class Lesson(models.Model):
         verbose_name='URL do Vídeo',
         help_text='URL do YouTube, Vimeo, etc.'
     )
+    video_file = models.FileField(
+        upload_to=upload_lesson_media,
+        blank=True,
+        null=True,
+        verbose_name='Arquivo de Vídeo',
+        help_text='Upload de vídeo (MP4, WebM, etc.)'
+    )
+    document_file = models.FileField(
+        upload_to=upload_lesson_media,
+        blank=True,
+        null=True,
+        verbose_name='Arquivo de Documento',
+        help_text='PDF, DOC, PPT, XLS, etc.'
+    )
     media_file = models.FileField(
         upload_to=upload_lesson_media,
         blank=True,
         null=True,
         verbose_name='Arquivo de Mídia',
-        help_text='PDF, imagens, etc.'
+        help_text='Outros arquivos (imagens, etc.)'
     )
     
     # Gamificação
@@ -283,6 +298,11 @@ class Lesson(models.Model):
     )
     
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
+    is_required = models.BooleanField(
+        default=True,
+        verbose_name='Obrigatória',
+        help_text='Lição obrigatória para conclusão do módulo'
+    )
     is_active = models.BooleanField(default=True, verbose_name='Ativa')
     
     class Meta:

@@ -783,3 +783,326 @@ def delete_module(request, module_id):
     messages.success(request, f'✅ Módulo "{module_title}" excluído com sucesso!')
     
     return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
+
+
+# ============= VIEWS DE CRUD DE LIÇÕES =============
+
+@login_required
+def create_lesson(request, module_id):
+    """Criar nova lição em um módulo"""
+    from .forms import LessonForm
+    
+    module = get_object_or_404(TrailModule.objects.select_related('trail'), id=module_id)
+    trail = module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para adicionar lições neste módulo.')
+        return redirect('knowledge_trails:dashboard')
+    
+    if request.method == 'POST':
+        form = LessonForm(request.POST, request.FILES)
+        if form.is_valid():
+            lesson = form.save(commit=False)
+            lesson.module = module
+            lesson.save()
+            
+            messages.success(request, f'✅ Lição "{lesson.title}" criada com sucesso!')
+            
+            # Se for quiz, redirecionar para adicionar questões
+            if lesson.lesson_type == 'quiz':
+                return redirect('knowledge_trails:edit_lesson_quiz', lesson_id=lesson.id)
+            
+            return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
+    else:
+        form = LessonForm()
+    
+    context = {
+        'form': form,
+        'module': module,
+        'trail': trail,
+    }
+    
+    return render(request, 'knowledge_trails/create_lesson.html', context)
+
+
+@login_required
+def edit_lesson(request, lesson_id):
+    """Editar lição existente"""
+    from .forms import LessonForm
+    
+    lesson = get_object_or_404(Lesson.objects.select_related('module__trail'), id=lesson_id)
+    module = lesson.module
+    trail = module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para editar esta lição.')
+        return redirect('knowledge_trails:dashboard')
+    
+    if request.method == 'POST':
+        form = LessonForm(request.POST, request.FILES, instance=lesson)
+        if form.is_valid():
+            lesson = form.save()
+            messages.success(request, f'✅ Lição "{lesson.title}" atualizada com sucesso!')
+            return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
+    else:
+        form = LessonForm(instance=lesson)
+    
+    context = {
+        'form': form,
+        'lesson': lesson,
+        'module': module,
+        'trail': trail,
+    }
+    
+    return render(request, 'knowledge_trails/edit_lesson.html', context)
+
+
+@login_required
+def edit_lesson_quiz(request, lesson_id):
+    """Editar questões do quiz de uma lição"""
+    from .forms import QuizQuestionForm, QuizOptionForm
+    
+    lesson = get_object_or_404(
+        Lesson.objects.select_related('module__trail').prefetch_related('quiz_questions__options'),
+        id=lesson_id
+    )
+    module = lesson.module
+    trail = module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para editar este quiz.')
+        return redirect('knowledge_trails:dashboard')
+    
+    if lesson.lesson_type != 'quiz':
+        messages.error(request, 'Esta lição não é um quiz.')
+        return redirect('knowledge_trails:edit_lesson', lesson_id=lesson.id)
+    
+    # Buscar questões existentes
+    questions = lesson.quiz_questions.all().prefetch_related('options')
+    
+    context = {
+        'lesson': lesson,
+        'module': module,
+        'trail': trail,
+        'questions': questions,
+    }
+    
+    return render(request, 'knowledge_trails/edit_lesson_quiz.html', context)
+
+
+@login_required
+def create_quiz_question(request, lesson_id):
+    """Criar nova questão de quiz"""
+    from .forms import QuizQuestionForm
+    
+    lesson = get_object_or_404(Lesson.objects.select_related('module__trail'), id=lesson_id)
+    module = lesson.module
+    trail = module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para adicionar questões neste quiz.')
+        return redirect('knowledge_trails:dashboard')
+    
+    if request.method == 'POST':
+        form = QuizQuestionForm(request.POST)
+        if form.is_valid():
+            question = form.save(commit=False)
+            question.lesson = lesson
+            question.save()
+            
+            messages.success(request, '✅ Questão criada com sucesso!')
+            return redirect('knowledge_trails:edit_quiz_question', question_id=question.id)
+    else:
+        form = QuizQuestionForm()
+    
+    context = {
+        'form': form,
+        'lesson': lesson,
+        'module': module,
+        'trail': trail,
+    }
+    
+    return render(request, 'knowledge_trails/create_quiz_question.html', context)
+
+
+@login_required
+def edit_quiz_question(request, question_id):
+    """Editar questão de quiz e suas alternativas"""
+    from .forms import QuizQuestionForm, QuizOptionForm
+    
+    question = get_object_or_404(
+        QuizQuestion.objects.select_related('lesson__module__trail').prefetch_related('options'),
+        id=question_id
+    )
+    lesson = question.lesson
+    module = lesson.module
+    trail = module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para editar esta questão.')
+        return redirect('knowledge_trails:dashboard')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'update_question':
+            form = QuizQuestionForm(request.POST, instance=question)
+            if form.is_valid():
+                form.save()
+                messages.success(request, '✅ Questão atualizada com sucesso!')
+        
+        elif action == 'add_option':
+            option_text = request.POST.get('option_text')
+            is_correct = request.POST.get('is_correct') == 'on'
+            
+            if option_text:
+                QuizOption.objects.create(
+                    question=question,
+                    option_text=option_text,
+                    is_correct=is_correct
+                )
+                messages.success(request, '✅ Alternativa adicionada com sucesso!')
+        
+        elif action == 'delete_option':
+            option_id = request.POST.get('option_id')
+            option = QuizOption.objects.filter(id=option_id, question=question).first()
+            if option:
+                option.delete()
+                messages.success(request, '✅ Alternativa excluída!')
+        
+        return redirect('knowledge_trails:edit_quiz_question', question_id=question.id)
+    
+    form = QuizQuestionForm(instance=question)
+    options = question.options.all()
+    
+    context = {
+        'form': form,
+        'question': question,
+        'options': options,
+        'lesson': lesson,
+        'module': module,
+        'trail': trail,
+    }
+    
+    return render(request, 'knowledge_trails/edit_quiz_question.html', context)
+
+
+@login_required
+@require_POST
+def delete_lesson(request, lesson_id):
+    """Excluir lição"""
+    lesson = get_object_or_404(Lesson.objects.select_related('module__trail'), id=lesson_id)
+    module = lesson.module
+    trail = module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para excluir esta lição.')
+        return redirect('knowledge_trails:dashboard')
+    
+    lesson_title = lesson.title
+    lesson.delete()
+    messages.success(request, f'✅ Lição "{lesson_title}" excluída com sucesso!')
+    
+    return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
+
+
+@login_required
+@require_POST
+def delete_quiz_question(request, question_id):
+    """Excluir questão de quiz"""
+    question = get_object_or_404(QuizQuestion.objects.select_related('lesson__module__trail'), id=question_id)
+    lesson = question.lesson
+    trail = lesson.module.trail
+    user = request.user
+    
+    # Verificar permissão
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para excluir esta questão.')
+        return redirect('knowledge_trails:dashboard')
+    
+    question.delete()
+    messages.success(request, '✅ Questão excluída com sucesso!')
+    
+    return redirect('knowledge_trails:edit_lesson_quiz', lesson_id=lesson.id)

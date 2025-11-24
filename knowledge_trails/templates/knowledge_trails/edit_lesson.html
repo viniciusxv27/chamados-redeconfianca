@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Editar Lição - {{ lesson.title }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <div class="max-w-5xl mx-auto">
+        <!-- Breadcrumb -->
+        <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">{{ trail.icon }} {{ trail.title }}</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <span class="text-gray-800 font-semibold">Editar {{ lesson.title }}</span>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-8">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-3xl font-bold flex items-center gap-3">
+                            <i class="fas fa-edit"></i>
+                            Editar Lição
+                        </h2>
+                        <p class="mt-2 text-white text-opacity-90">{{ module.icon_emoji }} {{ module.title }}</p>
+                    </div>
+                    {% if lesson.lesson_type == 'quiz' %}
+                    <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="px-6 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
+                        <i class="fas fa-question-circle"></i> Gerenciar Questões
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" class="p-8 space-y-6">
+                {% csrf_token %}
+
+                <!-- Tipo de Lição -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="{{ form.lesson_type.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            {{ form.lesson_type.label }} <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.lesson_type }}
+                    </div>
+
+                    <div>
+                        <label for="{{ form.order.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            {{ form.order.label }}
+                        </label>
+                        {{ form.order }}
+                    </div>
+                </div>
+
+                <!-- Informações Básicas -->
+                <div class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-file-alt text-purple-600"></i>
+                        Informações Básicas
+                    </h3>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label for="{{ form.title.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                {{ form.title.label }} <span class="text-red-500">*</span>
+                            </label>
+                            {{ form.title }}
+                        </div>
+
+                        <div>
+                            <label for="{{ form.description.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                {{ form.description.label }}
+                            </label>
+                            {{ form.description }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conteúdo -->
+                <div id="content-section" class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-align-left text-purple-600"></i>
+                        Conteúdo da Lição
+                    </h3>
+                    <div>
+                        <label for="{{ form.content.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            {{ form.content.label }}
+                        </label>
+                        {{ form.content }}
+                    </div>
+                </div>
+
+                <!-- Vídeo -->
+                <div id="video-section" class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-video text-purple-600"></i>
+                        Vídeo
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="{{ form.video_url.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                {{ form.video_url.label }}
+                            </label>
+                            {{ form.video_url }}
+                        </div>
+                        <div>
+                            <label for="{{ form.video_file.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                {{ form.video_file.label }}
+                            </label>
+                            {{ form.video_file }}
+                            {% if lesson.video_file %}
+                            <small class="text-green-600 text-xs mt-1 block">
+                                <i class="fas fa-check-circle"></i> Arquivo atual: {{ lesson.video_file.name|slice:":50" }}
+                            </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documento -->
+                <div id="document-section" class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-file-pdf text-purple-600"></i>
+                        Documento
+                    </h3>
+                    <div>
+                        <label for="{{ form.document_file.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            {{ form.document_file.label }}
+                        </label>
+                        {{ form.document_file }}
+                        {% if lesson.document_file %}
+                        <small class="text-green-600 text-xs mt-1 block">
+                            <i class="fas fa-check-circle"></i> Arquivo atual: {{ lesson.document_file.name|slice:":50" }}
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Configurações -->
+                <div class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-cog text-purple-600"></i>
+                        Configurações
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="{{ form.duration_minutes.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                {{ form.duration_minutes.label }}
+                            </label>
+                            {{ form.duration_minutes }}
+                        </div>
+                        <div>
+                            <label for="{{ form.points.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                {{ form.points.label }}
+                            </label>
+                            {{ form.points }}
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <div class="flex items-center">
+                            {{ form.is_required }}
+                            <label for="{{ form.is_required.id_for_label }}" class="ml-3 text-gray-700 font-medium">
+                                {{ form.is_required.label }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="border-t-2 border-gray-100 pt-6 flex justify-between">
+                    <form method="post" action="{% url 'knowledge_trails:delete_lesson' lesson.id %}" onsubmit="return confirm('Tem certeza que deseja excluir esta lição?');">
+                        {% csrf_token %}
+                        <button type="submit" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all duration-300 flex items-center gap-2">
+                            <i class="fas fa-trash"></i> Excluir Lição
+                        </button>
+                    </form>
+
+                    <div class="flex gap-3">
+                        <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition-all duration-300 flex items-center gap-2">
+                            <i class="fas fa-times"></i> Cancelar
+                        </a>
+                        <button type="submit" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl">
+                            <i class="fas fa-save"></i> Salvar Alterações
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Mostrar/ocultar seções baseado no tipo de lição
+document.getElementById('{{ form.lesson_type.id_for_label }}').addEventListener('change', function() {
+    const type = this.value;
+    const contentSection = document.getElementById('content-section');
+    const videoSection = document.getElementById('video-section');
+    const documentSection = document.getElementById('document-section');
+    
+    contentSection.style.display = 'none';
+    videoSection.style.display = 'none';
+    documentSection.style.display = 'none';
+    
+    if (type === 'text') {
+        contentSection.style.display = 'block';
+    } else if (type === 'video') {
+        videoSection.style.display = 'block';
+    } else if (type === 'document') {
+        documentSection.style.display = 'block';
+    }
+});
+
+// Trigger inicial
+document.getElementById('{{ form.lesson_type.id_for_label }}').dispatchEvent(new Event('change'));
+</script>
+{% endblock %}

@@ -24,4 +24,15 @@ urlpatterns = [
     # CRUD de Módulos
     path('trail/<int:trail_id>/create-module/', views.create_module, name='create_module'),
     path('module/<int:module_id>/delete/', views.delete_module, name='delete_module'),
+    
+    # CRUD de Lições
+    path('module/<int:module_id>/create-lesson/', views.create_lesson, name='create_lesson'),
+    path('lesson/<int:lesson_id>/edit/', views.edit_lesson, name='edit_lesson'),
+    path('lesson/<int:lesson_id>/delete/', views.delete_lesson, name='delete_lesson'),
+    
+    # Gerenciamento de Quiz
+    path('lesson/<int:lesson_id>/quiz/', views.edit_lesson_quiz, name='edit_lesson_quiz'),
+    path('lesson/<int:lesson_id>/quiz/create-question/', views.create_quiz_question, name='create_quiz_question'),
+    path('quiz/question/<int:question_id>/edit/', views.edit_quiz_question, name='edit_quiz_question'),
+    path('quiz/question/<int:question_id>/delete/', views.delete_quiz_question, name='delete_quiz_question'),
 ]

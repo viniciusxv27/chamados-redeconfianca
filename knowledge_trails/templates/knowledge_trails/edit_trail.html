@@ -254,7 +254,7 @@
                             <p class="text-gray-600 mb-4">{{ module.description|default:"Sem descrição" }}</p>
                             
                             {% if module.lessons.all %}
-                            <div class="space-y-2">
+                            <div class="space-y-2 mb-4">
                                 {% for lesson in module.lessons.all %}
                                 <div class="flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all duration-300">
                                     <div class="flex items-center gap-3">
@@ -269,17 +269,23 @@
                                         </span>
                                         {% endif %}
                                     </div>
+                                    <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all duration-300 text-xs flex items-center gap-1">
+                                        <i class="fas fa-edit"></i> Editar
+                                    </a>
                                 </div>
                                 {% endfor %}
                             </div>
                             {% else %}
-                            <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                            <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-4">
                                 <i class="fas fa-exclamation-triangle mr-2 text-yellow-600"></i>
-                                Nenhuma lição criada. Use o Django Admin para adicionar lições.
+                                Nenhuma lição criada neste módulo.
                             </div>
                             {% endif %}
                             
-                            <div class="mt-4">
+                            <div class="flex gap-2">
+                                <a href="{% url 'knowledge_trails:create_lesson' module.id %}" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                                    <i class="fas fa-plus"></i> Adicionar Lição
+                                </a>
                                 <form method="post" action="{% url 'knowledge_trails:delete_module' module.id %}" 
                                       onsubmit="return confirm('Tem certeza que deseja excluir este módulo e todas as suas lições?');">
                                     {% csrf_token %}

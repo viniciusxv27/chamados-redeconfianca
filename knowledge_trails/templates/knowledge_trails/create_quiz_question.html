@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Criar Questão - {{ lesson.title }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-8">
+                <h2 class="text-3xl font-bold flex items-center gap-3">
+                    <i class="fas fa-plus-circle"></i>
+                    Criar Nova Questão
+                </h2>
+                <p class="mt-2 text-white text-opacity-90">{{ lesson.title }}</p>
+            </div>
+
+            <form method="post" class="p-8 space-y-6">
+                {% csrf_token %}
+
+                <div>
+                    <label for="{{ form.question_text.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        {{ form.question_text.label }} <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.question_text }}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="{{ form.points.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            {{ form.points.label }}
+                        </label>
+                        {{ form.points }}
+                        <small class="text-gray-500 text-xs mt-1 block">Pontos que o aluno ganha ao acertar</small>
+                    </div>
+
+                    <div>
+                        <label for="{{ form.order.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            {{ form.order.label }}
+                        </label>
+                        {{ form.order }}
+                        <small class="text-gray-500 text-xs mt-1 block">Ordem de exibição</small>
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                    <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                    <strong>Próximo passo:</strong> Após criar a questão, você poderá adicionar as alternativas (mínimo 2, recomendado 4-5).
+                </div>
+
+                <div class="border-t-2 border-gray-100 pt-6 flex justify-end gap-3">
+                    <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition-all duration-300 flex items-center gap-2">
+                        <i class="fas fa-times"></i> Cancelar
+                    </a>
+                    <button type="submit" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl">
+                        <i class="fas fa-save"></i> Criar Questão
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

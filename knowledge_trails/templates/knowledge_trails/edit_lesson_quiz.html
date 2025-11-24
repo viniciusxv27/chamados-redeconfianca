@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Gerenciar Quiz - {{ lesson.title }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Breadcrumb -->
+        <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">{{ trail.icon }} {{ trail.title }}</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-purple-600 transition-colors">{{ lesson.title }}</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <span class="text-gray-800 font-semibold">Gerenciar Quiz</span>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-8">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-3xl font-bold flex items-center gap-3">
+                            <i class="fas fa-question-circle"></i>
+                            Gerenciar Questões do Quiz
+                        </h2>
+                        <p class="mt-2 text-white text-opacity-90">{{ lesson.title }}</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <a href="{% url 'knowledge_trails:create_quiz_question' lesson.id %}" class="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg">
+                            <i class="fas fa-plus"></i> Nova Questão
+                        </a>
+                        <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="px-6 py-3 bg-white bg-opacity-10 hover:bg-opacity-20 border-2 border-white border-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
+                            <i class="fas fa-arrow-left"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-8">
+                {% if questions %}
+                <div class="space-y-4">
+                    {% for question in questions %}
+                    <div class="border-2 border-gray-200 rounded-xl overflow-hidden hover:border-purple-300 transition-all duration-300">
+                        <div class="bg-gray-50 p-6">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-3 mb-3">
+                                        <span class="px-3 py-1 bg-purple-600 text-white text-sm font-bold rounded-full">
+                                            Q{{ question.order|default:forloop.counter }}
+                                        </span>
+                                        <span class="px-3 py-1 bg-yellow-400 text-yellow-900 text-sm font-semibold rounded-full">
+                                            {{ question.points }} pontos
+                                        </span>
+                                    </div>
+                                    <p class="text-lg text-gray-800 font-medium">{{ question.question_text }}</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <a href="{% url 'knowledge_trails:edit_quiz_question' question.id %}" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                                        <i class="fas fa-edit"></i> Editar
+                                    </a>
+                                    <form method="post" action="{% url 'knowledge_trails:delete_quiz_question' question.id %}" onsubmit="return confirm('Tem certeza que deseja excluir esta questão?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Alternativas -->
+                            <div class="mt-4 space-y-2">
+                                {% for option in question.options.all %}
+                                <div class="flex items-center gap-3 p-3 bg-white rounded-lg border-2 
+                                            {% if option.is_correct %}border-green-500 bg-green-50{% else %}border-gray-200{% endif %}">
+                                    <div class="flex-shrink-0">
+                                        {% if option.is_correct %}
+                                        <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                                        {% else %}
+                                        <i class="far fa-circle text-gray-400 text-xl"></i>
+                                        {% endif %}
+                                    </div>
+                                    <span class="flex-1 {% if option.is_correct %}font-semibold text-green-800{% else %}text-gray-700{% endif %}">
+                                        {{ option.option_text }}
+                                    </span>
+                                    {% if option.is_correct %}
+                                    <span class="px-2 py-1 bg-green-600 text-white text-xs font-bold rounded-full">
+                                        CORRETA
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                {% empty %}
+                                <div class="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                                    <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                                    <span class="text-yellow-800">Nenhuma alternativa criada ainda. Clique em "Editar" para adicionar alternativas.</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Estatísticas -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-purple-200 text-sm">Total de Questões</p>
+                                <p class="text-3xl font-bold mt-1">{{ questions.count }}</p>
+                            </div>
+                            <i class="fas fa-question-circle text-5xl opacity-20"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-yellow-200 text-sm">Pontos Totais</p>
+                                <p class="text-3xl font-bold mt-1">{{ questions|length|default:0 }}</p>
+                            </div>
+                            <i class="fas fa-star text-5xl opacity-20"></i>
+                        </div>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-green-200 text-sm">Status</p>
+                                <p class="text-lg font-bold mt-1">
+                                    {% if questions.count >= 3 %}Pronto{% else %}Mínimo 3 questões{% endif %}
+                                </p>
+                            </div>
+                            <i class="fas fa-check-circle text-5xl opacity-20"></i>
+                        </div>
+                    </div>
+                </div>
+
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-question-circle text-gray-300 text-6xl mb-4"></i>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">Nenhuma Questão Criada</h3>
+                    <p class="text-gray-600 mb-6">Comece criando questões para este quiz.</p>
+                    <a href="{% url 'knowledge_trails:create_quiz_question' lesson.id %}" class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl">
+                        <i class="fas fa-plus"></i> Criar Primeira Questão
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Dicas -->
+                <div class="mt-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
+                    <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                        <i class="fas fa-lightbulb text-blue-600"></i>
+                        Dicas para criar bons quizzes
+                    </h4>
+                    <ul class="space-y-2 text-gray-700">
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-check text-green-600 mt-1"></i>
+                            <span>Crie pelo menos 3-5 questões para um quiz efetivo</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-check text-green-600 mt-1"></i>
+                            <span>Cada questão deve ter pelo menos 2 alternativas, mas 4-5 é ideal</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-check text-green-600 mt-1"></i>
+                            <span>Marque apenas UMA alternativa como correta por questão</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-check text-green-600 mt-1"></i>
+                            <span>Use perguntas objetivas e claras</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-check text-green-600 mt-1"></i>
+                            <span>O aluno precisa de 70% ou mais para passar no quiz</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
