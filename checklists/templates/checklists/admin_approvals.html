@@ -156,6 +156,19 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            <br>
+                            {% if execution.status == 'awaiting_approval' %}
+                                <div class="flex items-center gap-4">
+                                    <button onclick="showRejectModal({{ execution.id }}, '{{ execution.assignment.template.name|escapejs }}')"
+                                            class="px-6 py-3 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-semibold">
+                                        ❌ Rejeitar
+                                    </button>
+                                    <button onclick="confirmApproval({{ execution.id }}, '{{ execution.assignment.template.name|escapejs }}')"
+                                            class="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-bold shadow-lg">
+                                        ✅ Aprovar Checklist
+                                    </button>
+                                </div>
+                            {% endif %}
                         </div>
 
                         <!-- Tasks -->
@@ -275,37 +288,6 @@
                                                     </div>
                                                 {% endif %}
                                                 
-                                                <!-- Task Approval Actions -->
-                                                {% if execution.status == 'awaiting_approval' %}
-                                                    <div class="mt-4 flex items-center gap-3">
-                                                        {% if task_exec.approval_status == 'pending' %}
-                                                            <button onclick="approveTask({{ task_exec.id }}, '{{ task_exec.task.title|escapejs }}')"
-                                                                    class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold">
-                                                                ✅ Aprovar Tarefa
-                                                            </button>
-                                                            <button onclick="showRejectTaskModal({{ task_exec.id }}, '{{ task_exec.task.title|escapejs }}')"
-                                                                    class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-semibold">
-                                                                ❌ Reprovar Tarefa
-                                                            </button>
-                                                        {% elif task_exec.approval_status == 'approved' %}
-                                                            <button onclick="unapproveTask({{ task_exec.id }})"
-                                                                    class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
-                                                                ↩️ Desfazer Aprovação
-                                                            </button>
-                                                        {% elif task_exec.approval_status == 'rejected' %}
-                                                            <button onclick="unapproveTask({{ task_exec.id }})"
-                                                                    class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
-                                                                ↩️ Desfazer Reprovação
-                                                            </button>
-                                                        {% endif %}
-                                                        
-                                                        {% if task_exec.approval_notes %}
-                                                            <span class="text-xs text-gray-600 italic">
-                                                                Observação: {{ task_exec.approval_notes }}
-                                                            </span>
-                                                        {% endif %}
-                                                    </div>
-                                                {% endif %}
                                             </div>
                                         </div>
                                     </div>
