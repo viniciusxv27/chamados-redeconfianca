@@ -669,6 +669,11 @@ def view_execution(request, execution_id):
                     yes_no_value = request.POST.get(yes_no_field_name)
                     if not yes_no_value or yes_no_value == 'none':
                         missing_required_tasks.append(task_exec.task.title)
+                elif task_exec.task.task_type == 'dropdown':
+                    dropdown_field_name = f'dropdown_{execution.id}_{task_exec.task.id}'
+                    dropdown_value = request.POST.get(dropdown_field_name)
+                    if not dropdown_value:
+                        missing_required_tasks.append(task_exec.task.title)
                 else:
                     task_field_name = f'task_{execution.id}_{task_exec.task.id}'
                     is_completed = request.POST.get(task_field_name) == 'on'
@@ -709,6 +714,17 @@ def view_execution(request, execution_id):
                 else:
                     task_exec.yes_no_answer = None
                     task_exec.is_completed = False
+            elif task.task_type == 'dropdown':
+                # Menu Suspenso (Sim/Não/Não se Aplica)
+                dropdown_field_name = f'dropdown_{execution.id}_{task.id}'
+                dropdown_value = request.POST.get(dropdown_field_name)
+                
+                if dropdown_value in ['yes', 'no', 'not_applicable']:
+                    task_exec.dropdown_answer = dropdown_value
+                    task_exec.is_completed = True
+                else:
+                    task_exec.dropdown_answer = None
+                    task_exec.is_completed = False
             else:
                 # Tarefa normal - verificar se foi marcada como completa
                 task_field_name = f'task_{execution.id}_{task.id}'
@@ -728,8 +744,8 @@ def view_execution(request, execution_id):
             evidence_videos = request.FILES.getlist(evidence_videos_field)
             
             # Validação: tarefas normais marcadas como completas devem ter observações OU evidências
-            # Perguntas sim/não não precisam de evidências
-            if task.task_type != 'yes_no' and task_exec.is_completed:
+            # Perguntas sim/não e dropdown não precisam de evidências
+            if task.task_type not in ['yes_no', 'dropdown'] and task_exec.is_completed:
                 has_notes = bool(notes)
                 has_existing_evidence = bool(task_exec.evidence_image or task_exec.evidence_video) or task_exec.evidences.exists()
                 has_new_evidence = bool(evidence_images or evidence_videos)
@@ -1855,3 +1871,316 @@ def unapprove_task(request, task_exec_id):
         return redirect('checklists:view_execution', execution_id=task_exec.execution.id)
     
     return redirect('checklists:admin_approvals')
+
+
+@login_required
+def checklist_reports(request):
+    """Relatório de quem fez e não fez os checklists"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Filtros
+    template_filter = request.GET.get('template', '')
+    sector_filter = request.GET.get('sector', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    status_filter = request.GET.get('status', '')  # 'completed', 'pending', 'all'
+    
+    # Data padrão: últimos 7 dias
+    if not date_from:
+        date_from = (timezone.now().date() - timedelta(days=7)).strftime('%Y-%m-%d')
+    if not date_to:
+        date_to = timezone.now().date().strftime('%Y-%m-%d')
+    
+    # Converter datas
+    try:
+        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        date_from_obj = timezone.now().date() - timedelta(days=7)
+        date_to_obj = timezone.now().date()
+    
+    # Buscar execuções
+    executions = ChecklistExecution.objects.select_related(
+        'assignment__template',
+        'assignment__template__sector',
+        'assignment__assigned_to'
+    ).filter(
+        execution_date__gte=date_from_obj,
+        execution_date__lte=date_to_obj
+    )
+    
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        if user_sectors:
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        else:
+            executions = executions.none()
+    
+    # Aplicar filtros
+    if template_filter:
+        executions = executions.filter(assignment__template_id=template_filter)
+    
+    if sector_filter:
+        executions = executions.filter(assignment__template__sector_id=sector_filter)
+    
+    if status_filter == 'completed':
+        executions = executions.filter(status='completed')
+    elif status_filter == 'pending':
+        executions = executions.filter(status__in=['pending', 'in_progress', 'awaiting_approval'])
+    elif status_filter == 'overdue':
+        executions = executions.filter(status='overdue')
+    
+    executions = executions.order_by('-execution_date', 'assignment__assigned_to__first_name')
+    
+    # Agrupar por usuário
+    users_report = {}
+    for execution in executions:
+        user = execution.assignment.assigned_to
+        if user.id not in users_report:
+            users_report[user.id] = {
+                'user': user,
+                'total': 0,
+                'completed': 0,
+                'pending': 0,
+                'overdue': 0,
+                'awaiting_approval': 0,
+                'executions': []
+            }
+        
+        users_report[user.id]['total'] += 1
+        users_report[user.id]['executions'].append(execution)
+        
+        if execution.status == 'completed':
+            users_report[user.id]['completed'] += 1
+        elif execution.status == 'awaiting_approval':
+            users_report[user.id]['awaiting_approval'] += 1
+        elif execution.status == 'overdue':
+            users_report[user.id]['overdue'] += 1
+        else:
+            users_report[user.id]['pending'] += 1
+    
+    # Calcular percentual de conclusão para cada usuário
+    for user_id, data in users_report.items():
+        if data['total'] > 0:
+            data['completion_rate'] = round((data['completed'] / data['total']) * 100)
+        else:
+            data['completion_rate'] = 0
+    
+    # Ordenar por nome
+    users_list = sorted(users_report.values(), key=lambda x: x['user'].get_full_name())
+    
+    # Estatísticas gerais
+    total_executions = executions.count()
+    completed_executions = executions.filter(status='completed').count()
+    pending_executions = executions.filter(status__in=['pending', 'in_progress', 'awaiting_approval']).count()
+    overdue_executions = executions.filter(status='overdue').count()
+    
+    stats = {
+        'total': total_executions,
+        'completed': completed_executions,
+        'pending': pending_executions,
+        'overdue': overdue_executions,
+        'completion_rate': round((completed_executions / total_executions * 100)) if total_executions > 0 else 0
+    }
+    
+    # Templates e setores para filtros
+    if request.user.is_superuser:
+        templates = ChecklistTemplate.objects.filter(is_active=True).order_by('name')
+        sectors = Sector.objects.all().order_by('name')
+    else:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        templates = ChecklistTemplate.objects.filter(sector__in=user_sectors, is_active=True).order_by('name')
+        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
+    
+    context = {
+        'users_report': users_list,
+        'stats': stats,
+        'templates': templates,
+        'sectors': sectors,
+        'template_filter': template_filter,
+        'sector_filter': sector_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'status_filter': status_filter,
+    }
+    
+    return render(request, 'checklists/checklist_reports.html', context)
+
+
+@login_required
+def export_checklists(request):
+    """Exportar relatório de checklists para Excel"""
+    from django.http import HttpResponse
+    import csv
+    
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para exportar dados.')
+        return redirect('checklists:dashboard')
+    
+    # Filtros
+    template_filter = request.GET.get('template', '')
+    sector_filter = request.GET.get('sector', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    status_filter = request.GET.get('status', '')
+    export_format = request.GET.get('format', 'csv')
+    
+    # Data padrão: últimos 30 dias
+    if not date_from:
+        date_from = (timezone.now().date() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if not date_to:
+        date_to = timezone.now().date().strftime('%Y-%m-%d')
+    
+    # Converter datas
+    try:
+        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        date_from_obj = timezone.now().date() - timedelta(days=30)
+        date_to_obj = timezone.now().date()
+    
+    # Buscar execuções com tarefas
+    executions = ChecklistExecution.objects.select_related(
+        'assignment__template',
+        'assignment__template__sector',
+        'assignment__assigned_to'
+    ).prefetch_related(
+        'task_executions__task'
+    ).filter(
+        execution_date__gte=date_from_obj,
+        execution_date__lte=date_to_obj
+    )
+    
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        if user_sectors:
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        else:
+            executions = executions.none()
+    
+    # Aplicar filtros
+    if template_filter:
+        executions = executions.filter(assignment__template_id=template_filter)
+    
+    if sector_filter:
+        executions = executions.filter(assignment__template__sector_id=sector_filter)
+    
+    if status_filter == 'completed':
+        executions = executions.filter(status='completed')
+    elif status_filter == 'pending':
+        executions = executions.filter(status__in=['pending', 'in_progress', 'awaiting_approval'])
+    elif status_filter == 'overdue':
+        executions = executions.filter(status='overdue')
+    
+    executions = executions.order_by('-execution_date', 'assignment__assigned_to__first_name')
+    
+    # Criar resposta CSV
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="checklists_{date_from}_{date_to}.csv"'
+    response.write('\ufeff')  # BOM para Excel reconhecer UTF-8
+    
+    writer = csv.writer(response, delimiter=';')
+    
+    # Cabeçalho
+    writer.writerow([
+        'Data',
+        'Período',
+        'Checklist',
+        'Setor',
+        'Usuário',
+        'Email',
+        'Status',
+        'Tarefa',
+        'Tipo de Tarefa',
+        'Obrigatória',
+        'Concluída',
+        'Resposta',
+        'Observações',
+        'Data Conclusão',
+    ])
+    
+    # Dados
+    for execution in executions:
+        for task_exec in execution.task_executions.all():
+            # Determinar resposta baseada no tipo
+            resposta = ''
+            if task_exec.task.task_type == 'yes_no':
+                if task_exec.yes_no_answer is True:
+                    resposta = 'Sim'
+                elif task_exec.yes_no_answer is False:
+                    resposta = 'Não'
+                else:
+                    resposta = 'Não respondido'
+            elif task_exec.task.task_type == 'dropdown':
+                if task_exec.dropdown_answer == 'yes':
+                    resposta = 'Sim'
+                elif task_exec.dropdown_answer == 'no':
+                    resposta = 'Não'
+                elif task_exec.dropdown_answer == 'not_applicable':
+                    resposta = 'Não se Aplica'
+                else:
+                    resposta = 'Não respondido'
+            else:
+                resposta = 'Concluída' if task_exec.is_completed else 'Pendente'
+            
+            # Período
+            periodo = 'Manhã' if execution.period == 'morning' else 'Tarde'
+            
+            # Status traduzido
+            status_map = {
+                'pending': 'Pendente',
+                'in_progress': 'Em Andamento',
+                'completed': 'Concluído',
+                'overdue': 'Atrasado',
+                'awaiting_approval': 'Aguardando Aprovação'
+            }
+            status = status_map.get(execution.status, execution.status)
+            
+            # Tipo de tarefa traduzido
+            tipo_map = {
+                'normal': 'Tarefa Normal',
+                'yes_no': 'Sim/Não',
+                'dropdown': 'Menu Suspenso'
+            }
+            tipo_tarefa = tipo_map.get(task_exec.task.task_type, task_exec.task.task_type)
+            
+            writer.writerow([
+                execution.execution_date.strftime('%d/%m/%Y'),
+                periodo,
+                execution.assignment.template.name,
+                execution.assignment.template.sector.name,
+                execution.assignment.assigned_to.get_full_name(),
+                execution.assignment.assigned_to.email,
+                status,
+                task_exec.task.title,
+                tipo_tarefa,
+                'Sim' if task_exec.task.is_required else 'Não',
+                'Sim' if task_exec.is_completed else 'Não',
+                resposta,
+                task_exec.notes or '',
+                task_exec.completed_at.strftime('%d/%m/%Y %H:%M') if task_exec.completed_at else '',
+            ])
+    
+    return response

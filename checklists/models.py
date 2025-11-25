@@ -75,6 +75,7 @@ class ChecklistTask(models.Model):
     TASK_TYPE_CHOICES = [
         ('normal', 'Tarefa Normal'),
         ('yes_no', 'Pergunta Sim/Não'),
+        ('dropdown', 'Menu Suspenso (Sim/Não/Não se Aplica)'),
     ]
     
     template = models.ForeignKey(
@@ -471,6 +472,21 @@ class ChecklistTaskExecution(models.Model):
         blank=True,
         verbose_name='Resposta Sim/Não',
         help_text='True = Sim, False = Não, None = Não respondida'
+    )
+    
+    # Campo para resposta de dropdown (Sim/Não/Não se Aplica)
+    DROPDOWN_CHOICES = [
+        ('yes', 'Sim'),
+        ('no', 'Não'),
+        ('not_applicable', 'Não se Aplica'),
+    ]
+    dropdown_answer = models.CharField(
+        max_length=20,
+        choices=DROPDOWN_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='Resposta Menu Suspenso',
+        help_text='Resposta para perguntas do tipo menu suspenso'
     )
     
     # Status de aprovação por tarefa

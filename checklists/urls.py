@@ -35,4 +35,8 @@ urlpatterns = [
     path('admin/approve-task/<int:task_exec_id>/', views.approve_task, name='approve_task'),
     path('admin/reject-task/<int:task_exec_id>/', views.reject_task, name='reject_task'),
     path('admin/unapprove-task/<int:task_exec_id>/', views.unapprove_task, name='unapprove_task'),
+    
+    # Admin - Relatórios e Exportação
+    path('admin/reports/', views.checklist_reports, name='checklist_reports'),
+    path('admin/export/', views.export_checklists, name='export_checklists'),
 ]

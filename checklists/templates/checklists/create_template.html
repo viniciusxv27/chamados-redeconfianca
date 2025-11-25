@@ -147,6 +147,7 @@
                                     onchange="toggleTaskType(this)">
                                 <option value="normal">Tarefa Normal</option>
                                 <option value="yes_no">Pergunta Sim/Não</option>
+                                <option value="dropdown">Menu Suspenso (Sim/Não/Não se Aplica)</option>
                             </select>
                         </div>
                         <div>
@@ -281,16 +282,21 @@ function removeTask(button) {
 }
 
 function toggleTaskType(select) {
-    // Futuramente pode adicionar lógica especial para perguntas sim/não
+    // Adicionar indicador visual baseado no tipo de tarefa
     const taskItem = select.closest('.task-item');
     const taskType = select.value;
     
+    // Remover todas as cores de borda
+    taskItem.classList.remove('border-green-500', 'border-blue-500', 'border-purple-500');
+    
     if (taskType === 'yes_no') {
-        // Adicionar indicador visual de pergunta
-        taskItem.classList.remove('border-green-500');
+        // Pergunta Sim/Não - azul
         taskItem.classList.add('border-blue-500');
+    } else if (taskType === 'dropdown') {
+        // Menu Suspenso - roxo
+        taskItem.classList.add('border-purple-500');
     } else {
-        taskItem.classList.remove('border-blue-500');
+        // Normal - verde
         taskItem.classList.add('border-green-500');
     }
 }

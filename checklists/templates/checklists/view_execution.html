@@ -72,6 +72,14 @@
                                         <span class="ml-2 text-sm font-semibold text-red-600">Não</span>
                                     </label>
                                 </div>
+                            {% elif task_exec.task.task_type == 'dropdown' %}
+                                <!-- Menu Suspenso (Sim/Não/Não se Aplica) -->
+                                <select name="dropdown_{{ execution.id }}_{{ task_exec.task.id }}" class="px-4 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm font-semibold bg-white dropdown-select" data-execution="{{ execution.id }}" data-task="{{ task_exec.task.id }}">
+                                    <option value="">Selecione...</option>
+                                    <option value="yes" {% if task_exec.dropdown_answer == 'yes' %}selected{% endif %} class="text-green-600">✅ Sim</option>
+                                    <option value="no" {% if task_exec.dropdown_answer == 'no' %}selected{% endif %} class="text-red-600">❌ Não</option>
+                                    <option value="not_applicable" {% if task_exec.dropdown_answer == 'not_applicable' %}selected{% endif %} class="text-gray-600">⚫ Não se Aplica</option>
+                                </select>
                             {% else %}
                                 <!-- Checkbox normal -->
                                 <label class="relative inline-block w-14 h-8 cursor-pointer">
@@ -87,6 +95,17 @@
                                     <div class="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-semibold">✓ Sim</div>
                                 {% elif task_exec.yes_no_answer == False %}
                                     <div class="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-semibold">✗ Não</div>
+                                {% else %}
+                                    <div class="px-4 py-2 bg-gray-100 text-gray-500 rounded-lg">Não respondido</div>
+                                {% endif %}
+                            {% elif task_exec.task.task_type == 'dropdown' %}
+                                <!-- Visualização Menu Suspenso -->
+                                {% if task_exec.dropdown_answer == 'yes' %}
+                                    <div class="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-semibold">✅ Sim</div>
+                                {% elif task_exec.dropdown_answer == 'no' %}
+                                    <div class="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-semibold">❌ Não</div>
+                                {% elif task_exec.dropdown_answer == 'not_applicable' %}
+                                    <div class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-semibold">⚫ Não se Aplica</div>
                                 {% else %}
                                     <div class="px-4 py-2 bg-gray-100 text-gray-500 rounded-lg">Não respondido</div>
                                 {% endif %}
@@ -114,6 +133,8 @@
                             {% endif %}
                             {% if task_exec.task.task_type == 'yes_no' %}
                                 <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Pergunta</span>
+                            {% elif task_exec.task.task_type == 'dropdown' %}
+                                <span class="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">Menu Suspenso</span>
                             {% endif %}
                         </h3>
 
