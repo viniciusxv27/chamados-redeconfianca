@@ -23,7 +23,7 @@
             </div>
 
             <!-- Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div class="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl p-6">
                     <div class="flex items-center justify-between">
                         <div>
@@ -43,6 +43,21 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Bulk Actions -->
+            {% if stats.awaiting_approval > 0 %}
+            <div class="flex gap-4">
+                <form method="post" action="{% url 'checklists:approve_all_checklists' %}" class="flex-1" onsubmit="return confirm('✅ Tem certeza que deseja APROVAR TODOS os {{ stats.awaiting_approval }} checklist(s) aguardando aprovação?')">
+                    {% csrf_token %}
+                    <button type="submit" class="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all font-semibold shadow-lg">
+                        ✅ Aprovar Todos ({{ stats.awaiting_approval }})
+                    </button>
+                </form>
+                <button type="button" onclick="showRejectAllModal()" class="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all font-semibold shadow-lg">
+                    ❌ Reprovar Todos ({{ stats.awaiting_approval }})
+                </button>
+            </div>
+            {% endif %}
         </div>
 
         <!-- Filters -->
@@ -392,6 +407,36 @@
     </div>
 </div>
 
+<!-- Reject All Modal -->
+<div id="rejectAllModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full m-4 p-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">❌ Reprovar Todos os Checklists</h2>
+        <p class="text-gray-600 mb-4">Você está prestes a reprovar <strong>{{ stats.awaiting_approval }}</strong> checklist(s).</p>
+        
+        <form method="post" action="{% url 'checklists:reject_all_checklists' %}">
+            {% csrf_token %}
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Motivo da Reprovação em Lote</label>
+            <textarea name="rejection_reason" 
+                      rows="4" 
+                      required
+                      placeholder="Descreva o motivo da reprovação em lote..."
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 mb-4"></textarea>
+            
+            <div class="flex items-center justify-end gap-3">
+                <button type="button" 
+                        onclick="closeRejectAllModal()"
+                        class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold">
+                    Reprovar Todos
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function showRejectModal(executionId, checklistName) {
     const confirmed = confirm(`❌ Tem certeza que deseja REJEITAR o checklist "${checklistName}"?\n\nVocê poderá adicionar uma justificativa na próxima tela.`);
@@ -464,6 +509,16 @@ function closeRejectTaskModal() {
     document.getElementById('rejectTaskModal').classList.remove('flex');
 }
 
+function showRejectAllModal() {
+    document.getElementById('rejectAllModal').classList.remove('hidden');
+    document.getElementById('rejectAllModal').classList.add('flex');
+}
+
+function closeRejectAllModal() {
+    document.getElementById('rejectAllModal').classList.add('hidden');
+    document.getElementById('rejectAllModal').classList.remove('flex');
+}
+
 function unapproveTask(taskExecId) {
     const confirmed = confirm('↩️ Tem certeza que deseja DESFAZER a aprovação/reprovação desta tarefa?');
     if (confirmed) {
@@ -481,6 +536,12 @@ document.getElementById('rejectModal').addEventListener('click', function(e) {
 document.getElementById('rejectTaskModal')?.addEventListener('click', function(e) {
     if (e.target === this) {
         closeRejectTaskModal();
+    }
+});
+
+document.getElementById('rejectAllModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeRejectAllModal();
     }
 });
 

@@ -1625,6 +1625,105 @@ def reject_checklist(request, execution_id):
 
 
 @login_required
+def approve_all_checklists(request):
+    """Aprovar todos os checklists aguardando aprovação"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para aprovar checklists.')
+        return redirect('checklists:dashboard')
+    
+    if request.method != 'POST':
+        return redirect('checklists:admin_approvals')
+    
+    # Buscar execuções aguardando aprovação
+    executions = ChecklistExecution.objects.filter(status='awaiting_approval')
+    
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if user_sectors:
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        else:
+            messages.error(request, 'Você não tem setores atribuídos.')
+            return redirect('checklists:admin_approvals')
+    
+    # Contar e aprovar
+    count = executions.count()
+    if count == 0:
+        messages.info(request, 'Não há checklists aguardando aprovação.')
+        return redirect('checklists:admin_approvals')
+    
+    executions.update(status='completed', completed_at=timezone.now())
+    
+    messages.success(request, f'✅ {count} checklist(s) aprovado(s) com sucesso!')
+    return redirect('checklists:admin_approvals')
+
+
+@login_required
+def reject_all_checklists(request):
+    """Reprovar todos os checklists aguardando aprovação"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para reprovar checklists.')
+        return redirect('checklists:dashboard')
+    
+    if request.method != 'POST':
+        return redirect('checklists:admin_approvals')
+    
+    # Buscar execuções aguardando aprovação
+    executions = ChecklistExecution.objects.filter(status='awaiting_approval')
+    
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        
+        if user_sectors:
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        else:
+            messages.error(request, 'Você não tem setores atribuídos.')
+            return redirect('checklists:admin_approvals')
+    
+    # Contar e reprovar
+    count = executions.count()
+    if count == 0:
+        messages.info(request, 'Não há checklists aguardando aprovação.')
+        return redirect('checklists:admin_approvals')
+    
+    rejection_note = request.POST.get('rejection_reason', 'Reprovação em lote')
+    
+    # Reprovar todos
+    for execution in executions:
+        execution.status = 'in_progress'
+        execution.submitted_at = None
+        execution.save()
+        
+        # Adicionar nota de rejeição
+        first_task = execution.task_executions.first()
+        if first_task:
+            current_note = first_task.notes or ''
+            first_task.notes = f"⚠️ REJEITADO EM LOTE: {rejection_note}\n\n{current_note}"
+            first_task.save()
+    
+    messages.warning(request, f'⚠️ {count} checklist(s) reprovado(s) e retornado(s) para correção.')
+    return redirect('checklists:admin_approvals')
+
+
+@login_required
 def approve_task(request, task_exec_id):
     """Aprovar tarefa individual"""
     # Verificar permissão

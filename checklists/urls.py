@@ -28,6 +28,8 @@ urlpatterns = [
     path('admin/approvals/', views.admin_approvals, name='admin_approvals'),
     path('admin/approve/<int:execution_id>/', views.approve_checklist, name='approve_checklist'),
     path('admin/reject/<int:execution_id>/', views.reject_checklist, name='reject_checklist'),
+    path('admin/approve-all/', views.approve_all_checklists, name='approve_all_checklists'),
+    path('admin/reject-all/', views.reject_all_checklists, name='reject_all_checklists'),
     
     # Admin - Task Approvals
     path('admin/approve-task/<int:task_exec_id>/', views.approve_task, name='approve_task'),

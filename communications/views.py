@@ -45,7 +45,7 @@ def home_feed(request):
             is_active=True
         ).select_related(
             'from_user', 'to_user', 'to_sector'
-        ).order_by('-created_at')[:5]
+        ).order_by('-created_at')[:2]
     except ImportError:
         # App de elogios não disponível
         pass
