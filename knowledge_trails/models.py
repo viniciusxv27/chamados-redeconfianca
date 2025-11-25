@@ -9,14 +9,16 @@ import os
 def upload_trail_icon(instance, filename):
     """Define o caminho de upload para ícones de trilha"""
     ext = filename.split('.')[-1]
-    new_filename = f"trail_{instance.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    instance_id = instance.id if instance.id else 'new'
+    new_filename = f"trail_{instance_id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
     return os.path.join('knowledge_trails', 'icons', new_filename)
 
 
 def upload_lesson_media(instance, filename):
     """Define o caminho de upload para mídia de lição"""
     ext = filename.split('.')[-1]
-    new_filename = f"lesson_{instance.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    instance_id = instance.id if instance.id else 'new'
+    new_filename = f"lesson_{instance_id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
     return os.path.join('knowledge_trails', 'lessons', new_filename)
 
 
