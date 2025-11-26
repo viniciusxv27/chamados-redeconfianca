@@ -23,7 +23,7 @@
             </p>
             
             <!-- Admin Button -->
-            {% if user.is_superuser or user.hierarchy in 'ADMIN,SUPERADMIN' %}
+            {% if user.is_superuser or user.hierarchy in 'ADMIN,SUPERADMIN,SUPERVISOR,ADMINISTRATIVO' %}
                 <div class="mt-6">
                     <a href="{% url 'benefits:admin_list' %}" 
                        class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg font-semibold">

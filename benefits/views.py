@@ -91,8 +91,8 @@ def redeem_benefit(request, benefit_id):
 @login_required
 def admin_benefits_list(request):
     """Lista todos os benefícios (admin)"""
-    # Verificar permissão
-    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN'])):
+    # Verificar permissão - ADMIN, SUPERADMIN, SUPERVISOR e ADMINISTRATIVO podem gerenciar
+    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO'])):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('benefits:list')
     
@@ -108,8 +108,8 @@ def admin_benefits_list(request):
 @login_required
 def admin_create_benefit(request):
     """Criar novo benefício (admin)"""
-    # Verificar permissão
-    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN'])):
+    # Verificar permissão - ADMIN, SUPERADMIN, SUPERVISOR e ADMINISTRATIVO podem gerenciar
+    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO'])):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('benefits:list')
     
@@ -157,8 +157,8 @@ def admin_create_benefit(request):
 @login_required
 def admin_edit_benefit(request, benefit_id):
     """Editar benefício (admin)"""
-    # Verificar permissão
-    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN'])):
+    # Verificar permissão - ADMIN, SUPERADMIN, SUPERVISOR e ADMINISTRATIVO podem gerenciar
+    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO'])):
         messages.error(request, 'Você não tem permissão para acessar esta página.')
         return redirect('benefits:list')
     
@@ -200,8 +200,8 @@ def admin_edit_benefit(request, benefit_id):
 @login_required
 def admin_delete_benefit(request, benefit_id):
     """Deletar benefício (admin)"""
-    # Verificar permissão
-    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN'])):
+    # Verificar permissão - ADMIN, SUPERADMIN, SUPERVISOR e ADMINISTRATIVO podem gerenciar
+    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO'])):
         messages.error(request, 'Você não tem permissão para realizar esta ação.')
         return redirect('benefits:list')
     
