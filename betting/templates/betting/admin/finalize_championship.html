@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Finalizar Campeonato - {{ championship.name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-yellow-600 to-orange-600 shadow-lg">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex items-center space-x-3">
+                <a href="{% url 'betting:admin_dashboard' %}" class="text-white hover:text-yellow-200">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-white">🏆 Finalizar Campeonato</h1>
+                    <p class="text-yellow-200 text-sm">{{ championship.name }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="bg-yellow-900/30 border border-yellow-600/50 rounded-xl p-6 mb-6">
+            <div class="flex items-start space-x-3">
+                <span class="text-2xl">⚠️</span>
+                <div>
+                    <h3 class="text-yellow-400 font-bold">Atenção!</h3>
+                    <p class="text-yellow-200 text-sm mt-1">
+                        Ao finalizar o campeonato, todas as apostas de campeão serão processadas automaticamente.
+                        Certifique-se de selecionar o time correto como campeão. Esta ação não pode ser desfeita.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+                <h2 class="text-lg font-bold text-white mb-4">Selecione o Campeão</h2>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for sector in sectors %}
+                    <label class="cursor-pointer">
+                        <input type="radio" name="champion_sector" value="{{ sector.id }}" class="sr-only peer" required>
+                        <div class="bg-gray-700 border-2 border-gray-600 peer-checked:border-yellow-500 peer-checked:bg-yellow-600/20 rounded-xl p-6 text-center transition hover:bg-gray-600/50">
+                            <div class="w-16 h-16 bg-purple-600/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <span class="text-3xl">🏆</span>
+                            </div>
+                            <div class="text-white font-bold">{{ sector.name }}</div>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="flex flex-col sm:flex-row justify-end gap-3">
+                <a href="{% url 'betting:admin_dashboard' %}" 
+                   class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg text-center transition">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        onclick="return confirm('Tem certeza que deseja finalizar o campeonato? Todas as apostas serão processadas.')"
+                        class="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white font-bold px-6 py-3 rounded-lg transition">
+                    🏆 Finalizar e Processar Apostas
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,612 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ match.home_team.name }} vs {{ match.away_team.name }} - Confiança BET{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <a href="{% url 'betting:home' %}" class="text-white hover:text-purple-200 flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    <span>Voltar</span>
+                </a>
+                <div class="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2 text-white">
+                    <span class="text-xs text-purple-200">Seu saldo</span>
+                    <div class="flex items-center space-x-1">
+                        <span class="text-xl font-bold" id="user-balance">{{ user_balance }}</span>
+                        <span class="text-yellow-300">C$</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Match Status Badge -->
+        <div class="text-center mb-4">
+            <span class="text-sm text-purple-400">{{ match.championship.name }} - Rodada {{ match.round_number }}</span>
+        </div>
+
+        <!-- Main Match Card -->
+        <div class="bg-gray-800/70 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 mb-6">
+            <!-- Status -->
+            <div class="text-center mb-4">
+                {% if match.status == 'live' %}
+                <span class="inline-flex items-center space-x-2 bg-red-600/30 text-red-400 px-4 py-2 rounded-full">
+                    <span class="relative flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                    <span class="font-bold">AO VIVO</span>
+                </span>
+                {% elif match.status == 'scheduled' %}
+                <span class="bg-blue-600/30 text-blue-400 px-4 py-2 rounded-full">
+                    📅 {{ match.match_date|date:"d/m/Y \à\s H:i" }}
+                </span>
+                {% elif match.status == 'finished' %}
+                <span class="bg-gray-600/30 text-gray-400 px-4 py-2 rounded-full">
+                    ✅ Finalizado
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Scoreboard -->
+            <div class="flex items-center justify-center space-x-4 sm:space-x-8 mb-6">
+                <div class="text-center flex-1">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-600 to-green-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span class="text-2xl sm:text-3xl">🏠</span>
+                    </div>
+                    <h2 class="text-lg sm:text-xl font-bold text-white">{{ match.home_team.name }}</h2>
+                    <div class="text-4xl sm:text-5xl font-bold text-white mt-2" id="home-score">{{ match.home_score }}</div>
+                </div>
+                
+                <div class="text-3xl sm:text-4xl text-gray-500 font-bold">VS</div>
+                
+                <div class="text-center flex-1">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span class="text-2xl sm:text-3xl">✈️</span>
+                    </div>
+                    <h2 class="text-lg sm:text-xl font-bold text-white">{{ match.away_team.name }}</h2>
+                    <div class="text-4xl sm:text-5xl font-bold text-white mt-2" id="away-score">{{ match.away_score }}</div>
+                </div>
+            </div>
+
+            <!-- Odds Display -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-green-600/20 border border-green-500/30 rounded-xl p-4 text-center">
+                    <div class="text-gray-400 text-xs mb-1">{{ match.home_team.name }}</div>
+                    <div class="text-2xl font-bold text-green-400" id="odds-home">{{ match.odds_home }}</div>
+                </div>
+                <div class="bg-gray-600/20 border border-gray-500/30 rounded-xl p-4 text-center">
+                    <div class="text-gray-400 text-xs mb-1">Empate</div>
+                    <div class="text-2xl font-bold text-gray-300" id="odds-draw">{{ match.odds_draw }}</div>
+                </div>
+                <div class="bg-blue-600/20 border border-blue-500/30 rounded-xl p-4 text-center">
+                    <div class="text-gray-400 text-xs mb-1">{{ match.away_team.name }}</div>
+                    <div class="text-2xl font-bold text-blue-400" id="odds-away">{{ match.odds_away }}</div>
+                </div>
+            </div>
+
+            <!-- Betting Form or User Bet Info -->
+            {% if match.status == 'finished' %}
+                <!-- Match Result -->
+                <div class="bg-gray-700/50 rounded-xl p-6 text-center">
+                    <div class="text-gray-400 mb-2">Resultado Final</div>
+                    <div class="text-xl font-bold text-white">
+                        {% if match.result == 'home' %}
+                            🎉 {{ match.home_team.name }} venceu!
+                        {% elif match.result == 'draw' %}
+                            🤝 Empate!
+                        {% elif match.result == 'away' %}
+                            🎉 {{ match.away_team.name }} venceu!
+                        {% endif %}
+                    </div>
+                </div>
+            {% elif user_bet %}
+                <!-- User Already Bet -->
+                <div class="bg-purple-900/50 border border-purple-500/30 rounded-xl p-6">
+                    <div class="text-center">
+                        <div class="text-purple-400 text-sm mb-2">Sua Aposta</div>
+                        <div class="text-xl font-bold text-white mb-2">
+                            {% if user_bet.bet_type == 'home' %}
+                                🏠 {{ match.home_team.name }}
+                            {% elif user_bet.bet_type == 'draw' %}
+                                🤝 Empate
+                            {% else %}
+                                ✈️ {{ match.away_team.name }}
+                            {% endif %}
+                        </div>
+                        <div class="flex justify-center space-x-6 text-sm">
+                            <div>
+                                <span class="text-gray-400">Valor:</span>
+                                <span class="text-white font-bold">{{ user_bet.amount }} C$</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Odd:</span>
+                                <span class="text-white font-bold">{{ user_bet.odds_at_bet }}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Ganho Potencial:</span>
+                                <span class="text-yellow-400 font-bold">{{ user_bet.potential_win }} C$</span>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            {% if user_bet.status == 'pending' %}
+                                <span class="bg-yellow-600/30 text-yellow-400 px-4 py-2 rounded-full">⏳ Aguardando resultado</span>
+                            {% elif user_bet.status == 'won' %}
+                                <span class="bg-green-600/30 text-green-400 px-4 py-2 rounded-full">🎉 Você ganhou {{ user_bet.winnings }} C$!</span>
+                            {% elif user_bet.status == 'lost' %}
+                                <span class="bg-red-600/30 text-red-400 px-4 py-2 rounded-full">😔 Você perdeu</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% elif can_bet %}
+                <!-- Betting Form -->
+                <form method="post" action="{% url 'betting:place_bet' match.id %}" id="bet-form">
+                    {% csrf_token %}
+                    <div class="bg-gray-900/50 rounded-xl p-6 border border-gray-600">
+                        <h3 class="text-lg font-bold text-white mb-4 text-center">Faça sua Aposta</h3>
+                        
+                        <!-- Bet Type Selection -->
+                        <div class="grid grid-cols-3 gap-3 mb-6">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="bet_type" value="home" class="sr-only peer" required>
+                                <div class="bg-gray-700 border-2 border-gray-600 peer-checked:border-green-500 peer-checked:bg-green-600/20 rounded-xl p-4 text-center transition">
+                                    <div class="text-2xl mb-2">🏠</div>
+                                    <div class="text-white text-sm font-semibold">{{ match.home_team.name }}</div>
+                                    <div class="text-green-400 font-bold mt-2">{{ match.odds_home }}</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="bet_type" value="draw" class="sr-only peer">
+                                <div class="bg-gray-700 border-2 border-gray-600 peer-checked:border-yellow-500 peer-checked:bg-yellow-600/20 rounded-xl p-4 text-center transition">
+                                    <div class="text-2xl mb-2">🤝</div>
+                                    <div class="text-white text-sm font-semibold">Empate</div>
+                                    <div class="text-yellow-400 font-bold mt-2">{{ match.odds_draw }}</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="bet_type" value="away" class="sr-only peer" required>
+                                <div class="bg-gray-700 border-2 border-gray-600 peer-checked:border-blue-500 peer-checked:bg-blue-600/20 rounded-xl p-4 text-center transition">
+                                    <div class="text-2xl mb-2">✈️</div>
+                                    <div class="text-white text-sm font-semibold">{{ match.away_team.name }}</div>
+                                    <div class="text-blue-400 font-bold mt-2">{{ match.odds_away }}</div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Amount Input -->
+                        <div class="mb-4">
+                            <label class="block text-gray-400 text-sm mb-2">Valor da Aposta (C$)</label>
+                            <div class="relative">
+                                <input type="number" name="amount" id="bet-amount" 
+                                       min="1" max="{{ user_balance }}" step="0.01"
+                                       class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white text-lg focus:outline-none focus:border-purple-500"
+                                       placeholder="Digite o valor" required>
+                                <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-yellow-400 font-bold">C$</div>
+                            </div>
+                            <div class="text-gray-500 text-xs mt-1">Mínimo: 1 C$ | Seu saldo: {{ user_balance }} C$</div>
+                        </div>
+
+                        <!-- Quick Amount Buttons -->
+                        <div class="flex flex-wrap gap-2 mb-6">
+                            <button type="button" onclick="setAmount(5)" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">5 C$</button>
+                            <button type="button" onclick="setAmount(10)" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">10 C$</button>
+                            <button type="button" onclick="setAmount(25)" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">25 C$</button>
+                            <button type="button" onclick="setAmount(50)" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">50 C$</button>
+                            <button type="button" onclick="setAmount(100)" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">100 C$</button>
+                            <button type="button" onclick="setAmount({{ user_balance }})" class="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm">Tudo</button>
+                        </div>
+
+                        <!-- Potential Win -->
+                        <div class="bg-gray-800 rounded-lg p-4 mb-6">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Ganho Potencial:</span>
+                                <span class="text-2xl font-bold text-yellow-400" id="potential-win">0.00 C$</span>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" 
+                                class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-4 rounded-xl text-lg transition transform hover:scale-105">
+                            🎰 Fazer Aposta
+                        </button>
+                    </div>
+                </form>
+            {% else %}
+                <div class="bg-gray-700/50 rounded-xl p-6 text-center">
+                    <div class="text-gray-400">As apostas para esta partida estão fechadas.</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Betting Stats -->
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+            <h3 class="text-lg font-bold text-white mb-4">📊 Estatísticas de Apostas</h3>
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                    <div class="text-gray-400 text-sm">{{ match.home_team.name }}</div>
+                    <div class="text-xl font-bold text-green-400">{{ bet_stats.count_home|default:0 }}</div>
+                    <div class="text-gray-500 text-xs">{{ bet_stats.total_home|default:0 }} C$</div>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-sm">Empate</div>
+                    <div class="text-xl font-bold text-yellow-400">{{ bet_stats.count_draw|default:0 }}</div>
+                    <div class="text-gray-500 text-xs">{{ bet_stats.total_draw|default:0 }} C$</div>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-sm">{{ match.away_team.name }}</div>
+                    <div class="text-xl font-bold text-blue-400">{{ bet_stats.count_away|default:0 }}</div>
+                    <div class="text-gray-500 text-xs">{{ bet_stats.total_away|default:0 }} C$</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Scorer Betting Section -->
+        {% if scorer_odds %}
+        <div class="mt-6 bg-gray-800/70 backdrop-blur-sm rounded-2xl p-6 border border-gray-700">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-white flex items-center space-x-2">
+                    <span>⚽</span>
+                    <span>Apostar no Artilheiro</span>
+                </h3>
+                {% if is_admin %}
+                <a href="{% url 'betting:admin_scorer_odds' match.id %}" 
+                   class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded-lg text-sm transition">
+                    ⚙️ Gerenciar Odds
+                </a>
+                {% endif %}
+            </div>
+
+            {% if user_scorer_bet %}
+            <!-- User Already Bet on Scorer -->
+            <div class="bg-orange-900/50 border border-orange-500/30 rounded-xl p-6">
+                <div class="text-center">
+                    <div class="text-orange-400 text-sm mb-2">Sua Aposta de Artilheiro</div>
+                    <div class="text-xl font-bold text-white mb-2">
+                        ⚽ {{ user_scorer_bet.player.first_name }} {{ user_scorer_bet.player.last_name }}
+                    </div>
+                    <div class="text-gray-400 text-sm mb-4">
+                        {{ user_scorer_bet.player.sector.name }}
+                    </div>
+                    <div class="flex justify-center space-x-6 text-sm">
+                        <div>
+                            <span class="text-gray-400">Valor:</span>
+                            <span class="text-white font-bold">{{ user_scorer_bet.amount }} C$</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">Odd:</span>
+                            <span class="text-white font-bold">{{ user_scorer_bet.odds_at_bet }}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">Ganho Potencial:</span>
+                            <span class="text-yellow-400 font-bold">{{ user_scorer_bet.potential_win }} C$</span>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        {% if user_scorer_bet.status == 'pending' %}
+                            <span class="bg-yellow-600/30 text-yellow-400 px-4 py-2 rounded-full">⏳ Aguardando resultado</span>
+                        {% elif user_scorer_bet.status == 'won' %}
+                            <span class="bg-green-600/30 text-green-400 px-4 py-2 rounded-full">🎉 Você ganhou {{ user_scorer_bet.winnings }} C$!</span>
+                        {% elif user_scorer_bet.status == 'lost' %}
+                            <span class="bg-red-600/30 text-red-400 px-4 py-2 rounded-full">😔 Você perdeu</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% elif match.status == 'scheduled' and can_bet %}
+            <!-- Scorer Betting Form -->
+            <div class="space-y-4">
+                <!-- Home Team Players -->
+                <div class="mb-4">
+                    <h4 class="text-lg font-semibold text-green-400 mb-3 flex items-center space-x-2">
+                        <span>🏠</span>
+                        <span>{{ match.home_team.name }}</span>
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {% for so in scorer_odds %}
+                            {% if so.player.sector == match.home_team %}
+                            <div class="bg-gray-700/50 border border-gray-600 rounded-xl p-4 hover:border-orange-500 transition cursor-pointer scorer-card"
+                                 data-player-id="{{ so.player.id }}"
+                                 data-player-name="{{ so.player.first_name }} {{ so.player.last_name }}"
+                                 data-odds="{{ so.odds }}">
+                                <div class="text-center">
+                                    <div class="w-12 h-12 bg-gradient-to-br from-green-600 to-green-800 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <span class="text-lg">👤</span>
+                                    </div>
+                                    <div class="text-white text-sm font-medium truncate">{{ so.player.first_name }}</div>
+                                    <div class="text-gray-400 text-xs truncate">{{ so.player.last_name }}</div>
+                                    <div class="text-orange-400 font-bold mt-2">{{ so.odds }}x</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Away Team Players -->
+                <div class="mb-4">
+                    <h4 class="text-lg font-semibold text-blue-400 mb-3 flex items-center space-x-2">
+                        <span>✈️</span>
+                        <span>{{ match.away_team.name }}</span>
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {% for so in scorer_odds %}
+                            {% if so.player.sector == match.away_team %}
+                            <div class="bg-gray-700/50 border border-gray-600 rounded-xl p-4 hover:border-orange-500 transition cursor-pointer scorer-card"
+                                 data-player-id="{{ so.player.id }}"
+                                 data-player-name="{{ so.player.first_name }} {{ so.player.last_name }}"
+                                 data-odds="{{ so.odds }}">
+                                <div class="text-center">
+                                    <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <span class="text-lg">👤</span>
+                                    </div>
+                                    <div class="text-white text-sm font-medium truncate">{{ so.player.first_name }}</div>
+                                    <div class="text-gray-400 text-xs truncate">{{ so.player.last_name }}</div>
+                                    <div class="text-orange-400 font-bold mt-2">{{ so.odds }}x</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Selected Player Info -->
+                <div id="scorer-bet-section" class="hidden bg-gray-900/50 rounded-xl p-6 border border-orange-500/50">
+                    <form method="post" action="{% url 'betting:place_scorer_bet' match.id %}" id="scorer-bet-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="player_id" id="selected-player-id">
+                        
+                        <div class="text-center mb-4">
+                            <div class="text-orange-400 text-sm">Jogador Selecionado</div>
+                            <div class="text-xl font-bold text-white" id="selected-player-name">-</div>
+                            <div class="text-gray-400">Odd: <span id="selected-player-odds" class="text-orange-400 font-bold">-</span></div>
+                        </div>
+
+                        <!-- Amount Input -->
+                        <div class="mb-4">
+                            <label class="block text-gray-400 text-sm mb-2">Valor da Aposta (C$)</label>
+                            <div class="relative">
+                                <input type="number" name="amount" id="scorer-bet-amount" 
+                                       min="1" max="{{ user_balance }}" step="0.01"
+                                       class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white text-lg focus:outline-none focus:border-orange-500"
+                                       placeholder="Digite o valor" required>
+                                <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-yellow-400 font-bold">C$</div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Amount Buttons -->
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <button type="button" onclick="setScorerAmount(5)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm">5 C$</button>
+                            <button type="button" onclick="setScorerAmount(10)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm">10 C$</button>
+                            <button type="button" onclick="setScorerAmount(25)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm">25 C$</button>
+                            <button type="button" onclick="setScorerAmount(50)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm">50 C$</button>
+                        </div>
+
+                        <!-- Potential Win -->
+                        <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Ganho Potencial:</span>
+                                <span class="text-2xl font-bold text-yellow-400" id="scorer-potential-win">0.00 C$</span>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" 
+                                class="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-bold py-3 rounded-xl text-lg transition transform hover:scale-105">
+                            ⚽ Apostar no Artilheiro
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% elif match.status == 'finished' %}
+            <div class="bg-gray-700/50 rounded-xl p-6 text-center">
+                <div class="text-gray-400">A partida já foi finalizada.</div>
+                {% if match.top_scorer %}
+                <div class="mt-4">
+                    <div class="text-orange-400 text-sm">Artilheiro da Partida</div>
+                    <div class="text-xl font-bold text-white">⚽ {{ match.top_scorer.first_name }} {{ match.top_scorer.last_name }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="bg-gray-700/50 rounded-xl p-6 text-center">
+                <div class="text-gray-400">As apostas de artilheiro estão fechadas para esta partida.</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if is_admin and match.status != 'finished' %}
+        <!-- Admin Controls -->
+        <div class="mt-6 bg-yellow-900/30 border border-yellow-600/50 rounded-xl p-6">
+            <h3 class="text-lg font-bold text-yellow-400 mb-4">⚙️ Controles Admin</h3>
+            <div class="flex flex-wrap gap-3">
+                {% if match.status == 'scheduled' %}
+                <form method="post" action="{% url 'betting:admin_set_match_live' match.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
+                        🔴 Iniciar Partida (Ao Vivo)
+                    </button>
+                </form>
+                {% endif %}
+                
+                {% if match.status == 'live' %}
+                <form method="post" action="{% url 'betting:admin_finalize_match' match.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                        ✅ Finalizar Partida
+                    </button>
+                </form>
+                
+                <!-- Score Update -->
+                <div class="flex items-center space-x-2">
+                    <input type="number" id="admin-home-score" value="{{ match.home_score }}" min="0" class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white text-center">
+                    <span class="text-gray-400">x</span>
+                    <input type="number" id="admin-away-score" value="{{ match.away_score }}" min="0" class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white text-center">
+                    <button onclick="updateScore()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                        Atualizar Placar
+                    </button>
+                </div>
+                {% endif %}
+                
+                <a href="{% url 'betting:admin_scorer_odds' match.id %}" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg">
+                    ⚽ Odds Artilheiro
+                </a>
+                
+                <a href="{% url 'betting:admin_edit_match' match.id %}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
+                    ✏️ Editar Partida
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const odds = {
+    home: parseFloat('{{ match.odds_home }}'),
+    draw: parseFloat('{{ match.odds_draw }}'),
+    away: parseFloat('{{ match.odds_away }}')
+};
+
+let selectedScorerOdds = 0;
+
+function setAmount(amount) {
+    document.getElementById('bet-amount').value = amount;
+    calculatePotentialWin();
+}
+
+function calculatePotentialWin() {
+    const amount = parseFloat(document.getElementById('bet-amount').value) || 0;
+    const selectedBet = document.querySelector('input[name="bet_type"]:checked');
+    
+    if (selectedBet && amount > 0) {
+        const odd = odds[selectedBet.value];
+        const potentialWin = (amount * odd).toFixed(2);
+        document.getElementById('potential-win').textContent = potentialWin + ' C$';
+    } else {
+        document.getElementById('potential-win').textContent = '0.00 C$';
+    }
+}
+
+// Scorer betting functions
+function setScorerAmount(amount) {
+    document.getElementById('scorer-bet-amount').value = amount;
+    calculateScorerPotentialWin();
+}
+
+function calculateScorerPotentialWin() {
+    const amount = parseFloat(document.getElementById('scorer-bet-amount').value) || 0;
+    if (selectedScorerOdds > 0 && amount > 0) {
+        const potentialWin = (amount * selectedScorerOdds).toFixed(2);
+        document.getElementById('scorer-potential-win').textContent = potentialWin + ' C$';
+    } else {
+        document.getElementById('scorer-potential-win').textContent = '0.00 C$';
+    }
+}
+
+// Scorer card selection
+document.querySelectorAll('.scorer-card').forEach(card => {
+    card.addEventListener('click', function() {
+        // Remove selection from all cards
+        document.querySelectorAll('.scorer-card').forEach(c => {
+            c.classList.remove('border-orange-500', 'bg-orange-900/30');
+            c.classList.add('border-gray-600');
+        });
+        
+        // Add selection to clicked card
+        this.classList.remove('border-gray-600');
+        this.classList.add('border-orange-500', 'bg-orange-900/30');
+        
+        // Update form
+        const playerId = this.dataset.playerId;
+        const playerName = this.dataset.playerName;
+        const playerOdds = parseFloat(this.dataset.odds);
+        
+        document.getElementById('selected-player-id').value = playerId;
+        document.getElementById('selected-player-name').textContent = playerName;
+        document.getElementById('selected-player-odds').textContent = playerOdds + 'x';
+        selectedScorerOdds = playerOdds;
+        
+        // Show bet section
+        document.getElementById('scorer-bet-section').classList.remove('hidden');
+        
+        // Recalculate potential win
+        calculateScorerPotentialWin();
+    });
+});
+
+// Add event listener for scorer bet amount
+document.getElementById('scorer-bet-amount')?.addEventListener('input', calculateScorerPotentialWin);
+
+// Add event listeners
+document.getElementById('bet-amount')?.addEventListener('input', calculatePotentialWin);
+document.querySelectorAll('input[name="bet_type"]').forEach(radio => {
+    radio.addEventListener('change', calculatePotentialWin);
+});
+
+{% if is_admin and match.status == 'live' %}
+function updateScore() {
+    const homeScore = document.getElementById('admin-home-score').value;
+    const awayScore = document.getElementById('admin-away-score').value;
+    
+    fetch('{% url "betting:admin_update_score" match.id %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            home_score: homeScore,
+            away_score: awayScore
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('home-score').textContent = data.home_score;
+            document.getElementById('away-score').textContent = data.away_score;
+            document.getElementById('odds-home').textContent = data.odds_home;
+            document.getElementById('odds-draw').textContent = data.odds_draw;
+            document.getElementById('odds-away').textContent = data.odds_away;
+            
+            // Update odds object
+            odds.home = parseFloat(data.odds_home);
+            odds.draw = parseFloat(data.odds_draw);
+            odds.away = parseFloat(data.odds_away);
+        } else {
+            alert('Erro ao atualizar placar: ' + data.error);
+        }
+    });
+}
+{% endif %}
+
+{% if match.status == 'live' %}
+// Auto-refresh odds every 10 seconds for live matches
+setInterval(() => {
+    fetch('{% url "betting:api_get_odds" match.id %}')
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('home-score').textContent = data.home_score;
+        document.getElementById('away-score').textContent = data.away_score;
+        document.getElementById('odds-home').textContent = data.odds_home;
+        document.getElementById('odds-draw').textContent = data.odds_draw;
+        document.getElementById('odds-away').textContent = data.odds_away;
+        
+        odds.home = parseFloat(data.odds_home);
+        odds.draw = parseFloat(data.odds_draw);
+        odds.away = parseFloat(data.odds_away);
+        
+        calculatePotentialWin();
+    });
+}, 10000);
+{% endif %}
+</script>
+{% endblock %}

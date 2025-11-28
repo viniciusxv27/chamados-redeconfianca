@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Confiança BET - Apostas{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="text-4xl">🎰</div>
+                    <div>
+                        <h1 class="text-2xl sm:text-3xl font-bold text-white">Confiança BET</h1>
+                        <p class="text-purple-200 text-sm">Aposte nos seus times favoritos!</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2 text-white">
+                        <span class="text-xs text-purple-200">Seu saldo</span>
+                        <div class="flex items-center space-x-1">
+                            <span class="text-xl font-bold">{{ user_balance }}</span>
+                            <span class="text-yellow-300">C$</span>
+                        </div>
+                    </div>
+                    {% if is_admin %}
+                    <a href="{% url 'betting:admin_dashboard' %}" 
+                       class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        <span class="hidden sm:inline">Admin</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Estatísticas do Usuário -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <div class="text-gray-400 text-xs mb-1">Total de Apostas</div>
+                <div class="text-2xl font-bold text-white">{{ user_stats.total_bets|default:0 }}</div>
+            </div>
+            <div class="bg-green-900/50 backdrop-blur-sm rounded-xl p-4 border border-green-700">
+                <div class="text-green-400 text-xs mb-1">Vitórias</div>
+                <div class="text-2xl font-bold text-green-400">{{ user_stats.total_won|default:0 }}</div>
+            </div>
+            <div class="bg-red-900/50 backdrop-blur-sm rounded-xl p-4 border border-red-700">
+                <div class="text-red-400 text-xs mb-1">Derrotas</div>
+                <div class="text-2xl font-bold text-red-400">{{ user_stats.total_lost|default:0 }}</div>
+            </div>
+            <div class="bg-yellow-900/50 backdrop-blur-sm rounded-xl p-4 border border-yellow-700">
+                <div class="text-yellow-400 text-xs mb-1">Ganhos Totais</div>
+                <div class="text-2xl font-bold text-yellow-400">{{ user_stats.total_winnings|default:0 }} C$</div>
+            </div>
+        </div>
+
+        <!-- Partidas Ao Vivo -->
+        {% if live_matches %}
+        <div class="mb-8">
+            <div class="flex items-center space-x-2 mb-4">
+                <span class="relative flex h-3 w-3">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                </span>
+                <h2 class="text-xl font-bold text-white">🔴 Ao Vivo</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for match in live_matches %}
+                <a href="{% url 'betting:match_detail' match.id %}" 
+                   class="bg-gradient-to-br from-red-900/80 to-orange-900/80 backdrop-blur-sm rounded-xl p-4 border border-red-500/50 hover:border-red-400 transition transform hover:scale-105">
+                    <div class="text-xs text-red-300 mb-2">{{ match.championship.name }} - Rodada {{ match.round_number }}</div>
+                    <div class="flex items-center justify-between">
+                        <div class="text-center flex-1">
+                            <div class="text-white font-semibold">{{ match.home_team.name }}</div>
+                            <div class="text-3xl font-bold text-white mt-2">{{ match.home_score }}</div>
+                            <div class="text-xs text-gray-400 mt-1">Odd: {{ match.odds_home }}</div>
+                        </div>
+                        <div class="text-2xl text-gray-500 px-4">VS</div>
+                        <div class="text-center flex-1">
+                            <div class="text-white font-semibold">{{ match.away_team.name }}</div>
+                            <div class="text-3xl font-bold text-white mt-2">{{ match.away_score }}</div>
+                            <div class="text-xs text-gray-400 mt-1">Odd: {{ match.odds_away }}</div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-3">
+                        <span class="text-xs text-gray-400">Empate: {{ match.odds_draw }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Próximas Partidas -->
+        <div class="mb-8">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
+                <span>📅</span>
+                <span>Próximas Partidas</span>
+            </h2>
+            {% if upcoming_matches %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for match in upcoming_matches %}
+                <a href="{% url 'betting:match_detail' match.id %}" 
+                   class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700 hover:border-purple-500 transition transform hover:scale-105">
+                    <div class="text-xs text-purple-400 mb-2">{{ match.championship.name }} - Rodada {{ match.round_number }}</div>
+                    <div class="text-xs text-gray-400 mb-3">{{ match.match_date|date:"d/m/Y H:i" }}</div>
+                    <div class="flex items-center justify-between">
+                        <div class="text-center flex-1">
+                            <div class="text-white font-semibold text-sm">{{ match.home_team.name }}</div>
+                            <div class="bg-green-600/30 text-green-400 text-lg font-bold rounded-lg py-2 mt-2">
+                                {{ match.odds_home }}
+                            </div>
+                        </div>
+                        <div class="text-center px-3">
+                            <div class="text-gray-500 text-xs mb-2">Empate</div>
+                            <div class="bg-gray-700/50 text-gray-300 text-lg font-bold rounded-lg py-2 px-3">
+                                {{ match.odds_draw }}
+                            </div>
+                        </div>
+                        <div class="text-center flex-1">
+                            <div class="text-white font-semibold text-sm">{{ match.away_team.name }}</div>
+                            <div class="bg-blue-600/30 text-blue-400 text-lg font-bold rounded-lg py-2 mt-2">
+                                {{ match.odds_away }}
+                            </div>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="bg-gray-800/50 rounded-xl p-8 text-center border border-gray-700">
+                <div class="text-4xl mb-3">🏈</div>
+                <p class="text-gray-400">Nenhuma partida agendada no momento.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Campeonatos Ativos -->
+        <div class="mb-8">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
+                <span>🏆</span>
+                <span>Campeonatos Ativos</span>
+            </h2>
+            {% if championships %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for championship in championships %}
+                <a href="{% url 'betting:championship_detail' championship.id %}" 
+                   class="bg-gradient-to-br from-purple-800/50 to-pink-800/50 backdrop-blur-sm rounded-xl overflow-hidden border border-purple-500/30 hover:border-purple-400 transition transform hover:scale-105">
+                    {% if championship.banner %}
+                    <img src="{{ championship.banner.url }}" alt="{{ championship.name }}" class="w-full h-32 object-cover">
+                    {% else %}
+                    <div class="w-full h-32 bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center">
+                        <span class="text-5xl">🏆</span>
+                    </div>
+                    {% endif %}
+                    <div class="p-4">
+                        <h3 class="text-lg font-bold text-white">{{ championship.name }}</h3>
+                        <p class="text-gray-400 text-sm mt-1">{{ championship.participating_sectors.count }} times</p>
+                        <p class="text-gray-400 text-sm">{{ championship.matches.count }} partidas</p>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="bg-gray-800/50 rounded-xl p-8 text-center border border-gray-700">
+                <div class="text-4xl mb-3">🏆</div>
+                <p class="text-gray-400">Nenhum campeonato ativo no momento.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Minhas Apostas Recentes -->
+        <div class="mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+                    <span>🎫</span>
+                    <span>Minhas Apostas Recentes</span>
+                </h2>
+                <a href="{% url 'betting:my_bets' %}" class="text-purple-400 hover:text-purple-300 text-sm">
+                    Ver todas →
+                </a>
+            </div>
+            {% if my_bets %}
+            <div class="space-y-3">
+                {% for bet in my_bets %}
+                <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div class="flex-1">
+                        <div class="text-sm text-gray-400">{{ bet.match.championship.name }}</div>
+                        <div class="text-white font-semibold">
+                            {{ bet.match.home_team.name }} vs {{ bet.match.away_team.name }}
+                        </div>
+                        <div class="text-sm text-gray-400 mt-1">
+                            Aposta: 
+                            {% if bet.bet_type == 'home' %}
+                                <span class="text-green-400">{{ bet.match.home_team.name }}</span>
+                            {% elif bet.bet_type == 'draw' %}
+                                <span class="text-yellow-400">Empate</span>
+                            {% else %}
+                                <span class="text-blue-400">{{ bet.match.away_team.name }}</span>
+                            {% endif %}
+                            | Odd: {{ bet.odds_at_bet }}
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <div class="text-sm text-gray-400">Apostou</div>
+                            <div class="text-white font-bold">{{ bet.amount }} C$</div>
+                        </div>
+                        <div class="text-center">
+                            {% if bet.status == 'pending' %}
+                                <span class="bg-yellow-600/30 text-yellow-400 px-3 py-1 rounded-full text-sm">Pendente</span>
+                            {% elif bet.status == 'won' %}
+                                <span class="bg-green-600/30 text-green-400 px-3 py-1 rounded-full text-sm">Ganhou +{{ bet.winnings }} C$</span>
+                            {% elif bet.status == 'lost' %}
+                                <span class="bg-red-600/30 text-red-400 px-3 py-1 rounded-full text-sm">Perdeu</span>
+                            {% elif bet.status == 'refunded' %}
+                                <span class="bg-gray-600/30 text-gray-400 px-3 py-1 rounded-full text-sm">Reembolsado</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="bg-gray-800/50 rounded-xl p-8 text-center border border-gray-700">
+                <div class="text-4xl mb-3">🎫</div>
+                <p class="text-gray-400">Você ainda não fez nenhuma aposta.</p>
+                <p class="text-gray-500 text-sm mt-2">Escolha uma partida acima para começar!</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Últimos Resultados -->
+        {% if recent_results %}
+        <div class="mb-8">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
+                <span>📊</span>
+                <span>Últimos Resultados</span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for match in recent_results %}
+                <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                    <div class="text-xs text-gray-400 mb-2">{{ match.championship.name }}</div>
+                    <div class="flex items-center justify-between">
+                        <div class="text-center flex-1 {% if match.result == 'home' %}text-green-400{% else %}text-gray-300{% endif %}">
+                            <div class="font-semibold text-sm">{{ match.home_team.name }}</div>
+                            <div class="text-2xl font-bold mt-1">{{ match.home_score }}</div>
+                        </div>
+                        <div class="text-gray-500 px-4">-</div>
+                        <div class="text-center flex-1 {% if match.result == 'away' %}text-green-400{% else %}text-gray-300{% endif %}">
+                            <div class="font-semibold text-sm">{{ match.away_team.name }}</div>
+                            <div class="text-2xl font-bold mt-1">{{ match.away_score }}</div>
+                        </div>
+                    </div>
+                    <div class="text-center text-xs text-gray-500 mt-2">
+                        {{ match.match_date|date:"d/m/Y" }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

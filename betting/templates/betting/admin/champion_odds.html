@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Odds de Campeão - {{ championship.name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-yellow-600 to-orange-600 shadow-lg">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex items-center space-x-3">
+                <a href="{% url 'betting:admin_dashboard' %}" class="text-white hover:text-yellow-200">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-white">🏆 Odds de Campeão</h1>
+                    <p class="text-yellow-200 text-sm">{{ championship.name }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+                <h2 class="text-lg font-bold text-white mb-4">Configure as Odds para Cada Time</h2>
+                <p class="text-gray-400 text-sm mb-6">
+                    Defina as odds para cada time vencer o campeonato. Quanto maior a odd, maior o retorno para quem apostar.
+                </p>
+                
+                <div class="space-y-4">
+                    {% for item in sectors_with_odds %}
+                    <div class="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-12 h-12 bg-purple-600/30 rounded-full flex items-center justify-center">
+                                    <span class="text-2xl">⚽</span>
+                                </div>
+                                <div>
+                                    <h3 class="text-white font-semibold">{{ item.sector.name }}</h3>
+                                    <p class="text-gray-400 text-sm">{{ item.bet_count }} apostas pendentes</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-wrap items-center gap-4">
+                                <div>
+                                    <label class="text-gray-400 text-xs block mb-1">Odds</label>
+                                    <input type="number" name="odds_{{ item.sector.id }}" 
+                                           value="{{ item.odds }}" step="0.01" min="1.01"
+                                           class="w-24 bg-gray-600 border border-gray-500 rounded-lg px-3 py-2 text-yellow-400 text-xl font-bold text-center focus:outline-none focus:border-yellow-500">
+                                </div>
+                                
+                                <div class="flex items-center">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="checkbox" name="active_{{ item.sector.id }}" 
+                                               {% if item.is_active %}checked{% endif %}
+                                               class="w-5 h-5 text-green-600 bg-gray-600 border-gray-500 rounded focus:ring-green-500">
+                                        <span class="ml-2 text-gray-300 text-sm">Ativo</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-gray-400 py-8">
+                        <p>Nenhum time participante neste campeonato.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <h3 class="text-white font-semibold mb-2">💡 Dicas de Odds</h3>
+                <ul class="text-gray-400 text-sm space-y-1">
+                    <li>• <strong>Favorito:</strong> 1.50 - 2.50 (menor risco, menor retorno)</li>
+                    <li>• <strong>Intermediário:</strong> 3.00 - 5.00</li>
+                    <li>• <strong>Zebra:</strong> 6.00 - 15.00+ (maior risco, maior retorno)</li>
+                </ul>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="flex flex-col sm:flex-row justify-end gap-3">
+                <a href="{% url 'betting:admin_dashboard' %}" 
+                   class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg text-center transition">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white font-bold px-6 py-3 rounded-lg transition">
+                    💾 Salvar Odds
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
