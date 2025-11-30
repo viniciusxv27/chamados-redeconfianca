@@ -1142,3 +1142,59 @@ def admin_approve_all_wins(request):
     messages.success(request, f'✅ {count} lucros aprovados com sucesso!')
     
     return redirect('betting:admin_win_approvals')
+
+
+@login_required
+def admin_clear_all_data(request):
+    """Limpar todos os dados de apostas (campeonatos, jogos, apostas, etc.)"""
+    if not has_betting_admin_permission(request.user):
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('betting:home')
+    
+    if request.method != 'POST':
+        return redirect('betting:admin_dashboard')
+    
+    # Confirmar com código de segurança
+    confirm_code = request.POST.get('confirm_code', '')
+    if confirm_code != 'LIMPAR_TUDO':
+        messages.error(request, '❌ Código de confirmação incorreto.')
+        return redirect('betting:admin_dashboard')
+    
+    # Deletar na ordem correta para evitar erros de foreign key
+    from .models import ScorerBet, ChampionBet, Bet, BetTransaction, BetWinApproval, MatchScorerOdds, Match, ChampionOdds, Championship
+    
+    # Contar antes de deletar
+    counts = {
+        'scorer_bets': ScorerBet.objects.count(),
+        'champion_bets': ChampionBet.objects.count(),
+        'bets': Bet.objects.count(),
+        'transactions': BetTransaction.objects.count(),
+        'approvals': BetWinApproval.objects.count(),
+        'scorer_odds': MatchScorerOdds.objects.count(),
+        'matches': Match.objects.count(),
+        'champion_odds': ChampionOdds.objects.count(),
+        'championships': Championship.objects.count(),
+    }
+    
+    total = sum(counts.values())
+    
+    # Deletar tudo
+    ScorerBet.objects.all().delete()
+    ChampionBet.objects.all().delete()
+    Bet.objects.all().delete()
+    BetTransaction.objects.all().delete()
+    BetWinApproval.objects.all().delete()
+    MatchScorerOdds.objects.all().delete()
+    Match.objects.all().delete()
+    ChampionOdds.objects.all().delete()
+    Championship.objects.all().delete()
+    
+    messages.success(
+        request, 
+        f'🗑️ Todos os dados foram limpos! '
+        f'{counts["championships"]} campeonato(s), '
+        f'{counts["matches"]} jogo(s), '
+        f'{counts["bets"] + counts["champion_bets"] + counts["scorer_bets"]} aposta(s) removidas.'
+    )
+    
+    return redirect('betting:admin_dashboard')

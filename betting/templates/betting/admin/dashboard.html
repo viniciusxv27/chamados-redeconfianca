@@ -45,6 +45,11 @@
                     <span>➕</span>
                     <span>Novo Campeonato</span>
                 </a>
+                <button type="button" onclick="showClearDataModal()" 
+                   class="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition">
+                    <span>🗑️</span>
+                    <span>Limpar Tudo</span>
+                </button>
             </div>
         </div>
 
@@ -179,4 +184,56 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Confirmação para Limpar Dados -->
+<div id="clearDataModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+        <div class="text-center">
+            <div class="text-6xl mb-4">⚠️</div>
+            <h3 class="text-xl font-bold text-white mb-2">Limpar Todos os Dados?</h3>
+            <p class="text-gray-400 mb-6">
+                Esta ação irá deletar <strong class="text-red-400">TODOS</strong> os dados de apostas, incluindo:
+            </p>
+            <ul class="text-left text-gray-300 mb-6 space-y-1">
+                <li>• Todas as apostas</li>
+                <li>• Todas as transações</li>
+                <li>• Todos os jogos e odds</li>
+                <li>• Todos os campeonatos</li>
+            </ul>
+            <p class="text-red-400 font-bold mb-6">Esta ação não pode ser desfeita!</p>
+            <div class="flex gap-4">
+                <button onclick="closeClearDataModal()" 
+                        class="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold">
+                    Cancelar
+                </button>
+                <form action="{% url 'betting:admin_clear_all_data' %}" method="post" class="flex-1">
+                    {% csrf_token %}
+                    <button type="submit" 
+                            class="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold">
+                        Confirmar Exclusão
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openClearDataModal() {
+    document.getElementById('clearDataModal').classList.remove('hidden');
+    document.getElementById('clearDataModal').classList.add('flex');
+}
+
+function closeClearDataModal() {
+    document.getElementById('clearDataModal').classList.add('hidden');
+    document.getElementById('clearDataModal').classList.remove('flex');
+}
+
+// Fechar modal ao clicar fora dele
+document.getElementById('clearDataModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeClearDataModal();
+    }
+});
+</script>
 {% endblock %}

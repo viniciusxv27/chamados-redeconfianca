@@ -5,6 +5,22 @@ from decimal import Decimal
 from users.models import Sector, User
 
 
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
+
+def upload_championship_banner(instance, filename):
+    """Define o caminho de upload para banners de campeonatos"""
+    import os
+    ext = filename.split('.')[-1]
+    new_filename = f"championship_{instance.id or 'new'}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return os.path.join('betting', 'championships', new_filename)
+
+
 class Championship(models.Model):
     """Campeonato"""
     STATUS_CHOICES = [
@@ -41,7 +57,8 @@ class Championship(models.Model):
     
     # Imagem/Banner
     banner = models.ImageField(
-        upload_to='betting/championships/',
+        upload_to=upload_championship_banner,
+        storage=get_media_storage(),
         blank=True,
         null=True,
         verbose_name='Banner'

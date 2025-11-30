@@ -37,6 +37,9 @@ urlpatterns = [
     path('admin/aprovacoes/<int:approval_id>/rejeitar/', views.admin_reject_win, name='admin_reject_win'),
     path('admin/aprovacoes/aprovar-todos/', views.admin_approve_all_wins, name='admin_approve_all_wins'),
     
+    # Limpeza de dados
+    path('admin/limpar-tudo/', views.admin_clear_all_data, name='admin_clear_all_data'),
+    
     # API
     path('api/partida/<int:match_id>/odds/', views.api_get_odds, name='api_get_odds'),
     path('api/saldo/', views.api_get_user_balance, name='api_get_user_balance'),
