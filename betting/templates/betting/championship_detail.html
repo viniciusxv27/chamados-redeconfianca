@@ -77,7 +77,10 @@
             </h2>
             <div class="flex flex-wrap gap-3">
                 {% for sector in championship.participating_sectors.all %}
-                <span class="bg-purple-600/30 text-purple-300 px-4 py-2 rounded-full">
+                <span class="bg-purple-600/30 text-purple-300 px-4 py-2 rounded-full flex items-center gap-2">
+                    {% if sector.team_logo %}
+                    <img src="{{ sector.team_logo.url }}" alt="{{ sector.name }}" class="w-6 h-6 rounded-full object-cover">
+                    {% endif %}
                     {{ sector.name }}
                 </span>
                 {% endfor %}
@@ -115,8 +118,12 @@
                 {% for odds in champion_odds %}
                 <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-600 hover:border-yellow-500 transition">
                     <div class="text-center mb-3">
-                        <div class="w-12 h-12 bg-purple-600/30 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <div class="w-12 h-12 bg-purple-600/30 rounded-full flex items-center justify-center mx-auto mb-2 overflow-hidden">
+                            {% if odds.sector.team_logo %}
+                            <img src="{{ odds.sector.team_logo.url }}" alt="{{ odds.sector.name }}" class="w-full h-full object-cover">
+                            {% else %}
                             <span class="text-xl">⚽</span>
+                            {% endif %}
                         </div>
                         <div class="text-white font-semibold text-sm">{{ odds.sector.name }}</div>
                     </div>

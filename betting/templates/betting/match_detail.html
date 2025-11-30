@@ -58,8 +58,12 @@
             <!-- Scoreboard -->
             <div class="flex items-center justify-center space-x-4 sm:space-x-8 mb-6">
                 <div class="text-center flex-1">
-                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-600 to-green-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-600 to-green-800 rounded-full flex items-center justify-center mx-auto mb-3 overflow-hidden">
+                        {% if match.home_team.team_logo %}
+                        <img src="{{ match.home_team.team_logo.url }}" alt="{{ match.home_team.name }}" class="w-full h-full object-cover">
+                        {% else %}
                         <span class="text-2xl sm:text-3xl">🏠</span>
+                        {% endif %}
                     </div>
                     <h2 class="text-lg sm:text-xl font-bold text-white">{{ match.home_team.name }}</h2>
                     <div class="text-4xl sm:text-5xl font-bold text-white mt-2" id="home-score">{{ match.home_score }}</div>
@@ -68,8 +72,12 @@
                 <div class="text-3xl sm:text-4xl text-gray-500 font-bold">VS</div>
                 
                 <div class="text-center flex-1">
-                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center mx-auto mb-3 overflow-hidden">
+                        {% if match.away_team.team_logo %}
+                        <img src="{{ match.away_team.team_logo.url }}" alt="{{ match.away_team.name }}" class="w-full h-full object-cover">
+                        {% else %}
                         <span class="text-2xl sm:text-3xl">✈️</span>
+                        {% endif %}
                     </div>
                     <h2 class="text-lg sm:text-xl font-bold text-white">{{ match.away_team.name }}</h2>
                     <div class="text-4xl sm:text-5xl font-bold text-white mt-2" id="away-score">{{ match.away_score }}</div>

@@ -40,6 +40,11 @@
                     <span class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ pending_approvals }}</span>
                     {% endif %}
                 </a>
+                <a href="{% url 'betting:admin_team_logos' %}" 
+                   class="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition">
+                    <span>🛡️</span>
+                    <span>Escudos dos Times</span>
+                </a>
                 <a href="{% url 'betting:admin_create_championship' %}" 
                    class="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
                     <span>➕</span>

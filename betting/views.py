@@ -1198,3 +1198,44 @@ def admin_clear_all_data(request):
     )
     
     return redirect('betting:admin_dashboard')
+
+
+@login_required
+def admin_team_logos(request):
+    """Gerenciar escudos/logos dos times (setores)"""
+    if not has_betting_admin_permission(request.user):
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('betting:home')
+    
+    sectors = Sector.objects.all().order_by('name')
+    
+    if request.method == 'POST':
+        # Processar upload de escudos
+        for sector in sectors:
+            logo_key = f'logo_{sector.id}'
+            remove_key = f'remove_logo_{sector.id}'
+            
+            # Verificar se deve remover o logo
+            if remove_key in request.POST:
+                if sector.team_logo:
+                    sector.team_logo.delete(save=True)
+                continue
+            
+            # Verificar se há novo upload
+            if logo_key in request.FILES:
+                logo_file = request.FILES[logo_key]
+                # Se já tinha logo, deletar o antigo
+                if sector.team_logo:
+                    sector.team_logo.delete(save=False)
+                sector.team_logo = logo_file
+                sector.save()
+        
+        messages.success(request, '✅ Escudos atualizados com sucesso!')
+        return redirect('betting:admin_team_logos')
+    
+    context = {
+        'sectors': sectors,
+    }
+    
+    return render(request, 'betting/admin/team_logos.html', context)
+

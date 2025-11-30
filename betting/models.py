@@ -9,7 +9,7 @@ def get_media_storage():
     """Return media storage backend"""
     if getattr(settings, 'USE_S3', False):
         from core.storage import MediaStorage
-        return MediaStorage
+        return MediaStorage()
     return None
 
 

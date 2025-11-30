@@ -77,12 +77,26 @@
                     <div class="text-xs text-red-300 mb-2">{{ match.championship.name }} - Rodada {{ match.round_number }}</div>
                     <div class="flex items-center justify-between">
                         <div class="text-center flex-1">
+                            <div class="w-10 h-10 bg-green-600/30 rounded-full flex items-center justify-center mx-auto mb-2 overflow-hidden">
+                                {% if match.home_team.team_logo %}
+                                <img src="{{ match.home_team.team_logo.url }}" alt="{{ match.home_team.name }}" class="w-full h-full object-cover">
+                                {% else %}
+                                <span class="text-lg">🏠</span>
+                                {% endif %}
+                            </div>
                             <div class="text-white font-semibold">{{ match.home_team.name }}</div>
                             <div class="text-3xl font-bold text-white mt-2">{{ match.home_score }}</div>
                             <div class="text-xs text-gray-400 mt-1">Odd: {{ match.odds_home }}</div>
                         </div>
                         <div class="text-2xl text-gray-500 px-4">VS</div>
                         <div class="text-center flex-1">
+                            <div class="w-10 h-10 bg-blue-600/30 rounded-full flex items-center justify-center mx-auto mb-2 overflow-hidden">
+                                {% if match.away_team.team_logo %}
+                                <img src="{{ match.away_team.team_logo.url }}" alt="{{ match.away_team.name }}" class="w-full h-full object-cover">
+                                {% else %}
+                                <span class="text-lg">✈️</span>
+                                {% endif %}
+                            </div>
                             <div class="text-white font-semibold">{{ match.away_team.name }}</div>
                             <div class="text-3xl font-bold text-white mt-2">{{ match.away_score }}</div>
                             <div class="text-xs text-gray-400 mt-1">Odd: {{ match.odds_away }}</div>
@@ -112,6 +126,13 @@
                     <div class="text-xs text-gray-400 mb-3">{{ match.match_date|date:"d/m/Y H:i" }}</div>
                     <div class="flex items-center justify-between">
                         <div class="text-center flex-1">
+                            <div class="w-8 h-8 bg-green-600/30 rounded-full flex items-center justify-center mx-auto mb-1 overflow-hidden">
+                                {% if match.home_team.team_logo %}
+                                <img src="{{ match.home_team.team_logo.url }}" alt="{{ match.home_team.name }}" class="w-full h-full object-cover">
+                                {% else %}
+                                <span class="text-sm">🏠</span>
+                                {% endif %}
+                            </div>
                             <div class="text-white font-semibold text-sm">{{ match.home_team.name }}</div>
                             <div class="bg-green-600/30 text-green-400 text-lg font-bold rounded-lg py-2 mt-2">
                                 {{ match.odds_home }}
@@ -124,6 +145,13 @@
                             </div>
                         </div>
                         <div class="text-center flex-1">
+                            <div class="w-8 h-8 bg-blue-600/30 rounded-full flex items-center justify-center mx-auto mb-1 overflow-hidden">
+                                {% if match.away_team.team_logo %}
+                                <img src="{{ match.away_team.team_logo.url }}" alt="{{ match.away_team.name }}" class="w-full h-full object-cover">
+                                {% else %}
+                                <span class="text-sm">✈️</span>
+                                {% endif %}
+                            </div>
                             <div class="text-white font-semibold text-sm">{{ match.away_team.name }}</div>
                             <div class="bg-blue-600/30 text-blue-400 text-lg font-bold rounded-lg py-2 mt-2">
                                 {{ match.odds_away }}
@@ -249,11 +277,25 @@
                     <div class="text-xs text-gray-400 mb-2">{{ match.championship.name }}</div>
                     <div class="flex items-center justify-between">
                         <div class="text-center flex-1 {% if match.result == 'home' %}text-green-400{% else %}text-gray-300{% endif %}">
+                            <div class="w-8 h-8 bg-gray-600/30 rounded-full flex items-center justify-center mx-auto mb-1 overflow-hidden">
+                                {% if match.home_team.team_logo %}
+                                <img src="{{ match.home_team.team_logo.url }}" alt="{{ match.home_team.name }}" class="w-full h-full object-cover">
+                                {% else %}
+                                <span class="text-sm">🏠</span>
+                                {% endif %}
+                            </div>
                             <div class="font-semibold text-sm">{{ match.home_team.name }}</div>
                             <div class="text-2xl font-bold mt-1">{{ match.home_score }}</div>
                         </div>
                         <div class="text-gray-500 px-4">-</div>
                         <div class="text-center flex-1 {% if match.result == 'away' %}text-green-400{% else %}text-gray-300{% endif %}">
+                            <div class="w-8 h-8 bg-gray-600/30 rounded-full flex items-center justify-center mx-auto mb-1 overflow-hidden">
+                                {% if match.away_team.team_logo %}
+                                <img src="{{ match.away_team.team_logo.url }}" alt="{{ match.away_team.name }}" class="w-full h-full object-cover">
+                                {% else %}
+                                <span class="text-sm">✈️</span>
+                                {% endif %}
+                            </div>
                             <div class="font-semibold text-sm">{{ match.away_team.name }}</div>
                             <div class="text-2xl font-bold mt-1">{{ match.away_score }}</div>
                         </div>

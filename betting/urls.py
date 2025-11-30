@@ -40,6 +40,9 @@ urlpatterns = [
     # Limpeza de dados
     path('admin/limpar-tudo/', views.admin_clear_all_data, name='admin_clear_all_data'),
     
+    # Gerenciamento de escudos
+    path('admin/escudos/', views.admin_team_logos, name='admin_team_logos'),
+    
     # API
     path('api/partida/<int:match_id>/odds/', views.api_get_odds, name='api_get_odds'),
     path('api/saldo/', views.api_get_user_balance, name='api_get_user_balance'),

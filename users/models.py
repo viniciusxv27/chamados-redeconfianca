@@ -8,13 +8,30 @@ def get_media_storage():
     """Return media storage backend"""
     if getattr(settings, 'USE_S3', False):
         from core.storage import MediaStorage
-        return MediaStorage
+        return MediaStorage()
     return None
+
+
+def upload_sector_team_logo(instance, filename):
+    """Define o caminho de upload para logos/escudos de times dos setores"""
+    import os
+    from django.utils import timezone
+    ext = filename.split('.')[-1]
+    new_filename = f"sector_{instance.id or 'new'}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return os.path.join('betting', 'team_logos', new_filename)
 
 
 class Sector(models.Model):
     name = models.CharField(max_length=100, verbose_name="Nome")
     description = models.TextField(blank=True, verbose_name="Descrição")
+    team_logo = models.ImageField(
+        upload_to=upload_sector_team_logo,
+        storage=get_media_storage(),
+        blank=True,
+        null=True,
+        verbose_name="Escudo/Logo do Time",
+        help_text="Escudo ou logo do time do setor para o sistema de apostas"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

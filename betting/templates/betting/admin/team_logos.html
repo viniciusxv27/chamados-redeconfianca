@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Escudos dos Times{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex items-center space-x-3">
+                <a href="{% url 'betting:admin_dashboard' %}" class="text-white hover:text-green-200">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-white">🛡️ Escudos dos Times</h1>
+                    <p class="text-green-200 text-sm">Defina o escudo/logo de cada setor para o sistema de apostas</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for message in messages %}
+            <div class="p-4 rounded-lg {% if message.tags == 'success' %}bg-green-600/20 border border-green-500 text-green-400{% elif message.tags == 'error' %}bg-red-600/20 border border-red-500 text-red-400{% else %}bg-blue-600/20 border border-blue-500 text-blue-400{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Escudos por Setor</h2>
+                        <p class="text-gray-400 text-sm">
+                            Faça upload do escudo/logo de cada time. Formatos aceitos: PNG, JPG, GIF, SVG.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for sector in sectors %}
+                    <div class="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                        <div class="flex items-center space-x-4">
+                            <!-- Preview do Escudo -->
+                            <div class="flex-shrink-0">
+                                {% if sector.team_logo %}
+                                <div class="relative group">
+                                    <img src="{{ sector.team_logo.url }}" 
+                                         alt="{{ sector.name }}" 
+                                         class="w-16 h-16 rounded-lg object-cover border-2 border-green-500">
+                                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
+                                        <label class="cursor-pointer text-white text-xs">
+                                            <span>Trocar</span>
+                                            <input type="file" name="logo_{{ sector.id }}" accept="image/*" class="hidden" onchange="previewImage(this, {{ sector.id }})">
+                                        </label>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="w-16 h-16 bg-gray-600 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-500" id="placeholder_{{ sector.id }}">
+                                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                </div>
+                                <img id="preview_{{ sector.id }}" class="w-16 h-16 rounded-lg object-cover border-2 border-green-500 hidden">
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Info e Upload -->
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-white font-semibold truncate">{{ sector.name }}</h3>
+                                <p class="text-gray-400 text-sm">{{ sector.description|default:"Sem descrição" }}</p>
+                                
+                                <div class="mt-2 flex items-center gap-2">
+                                    {% if not sector.team_logo %}
+                                    <label class="cursor-pointer bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded-lg inline-flex items-center gap-1 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                                        </svg>
+                                        Upload
+                                        <input type="file" name="logo_{{ sector.id }}" accept="image/*" class="hidden" onchange="previewImage(this, {{ sector.id }})">
+                                    </label>
+                                    {% else %}
+                                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded-lg inline-flex items-center gap-1 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                        </svg>
+                                        Trocar
+                                        <input type="file" name="logo_{{ sector.id }}" accept="image/*" class="hidden">
+                                    </label>
+                                    <label class="cursor-pointer">
+                                        <input type="checkbox" name="remove_logo_{{ sector.id }}" class="hidden peer">
+                                        <span class="peer-checked:bg-red-700 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded-lg inline-flex items-center gap-1 transition">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                            Remover
+                                        </span>
+                                    </label>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-2 text-center text-gray-400 py-12">
+                        <div class="text-6xl mb-4">🏢</div>
+                        <p>Nenhum setor cadastrado no sistema.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Dicas -->
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <h3 class="text-white font-semibold mb-2">💡 Dicas para os Escudos</h3>
+                <ul class="text-gray-400 text-sm space-y-1">
+                    <li>• Use imagens quadradas (1:1) para melhor visualização</li>
+                    <li>• Tamanho recomendado: 200x200 pixels ou maior</li>
+                    <li>• PNG com fundo transparente é o ideal</li>
+                    <li>• Máximo de 5MB por imagem</li>
+                </ul>
+            </div>
+
+            <!-- Botões -->
+            {% if sectors %}
+            <div class="flex flex-col sm:flex-row justify-end gap-3">
+                <a href="{% url 'betting:admin_dashboard' %}" 
+                   class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg text-center transition">
+                    Voltar
+                </a>
+                <button type="submit" 
+                        class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold px-6 py-3 rounded-lg transition">
+                    💾 Salvar Escudos
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<script>
+function previewImage(input, sectorId) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('preview_' + sectorId);
+            const placeholder = document.getElementById('placeholder_' + sectorId);
+            if (preview && placeholder) {
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+            }
+        }
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+{% endblock %}
