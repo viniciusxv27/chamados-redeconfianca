@@ -49,24 +49,52 @@
     </div>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <!-- Google Sheets Table -->
-        {% if championship.google_sheet_url %}
+        <!-- Tabela de Classificação (Link Externo) -->
+        {% if championship.table_url %}
         <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 mb-8 border border-gray-700">
-            <h2 class="text-xl font-bold text-white mb-4 flex items-center space-x-2">
-                <span>📊</span>
-                <span>Tabela de Classificação</span>
-            </h2>
-            <div class="bg-white rounded-lg overflow-hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+                    <span>📊</span>
+                    <span>Tabela de Classificação</span>
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleFullscreen()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-1 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                        </svg>
+                        Tela Cheia
+                    </button>
+                    <a href="{{ championship.table_url }}" target="_blank" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-1 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                        </svg>
+                        Abrir em nova aba
+                    </a>
+                </div>
+            </div>
+            <div id="tableContainer" class="rounded-lg overflow-hidden border border-gray-600">
                 <iframe 
-                    src="{{ championship.google_sheet_url }}" 
-                    class="w-full h-96"
-                    frameborder="0">
+                    id="tableIframe"
+                    src="{{ championship.table_url }}" 
+                    class="w-full bg-white"
+                    style="height: 80vh; min-height: 600px;"
+                    frameborder="0"
+                    allowfullscreen>
                 </iframe>
             </div>
-            <a href="{{ championship.google_sheet_url }}" target="_blank" class="text-purple-400 hover:text-purple-300 text-sm mt-2 inline-block">
-                Abrir em nova aba →
-            </a>
         </div>
+        <script>
+            function toggleFullscreen() {
+                const iframe = document.getElementById('tableIframe');
+                if (iframe.requestFullscreen) {
+                    iframe.requestFullscreen();
+                } else if (iframe.webkitRequestFullscreen) {
+                    iframe.webkitRequestFullscreen();
+                } else if (iframe.msRequestFullscreen) {
+                    iframe.msRequestFullscreen();
+                }
+            }
+        </script>
         {% endif %}
 
         <!-- Participating Teams -->

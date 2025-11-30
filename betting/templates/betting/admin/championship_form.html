@@ -51,17 +51,17 @@
                               placeholder="Descrição do campeonato...">{% if championship %}{{ championship.description }}{% endif %}</textarea>
                 </div>
 
-                <!-- Google Sheet URL -->
+                <!-- URL da Tabela -->
                 <div class="mb-4">
-                    <label for="google_sheet_url" class="block text-gray-300 text-sm font-medium mb-2">
-                        URL da Planilha Google (Tabela de Classificação)
+                    <label for="table_url" class="block text-gray-300 text-sm font-medium mb-2">
+                        URL da Tabela de Classificação
                     </label>
-                    <input type="url" name="google_sheet_url" id="google_sheet_url"
-                           value="{% if championship %}{{ championship.google_sheet_url }}{% endif %}"
+                    <input type="url" name="table_url" id="table_url"
+                           value="{% if championship %}{{ championship.table_url }}{% endif %}"
                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-purple-500"
-                           placeholder="https://docs.google.com/spreadsheets/d/.../pubhtml">
+                           placeholder="https://exemplo.com/tabela">
                     <p class="text-gray-500 text-xs mt-1">
-                        Cole a URL de publicação da planilha (Arquivo → Publicar na web → Link)
+                        Cole a URL do site com a tabela de classificação (será exibido em tela cheia no iframe)
                     </p>
                 </div>
 

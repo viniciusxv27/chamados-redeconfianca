@@ -40,11 +40,11 @@ class Championship(models.Model):
         verbose_name='Setores Participantes'
     )
     
-    # Link da planilha do Google Sheets para tabela
-    google_sheet_url = models.URLField(
+    # Link externo para tabela de classificação
+    table_url = models.URLField(
         blank=True,
-        verbose_name='URL da Planilha Google Sheets',
-        help_text='Cole aqui o link da planilha com a tabela do campeonato'
+        verbose_name='URL da Tabela de Classificação',
+        help_text='Cole aqui o link do site com a tabela do campeonato (será exibido em tela cheia)'
     )
     
     # Status

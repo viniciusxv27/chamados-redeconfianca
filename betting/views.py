@@ -534,7 +534,7 @@ def admin_create_championship(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         description = request.POST.get('description', '').strip()
-        google_sheet_url = request.POST.get('google_sheet_url', '').strip()
+        table_url = request.POST.get('table_url', '').strip()
         sector_ids = request.POST.getlist('sectors')
         status = request.POST.get('status', 'draft')
         banner = request.FILES.get('banner')
@@ -550,7 +550,7 @@ def admin_create_championship(request):
         championship = Championship.objects.create(
             name=name,
             description=description,
-            google_sheet_url=google_sheet_url,
+            table_url=table_url,
             status=status,
             banner=banner,
             created_by=request.user
@@ -585,7 +585,7 @@ def admin_edit_championship(request, championship_id):
     if request.method == 'POST':
         championship.name = request.POST.get('name', '').strip()
         championship.description = request.POST.get('description', '').strip()
-        championship.google_sheet_url = request.POST.get('google_sheet_url', '').strip()
+        championship.table_url = request.POST.get('table_url', '').strip()
         championship.status = request.POST.get('status', 'draft')
         
         if request.FILES.get('banner'):
