@@ -14,4 +14,8 @@ urlpatterns = [
     path('admin/create/', views.admin_create_benefit, name='admin_create'),
     path('admin/<int:benefit_id>/edit/', views.admin_edit_benefit, name='admin_edit'),
     path('admin/<int:benefit_id>/delete/', views.admin_delete_benefit, name='admin_delete'),
+    
+    # Histórico de resgates
+    path('admin/history/', views.admin_history, name='admin_history'),
+    path('admin/<int:benefit_id>/history/', views.admin_benefit_history, name='admin_benefit_history'),
 ]

@@ -9,7 +9,7 @@
         
         <!-- Header -->
         <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
                     <h1 class="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
                         <i class="fas fa-cog mr-2"></i>
@@ -17,7 +17,12 @@
                     </h1>
                     <p class="text-gray-600">Crie e edite os benefícios do Clube de Benefícios</p>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <a href="{% url 'benefits:admin_history' %}" 
+                       class="px-6 py-3 bg-purple-100 text-purple-700 rounded-xl hover:bg-purple-200 transition-colors font-semibold">
+                        <i class="fas fa-history mr-2"></i>
+                        Histórico
+                    </a>
                     <a href="{% url 'benefits:list' %}" 
                        class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
                         <i class="fas fa-eye mr-2"></i>

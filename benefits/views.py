@@ -215,6 +215,107 @@ def admin_delete_benefit(request, benefit_id):
     return redirect('benefits:admin_list')
 
 
+@login_required
+def admin_history(request):
+    """Histórico de resgates de benefícios (para supervisores+)"""
+    # Verificar permissão
+    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO'])):
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('benefits:list')
+    
+    from django.db.models import Count, Q
+    from django.db.models.functions import TruncDate
+    
+    # Filtros
+    benefit_filter = request.GET.get('benefit', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    
+    # Todos os resgates
+    redeems = BenefitRedeem.objects.select_related('benefit', 'user', 'user__sector').order_by('-redeemed_at')
+    
+    # Aplicar filtros
+    if benefit_filter:
+        redeems = redeems.filter(benefit_id=benefit_filter)
+    if user_filter:
+        redeems = redeems.filter(
+            Q(user__first_name__icontains=user_filter) | 
+            Q(user__last_name__icontains=user_filter) |
+            Q(user__email__icontains=user_filter)
+        )
+    if date_from:
+        redeems = redeems.filter(redeemed_at__date__gte=date_from)
+    if date_to:
+        redeems = redeems.filter(redeemed_at__date__lte=date_to)
+    
+    # Estatísticas gerais
+    total_redeems = BenefitRedeem.objects.count()
+    unique_users = BenefitRedeem.objects.values('user').distinct().count()
+    
+    # Benefícios mais resgatados
+    most_redeemed = Benefit.objects.annotate(
+        total_redeems=Count('redeems')
+    ).filter(total_redeems__gt=0).order_by('-total_redeems')[:10]
+    
+    # Usuários que mais resgataram
+    from users.models import User
+    top_users = User.objects.annotate(
+        total_redeems=Count('benefit_redeems')
+    ).filter(total_redeems__gt=0).order_by('-total_redeems')[:10]
+    
+    # Resgates por dia (últimos 30 dias)
+    from datetime import timedelta
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    redeems_by_day = BenefitRedeem.objects.filter(
+        redeemed_at__gte=thirty_days_ago
+    ).annotate(
+        date=TruncDate('redeemed_at')
+    ).values('date').annotate(
+        count=Count('id')
+    ).order_by('date')
+    
+    # Lista de benefícios para o filtro
+    all_benefits = Benefit.objects.all().order_by('title')
+    
+    context = {
+        'redeems': redeems[:100],  # Limitar a 100 registros
+        'total_redeems': total_redeems,
+        'unique_users': unique_users,
+        'most_redeemed': most_redeemed,
+        'top_users': top_users,
+        'redeems_by_day': list(redeems_by_day),
+        'all_benefits': all_benefits,
+        'filters': {
+            'benefit': benefit_filter,
+            'user': user_filter,
+            'date_from': date_from,
+            'date_to': date_to,
+        }
+    }
+    
+    return render(request, 'benefits/admin_history.html', context)
+
+
+@login_required
+def admin_benefit_history(request, benefit_id):
+    """Histórico de resgates de um benefício específico"""
+    # Verificar permissão
+    if not (request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO'])):
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('benefits:list')
+    
+    benefit = get_object_or_404(Benefit, id=benefit_id)
+    redeems = BenefitRedeem.objects.filter(benefit=benefit).select_related('user', 'user__sector').order_by('-redeemed_at')
+    
+    context = {
+        'benefit': benefit,
+        'redeems': redeems,
+    }
+    
+    return render(request, 'benefits/admin_benefit_history.html', context)
+
+
 # Importar models para usar Q
 from django.db import models
 

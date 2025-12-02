@@ -1,0 +1,254 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Histórico de Resgates{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                        <i class="fas fa-history mr-2"></i>
+                        Histórico de Resgates
+                    </h1>
+                    <p class="text-gray-600">Veja todos os resgates de benefícios realizados</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <a href="{% url 'benefits:admin_list' %}" 
+                       class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-semibold">
+                        <i class="fas fa-cog mr-2"></i>
+                        Gerenciar
+                    </a>
+                    <a href="{% url 'benefits:list' %}" 
+                       class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all font-semibold">
+                        <i class="fas fa-gift mr-2"></i>
+                        Ver Clube
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Total de Resgates</p>
+                        <p class="text-3xl font-bold text-indigo-600">{{ total_redeems }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-ticket-alt text-xl text-indigo-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Usuários Únicos</p>
+                        <p class="text-3xl font-bold text-green-600">{{ unique_users }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-users text-xl text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Benefícios Ativos</p>
+                        <p class="text-3xl font-bold text-purple-600">{{ all_benefits.count }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-gift text-xl text-purple-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Média por Usuário</p>
+                        <p class="text-3xl font-bold text-orange-600">
+                            {% if unique_users > 0 %}
+                                {{ total_redeems|divisibleby:unique_users }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-chart-line text-xl text-orange-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Benefícios Mais Resgatados -->
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <i class="fas fa-trophy text-yellow-500"></i>
+                    Mais Resgatados
+                </h2>
+                <div class="space-y-3">
+                    {% for benefit in most_redeemed %}
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">{{ forloop.counter }}</span>
+                            <span class="text-gray-700 text-sm font-medium truncate" style="max-width: 150px;">{{ benefit.title }}</span>
+                        </div>
+                        <span class="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-xs font-bold">{{ benefit.total_redeems }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-gray-400 text-center py-4">Nenhum resgate ainda</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Top Usuários -->
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <i class="fas fa-medal text-amber-500"></i>
+                    Top Usuários
+                </h2>
+                <div class="space-y-3">
+                    {% for user in top_users %}
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="w-6 h-6 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xs font-bold">{{ forloop.counter }}</span>
+                            <div>
+                                <span class="text-gray-700 text-sm font-medium">{{ user.get_full_name }}</span>
+                                {% if user.sector %}
+                                <span class="text-gray-400 text-xs block">{{ user.sector.name }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <span class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-xs font-bold">{{ user.total_redeems }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-gray-400 text-center py-4">Nenhum resgate ainda</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Filtros -->
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <i class="fas fa-filter text-blue-500"></i>
+                    Filtros
+                </h2>
+                <form method="GET" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Benefício</label>
+                        <select name="benefit" class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Todos</option>
+                            {% for benefit in all_benefits %}
+                            <option value="{{ benefit.id }}" {% if filters.benefit == benefit.id|stringformat:"s" %}selected{% endif %}>
+                                {{ benefit.title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                        <input type="text" name="user" value="{{ filters.user }}" placeholder="Nome ou email" 
+                               class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">De</label>
+                            <input type="date" name="date_from" value="{{ filters.date_from }}" 
+                                   class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Até</label>
+                            <input type="date" name="date_to" value="{{ filters.date_to }}" 
+                                   class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit" class="flex-1 bg-indigo-600 text-white py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium">
+                            <i class="fas fa-search mr-2"></i>Filtrar
+                        </button>
+                        <a href="{% url 'benefits:admin_history' %}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors">
+                            <i class="fas fa-times"></i>
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tabela de Resgates -->
+        <div class="bg-white rounded-2xl shadow-lg mt-8 overflow-hidden">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <i class="fas fa-list text-gray-500"></i>
+                    Últimos Resgates
+                </h2>
+            </div>
+            
+            {% if redeems %}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Usuário</th>
+                            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Setor</th>
+                            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Benefício</th>
+                            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Data</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for redeem in redeems %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    {% if redeem.user.profile_picture %}
+                                    <img src="{{ redeem.user.profile_picture.url }}" alt="{{ redeem.user.get_full_name }}" class="w-10 h-10 rounded-full object-cover">
+                                    {% else %}
+                                    <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                        <span class="text-indigo-600 font-bold">{{ redeem.user.first_name|slice:":1" }}{{ redeem.user.last_name|slice:":1" }}</span>
+                                    </div>
+                                    {% endif %}
+                                    <div>
+                                        <p class="font-medium text-gray-800">{{ redeem.user.get_full_name }}</p>
+                                        <p class="text-xs text-gray-500">{{ redeem.user.email }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                {% if redeem.user.sector %}
+                                <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-xs font-medium">{{ redeem.user.sector.name }}</span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4">
+                                <a href="{% url 'benefits:admin_benefit_history' redeem.benefit.id %}" class="text-indigo-600 hover:text-indigo-800 font-medium">
+                                    {{ redeem.benefit.title }}
+                                </a>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-gray-600">{{ redeem.redeemed_at|date:"d/m/Y H:i" }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-12 text-center">
+                <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-inbox text-4xl text-gray-400"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Nenhum resgate encontrado</h3>
+                <p class="text-gray-500">Ajuste os filtros ou aguarde novos resgates</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
