@@ -234,6 +234,18 @@
                                                 <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplos vídeos de uma vez</p>
                                             </div>
                                             
+                                            <div class="mb-4">
+                                                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                                    📄 Evidências - Documentos (múltiplos)
+                                                </label>
+                                                <input type="file" 
+                                                       name="evidence_documents_{{ execution.id }}_{{ task_exec.task.id }}"
+                                                       accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+                                                       multiple
+                                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer">
+                                                <p class="text-xs text-gray-500 mt-1">PDF, Word, Excel, PowerPoint, TXT, ZIP, RAR</p>
+                                            </div>
+                                            
                                             {% if task_exec.evidence_image or task_exec.evidence_video or task_exec.evidences.exists %}
                                             <div class="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
                                                 <p class="text-sm font-semibold text-blue-800 mb-3">📎 Evidências Já Enviadas</p>
@@ -268,6 +280,17 @@
                                                         <video controls class="w-full rounded-lg shadow-md">
                                                             <source src="{{ evidence.file.url }}">
                                                         </video>
+                                                        {% elif evidence.evidence_type == 'document' %}
+                                                        <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento {{ forloop.counter }}</p>
+                                                        <a href="{{ evidence.file.url }}" 
+                                                           target="_blank"
+                                                           class="flex flex-col items-center justify-center p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 border-gray-200 hover:border-green-400">
+                                                            <i class="fas {{ evidence.get_file_icon }} text-3xl mb-2"></i>
+                                                            <span class="text-xs text-center text-gray-700 font-medium truncate w-full">
+                                                                {{ evidence.original_filename|default:evidence.file.name|slice:"-25:" }}
+                                                            </span>
+                                                            <span class="text-xs text-green-600 mt-1">Clique para abrir</span>
+                                                        </a>
                                                         {% endif %}
                                                     </div>
                                                     {% endfor %}

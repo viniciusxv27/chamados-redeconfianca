@@ -489,23 +489,25 @@ def execute_today_checklists(request):
                 notes_key = f'notes_{execution.id}_{task_exec.task.id}'
                 images_key = f'evidence_images_{execution.id}_{task_exec.task.id}'
                 videos_key = f'evidence_videos_{execution.id}_{task_exec.task.id}'
+                documents_key = f'evidence_documents_{execution.id}_{task_exec.task.id}'
                 
                 is_completed = request.POST.get(task_key) == 'on'
                 notes = request.POST.get(notes_key, '').strip()
                 evidence_images = request.FILES.getlist(images_key)
                 evidence_videos = request.FILES.getlist(videos_key)
+                evidence_documents = request.FILES.getlist(documents_key)
                 
                 # VALIDAÇÃO: Se marcado como completo, deve ter descrição OU evidência
                 if is_completed:
                     has_notes = bool(notes)
                     has_existing_evidence = bool(task_exec.evidence_image or task_exec.evidence_video) or task_exec.evidences.exists()
-                    has_new_evidence = bool(evidence_images or evidence_videos)
+                    has_new_evidence = bool(evidence_images or evidence_videos or evidence_documents)
                     
                     if not has_notes and not has_existing_evidence and not has_new_evidence:
                         messages.error(
                             request,
                             f'❌ Tarefa "{task_exec.task.title}" do checklist "{execution.assignment.template.name}": '
-                            f'você deve preencher a descrição OU anexar alguma evidência (imagem/vídeo).'
+                            f'você deve preencher a descrição OU anexar alguma evidência (imagem/vídeo/documento).'
                         )
                         return redirect('checklists:today_checklists')
                 
@@ -533,6 +535,16 @@ def execute_today_checklists(request):
                         task_execution=task_exec,
                         evidence_type='video',
                         file=video,
+                        order=order
+                    )
+                
+                # Salvar múltiplos documentos
+                for order, document in enumerate(evidence_documents):
+                    ChecklistTaskEvidence.objects.create(
+                        task_execution=task_exec,
+                        evidence_type='document',
+                        file=document,
+                        original_filename=document.name,
                         order=order
                     )
                 
@@ -743,12 +755,16 @@ def view_execution(request, execution_id):
             evidence_videos_field = f'evidence_videos_{execution.id}_{task.id}'
             evidence_videos = request.FILES.getlist(evidence_videos_field)
             
+            # Pegar múltiplos documentos de evidência
+            evidence_documents_field = f'evidence_documents_{execution.id}_{task.id}'
+            evidence_documents = request.FILES.getlist(evidence_documents_field)
+            
             # Validação: tarefas normais marcadas como completas devem ter observações OU evidências
             # Perguntas sim/não e dropdown não precisam de evidências
             if task.task_type not in ['yes_no', 'dropdown'] and task_exec.is_completed:
                 has_notes = bool(notes)
                 has_existing_evidence = bool(task_exec.evidence_image or task_exec.evidence_video) or task_exec.evidences.exists()
-                has_new_evidence = bool(evidence_images or evidence_videos)
+                has_new_evidence = bool(evidence_images or evidence_videos or evidence_documents)
                 
                 if not has_notes and not has_existing_evidence and not has_new_evidence:
                     messages.error(
@@ -790,6 +806,16 @@ def view_execution(request, execution_id):
                     task_execution=task_exec,
                     evidence_type='video',
                     file=video,
+                    order=order
+                )
+            
+            # Salvar múltiplos documentos
+            for order, document in enumerate(evidence_documents):
+                ChecklistTaskEvidence.objects.create(
+                    task_execution=task_exec,
+                    evidence_type='document',
+                    file=document,
+                    original_filename=document.name,
                     order=order
                 )
         

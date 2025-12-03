@@ -245,8 +245,9 @@ def tickets_list_view(request):
             filter_params['overdue'] = overdue_filter
     
     # Converter parâmetros para query string
+    # doseq=True permite múltiplos valores para o mesmo parâmetro (ex: status=ABERTO&status=EM_ANDAMENTO)
     from urllib.parse import urlencode
-    filter_query_string = urlencode(filter_params)
+    filter_query_string = urlencode(filter_params, doseq=True)
     
     # Obter categorias e setores do usuário para os filtros
     user_sectors = list(user.sectors.all())
@@ -774,8 +775,8 @@ def update_ticket_status_view(request, ticket_id):
                 messages.error(request, 'Solução é obrigatória para marcar como resolvido.')
                 return redirect('ticket_detail', ticket_id=ticket.id)
             
-            # Se a categoria não requer aprovação, fechar direto
-            if not ticket.category.requires_approval:
+            # Se a categoria não requer aprovação ou não tem categoria, fechar direto
+            if not ticket.category or not ticket.category.requires_approval:
                 ticket.status = 'FECHADO'
                 ticket.closed_at = timezone.now()
         elif new_status == 'FECHADO':
@@ -821,7 +822,7 @@ def update_ticket_status_view(request, ticket_id):
         if ticket.status == 'FECHADO' and old_status == 'RESOLVIDO':
             # Fechamento direto sem aprovação
             messages.success(request, f'Chamado #{ticket.id} resolvido e fechado automaticamente (categoria não requer aprovação do usuário).')
-        elif new_status == 'RESOLVIDO' and ticket.category.requires_approval:
+        elif new_status == 'RESOLVIDO' and ticket.category and ticket.category.requires_approval:
             messages.success(request, f'Chamado #{ticket.id} marcado como resolvido. Aguardando aprovação do usuário.')
         elif new_status == 'FECHADO':
             messages.success(request, f'Chamado #{ticket.id} fechado com sucesso!')
@@ -1061,8 +1062,8 @@ class TicketViewSet(viewsets.ModelViewSet):
         if new_status == 'RESOLVIDO':
             ticket.resolved_at = timezone.now()
             ticket.solution = solution
-            # Se a categoria não requer aprovação, vai direto para fechado
-            if not ticket.category.requires_approval:
+            # Se a categoria não requer aprovação ou não tem categoria, vai direto para fechado
+            if not ticket.category or not ticket.category.requires_approval:
                 ticket.status = 'FECHADO'
                 ticket.closed_at = timezone.now()
         elif new_status == 'FECHADO':
@@ -1591,7 +1592,7 @@ def pending_approvals(request):
                 'created_at': approval.created_at.isoformat(),
                 'approval_step': approval.approval_step,
                 'created_by': approval.ticket.created_by.full_name,
-                'category': approval.ticket.category.name,
+                'category': approval.ticket.category.name if approval.ticket.category else None,
             })
         
         return Response({

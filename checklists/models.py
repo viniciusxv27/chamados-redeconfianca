@@ -576,11 +576,12 @@ class ChecklistTaskExecution(models.Model):
 
 
 class ChecklistTaskEvidence(models.Model):
-    """Múltiplas evidências (fotos/vídeos) para uma tarefa executada"""
+    """Múltiplas evidências (fotos/vídeos/documentos) para uma tarefa executada"""
     
     EVIDENCE_TYPE_CHOICES = [
         ('image', 'Imagem'),
         ('video', 'Vídeo'),
+        ('document', 'Documento'),
     ]
     
     task_execution = models.ForeignKey(
@@ -602,6 +603,12 @@ class ChecklistTaskEvidence(models.Model):
         verbose_name='Arquivo'
     )
     
+    original_filename = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Nome Original do Arquivo'
+    )
+    
     uploaded_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Enviado em'
@@ -619,3 +626,25 @@ class ChecklistTaskEvidence(models.Model):
     
     def __str__(self):
         return f'{self.get_evidence_type_display()} - {self.task_execution}'
+    
+    def get_file_extension(self):
+        """Retorna a extensão do arquivo"""
+        import os
+        return os.path.splitext(self.file.name)[1].lower() if self.file else ''
+    
+    def get_file_icon(self):
+        """Retorna o ícone apropriado para o tipo de arquivo"""
+        ext = self.get_file_extension()
+        icons = {
+            '.pdf': 'fa-file-pdf text-red-600',
+            '.doc': 'fa-file-word text-blue-600',
+            '.docx': 'fa-file-word text-blue-600',
+            '.xls': 'fa-file-excel text-green-600',
+            '.xlsx': 'fa-file-excel text-green-600',
+            '.ppt': 'fa-file-powerpoint text-orange-600',
+            '.pptx': 'fa-file-powerpoint text-orange-600',
+            '.txt': 'fa-file-alt text-gray-600',
+            '.zip': 'fa-file-archive text-yellow-600',
+            '.rar': 'fa-file-archive text-yellow-600',
+        }
+        return icons.get(ext, 'fa-file text-gray-600')
