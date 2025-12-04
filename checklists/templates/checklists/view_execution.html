@@ -197,68 +197,105 @@
                             <textarea name="notes_{{ execution.id }}_{{ task_exec.task.id }}" rows="2" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="Adicione observações sobre esta tarefa..." {% if not can_execute %}readonly{% endif %}>{{ task_exec.notes|default:'' }}</textarea>
                         </div>
 
-                        <div class="mb-4">
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">📷 Evidências - Imagens (múltiplas)</label>
-                            <input type="file" name="evidence_images_{{ execution.id }}_{{ task_exec.task.id }}" accept="image/*" multiple class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer" {% if not can_execute %}disabled{% endif %}>
-                            <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplas imagens de uma vez</p>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">🎥 Evidências - Vídeos (múltiplos)</label>
-                            <input type="file" name="evidence_videos_{{ execution.id }}_{{ task_exec.task.id }}" accept="video/*" multiple class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer" {% if not can_execute %}disabled{% endif %}>
-                            <p class="text-xs text-gray-500 mt-1">Você pode selecionar múltiplos vídeos de uma vez</p>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">📄 Evidências - Documentos (múltiplos)</label>
-                            <input type="file" name="evidence_documents_{{ execution.id }}_{{ task_exec.task.id }}" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" multiple class="w-full px-4 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer" {% if not can_execute %}disabled{% endif %}>
-                            <p class="text-xs text-gray-500 mt-1">PDF, Word, Excel, PowerPoint, TXT, ZIP, RAR</p>
-                        </div>
-                        
-                        {% if task_exec.evidence_image or task_exec.evidence_video or task_exec.evidences.exists %}
-                        <div class="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400 mb-4">
-                            <p class="text-sm font-semibold text-blue-800 mb-3">📎 Evidências Já Enviadas</p>
-                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {% if task_exec.evidence_image %}
-                                <div>
-                                    <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
-                                    <img src="{{ task_exec.evidence_image.url }}" alt="Evidência" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity" onclick="openImageModal('{{ task_exec.evidence_image.url }}', 'Evidência')">
-                                </div>
+                        <!-- Seção de Upload de Evidências com AJAX -->
+                        <div class="mb-4 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                            <div class="flex items-center justify-between mb-3">
+                                <label class="block text-sm font-semibold text-purple-800">📎 Anexar Evidências</label>
+                                {% if can_execute %}
+                                <span class="text-xs text-purple-600">Arquivos são salvos automaticamente</span>
                                 {% endif %}
-                                {% if task_exec.evidence_video %}
-                                <div>
-                                    <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
-                                    <video controls class="w-full rounded-lg shadow-md">
-                                        <source src="{{ task_exec.evidence_video.url }}">
-                                    </video>
+                            </div>
+                            
+                            {% if can_execute %}
+                            <!-- Input de Upload AJAX -->
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                <label class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg cursor-pointer hover:bg-purple-700 transition-colors">
+                                    <i class="fas fa-camera"></i> Imagens
+                                    <input type="file" accept="image/*" multiple class="hidden evidence-upload-input" 
+                                           data-task-exec-id="{{ task_exec.id }}" data-type="images">
+                                </label>
+                                <label class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors">
+                                    <i class="fas fa-video"></i> Vídeos
+                                    <input type="file" accept="video/*" multiple class="hidden evidence-upload-input" 
+                                           data-task-exec-id="{{ task_exec.id }}" data-type="videos">
+                                </label>
+                                <label class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg cursor-pointer hover:bg-green-700 transition-colors">
+                                    <i class="fas fa-file-alt"></i> Documentos
+                                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" multiple class="hidden evidence-upload-input" 
+                                           data-task-exec-id="{{ task_exec.id }}" data-type="documents">
+                                </label>
+                            </div>
+                            <p class="text-xs text-purple-600 mb-3">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Imagens, vídeos ou documentos (PDF, Word, Excel, etc.) - Múltiplos arquivos permitidos
+                            </p>
+                            {% endif %}
+                            
+                            <!-- Loading indicator -->
+                            <div id="upload-loading-{{ task_exec.id }}" class="hidden">
+                                <div class="flex items-center justify-center p-4 bg-white rounded-lg">
+                                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mr-3"></div>
+                                    <span class="text-sm text-purple-600">Enviando arquivo(s)...</span>
                                 </div>
-                                {% endif %}
-                                {% for evidence in task_exec.evidences.all %}
-                                <div>
-                                    {% if evidence.evidence_type == 'image' %}
-                                    <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem {{ forloop.counter }}</p>
-                                    <img src="{{ evidence.file.url }}" alt="Evidência {{ forloop.counter }}" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity" onclick="openImageModal('{{ evidence.file.url }}', 'Evidência {{ forloop.counter }}')">
-                                    {% elif evidence.evidence_type == 'video' %}
-                                    <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo {{ forloop.counter }}</p>
-                                    <video controls class="w-full rounded-lg shadow-md">
-                                        <source src="{{ evidence.file.url }}">
-                                    </video>
-                                    {% elif evidence.evidence_type == 'document' %}
-                                    <p class="text-xs font-semibold text-gray-700 mb-2">📄 Documento {{ forloop.counter }}</p>
-                                    <a href="{{ evidence.file.url }}" 
-                                       target="_blank"
-                                       class="flex flex-col items-center justify-center p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 border-gray-200 hover:border-green-400">
-                                        <i class="fas {{ evidence.get_file_icon }} text-3xl mb-2"></i>
-                                        <span class="text-xs text-center text-gray-700 font-medium truncate w-full">
-                                            {{ evidence.original_filename|default:evidence.file.name|slice:"-25:" }}
-                                        </span>
-                                        <span class="text-xs text-green-600 mt-1">Clique para abrir</span>
-                                    </a>
+                            </div>
+                            
+                            <!-- Container para evidências desta tarefa -->
+                            <div id="evidences-container-{{ task_exec.id }}" class="{% if not task_exec.evidence_image and not task_exec.evidence_video and not task_exec.evidences.exists %}hidden{% endif %}">
+                                <p class="text-sm font-semibold text-purple-800 mb-3">📎 Evidências Anexadas</p>
+                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="evidences-grid-{{ task_exec.id }}">
+                                    {% if task_exec.evidence_image %}
+                                    <div class="evidence-item relative group">
+                                        <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                        <img src="{{ task_exec.evidence_image.url }}" alt="Evidência" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity" onclick="openImageModal('{{ task_exec.evidence_image.url }}', 'Evidência')">
+                                    </div>
                                     {% endif %}
+                                    {% if task_exec.evidence_video %}
+                                    <div class="evidence-item relative group">
+                                        <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                        <video controls class="w-full rounded-lg shadow-md">
+                                            <source src="{{ task_exec.evidence_video.url }}">
+                                        </video>
+                                    </div>
+                                    {% endif %}
+                                    {% for evidence in task_exec.evidences.all %}
+                                    <div class="evidence-item relative group" data-evidence-id="{{ evidence.id }}">
+                                        {% if can_execute %}
+                                        <button type="button" onclick="deleteEvidence({{ evidence.id }}, this)" 
+                                                class="absolute -top-2 -right-2 z-10 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if evidence.evidence_type == 'image' %}
+                                        <p class="text-xs font-semibold text-gray-700 mb-2">📷 Imagem</p>
+                                        <img src="{{ evidence.file.url }}" alt="Evidência" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity" onclick="openImageModal('{{ evidence.file.url }}', 'Evidência')">
+                                        {% elif evidence.evidence_type == 'video' %}
+                                        <p class="text-xs font-semibold text-gray-700 mb-2">🎥 Vídeo</p>
+                                        <video controls class="w-full rounded-lg shadow-md">
+                                            <source src="{{ evidence.file.url }}">
+                                        </video>
+                                        {% elif evidence.evidence_type == 'document' %}
+                                        <p class="text-xs font-semibold text-gray-700 mb-2">📄 {{ evidence.original_filename|default:"Documento"|truncatechars:20 }}</p>
+                                        <a href="{{ evidence.file.url }}" 
+                                           target="_blank"
+                                           class="flex flex-col items-center justify-center p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 border-gray-200 hover:border-green-400">
+                                            <i class="fas {{ evidence.get_file_icon }} text-3xl mb-2 text-gray-600"></i>
+                                            <span class="text-xs text-center text-gray-700 font-medium truncate w-full">
+                                                {{ evidence.original_filename|default:evidence.file.name|slice:"-25:" }}
+                                            </span>
+                                            <span class="text-xs text-green-600 mt-1">Clique para abrir</span>
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
                                 </div>
-                                {% endfor %}
                             </div>
                         </div>
+
+                        <!-- Campos ocultos para manter compatibilidade com o submit do form -->
+                        {% if can_execute %}
+                        <input type="file" name="evidence_images_{{ execution.id }}_{{ task_exec.task.id }}" accept="image/*" multiple class="hidden">
+                        <input type="file" name="evidence_videos_{{ execution.id }}_{{ task_exec.task.id }}" accept="video/*" multiple class="hidden">
+                        <input type="file" name="evidence_documents_{{ execution.id }}_{{ task_exec.task.id }}" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" multiple class="hidden">
                         {% endif %}
 
                         {% if task_exec.completed_at and not can_execute %}
@@ -570,5 +607,174 @@ document.addEventListener('keydown', function(e) {
         closeImageModal();
     }
 });
+
+// === UPLOAD DE EVIDÊNCIAS AJAX ===
+document.querySelectorAll('.evidence-upload-input').forEach(input => {
+    input.addEventListener('change', async function() {
+        if (!this.files || this.files.length === 0) return;
+        
+        const taskExecId = this.dataset.taskExecId;
+        const loadingEl = document.getElementById(`upload-loading-${taskExecId}`);
+        const containerEl = document.getElementById(`evidences-container-${taskExecId}`);
+        const gridEl = document.getElementById(`evidences-grid-${taskExecId}`);
+        
+        // Mostrar loading
+        loadingEl.classList.remove('hidden');
+        
+        // Preparar FormData
+        const formData = new FormData();
+        for (const file of this.files) {
+            formData.append('files', file);
+        }
+        
+        try {
+            const response = await fetch(`/checklists/api/upload-evidence/${taskExecId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Mostrar container se estava oculto
+                containerEl.classList.remove('hidden');
+                
+                // Adicionar novos arquivos ao grid
+                for (const file of data.files) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'evidence-item relative group';
+                    itemDiv.dataset.evidenceId = file.id;
+                    
+                    let content = '';
+                    
+                    // Botão de excluir
+                    content += `
+                        <button type="button" onclick="deleteEvidence(${file.id}, this)" 
+                                class="absolute -top-2 -right-2 z-10 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    `;
+                    
+                    if (file.type === 'image') {
+                        content += `
+                            <p class="text-xs font-semibold text-gray-700 mb-2">📷 ${file.filename}</p>
+                            <img src="${file.url}" alt="Evidência" class="w-full rounded-lg shadow-md cursor-pointer hover:opacity-90 transition-opacity" onclick="openImageModal('${file.url}', 'Evidência')">
+                        `;
+                    } else if (file.type === 'video') {
+                        content += `
+                            <p class="text-xs font-semibold text-gray-700 mb-2">🎥 ${file.filename}</p>
+                            <video controls class="w-full rounded-lg shadow-md">
+                                <source src="${file.url}">
+                            </video>
+                        `;
+                    } else {
+                        content += `
+                            <p class="text-xs font-semibold text-gray-700 mb-2">📄 ${file.filename.substring(0, 20)}${file.filename.length > 20 ? '...' : ''}</p>
+                            <a href="${file.url}" target="_blank"
+                               class="flex flex-col items-center justify-center p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 border-gray-200 hover:border-green-400">
+                                <i class="fas ${file.icon} text-3xl mb-2 text-gray-600"></i>
+                                <span class="text-xs text-center text-gray-700 font-medium truncate w-full">
+                                    ${file.filename.slice(-25)}
+                                </span>
+                                <span class="text-xs text-green-600 mt-1">Clique para abrir</span>
+                            </a>
+                        `;
+                    }
+                    
+                    itemDiv.innerHTML = content;
+                    gridEl.appendChild(itemDiv);
+                }
+                
+                // Mostrar mensagem de sucesso
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.error || 'Erro ao enviar arquivo', 'error');
+            }
+        } catch (error) {
+            console.error('Erro no upload:', error);
+            showToast('Erro ao enviar arquivo. Tente novamente.', 'error');
+        } finally {
+            // Esconder loading e limpar input
+            loadingEl.classList.add('hidden');
+            this.value = '';
+        }
+    });
+});
+
+// Função para excluir evidência
+async function deleteEvidence(evidenceId, button) {
+    if (!confirm('Tem certeza que deseja excluir esta evidência?')) return;
+    
+    const itemDiv = button.closest('.evidence-item');
+    
+    try {
+        const response = await fetch(`/checklists/api/delete-evidence/${evidenceId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Remover item do DOM com animação
+            itemDiv.style.transition = 'opacity 0.3s, transform 0.3s';
+            itemDiv.style.opacity = '0';
+            itemDiv.style.transform = 'scale(0.8)';
+            setTimeout(() => {
+                itemDiv.remove();
+                
+                // Verificar se ainda há evidências, se não, esconder container
+                const gridEl = itemDiv.parentElement;
+                if (gridEl && gridEl.querySelectorAll('.evidence-item').length === 0) {
+                    gridEl.closest('[id^="evidences-container-"]')?.classList.add('hidden');
+                }
+            }, 300);
+            
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.error || 'Erro ao excluir evidência', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao excluir:', error);
+        showToast('Erro ao excluir evidência. Tente novamente.', 'error');
+    }
+}
+
+// Toast notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium transform transition-all duration-300 ${
+        type === 'success' ? 'bg-green-600' : 
+        type === 'error' ? 'bg-red-600' : 
+        'bg-blue-600'
+    }`;
+    toast.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Animar entrada
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+    
+    // Remover após 3 segundos
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(20px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
 </script>
 {% endblock %}

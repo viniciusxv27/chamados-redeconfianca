@@ -612,7 +612,8 @@ def view_execution(request, execution_id):
             'assignment__assigned_to',
             'assignment__assigned_by'
         ).prefetch_related(
-            'task_executions__task__instruction_media'
+            'task_executions__task__instruction_media',
+            'task_executions__evidences'
         ),
         id=execution_id
     )
@@ -621,6 +622,7 @@ def view_execution(request, execution_id):
     user = request.user
     can_view = (
         user == execution.assignment.assigned_to or  # É o executor
+        user == execution.assignment.assigned_by or  # É quem atribuiu o checklist
         user.is_superuser or  # É superuser
         (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])  # É supervisor+
     )
@@ -856,6 +858,7 @@ def execute_checklist(request, assignment_id):
     user = request.user
     can_view = (
         user == assignment.assigned_to or  # É o executor
+        user == assignment.assigned_by or  # É quem atribuiu o checklist
         user.is_superuser or  # É superuser
         (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])  # É supervisor+
     )
@@ -1581,9 +1584,12 @@ def admin_approvals(request):
 @login_required
 def approve_checklist(request, execution_id):
     """Aprovar checklist executado"""
+    execution = get_object_or_404(ChecklistExecution, id=execution_id)
+    
     # Verificar se o usuário tem permissão para aprovar
     is_authorized = (
         request.user.is_superuser or
+        request.user == execution.assignment.assigned_by or  # É quem atribuiu o checklist
         (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
     )
     
@@ -1591,10 +1597,8 @@ def approve_checklist(request, execution_id):
         messages.error(request, 'Você não tem permissão para aprovar checklists.')
         return redirect('checklists:dashboard')
     
-    execution = get_object_or_404(ChecklistExecution, id=execution_id)
-    
-    # Verificar se o checklist é de um setor do usuário
-    if not request.user.is_superuser:
+    # Verificar se o checklist é de um setor do usuário (exceto quem atribuiu)
+    if not request.user.is_superuser and request.user != execution.assignment.assigned_by:
         user_sectors = list(request.user.sectors.all())
         if request.user.sector:
             user_sectors.append(request.user.sector)
@@ -1617,9 +1621,12 @@ def approve_checklist(request, execution_id):
 @login_required
 def reject_checklist(request, execution_id):
     """Rejeitar checklist executado"""
+    execution = get_object_or_404(ChecklistExecution, id=execution_id)
+    
     # Verificar se o usuário tem permissão para rejeitar
     is_authorized = (
         request.user.is_superuser or
+        request.user == execution.assignment.assigned_by or  # É quem atribuiu o checklist
         (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
     )
     
@@ -1627,10 +1634,8 @@ def reject_checklist(request, execution_id):
         messages.error(request, 'Você não tem permissão para rejeitar checklists.')
         return redirect('checklists:dashboard')
     
-    execution = get_object_or_404(ChecklistExecution, id=execution_id)
-    
-    # Verificar se o checklist é de um setor do usuário
-    if not request.user.is_superuser:
+    # Verificar se o checklist é de um setor do usuário (exceto quem atribuiu)
+    if not request.user.is_superuser and request.user != execution.assignment.assigned_by:
         user_sectors = list(request.user.sectors.all())
         if request.user.sector:
             user_sectors.append(request.user.sector)
@@ -1768,9 +1773,13 @@ def reject_all_checklists(request):
 @login_required
 def approve_task(request, task_exec_id):
     """Aprovar tarefa individual"""
+    from checklists.models import ChecklistTaskExecution
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    
     # Verificar permissão
     is_authorized = (
         request.user.is_superuser or
+        request.user == task_exec.execution.assignment.assigned_by or  # É quem atribuiu o checklist
         (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
     )
     
@@ -1778,11 +1787,8 @@ def approve_task(request, task_exec_id):
         messages.error(request, 'Você não tem permissão para aprovar tarefas.')
         return redirect('checklists:dashboard')
     
-    from checklists.models import ChecklistTaskExecution
-    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
-    
-    # Verificar setor
-    if not request.user.is_superuser:
+    # Verificar setor (exceto quem atribuiu)
+    if not request.user.is_superuser and request.user != task_exec.execution.assignment.assigned_by:
         user_sectors = list(request.user.sectors.all())
         if request.user.sector:
             user_sectors.append(request.user.sector)
@@ -1811,9 +1817,13 @@ def approve_task(request, task_exec_id):
 @login_required
 def reject_task(request, task_exec_id):
     """Reprovar tarefa individual"""
+    from checklists.models import ChecklistTaskExecution
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    
     # Verificar permissão
     is_authorized = (
         request.user.is_superuser or
+        request.user == task_exec.execution.assignment.assigned_by or  # É quem atribuiu o checklist
         (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
     )
     
@@ -1821,11 +1831,8 @@ def reject_task(request, task_exec_id):
         messages.error(request, 'Você não tem permissão para reprovar tarefas.')
         return redirect('checklists:dashboard')
     
-    from checklists.models import ChecklistTaskExecution
-    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
-    
-    # Verificar setor
-    if not request.user.is_superuser:
+    # Verificar setor (exceto quem atribuiu)
+    if not request.user.is_superuser and request.user != task_exec.execution.assignment.assigned_by:
         user_sectors = list(request.user.sectors.all())
         if request.user.sector:
             user_sectors.append(request.user.sector)
@@ -1859,9 +1866,13 @@ def reject_task(request, task_exec_id):
 @login_required
 def unapprove_task(request, task_exec_id):
     """Desfazer aprovação/reprovação de tarefa"""
+    from checklists.models import ChecklistTaskExecution
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    
     # Verificar permissão
     is_authorized = (
         request.user.is_superuser or
+        request.user == task_exec.execution.assignment.assigned_by or  # É quem atribuiu o checklist
         (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
     )
     
@@ -1869,11 +1880,8 @@ def unapprove_task(request, task_exec_id):
         messages.error(request, 'Você não tem permissão para modificar tarefas.')
         return redirect('checklists:dashboard')
     
-    from checklists.models import ChecklistTaskExecution
-    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
-    
-    # Verificar setor
-    if not request.user.is_superuser:
+    # Verificar setor (exceto quem atribuiu)
+    if not request.user.is_superuser and request.user != task_exec.execution.assignment.assigned_by:
         user_sectors = list(request.user.sectors.all())
         if request.user.sector:
             user_sectors.append(request.user.sector)
@@ -2210,3 +2218,116 @@ def export_checklists(request):
             ])
     
     return response
+
+
+@login_required
+def api_upload_evidence(request, task_exec_id):
+    """API para upload de evidências (imagens, vídeos, documentos) sem submeter o checklist"""
+    from django.http import JsonResponse
+    from checklists.models import ChecklistTaskExecution, ChecklistTaskEvidence
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    # Buscar a execução da tarefa
+    task_exec = get_object_or_404(ChecklistTaskExecution, id=task_exec_id)
+    execution = task_exec.execution
+    
+    # Verificar permissão - pode ser o executor ou quem atribuiu
+    user = request.user
+    can_upload = (
+        user == execution.assignment.assigned_to or  # É o executor
+        user == execution.assignment.assigned_by or  # É quem atribuiu o checklist
+        user.is_superuser
+    )
+    
+    if not can_upload:
+        return JsonResponse({'error': 'Você não tem permissão para enviar evidências neste checklist.'}, status=403)
+    
+    # Verificar se o status do checklist permite uploads
+    # Permite uploads em: pending, in_progress, overdue
+    if execution.status in ['completed', 'awaiting_approval'] and user == execution.assignment.assigned_to:
+        return JsonResponse({'error': 'O checklist já foi enviado para aprovação. Não é possível adicionar mais evidências.'}, status=400)
+    
+    files = request.FILES.getlist('files')
+    
+    if not files:
+        return JsonResponse({'error': 'Nenhum arquivo enviado.'}, status=400)
+    
+    uploaded = []
+    
+    for file in files:
+        # Determinar o tipo de evidência
+        content_type = file.content_type.lower()
+        
+        if content_type.startswith('image/'):
+            evidence_type = 'image'
+        elif content_type.startswith('video/'):
+            evidence_type = 'video'
+        else:
+            evidence_type = 'document'
+        
+        # Criar a evidência
+        evidence = ChecklistTaskEvidence.objects.create(
+            task_execution=task_exec,
+            evidence_type=evidence_type,
+            file=file,
+            original_filename=file.name,
+            order=task_exec.evidences.count()
+        )
+        
+        uploaded.append({
+            'id': evidence.id,
+            'type': evidence_type,
+            'filename': evidence.original_filename or file.name,
+            'url': evidence.file.url if evidence.file else None,
+            'icon': evidence.get_file_icon() if hasattr(evidence, 'get_file_icon') else 'fa-file'
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'{len(uploaded)} arquivo(s) enviado(s) com sucesso!',
+        'files': uploaded
+    })
+
+
+@login_required
+def api_delete_evidence(request, evidence_id):
+    """API para deletar uma evidência"""
+    from django.http import JsonResponse
+    from checklists.models import ChecklistTaskEvidence
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    
+    # Buscar a evidência
+    evidence = get_object_or_404(ChecklistTaskEvidence, id=evidence_id)
+    task_exec = evidence.task_execution
+    execution = task_exec.execution
+    
+    # Verificar permissão - pode ser o executor ou quem atribuiu
+    user = request.user
+    can_delete = (
+        user == execution.assignment.assigned_to or  # É o executor
+        user == execution.assignment.assigned_by or  # É quem atribuiu o checklist
+        user.is_superuser
+    )
+    
+    if not can_delete:
+        return JsonResponse({'error': 'Você não tem permissão para excluir esta evidência.'}, status=403)
+    
+    # Verificar se o status do checklist permite exclusão
+    if execution.status in ['completed', 'awaiting_approval'] and user == execution.assignment.assigned_to:
+        return JsonResponse({'error': 'O checklist já foi enviado para aprovação. Não é possível excluir evidências.'}, status=400)
+    
+    # Deletar o arquivo do S3/storage
+    if evidence.file:
+        evidence.file.delete(save=False)
+    
+    # Deletar o registro
+    evidence.delete()
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Evidência excluída com sucesso!'
+    })
