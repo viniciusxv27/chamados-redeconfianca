@@ -515,6 +515,75 @@ class ChecklistItem(models.Model):
         self.checklist.mark_as_completed()
 
 
+def upload_checklist_item_evidence(instance, filename):
+    """Função para definir o caminho de upload das evidências dos itens de checklist"""
+    import os
+    from datetime import datetime
+    ext = filename.split('.')[-1]
+    new_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{instance.item.id}.{ext}"
+    return os.path.join('checklist_item_evidences', str(instance.item.checklist.id), new_filename)
+
+
+class ChecklistItemEvidence(models.Model):
+    """Modelo para armazenar evidências (imagens, vídeos, documentos) dos itens de checklist"""
+    EVIDENCE_TYPE_CHOICES = [
+        ('image', 'Imagem'),
+        ('video', 'Vídeo'),
+        ('document', 'Documento'),
+    ]
+    
+    item = models.ForeignKey(ChecklistItem, on_delete=models.CASCADE, related_name='evidences')
+    evidence_type = models.CharField(max_length=20, choices=EVIDENCE_TYPE_CHOICES, verbose_name="Tipo de Evidência")
+    file = models.FileField(
+        upload_to=upload_checklist_item_evidence,
+        storage=get_media_storage(),
+        verbose_name="Arquivo"
+    )
+    original_filename = models.CharField(max_length=255, blank=True, verbose_name="Nome Original do Arquivo")
+    uploaded_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='checklist_item_evidences',
+        verbose_name="Enviado por"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Enviado em")
+    order = models.IntegerField(default=0, verbose_name="Ordem")
+    
+    class Meta:
+        verbose_name = "Evidência do Item de Checklist"
+        verbose_name_plural = "Evidências dos Itens de Checklist"
+        ordering = ['order', '-uploaded_at']
+    
+    def __str__(self):
+        return f"Evidência ({self.evidence_type}) - {self.item.title}"
+    
+    def get_file_icon(self):
+        """Retorna o ícone FontAwesome apropriado para o tipo de arquivo"""
+        if self.evidence_type == 'image':
+            return 'fa-file-image text-purple-500'
+        elif self.evidence_type == 'video':
+            return 'fa-file-video text-indigo-500'
+        else:
+            # Determinar ícone pelo nome do arquivo
+            if self.original_filename:
+                filename_lower = self.original_filename.lower()
+                if filename_lower.endswith('.pdf'):
+                    return 'fa-file-pdf text-red-500'
+                elif filename_lower.endswith(('.doc', '.docx')):
+                    return 'fa-file-word text-blue-600'
+                elif filename_lower.endswith(('.xls', '.xlsx')):
+                    return 'fa-file-excel text-green-600'
+                elif filename_lower.endswith(('.ppt', '.pptx')):
+                    return 'fa-file-powerpoint text-orange-500'
+                elif filename_lower.endswith(('.zip', '.rar', '.7z')):
+                    return 'fa-file-archive text-yellow-600'
+                elif filename_lower.endswith('.txt'):
+                    return 'fa-file-alt text-gray-500'
+            return 'fa-file text-gray-500'
+
+
 # ===== ATIVIDADES MODELS =====
 class TaskActivity(models.Model):
     STATUS_CHOICES = [

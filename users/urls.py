@@ -70,6 +70,8 @@ urlpatterns = [
     path('checklist/<int:checklist_id>/', views.checklist_detail_view, name='checklist_detail'),
     path('checklist/<int:checklist_id>/delete/', views.delete_checklist, name='delete_checklist'),
     path('checklist/item/<int:item_id>/update-status/', views.update_checklist_item_status, name='update_checklist_item_status'),
+    path('checklist/item/<int:item_id>/upload-evidence/', views.api_upload_checklist_item_evidence, name='api_upload_checklist_item_evidence'),
+    path('checklist/evidence/<int:evidence_id>/delete/', views.api_delete_checklist_item_evidence, name='api_delete_checklist_item_evidence'),
     
     # Tasks URLs
     path('tasks/', views.tasks_dashboard_view, name='tasks_dashboard'),

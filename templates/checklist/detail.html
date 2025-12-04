@@ -209,11 +209,98 @@
                         <input type="checkbox" 
                                {% if item.is_not_applicable %}checked{% endif %}
                                onchange="toggleNotApplicable({{ item.id }}, this.checked)"
-                               class="h-4 w-4 text-gray-500 focus:ring-gray-400 border-gray-300 rounded">
+                               class="h-4 w-4 text-gray-500 focus:ring-gray-400 border-gray-300 rounded"
+                               {% if not can_edit %}disabled{% endif %}>
                         <span class="ml-2 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">
                             <i class="fas fa-ban mr-1"></i>Não se aplica
                         </span>
                     </label>
+                </div>
+                
+                <!-- Seção de Evidências -->
+                <div class="border-t pt-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">
+                            <i class="fas fa-paperclip mr-1"></i>Evidências
+                        </p>
+                        {% if can_edit %}
+                        <span class="text-xs text-purple-600">Clique para anexar</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if can_edit %}
+                    <!-- Botões de Upload -->
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-purple-100 text-purple-700 text-xs font-medium rounded-lg cursor-pointer hover:bg-purple-200 transition-colors">
+                            <i class="fas fa-camera"></i>
+                            <span class="hidden sm:inline">Imagem</span>
+                            <input type="file" accept="image/*" multiple class="hidden evidence-upload-input" 
+                                   data-item-id="{{ item.id }}" data-type="images">
+                        </label>
+                        <label class="flex items-center gap-1 px-3 py-2 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg cursor-pointer hover:bg-indigo-200 transition-colors">
+                            <i class="fas fa-video"></i>
+                            <span class="hidden sm:inline">Vídeo</span>
+                            <input type="file" accept="video/*" multiple class="hidden evidence-upload-input" 
+                                   data-item-id="{{ item.id }}" data-type="videos">
+                        </label>
+                        <label class="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 text-xs font-medium rounded-lg cursor-pointer hover:bg-green-200 transition-colors">
+                            <i class="fas fa-file-alt"></i>
+                            <span class="hidden sm:inline">Arquivo</span>
+                            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" multiple class="hidden evidence-upload-input" 
+                                   data-item-id="{{ item.id }}" data-type="documents">
+                        </label>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Loading indicator -->
+                    <div id="upload-loading-{{ item.id }}" class="hidden mb-3">
+                        <div class="flex items-center justify-center p-3 bg-purple-50 rounded-lg">
+                            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600 mr-2"></div>
+                            <span class="text-sm text-purple-600">Enviando...</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Container de evidências -->
+                    <div id="evidences-container-{{ item.id }}" class="{% if not item.evidences.exists %}hidden{% endif %}">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="evidences-grid-{{ item.id }}">
+                            {% for evidence in item.evidences.all %}
+                            <div class="evidence-item relative group" data-evidence-id="{{ evidence.id }}">
+                                {% if can_edit %}
+                                <button type="button" onclick="deleteEvidence({{ evidence.id }}, this)" 
+                                        class="absolute -top-1 -right-1 z-10 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                                    <i class="fas fa-times text-[10px]"></i>
+                                </button>
+                                {% endif %}
+                                {% if evidence.evidence_type == 'image' %}
+                                <img src="{{ evidence.file.url }}" alt="Evidência" 
+                                     class="w-full h-20 object-cover rounded-lg shadow cursor-pointer hover:opacity-90 transition-opacity" 
+                                     onclick="openImageModal('{{ evidence.file.url }}', 'Evidência')">
+                                {% elif evidence.evidence_type == 'video' %}
+                                <div class="relative h-20">
+                                    <video class="w-full h-20 object-cover rounded-lg shadow" onclick="openVideoModal('{{ evidence.file.url }}')">
+                                        <source src="{{ evidence.file.url }}">
+                                    </video>
+                                    <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg cursor-pointer" onclick="openVideoModal('{{ evidence.file.url }}')">
+                                        <i class="fas fa-play text-white text-xl"></i>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <a href="{{ evidence.file.url }}" target="_blank"
+                                   class="flex flex-col items-center justify-center h-20 bg-gray-100 rounded-lg shadow hover:bg-gray-200 transition-colors">
+                                    <i class="fas {{ evidence.get_file_icon }} text-xl mb-1"></i>
+                                    <span class="text-[10px] text-center text-gray-600 px-1 truncate w-full">
+                                        {{ evidence.original_filename|default:"Arquivo"|truncatechars:15 }}
+                                    </span>
+                                </a>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    {% if not item.evidences.exists and not can_edit %}
+                    <p class="text-xs text-gray-400 italic">Nenhuma evidência anexada</p>
+                    {% endif %}
                 </div>
                 
                 {% if item.updated_at %}
@@ -440,5 +527,215 @@ function showToast(message, type) {
         }, 300);
     }, 3000);
 }
+
+// === UPLOAD DE EVIDÊNCIAS ===
+document.querySelectorAll('.evidence-upload-input').forEach(input => {
+    input.addEventListener('change', async function() {
+        if (!this.files || this.files.length === 0) return;
+        
+        const itemId = this.dataset.itemId;
+        const loadingEl = document.getElementById(`upload-loading-${itemId}`);
+        const containerEl = document.getElementById(`evidences-container-${itemId}`);
+        const gridEl = document.getElementById(`evidences-grid-${itemId}`);
+        
+        // Mostrar loading
+        loadingEl.classList.remove('hidden');
+        
+        // Preparar FormData
+        const formData = new FormData();
+        for (const file of this.files) {
+            formData.append('files', file);
+        }
+        
+        try {
+            const response = await fetch(`/users/checklist/item/${itemId}/upload-evidence/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Mostrar container se estava oculto
+                containerEl.classList.remove('hidden');
+                
+                // Adicionar novos arquivos ao grid
+                for (const file of data.files) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'evidence-item relative group';
+                    itemDiv.dataset.evidenceId = file.id;
+                    
+                    let content = '';
+                    
+                    // Botão de excluir
+                    content += `
+                        <button type="button" onclick="deleteEvidence(${file.id}, this)" 
+                                class="absolute -top-1 -right-1 z-10 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                            <i class="fas fa-times text-[10px]"></i>
+                        </button>
+                    `;
+                    
+                    if (file.type === 'image') {
+                        content += `
+                            <img src="${file.url}" alt="Evidência" 
+                                 class="w-full h-20 object-cover rounded-lg shadow cursor-pointer hover:opacity-90 transition-opacity" 
+                                 onclick="openImageModal('${file.url}', 'Evidência')">
+                        `;
+                    } else if (file.type === 'video') {
+                        content += `
+                            <div class="relative h-20">
+                                <video class="w-full h-20 object-cover rounded-lg shadow" onclick="openVideoModal('${file.url}')">
+                                    <source src="${file.url}">
+                                </video>
+                                <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg cursor-pointer" onclick="openVideoModal('${file.url}')">
+                                    <i class="fas fa-play text-white text-xl"></i>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        const shortName = file.filename.length > 15 ? file.filename.substring(0, 12) + '...' : file.filename;
+                        content += `
+                            <a href="${file.url}" target="_blank"
+                               class="flex flex-col items-center justify-center h-20 bg-gray-100 rounded-lg shadow hover:bg-gray-200 transition-colors">
+                                <i class="fas ${file.icon} text-xl mb-1"></i>
+                                <span class="text-[10px] text-center text-gray-600 px-1 truncate w-full">${shortName}</span>
+                            </a>
+                        `;
+                    }
+                    
+                    itemDiv.innerHTML = content;
+                    gridEl.appendChild(itemDiv);
+                }
+                
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.error || 'Erro ao enviar arquivo', 'error');
+            }
+        } catch (error) {
+            console.error('Erro no upload:', error);
+            showToast('Erro ao enviar arquivo. Tente novamente.', 'error');
+        } finally {
+            loadingEl.classList.add('hidden');
+            this.value = '';
+        }
+    });
+});
+
+// Função para excluir evidência
+async function deleteEvidence(evidenceId, button) {
+    if (!confirm('Tem certeza que deseja excluir esta evidência?')) return;
+    
+    const itemDiv = button.closest('.evidence-item');
+    
+    try {
+        const response = await fetch(`/users/checklist/evidence/${evidenceId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Remover item do DOM com animação
+            itemDiv.style.transition = 'opacity 0.3s, transform 0.3s';
+            itemDiv.style.opacity = '0';
+            itemDiv.style.transform = 'scale(0.8)';
+            setTimeout(() => {
+                const gridEl = itemDiv.parentElement;
+                itemDiv.remove();
+                
+                // Verificar se ainda há evidências
+                if (gridEl && gridEl.querySelectorAll('.evidence-item').length === 0) {
+                    gridEl.closest('[id^="evidences-container-"]')?.classList.add('hidden');
+                }
+            }, 300);
+            
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.error || 'Erro ao excluir evidência', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao excluir:', error);
+        showToast('Erro ao excluir evidência. Tente novamente.', 'error');
+    }
+}
+
+// Modal para visualizar imagens
+function openImageModal(src, alt) {
+    const modal = document.createElement('div');
+    modal.id = 'imageModal';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4';
+    modal.onclick = function() { closeImageModal(); };
+    
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = alt;
+    img.className = 'max-w-full max-h-full rounded-lg shadow-2xl';
+    img.onclick = function(e) { e.stopPropagation(); };
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    closeBtn.className = 'absolute top-4 right-4 text-white text-3xl hover:text-gray-300 transition-colors';
+    closeBtn.onclick = function() { closeImageModal(); };
+    
+    modal.appendChild(img);
+    modal.appendChild(closeBtn);
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Modal para visualizar vídeos
+function openVideoModal(src) {
+    const modal = document.createElement('div');
+    modal.id = 'videoModal';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4';
+    modal.onclick = function(e) { if (e.target === modal) closeVideoModal(); };
+    
+    const video = document.createElement('video');
+    video.src = src;
+    video.controls = true;
+    video.autoplay = true;
+    video.className = 'max-w-full max-h-full rounded-lg shadow-2xl';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    closeBtn.className = 'absolute top-4 right-4 text-white text-3xl hover:text-gray-300 transition-colors';
+    closeBtn.onclick = function() { closeVideoModal(); };
+    
+    modal.appendChild(video);
+    modal.appendChild(closeBtn);
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+function closeVideoModal() {
+    const modal = document.getElementById('videoModal');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Fechar modais com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeImageModal();
+        closeVideoModal();
+    }
+});
 </script>
 {% endblock %}

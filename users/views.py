@@ -3042,12 +3042,22 @@ def checklist_detail_view(request, checklist_id):
     except DailyChecklist.DoesNotExist:
         raise Http404("Checklist não encontrado")
     
-    items = checklist.items.all().order_by('order', 'title')
+    # Carregar itens com evidências
+    items = checklist.items.prefetch_related('evidences').all().order_by('order', 'title')
+    
+    # Verificar se pode editar (dono do checklist ou quem criou)
+    can_edit = (
+        user == checklist.user or
+        user == checklist.created_by or
+        user.hierarchy in ['SUPERADMIN', 'ADMIN'] or
+        (user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO'] and checklist.user.sector == user.sector)
+    )
     
     context = {
         'checklist': checklist,
         'items': items,
         'completion_percentage': checklist.get_completion_percentage(),
+        'can_edit': can_edit,
     }
     return render(request, 'checklist/detail.html', context)
 
@@ -3174,6 +3184,117 @@ def delete_checklist(request, checklist_id):
     except Exception as e:
         messages.error(request, f'Erro ao excluir checklist: {str(e)}')
         return redirect('checklist_dashboard')
+
+
+@login_required
+@require_POST
+def api_upload_checklist_item_evidence(request, item_id):
+    """API para upload de evidências (imagens, vídeos, documentos) de itens de checklist"""
+    from core.models import ChecklistItem, ChecklistItemEvidence
+    from django.db import models
+    
+    try:
+        item = ChecklistItem.objects.select_related('checklist', 'checklist__user', 'checklist__created_by').get(id=item_id)
+    except ChecklistItem.DoesNotExist:
+        return JsonResponse({'error': 'Item não encontrado'}, status=404)
+    
+    user = request.user
+    checklist = item.checklist
+    
+    # Verificar permissão
+    can_upload = (
+        user == checklist.user or  # É o dono do checklist
+        user == checklist.created_by or  # É quem criou/atribuiu
+        user.hierarchy in ['SUPERADMIN', 'ADMIN'] or
+        (user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO'] and checklist.user.sector == user.sector)
+    )
+    
+    if not can_upload:
+        return JsonResponse({'error': 'Você não tem permissão para enviar evidências neste item.'}, status=403)
+    
+    files = request.FILES.getlist('files')
+    
+    if not files:
+        return JsonResponse({'error': 'Nenhum arquivo enviado.'}, status=400)
+    
+    uploaded = []
+    
+    for file in files:
+        # Determinar o tipo de evidência
+        content_type = file.content_type.lower()
+        
+        if content_type.startswith('image/'):
+            evidence_type = 'image'
+        elif content_type.startswith('video/'):
+            evidence_type = 'video'
+        else:
+            evidence_type = 'document'
+        
+        # Criar a evidência
+        evidence = ChecklistItemEvidence.objects.create(
+            item=item,
+            evidence_type=evidence_type,
+            file=file,
+            original_filename=file.name,
+            uploaded_by=user,
+            order=item.evidences.count()
+        )
+        
+        uploaded.append({
+            'id': evidence.id,
+            'type': evidence_type,
+            'filename': evidence.original_filename or file.name,
+            'url': evidence.file.url if evidence.file else None,
+            'icon': evidence.get_file_icon()
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'{len(uploaded)} arquivo(s) enviado(s) com sucesso!',
+        'files': uploaded
+    })
+
+
+@login_required
+@require_POST
+def api_delete_checklist_item_evidence(request, evidence_id):
+    """API para deletar uma evidência de item de checklist"""
+    from core.models import ChecklistItemEvidence
+    from django.db import models
+    
+    try:
+        evidence = ChecklistItemEvidence.objects.select_related(
+            'item', 'item__checklist', 'item__checklist__user', 'item__checklist__created_by'
+        ).get(id=evidence_id)
+    except ChecklistItemEvidence.DoesNotExist:
+        return JsonResponse({'error': 'Evidência não encontrada'}, status=404)
+    
+    user = request.user
+    checklist = evidence.item.checklist
+    
+    # Verificar permissão
+    can_delete = (
+        user == checklist.user or  # É o dono do checklist
+        user == checklist.created_by or  # É quem criou/atribuiu
+        user == evidence.uploaded_by or  # É quem enviou a evidência
+        user.hierarchy in ['SUPERADMIN', 'ADMIN'] or
+        (user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO'] and checklist.user.sector == user.sector)
+    )
+    
+    if not can_delete:
+        return JsonResponse({'error': 'Você não tem permissão para excluir esta evidência.'}, status=403)
+    
+    # Deletar o arquivo do S3/storage
+    if evidence.file:
+        evidence.file.delete(save=False)
+    
+    # Deletar o registro
+    evidence.delete()
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Evidência excluída com sucesso!'
+    })
 
 
 # ===== ATIVIDADES/TAREFAS VIEWS =====
