@@ -703,19 +703,25 @@ class Webhook(models.Model):
             from users.models import User
             sector_users = []
             if instance.sector:
-                sector_users_qs = User.objects.filter(sector=instance.sector).values(
-                    'id', 'first_name', 'last_name', 'email', 'phone', 'hierarchy'
-                )
-                sector_users = [
-                    {
-                        'id': user['id'],
-                        'name': f"{user['first_name']} {user['last_name']}".strip(),
-                        'email': user['email'],
-                        'phone': user['phone'] or '',
-                        'hierarchy': user['hierarchy']
-                    }
-                    for user in sector_users_qs
-                ]
+                sector_users_qs = User.objects.filter(sector=instance.sector).prefetch_related('communication_groups')
+                sector_users = []
+                for user in sector_users_qs:
+                    user_groups = [
+                        {
+                            'id': group.id,
+                            'name': group.name,
+                            'description': group.description or ''
+                        }
+                        for group in user.communication_groups.all()
+                    ]
+                    sector_users.append({
+                        'id': user.id,
+                        'name': f"{user.first_name} {user.last_name}".strip(),
+                        'email': user.email,
+                        'phone': user.phone or '',
+                        'hierarchy': user.hierarchy,
+                        'groups': user_groups
+                    })
             
             # Buscar grupos do usuário que criou o ticket
             user_groups = []
