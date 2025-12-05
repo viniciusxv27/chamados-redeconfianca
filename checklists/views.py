@@ -2331,3 +2331,193 @@ def api_delete_evidence(request, evidence_id):
         'success': True,
         'message': 'Evidência excluída com sucesso!'
     })
+
+
+@login_required
+def admin_executions(request):
+    """Área administrativa para controle de execuções de checklists"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Filtros
+    template_filter = request.GET.get('template', '')
+    sector_filter = request.GET.get('sector', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    status_filter = request.GET.get('status', '')
+    period_filter = request.GET.get('period', '')
+    
+    # Data padrão: últimos 30 dias
+    if not date_from:
+        date_from = (timezone.now().date() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if not date_to:
+        date_to = timezone.now().date().strftime('%Y-%m-%d')
+    
+    # Converter datas
+    try:
+        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        date_from_obj = timezone.now().date() - timedelta(days=30)
+        date_to_obj = timezone.now().date()
+    
+    # Buscar execuções
+    executions = ChecklistExecution.objects.select_related(
+        'assignment__template',
+        'assignment__template__sector',
+        'assignment__assigned_to',
+        'assignment__assigned_by'
+    ).filter(
+        execution_date__gte=date_from_obj,
+        execution_date__lte=date_to_obj
+    )
+    
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        if user_sectors:
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        else:
+            executions = executions.none()
+    
+    # Aplicar filtros
+    if template_filter:
+        executions = executions.filter(assignment__template_id=template_filter)
+    
+    if sector_filter:
+        executions = executions.filter(assignment__template__sector_id=sector_filter)
+    
+    if user_filter:
+        executions = executions.filter(assignment__assigned_to_id=user_filter)
+    
+    if status_filter:
+        executions = executions.filter(status=status_filter)
+    
+    if period_filter:
+        executions = executions.filter(period=period_filter)
+    
+    executions = executions.order_by('-execution_date', '-id')
+    
+    # Estatísticas
+    total_count = executions.count()
+    stats = {
+        'total': total_count,
+        'pending': executions.filter(status='pending').count(),
+        'in_progress': executions.filter(status='in_progress').count(),
+        'awaiting_approval': executions.filter(status='awaiting_approval').count(),
+        'completed': executions.filter(status='completed').count(),
+        'overdue': executions.filter(status='overdue').count(),
+    }
+    
+    # Paginação
+    page = request.GET.get('page', 1)
+    paginator = Paginator(executions, 50)
+    
+    try:
+        executions_page = paginator.page(page)
+    except PageNotAnInteger:
+        executions_page = paginator.page(1)
+    except EmptyPage:
+        executions_page = paginator.page(paginator.num_pages)
+    
+    # Buscar templates e setores para filtros
+    if request.user.is_superuser:
+        templates = ChecklistTemplate.objects.filter(is_active=True).order_by('name')
+        sectors = Sector.objects.all().order_by('name')
+        users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    else:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        templates = ChecklistTemplate.objects.filter(is_active=True, sector__in=user_sectors).order_by('name')
+        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
+        users = User.objects.filter(is_active=True, sector__in=user_sectors).order_by('first_name', 'last_name')
+    
+    context = {
+        'executions': executions_page,
+        'templates': templates,
+        'sectors': sectors,
+        'users': users,
+        'stats': stats,
+        'filters': {
+            'template': template_filter,
+            'sector': sector_filter,
+            'user': user_filter,
+            'date_from': date_from,
+            'date_to': date_to,
+            'status': status_filter,
+            'period': period_filter,
+        },
+        'status_choices': [
+            ('pending', 'Pendente'),
+            ('in_progress', 'Em Andamento'),
+            ('awaiting_approval', 'Aguardando Aprovação'),
+            ('completed', 'Concluído'),
+            ('overdue', 'Atrasado'),
+        ],
+        'period_choices': [
+            ('morning', 'Manhã'),
+            ('afternoon', 'Tarde'),
+        ],
+    }
+    
+    return render(request, 'checklists/admin_executions.html', context)
+
+
+@login_required
+@require_POST
+def api_delete_executions(request):
+    """API para excluir múltiplas execuções de checklist"""
+    from django.http import JsonResponse
+    import json
+    
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        return JsonResponse({'error': 'Você não tem permissão para excluir execuções.'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        execution_ids = data.get('ids', [])
+        
+        if not execution_ids:
+            return JsonResponse({'error': 'Nenhuma execução selecionada.'}, status=400)
+        
+        # Buscar execuções
+        executions = ChecklistExecution.objects.filter(id__in=execution_ids)
+        
+        # Verificar permissão por setor (exceto superuser)
+        if not request.user.is_superuser:
+            user_sectors = list(request.user.sectors.all())
+            if request.user.sector:
+                user_sectors.append(request.user.sector)
+            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        
+        count = executions.count()
+        
+        # Excluir execuções (isso também exclui task_executions e evidences pelo cascade)
+        executions.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{count} execução(ões) excluída(s) com sucesso!'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Dados inválidos.'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao excluir: {str(e)}'}, status=500)

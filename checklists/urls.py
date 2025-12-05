@@ -41,4 +41,8 @@ urlpatterns = [
     # Admin - Relatórios e Exportação
     path('admin/reports/', views.checklist_reports, name='checklist_reports'),
     path('admin/export/', views.export_checklists, name='export_checklists'),
+    
+    # Admin - Controle de Execuções
+    path('admin/executions/', views.admin_executions, name='admin_executions'),
+    path('api/delete-executions/', views.api_delete_executions, name='api_delete_executions'),
 ]

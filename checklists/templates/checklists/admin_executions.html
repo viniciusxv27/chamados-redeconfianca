@@ -1,0 +1,501 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Controle de Checklists{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100 p-4 md:p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-xl p-6 mb-6 text-white">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold">📊 Controle de Checklists</h1>
+                    <p class="text-indigo-100 mt-1">Gerencie e exclua execuções de checklists</p>
+                </div>
+                <div class="flex gap-3">
+                    <a href="{% url 'checklists:admin_approvals' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
+                        <i class="fas fa-check-circle mr-2"></i>Aprovações
+                    </a>
+                    <a href="{% url 'checklists:checklist_reports' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
+                        <i class="fas fa-chart-bar mr-2"></i>Relatórios
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            <div class="bg-white rounded-xl shadow p-4 text-center">
+                <div class="text-3xl font-bold text-gray-800">{{ stats.total }}</div>
+                <div class="text-sm text-gray-500">Total</div>
+            </div>
+            <div class="bg-yellow-50 rounded-xl shadow p-4 text-center border-l-4 border-yellow-400">
+                <div class="text-3xl font-bold text-yellow-600">{{ stats.pending }}</div>
+                <div class="text-sm text-yellow-700">Pendentes</div>
+            </div>
+            <div class="bg-blue-50 rounded-xl shadow p-4 text-center border-l-4 border-blue-400">
+                <div class="text-3xl font-bold text-blue-600">{{ stats.in_progress }}</div>
+                <div class="text-sm text-blue-700">Em Andamento</div>
+            </div>
+            <div class="bg-orange-50 rounded-xl shadow p-4 text-center border-l-4 border-orange-400">
+                <div class="text-3xl font-bold text-orange-600">{{ stats.awaiting_approval }}</div>
+                <div class="text-sm text-orange-700">Aguardando</div>
+            </div>
+            <div class="bg-green-50 rounded-xl shadow p-4 text-center border-l-4 border-green-400">
+                <div class="text-3xl font-bold text-green-600">{{ stats.completed }}</div>
+                <div class="text-sm text-green-700">Concluídos</div>
+            </div>
+            <div class="bg-red-50 rounded-xl shadow p-4 text-center border-l-4 border-red-400">
+                <div class="text-3xl font-bold text-red-600">{{ stats.overdue }}</div>
+                <div class="text-sm text-red-700">Atrasados</div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <form method="get" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Data Início -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
+                        <input type="date" name="date_from" value="{{ filters.date_from }}" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+                    
+                    <!-- Data Fim -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Data Fim</label>
+                        <input type="date" name="date_to" value="{{ filters.date_to }}" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+                    
+                    <!-- Setor -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
+                        <select name="sector" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Todos os Setores</option>
+                            {% for sector in sectors %}
+                            <option value="{{ sector.id }}" {% if filters.sector == sector.id|stringformat:"s" %}selected{% endif %}>
+                                {{ sector.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Template -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Template</label>
+                        <select name="template" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Todos os Templates</option>
+                            {% for template in templates %}
+                            <option value="{{ template.id }}" {% if filters.template == template.id|stringformat:"s" %}selected{% endif %}>
+                                {{ template.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Usuário -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                        <select name="user" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Todos os Usuários</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if filters.user == user.id|stringformat:"s" %}selected{% endif %}>
+                                {{ user.get_full_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Status -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Todos os Status</option>
+                            {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Período -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Período</label>
+                        <select name="period" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Todos os Períodos</option>
+                            {% for value, label in period_choices %}
+                            <option value="{{ value }}" {% if filters.period == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- Botões -->
+                    <div class="flex items-end gap-2">
+                        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
+                            <i class="fas fa-search mr-2"></i>Filtrar
+                        </button>
+                        <a href="{% url 'checklists:admin_executions' %}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                            <i class="fas fa-times"></i>
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Ações em Massa -->
+        <div id="bulkActions" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-red-500"></i>
+                    <span class="font-medium text-red-700">
+                        <span id="selectedCount">0</span> item(ns) selecionado(s)
+                    </span>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="clearSelection()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium">
+                        <i class="fas fa-times mr-2"></i>Limpar Seleção
+                    </button>
+                    <button onclick="deleteSelected()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium">
+                        <i class="fas fa-trash mr-2"></i>Excluir Selecionados
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela de Execuções -->
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" 
+                                       class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Período</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for execution in executions %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3">
+                                <input type="checkbox" class="execution-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" 
+                                       value="{{ execution.id }}" onchange="updateSelection()">
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                <span class="text-sm font-medium text-gray-900">{{ execution.execution_date|date:"d/m/Y" }}</span>
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                {% if execution.period == 'morning' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    <i class="fas fa-sun mr-1"></i>Manhã
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    <i class="fas fa-cloud-sun mr-1"></i>Tarde
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="text-sm text-gray-900">{{ execution.assignment.template.name }}</span>
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                <span class="text-sm text-gray-600">{{ execution.assignment.template.sector.name }}</span>
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center mr-2">
+                                        <span class="text-xs font-bold text-indigo-600">
+                                            {{ execution.assignment.assigned_to.first_name|slice:":1" }}{{ execution.assignment.assigned_to.last_name|slice:":1" }}
+                                        </span>
+                                    </div>
+                                    <span class="text-sm text-gray-900">{{ execution.assignment.assigned_to.get_full_name }}</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                {% if execution.status == 'pending' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    <i class="fas fa-clock mr-1"></i>Pendente
+                                </span>
+                                {% elif execution.status == 'in_progress' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    <i class="fas fa-spinner mr-1"></i>Em Andamento
+                                </span>
+                                {% elif execution.status == 'awaiting_approval' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    <i class="fas fa-hourglass-half mr-1"></i>Aguardando
+                                </span>
+                                {% elif execution.status == 'completed' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <i class="fas fa-check mr-1"></i>Concluído
+                                </span>
+                                {% elif execution.status == 'overdue' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>Atrasado
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center whitespace-nowrap">
+                                <div class="flex items-center justify-center gap-2">
+                                    <a href="{% url 'checklists:view_execution' execution.id %}" 
+                                       class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" 
+                                       title="Visualizar">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button onclick="deleteSingle({{ execution.id }})" 
+                                            class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" 
+                                            title="Excluir">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="px-4 py-12 text-center">
+                                <div class="text-gray-400">
+                                    <i class="fas fa-clipboard-list text-5xl mb-4"></i>
+                                    <p class="text-lg font-medium">Nenhuma execução encontrada</p>
+                                    <p class="text-sm">Ajuste os filtros para ver mais resultados</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Paginação -->
+            {% if executions.has_other_pages %}
+            <div class="bg-gray-50 px-4 py-3 border-t border-gray-200">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div class="text-sm text-gray-700">
+                        Mostrando <span class="font-medium">{{ executions.start_index }}</span> a 
+                        <span class="font-medium">{{ executions.end_index }}</span> de 
+                        <span class="font-medium">{{ executions.paginator.count }}</span> resultados
+                    </div>
+                    <nav class="flex items-center gap-1">
+                        {% if executions.has_previous %}
+                        <a href="?page=1{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                        <a href="?page={{ executions.previous_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                        {% endif %}
+                        
+                        <span class="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg">
+                            {{ executions.number }} / {{ executions.paginator.num_pages }}
+                        </span>
+                        
+                        {% if executions.has_next %}
+                        <a href="?page={{ executions.next_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                        <a href="?page={{ executions.paginator.num_pages }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                           class="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div class="text-center mb-6">
+            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600 text-3xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Confirmar Exclusão</h3>
+            <p class="text-gray-600" id="deleteModalMessage">
+                Tem certeza que deseja excluir os itens selecionados?
+            </p>
+            <p class="text-sm text-red-600 mt-2">
+                <i class="fas fa-warning mr-1"></i>
+                Esta ação não pode ser desfeita!
+            </p>
+        </div>
+        
+        <div class="flex gap-3">
+            <button onclick="hideDeleteModal()" class="flex-1 px-4 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
+                Cancelar
+            </button>
+            <button onclick="confirmDelete()" class="flex-1 px-4 py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
+                <i class="fas fa-trash mr-2"></i>Excluir
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div id="loadingModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+        <p class="text-gray-600 font-medium">Processando...</p>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+<script>
+let selectedIds = [];
+let deleteMode = 'multiple'; // 'single' ou 'multiple'
+let singleDeleteId = null;
+
+function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('.execution-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateSelection();
+}
+
+function updateSelection() {
+    const checkboxes = document.querySelectorAll('.execution-checkbox:checked');
+    selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    const bulkActions = document.getElementById('bulkActions');
+    const selectedCount = document.getElementById('selectedCount');
+    const selectAll = document.getElementById('selectAll');
+    
+    if (selectedIds.length > 0) {
+        bulkActions.classList.remove('hidden');
+        selectedCount.textContent = selectedIds.length;
+    } else {
+        bulkActions.classList.add('hidden');
+    }
+    
+    // Atualizar checkbox "selecionar todos"
+    const allCheckboxes = document.querySelectorAll('.execution-checkbox');
+    selectAll.checked = selectedIds.length === allCheckboxes.length && allCheckboxes.length > 0;
+    selectAll.indeterminate = selectedIds.length > 0 && selectedIds.length < allCheckboxes.length;
+}
+
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.execution-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = false;
+    });
+    document.getElementById('selectAll').checked = false;
+    updateSelection();
+}
+
+function deleteSingle(id) {
+    deleteMode = 'single';
+    singleDeleteId = id;
+    document.getElementById('deleteModalMessage').textContent = 'Tem certeza que deseja excluir esta execução?';
+    showDeleteModal();
+}
+
+function deleteSelected() {
+    if (selectedIds.length === 0) {
+        showToast('Nenhum item selecionado!', 'error');
+        return;
+    }
+    deleteMode = 'multiple';
+    document.getElementById('deleteModalMessage').textContent = `Tem certeza que deseja excluir ${selectedIds.length} execução(ões)?`;
+    showDeleteModal();
+}
+
+function showDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function hideDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+}
+
+async function confirmDelete() {
+    hideDeleteModal();
+    document.getElementById('loadingModal').classList.remove('hidden');
+    
+    const idsToDelete = deleteMode === 'single' ? [singleDeleteId] : selectedIds;
+    
+    try {
+        const response = await fetch('{% url "checklists:api_delete_executions" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ ids: idsToDelete })
+        });
+        
+        const data = await response.json();
+        
+        document.getElementById('loadingModal').classList.add('hidden');
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            showToast(data.error || 'Erro ao excluir', 'error');
+        }
+    } catch (error) {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao processar a solicitação', 'error');
+        console.error('Erro:', error);
+    }
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    toast.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fas ${icon}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Fechar modal ao clicar fora
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideDeleteModal();
+    }
+});
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        hideDeleteModal();
+    }
+});
+</script>
+{% endblock %}
