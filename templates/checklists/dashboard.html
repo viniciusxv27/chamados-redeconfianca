@@ -50,6 +50,11 @@
                 </a>
                 {% endif %}
                 {% if user.hierarchy in 'SUPERADMIN,ADMIN,ADMINISTRATIVO,SUPERVISOR' or user.is_superuser %}
+                <a href="{% url 'checklists:admin_executions' %}" 
+                   class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg">
+                    <i class="fas fa-chart-bar mr-2"></i>
+                    📊 Controle
+                </a>
                 <a href="{% url 'checklists:admin_templates' %}" 
                    class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
                     <i class="fas fa-cogs mr-2"></i>
