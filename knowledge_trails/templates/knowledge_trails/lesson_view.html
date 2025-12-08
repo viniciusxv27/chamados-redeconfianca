@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load video_filters %}
 
 {% block title %}{{ lesson.title }} - {{ trail.title }}{% endblock %}
 
@@ -67,17 +68,30 @@
     padding-bottom: 56.25%; /* 16:9 */
     height: 0;
     overflow: hidden;
-    border-radius: 0.75rem;
 }
 
-.video-container iframe,
-.video-container video {
+.video-container iframe {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    border-radius: 0.75rem;
+}
+
+video {
+    background: #000;
+    outline: none;
+}
+
+video::-webkit-media-controls-panel {
+    background-image: linear-gradient(transparent, rgba(0,0,0,0.5));
+}
+
+.video-error {
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 </style>
 {% endblock %}
@@ -160,42 +174,54 @@
             {% if lesson.lesson_type == 'video' %}
                 <!-- Vídeo -->
                 {% if lesson.video_url %}
-                <div class="video-container mb-6">
-                    {% if 'youtube.com' in lesson.video_url or 'youtu.be' in lesson.video_url %}
-                        {% if 'youtu.be' in lesson.video_url %}
-                            {% with video_id=lesson.video_url|slice:"17:" %}
-                            <iframe src="https://www.youtube.com/embed/{{ video_id }}" 
+                <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6">
+                    <div class="video-container">
+                        {% if lesson.video_url|is_youtube %}
+                            <iframe src="{{ lesson.video_url|youtube_embed_url }}" 
                                     frameborder="0" 
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                    allowfullscreen></iframe>
-                            {% endwith %}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                    allowfullscreen
+                                    loading="lazy"></iframe>
+                        {% elif lesson.video_url|is_vimeo %}
+                            <iframe src="{{ lesson.video_url|vimeo_embed_url }}" 
+                                    frameborder="0" 
+                                    allow="autoplay; fullscreen; picture-in-picture" 
+                                    allowfullscreen
+                                    loading="lazy"></iframe>
                         {% else %}
-                            {% with video_id=lesson.video_url|slice:"-11:" %}
-                            <iframe src="https://www.youtube.com/embed/{{ video_id }}" 
+                            <iframe src="{{ lesson.video_url }}" 
                                     frameborder="0" 
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                    allowfullscreen></iframe>
-                            {% endwith %}
+                                    allowfullscreen
+                                    loading="lazy"></iframe>
                         {% endif %}
-                    {% elif 'vimeo.com' in lesson.video_url %}
-                        {% with video_id=lesson.video_url|slice:"-9:" %}
-                        <iframe src="https://player.vimeo.com/video/{{ video_id }}" 
-                                frameborder="0" 
-                                allow="autoplay; fullscreen; picture-in-picture" 
-                                allowfullscreen></iframe>
-                        {% endwith %}
-                    {% else %}
-                        <iframe src="{{ lesson.video_url }}" 
-                                frameborder="0" 
-                                allowfullscreen></iframe>
-                    {% endif %}
+                    </div>
                 </div>
                 {% elif lesson.video_file %}
-                <div class="video-container mb-6">
-                    <video controls>
-                        <source src="{{ lesson.video_file.url }}" type="video/mp4">
-                        Seu navegador não suporta a tag de vídeo.
+                <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 relative">
+                    <video id="lessonVideo" 
+                           class="w-full" 
+                           controls 
+                           preload="metadata"
+                           playsinline
+                           style="display: block; max-height: 70vh;">
+                        <source src="{{ lesson.video_file.url }}" type="{{ lesson.video_file.name|video_type }}">
+                        {% if lesson.video_file.name|video_type == 'video/mp4' %}
+                        <source src="{{ lesson.video_file.url }}" type="video/webm">
+                        {% endif %}
+                        Seu navegador não suporta a reprodução de vídeos HTML5.
                     </video>
+                    <div id="videoLoading" style="display: none;" class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-10">
+                        <div class="text-center text-white">
+                            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
+                            <p class="text-lg font-medium">Carregando vídeo...</p>
+                            <p class="text-sm text-gray-300 mt-2">Isso pode levar alguns segundos</p>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 text-4xl mb-3"></i>
+                    <p class="text-yellow-700 font-medium">Nenhum vídeo configurado para esta lição.</p>
                 </div>
                 {% endif %}
                 
@@ -360,6 +386,73 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
         });
+    }
+    
+    // Gerenciamento do vídeo
+    const video = document.getElementById('lessonVideo');
+    const videoLoading = document.getElementById('videoLoading');
+    
+    if (video) {
+        // Mostrar loading quando o vídeo está carregando
+        video.addEventListener('loadstart', function() {
+            if (videoLoading) videoLoading.style.display = 'flex';
+        });
+        
+        video.addEventListener('waiting', function() {
+            if (videoLoading) videoLoading.style.display = 'flex';
+        });
+        
+        // Esconder loading quando o vídeo está pronto
+        video.addEventListener('canplay', function() {
+            if (videoLoading) videoLoading.style.display = 'none';
+        });
+        
+        video.addEventListener('playing', function() {
+            if (videoLoading) videoLoading.style.display = 'none';
+        });
+        
+        // Tratamento de erros
+        video.addEventListener('error', function(e) {
+            if (videoLoading) videoLoading.style.display = 'none';
+            
+            let errorMessage = 'Erro ao carregar o vídeo. ';
+            
+            if (video.error) {
+                switch (video.error.code) {
+                    case video.error.MEDIA_ERR_ABORTED:
+                        errorMessage += 'Carregamento interrompido.';
+                        break;
+                    case video.error.MEDIA_ERR_NETWORK:
+                        errorMessage += 'Erro de rede. Verifique sua conexão.';
+                        break;
+                    case video.error.MEDIA_ERR_DECODE:
+                        errorMessage += 'Erro ao decodificar o vídeo.';
+                        break;
+                    case video.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                        errorMessage += 'Formato de vídeo não suportado ou arquivo não encontrado.';
+                        break;
+                    default:
+                        errorMessage += 'Erro desconhecido.';
+                }
+            }
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center';
+            errorDiv.innerHTML = `
+                <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-3"></i>
+                <p class="text-red-700 font-medium">${errorMessage}</p>
+                <p class="text-sm text-red-600 mt-2">Tente recarregar a página ou entre em contato com o suporte.</p>
+            `;
+            
+            video.parentElement.replaceChild(errorDiv, video);
+            console.error('Erro no vídeo:', video.error);
+        });
+        
+        // Log para debug
+        console.log('URL do vídeo:', video.querySelector('source')?.src);
+        
+        // Forçar carregamento de metadados
+        video.load();
     }
 });
 </script>
