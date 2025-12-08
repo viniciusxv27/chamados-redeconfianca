@@ -1035,6 +1035,9 @@ def edit_quiz_question(request, question_id):
     form = QuizQuestionForm(instance=question)
     options = question.options.all()
     
+    # Verificar se existe pelo menos uma alternativa correta
+    has_no_correct = options.exists() and not options.filter(is_correct=True).exists()
+    
     context = {
         'form': form,
         'question': question,
@@ -1042,6 +1045,7 @@ def edit_quiz_question(request, question_id):
         'lesson': lesson,
         'module': module,
         'trail': trail,
+        'has_no_correct': has_no_correct,
     }
     
     return render(request, 'knowledge_trails/edit_quiz_question.html', context)
