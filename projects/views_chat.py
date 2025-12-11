@@ -114,9 +114,11 @@ def support_chat_list(request):
     chats_data = []
     for chat in all_chats[:20]:  # Limitar a 20 chats
         last_message = chat.messages.last()
+        queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
         chats_data.append({
             'id': chat.id,
             'title': chat.title,
+            'protocol': getattr(chat, 'protocol', None),
             'status': chat.get_status_display(),
             'status_code': chat.status,
             'priority': chat.get_priority_display(),
@@ -124,7 +126,8 @@ def support_chat_list(request):
             'assigned_to': chat.assigned_to.get_full_name() if chat.assigned_to else None,
             'last_message': last_message.message[:100] if last_message else 'Sem mensagens',
             'updated_at': chat.updated_at.strftime('%d/%m/%Y %H:%M'),
-            'is_own': chat.user == request.user
+            'is_own': chat.user == request.user,
+            'queue_position': queue_position
         })
     
     return JsonResponse({
@@ -147,7 +150,7 @@ def get_support_chat(request, chat_id):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     # Buscar mensagens
-    messages = SupportChatMessage.objects.filter(chat=chat).select_related('user')
+    messages = SupportChatMessage.objects.filter(chat=chat).select_related('user').prefetch_related('files')
     
     # Filtrar mensagens internas se não for agente de suporte ou supervisor+
     if not (is_support_agent or is_supervisor_or_higher):
@@ -155,7 +158,7 @@ def get_support_chat(request, chat_id):
     
     messages_data = []
     for msg in messages:
-        messages_data.append({
+        msg_data = {
             'id': msg.id,
             'user': {
                 'id': msg.user.id,
@@ -166,8 +169,24 @@ def get_support_chat(request, chat_id):
             'message': msg.message,
             'is_internal': msg.is_internal,
             'created_at': msg.created_at.strftime('%d/%m/%Y %H:%M'),
-            'is_own': msg.user == request.user
-        })
+            'is_own': msg.user == request.user,
+            'files': []
+        }
+        
+        # Adicionar arquivos
+        for file in msg.files.all():
+            msg_data['files'].append({
+                'id': file.id,
+                'type': file.file_type,
+                'name': file.original_name,
+                'url': file.file.url,
+                'size': file.file_size
+            })
+        
+        messages_data.append(msg_data)
+    
+    # Calcular posição na fila
+    queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
     
     return JsonResponse({
         'success': True,
@@ -175,10 +194,12 @@ def get_support_chat(request, chat_id):
         'chat': {
             'id': chat.id,
             'title': chat.title,
+            'protocol': getattr(chat, 'protocol', None),
             'status': chat.status,
             'get_status_display': chat.get_status_display(),
             'priority': chat.priority.lower() if chat.priority else 'media',
             'get_priority_display': chat.get_priority_display(),
+            'queue_position': queue_position,
             'user': {
                 'id': chat.user.id,
                 'get_full_name': chat.user.get_full_name()
@@ -209,6 +230,7 @@ def create_support_chat(request):
     message = request.POST.get('message', '').strip()
     sector_id = request.POST.get('sector_id')
     category_id = request.POST.get('category_id')
+    virtual_type = request.POST.get('virtual_type', '')  # Para Ilha de Qualidade
     
     if not title or not message:
         return JsonResponse({'success': False, 'error': 'Título e mensagem são obrigatórios'})
@@ -216,10 +238,18 @@ def create_support_chat(request):
     # Importar modelos necessários
     from users.models import Sector
     
+    # Ajustar título para setores virtuais (Ilha de Qualidade)
+    if virtual_type:
+        if virtual_type == 'lojas':
+            title = title.replace('Ilha de Qualidade', 'ILHA - SUPORTE LOJAS')
+        elif virtual_type == 'logins':
+            title = title.replace('Ilha de Qualidade', 'ILHA - SUPORTE LOGINS')
+    
     # Criar chat
     chat_data = {
         'user': request.user,
         'title': title,
+        'status': 'AGUARDANDO',  # Começa na fila
     }
     
     if sector_id:
@@ -245,10 +275,15 @@ def create_support_chat(request):
         message=message
     )
     
+    # Calcular posição na fila
+    queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
+    
     return JsonResponse({
         'success': True,
         'chat_id': chat.id,
-        'message': 'Chat de suporte criado com sucesso!'
+        'protocol': getattr(chat, 'protocol', None),
+        'queue_position': queue_position,
+        'message': f'Chat de suporte criado! Protocolo: {getattr(chat, "protocol", "N/A")}'
     })
 
 
@@ -322,7 +357,17 @@ def get_sectors(request):
     # Retornar todos os setores - usuários devem poder abrir chat de suporte para qualquer setor
     sectors = Sector.objects.all().order_by('name')
     
-    sectors_data = [{'id': s.id, 'name': s.name} for s in sectors]
+    sectors_data = []
+    for s in sectors:
+        # Duplicar "Ilha de Qualidade" como dois setores virtuais
+        if 'ilha de qualidade' in s.name.lower():
+            sectors_data.append({'id': s.id, 'name': 'ILHA - SUPORTE LOJAS', 'virtual_type': 'lojas', 'original_id': s.id})
+            sectors_data.append({'id': s.id, 'name': 'ILHA - SUPORTE LOGINS', 'virtual_type': 'logins', 'original_id': s.id})
+        else:
+            sectors_data.append({'id': s.id, 'name': s.name})
+    
+    # Ordenar por nome
+    sectors_data.sort(key=lambda x: x['name'])
     
     return JsonResponse({'success': True, 'sectors': sectors_data})
 
@@ -1570,3 +1615,231 @@ def support_metrics(request):
         import traceback
         traceback.print_exc()
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+# ============ NOVAS VIEWS PARA TEMPO REAL E MELHORIAS ============
+
+@login_required
+def poll_chat_updates(request, chat_id):
+    """Polling para atualizações em tempo real do chat"""
+    import json
+    
+    chat = get_object_or_404(SupportChat, id=chat_id)
+    
+    # Verificar se o usuário pode acessar este chat
+    is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    if not (chat.user == request.user or is_support_agent or is_supervisor_or_higher):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    # Obter último ID de mensagem visto (para retornar apenas novas)
+    last_message_id = request.GET.get('last_message_id', 0)
+    try:
+        last_message_id = int(last_message_id)
+    except:
+        last_message_id = 0
+    
+    # Buscar novas mensagens
+    messages = SupportChatMessage.objects.filter(
+        chat=chat,
+        id__gt=last_message_id
+    ).select_related('user').prefetch_related('files')
+    
+    # Filtrar mensagens internas se não for agente de suporte ou supervisor+
+    if not (is_support_agent or is_supervisor_or_higher):
+        messages = messages.filter(is_internal=False)
+    
+    messages_data = []
+    for msg in messages:
+        msg_data = {
+            'id': msg.id,
+            'user': {
+                'id': msg.user.id,
+                'name': msg.user.get_full_name(),
+                'avatar': msg.user.first_name[0].upper() if msg.user.first_name else 'U',
+                'is_support': hasattr(msg.user, 'support_agent')
+            },
+            'message': msg.message,
+            'is_internal': msg.is_internal,
+            'created_at': msg.created_at.strftime('%d/%m/%Y %H:%M'),
+            'is_own': msg.user == request.user,
+            'files': []
+        }
+        
+        # Adicionar arquivos da mensagem
+        for file in msg.files.all():
+            msg_data['files'].append({
+                'id': file.id,
+                'type': file.file_type,
+                'name': file.original_name,
+                'url': file.file.url,
+                'size': file.file_size
+            })
+        
+        messages_data.append(msg_data)
+    
+    # Calcular posição na fila
+    queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
+    
+    return JsonResponse({
+        'success': True,
+        'messages': messages_data,
+        'chat_status': chat.status,
+        'chat_status_display': chat.get_status_display(),
+        'assigned_to': chat.assigned_to.get_full_name() if chat.assigned_to else None,
+        'queue_position': queue_position,
+        'protocol': getattr(chat, 'protocol', None)
+    })
+
+
+@login_required
+def get_queue_status(request):
+    """Retorna status da fila de chats por setor"""
+    from users.models import Sector
+    
+    sector_id = request.GET.get('sector_id')
+    
+    if sector_id:
+        sectors = Sector.objects.filter(id=sector_id)
+    else:
+        sectors = Sector.objects.all()
+    
+    queue_data = []
+    for sector in sectors:
+        waiting_count = SupportChat.objects.filter(
+            sector=sector,
+            status__in=['AGUARDANDO', 'ABERTO']
+        ).count()
+        
+        in_progress_count = SupportChat.objects.filter(
+            sector=sector,
+            status='EM_ANDAMENTO'
+        ).count()
+        
+        queue_data.append({
+            'sector_id': sector.id,
+            'sector_name': sector.name,
+            'waiting': waiting_count,
+            'in_progress': in_progress_count
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'queue': queue_data
+    })
+
+
+@login_required
+def get_user_queue_position(request, chat_id):
+    """Retorna a posição do usuário na fila para um chat específico"""
+    chat = get_object_or_404(SupportChat, id=chat_id)
+    
+    # Verificar se o usuário pode acessar este chat
+    if chat.user != request.user and not hasattr(request.user, 'support_agent'):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
+    
+    # Contar total na fila do setor
+    total_in_queue = 0
+    if chat.sector:
+        total_in_queue = SupportChat.objects.filter(
+            sector=chat.sector,
+            status__in=['AGUARDANDO', 'ABERTO']
+        ).count()
+    
+    return JsonResponse({
+        'success': True,
+        'position': queue_position,
+        'total_in_queue': total_in_queue,
+        'status': chat.status,
+        'protocol': getattr(chat, 'protocol', None)
+    })
+
+
+@login_required
+@require_POST  
+def upload_chat_file_with_message(request, chat_id):
+    """Upload de arquivos no chat de suporte com mensagem"""
+    chat = get_object_or_404(SupportChat, id=chat_id)
+    
+    # Verificar permissão
+    is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    if not (chat.user == request.user or is_support_agent or is_supervisor_or_higher):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    if 'file' not in request.FILES:
+        return JsonResponse({'success': False, 'error': 'Nenhum arquivo enviado'})
+    
+    uploaded_file = request.FILES['file']
+    
+    # Validar tamanho (max 25MB)
+    if uploaded_file.size > 25 * 1024 * 1024:
+        return JsonResponse({'success': False, 'error': 'Arquivo muito grande (máximo 25MB)'})
+    
+    # Determinar tipo do arquivo
+    file_type = 'DOCUMENT'
+    content_type = uploaded_file.content_type.lower()
+    if content_type.startswith('image/'):
+        file_type = 'IMAGE'
+    elif content_type.startswith('video/'):
+        file_type = 'VIDEO'
+    elif content_type.startswith('audio/'):
+        file_type = 'AUDIO'
+    
+    # Criar mensagem primeiro
+    message_text = request.POST.get('message', '').strip()
+    if not message_text:
+        message_text = f'📎 {uploaded_file.name}'
+    
+    is_internal = request.POST.get('is_internal') == 'true' and (is_support_agent or is_supervisor_or_higher)
+    
+    message = SupportChatMessage.objects.create(
+        chat=chat,
+        user=request.user,
+        message=message_text,
+        is_internal=is_internal
+    )
+    
+    # Criar arquivo
+    chat_file = SupportChatFile.objects.create(
+        chat=chat,
+        message=message,
+        file=uploaded_file,
+        file_type=file_type,
+        original_name=uploaded_file.name,
+        file_size=uploaded_file.size
+    )
+    
+    # Atualizar status do chat se necessário
+    if chat.status in ['AGUARDANDO', 'ABERTO'] and (is_support_agent or is_supervisor_or_higher):
+        chat.status = 'EM_ANDAMENTO'
+        chat.assigned_to = request.user
+        chat.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': {
+            'id': message.id,
+            'user': {
+                'id': request.user.id,
+                'name': request.user.get_full_name(),
+                'avatar': request.user.first_name[0].upper() if request.user.first_name else 'U',
+                'is_support': is_support_agent
+            },
+            'message': message.message,
+            'is_internal': message.is_internal,
+            'created_at': message.created_at.strftime('%d/%m/%Y %H:%M'),
+            'is_own': True,
+            'files': [{
+                'id': chat_file.id,
+                'type': file_type,
+                'name': chat_file.original_name,
+                'url': chat_file.file.url,
+                'size': chat_file.file_size
+            }]
+        }
+    })

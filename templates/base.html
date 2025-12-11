@@ -1439,16 +1439,20 @@
 
         <!-- Chat Window -->
         <div id="supportChatWindow" 
-             class="absolute bottom-16 right-0 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50"
-             style="display: none; height: 500px;">
+             class="absolute bottom-16 right-0 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50 transition-all duration-300"
+             style="display: none; height: 500px; width: 320px;"
+             data-expanded="false">
             
             <!-- Chat Header -->
             <div class="bg-blue-500 text-white p-4 flex items-center justify-between flex-shrink-0">
                 <div>
                     <h3 class="font-semibold">Suporte</h3>
-                    <p class="text-xs text-blue-100">Como podemos ajudar?</p>
+                    <p class="text-xs text-blue-100" id="chatHeaderSubtitle">Como podemos ajudar?</p>
                 </div>
                 <div class="flex items-center space-x-2">
+                    <button id="supportChatExpand" onclick="toggleChatExpand()" class="text-blue-100 hover:text-white transition-colors" title="Expandir">
+                        <i class="fas fa-expand"></i>
+                    </button>
                     <button id="supportChatMinimize" onclick="document.getElementById('supportChatWindow').style.display = 'none';" class="text-blue-100 hover:text-white transition-colors">
                         <i class="fas fa-minus"></i>
                     </button>
@@ -1480,7 +1484,12 @@
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Selecione o setor</option>
                             {% for sector in user_support_sectors %}
+                                {% if 'Ilha de Qualidade' in sector.name %}
+                                <option value="{{ sector.id }}" data-virtual="lojas">ILHA - SUPORTE LOJAS</option>
+                                <option value="{{ sector.id }}" data-virtual="logins">ILHA - SUPORTE LOGINS</option>
+                                {% else %}
                                 <option value="{{ sector.id }}">{{ sector.name }}</option>
+                                {% endif %}
                             {% endfor %}
                         </select>
                     </div>
@@ -1493,8 +1502,14 @@
                         </select>
                     </div>
                     
+                    <!-- Queue Info -->
+                    <div id="queueInfoDiv" class="hidden bg-blue-50 border border-blue-200 rounded-md p-3">
+                        <div class="flex items-center text-blue-700 text-sm">
+                            <i class="fas fa-users mr-2"></i>
+                            <span id="queueInfoText">Carregando fila...</span>
+                        </div>
+                    </div>
 
-                    
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
                         <textarea id="supportChatMessage" rows="4" required
@@ -1521,13 +1536,21 @@
                 <!-- Chat Header -->
                 <div class="border-b border-gray-200 p-3 flex-shrink-0">
                     <div class="flex items-center justify-between">
-                        <div>
-                            <h4 id="activeChatTitle" class="font-medium text-sm text-gray-900"></h4>
+                        <div class="flex-1 min-w-0">
+                            <h4 id="activeChatTitle" class="font-medium text-sm text-gray-900 truncate"></h4>
                             <p id="activeChatStatus" class="text-xs text-gray-500"></p>
+                            <p id="activeChatProtocol" class="text-xs text-blue-600 font-mono"></p>
                         </div>
-                        <button id="backToChatList" class="text-gray-400 hover:text-gray-600">
+                        <button id="backToChatList" class="text-gray-400 hover:text-gray-600 ml-2">
                             <i class="fas fa-arrow-left"></i>
                         </button>
+                    </div>
+                    <!-- Queue Position Info -->
+                    <div id="queuePositionDiv" class="hidden mt-2 bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
+                        <span class="text-xs text-yellow-700">
+                            <i class="fas fa-clock mr-1"></i>
+                            <span id="queuePositionText">Posição na fila: -</span>
+                        </span>
                     </div>
                 </div>
 
@@ -1536,16 +1559,33 @@
                     <!-- Messages will be loaded here -->
                 </div>
 
-                <!-- Message Input -->
+                <!-- Message Input with File Upload -->
                 <div class="border-t border-gray-200 p-3">
-                    <form id="sendMessageForm" class="flex space-x-2">
-                        <input type="text" id="messageInput" required
-                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                               placeholder="Digite sua mensagem...">
-                        <button type="submit" 
-                                class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md transition-colors">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
+                    <form id="sendMessageForm" class="space-y-2">
+                        <!-- File Preview -->
+                        <div id="filePreviewContainer" class="hidden">
+                            <div class="flex items-center bg-gray-100 rounded-md p-2">
+                                <i id="filePreviewIcon" class="fas fa-file text-gray-500 mr-2"></i>
+                                <span id="filePreviewName" class="text-sm text-gray-700 flex-1 truncate"></span>
+                                <button type="button" onclick="clearFilePreview()" class="text-gray-400 hover:text-red-500">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <!-- File Upload Button -->
+                            <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2 rounded-md transition-colors">
+                                <i class="fas fa-paperclip"></i>
+                                <input type="file" id="fileInput" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="handleFileSelect(this)">
+                            </label>
+                            <input type="text" id="messageInput" 
+                                   class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Digite sua mensagem...">
+                            <button type="submit" 
+                                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md transition-colors">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
@@ -1558,6 +1598,179 @@
         // Dados pré-carregados do backend
         window.userSupportSectors = {{ user_support_sectors_json|safe }};
         console.log('Setores pré-carregados do backend:', window.userSupportSectors);
+        
+        // ============ VARIÁVEIS GLOBAIS ============
+        let currentChatId = null;
+        let lastMessageId = 0;
+        let pollingInterval = null;
+        let selectedFile = null;
+        
+        // ============ FUNÇÕES DE EXPANSÃO DO CHAT ============
+        window.toggleChatExpand = function() {
+            const chatWindow = document.getElementById('supportChatWindow');
+            const chatWidget = document.getElementById('supportChatWidget');
+            const expandBtn = document.getElementById('supportChatExpand');
+            
+            if (!chatWindow) return;
+            
+            const isExpanded = chatWindow.dataset.expanded === 'true';
+            
+            if (isExpanded) {
+                // Voltar ao tamanho normal
+                chatWindow.style.position = 'absolute';
+                chatWindow.style.width = '320px';
+                chatWindow.style.height = '500px';
+                chatWindow.style.top = '';
+                chatWindow.style.left = '';
+                chatWindow.style.right = '0';
+                chatWindow.style.bottom = '64px';
+                chatWindow.style.borderRadius = '0.5rem';
+                chatWindow.dataset.expanded = 'false';
+                expandBtn.innerHTML = '<i class="fas fa-expand"></i>';
+                expandBtn.title = 'Expandir';
+            } else {
+                // Expandir para tela cheia
+                chatWindow.style.position = 'fixed';
+                chatWindow.style.width = '100%';
+                chatWindow.style.height = '100%';
+                chatWindow.style.top = '0';
+                chatWindow.style.left = '0';
+                chatWindow.style.right = '0';
+                chatWindow.style.bottom = '0';
+                chatWindow.style.borderRadius = '0';
+                chatWindow.dataset.expanded = 'true';
+                expandBtn.innerHTML = '<i class="fas fa-compress"></i>';
+                expandBtn.title = 'Reduzir';
+            }
+        };
+        
+        // ============ FUNÇÕES DE ARQUIVO ============
+        window.handleFileSelect = function(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            // Validar tamanho (25MB)
+            if (file.size > 25 * 1024 * 1024) {
+                alert('Arquivo muito grande. Máximo: 25MB');
+                input.value = '';
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Mostrar preview
+            const container = document.getElementById('filePreviewContainer');
+            const icon = document.getElementById('filePreviewIcon');
+            const name = document.getElementById('filePreviewName');
+            
+            // Determinar ícone baseado no tipo
+            if (file.type.startsWith('image/')) {
+                icon.className = 'fas fa-image text-blue-500 mr-2';
+            } else if (file.type.startsWith('video/')) {
+                icon.className = 'fas fa-video text-purple-500 mr-2';
+            } else if (file.type.startsWith('audio/')) {
+                icon.className = 'fas fa-music text-green-500 mr-2';
+            } else {
+                icon.className = 'fas fa-file text-gray-500 mr-2';
+            }
+            
+            name.textContent = file.name;
+            container.classList.remove('hidden');
+        };
+        
+        window.clearFilePreview = function() {
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('filePreviewContainer').classList.add('hidden');
+        };
+        
+        // ============ FUNÇÕES DE POLLING TEMPO REAL ============
+        function startPolling(chatId) {
+            stopPolling();
+            
+            pollingInterval = setInterval(() => {
+                pollChatUpdates(chatId);
+            }, 3000); // A cada 3 segundos
+        }
+        
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+        
+        function pollChatUpdates(chatId) {
+            fetch(`/projects/support/chat/${chatId}/poll/?last_message_id=${lastMessageId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Adicionar novas mensagens
+                        if (data.messages && data.messages.length > 0) {
+                            const messagesContainer = document.getElementById('activeChatMessages');
+                            
+                            data.messages.forEach(msg => {
+                                if (msg.id > lastMessageId) {
+                                    appendMessage(messagesContainer, msg);
+                                    lastMessageId = msg.id;
+                                }
+                            });
+                            
+                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        }
+                        
+                        // Atualizar status
+                        document.getElementById('activeChatStatus').textContent = 
+                            `Status: ${data.chat_status_display}${data.assigned_to ? ' | Atendente: ' + data.assigned_to : ''}`;
+                        
+                        // Atualizar posição na fila
+                        const queueDiv = document.getElementById('queuePositionDiv');
+                        const queueText = document.getElementById('queuePositionText');
+                        
+                        if (data.queue_position && data.chat_status !== 'EM_ANDAMENTO' && data.chat_status !== 'RESOLVIDO' && data.chat_status !== 'FECHADO') {
+                            queueText.textContent = `Posição na fila: ${data.queue_position}º`;
+                            queueDiv.classList.remove('hidden');
+                        } else {
+                            queueDiv.classList.add('hidden');
+                        }
+                        
+                        // Atualizar protocolo se disponível
+                        if (data.protocol) {
+                            document.getElementById('activeChatProtocol').textContent = `Protocolo: ${data.protocol}`;
+                        }
+                    }
+                })
+                .catch(error => console.error('Erro no polling:', error));
+        }
+        
+        function appendMessage(container, msg) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${msg.is_own ? 'justify-end' : 'justify-start'}`;
+            
+            let filesHtml = '';
+            if (msg.files && msg.files.length > 0) {
+                filesHtml = msg.files.map(file => {
+                    if (file.type === 'IMAGE') {
+                        return `<a href="${file.url}" target="_blank" class="block mt-2"><img src="${file.url}" class="max-w-full rounded" style="max-height: 200px;"></a>`;
+                    } else if (file.type === 'VIDEO') {
+                        return `<video src="${file.url}" controls class="max-w-full rounded mt-2" style="max-height: 200px;"></video>`;
+                    } else {
+                        return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 text-blue-600 hover:underline"><i class="fas fa-file mr-1"></i>${file.name}</a>`;
+                    }
+                }).join('');
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="max-w-xs px-3 py-2 rounded-lg text-sm ${msg.is_own ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'}">
+                    ${!msg.is_own ? `<div class="text-xs font-medium mb-1">${msg.user.name}</div>` : ''}
+                    <div>${msg.message}</div>
+                    ${filesHtml}
+                    <div class="text-xs ${msg.is_own ? 'text-blue-100' : 'text-gray-500'} mt-1">${msg.created_at}</div>
+                    ${msg.is_internal ? '<div class="text-xs text-red-400 mt-1">Mensagem interna</div>' : ''}
+                </div>
+            `;
+            container.appendChild(messageDiv);
+        }
         
         // Global functions for support chat (called from onclick)
         window.toggleSupportChat = function() {
@@ -1589,6 +1802,7 @@
                 } else {
                     chatWindow.style.display = 'none';
                     console.log('Chat window closed'); // Debug log
+                    stopPolling();
                 }
             } else {
                 console.error('Chat window not found - element is null'); // Debug log
@@ -1605,6 +1819,7 @@
             if (chatWindow) {
                 chatWindow.style.display = 'none';
                 console.log('Chat window closed'); // Debug log
+                stopPolling();
             } else {
                 console.error('Chat window not found'); // Debug log
             }
@@ -1616,7 +1831,7 @@
             if (chatWindow) {
                 chatWindow.style.display = 'none';
                 console.log('Chat window minimized'); // Debug log
-                // Aqui poderíamos adicionar lógica para mostrar um indicador de minimizado
+                stopPolling();
             } else {
                 console.error('Chat window not found'); // Debug log
             }
@@ -1830,14 +2045,23 @@
                         data.chats.forEach(chat => {
                             const chatItem = document.createElement('div');
                             chatItem.className = 'p-2 border border-gray-200 rounded-md mb-2 cursor-pointer hover:bg-gray-50';
+                            
+                            // Mostrar posição na fila se aplicável
+                            let queueInfo = '';
+                            if (chat.queue_position && ['AGUARDANDO', 'ABERTO'].includes(chat.status_code)) {
+                                queueInfo = `<span class="text-xs text-yellow-600"><i class="fas fa-clock mr-1"></i>${chat.queue_position}º na fila</span>`;
+                            }
+                            
                             chatItem.innerHTML = `
                                 <div class="flex items-center justify-between mb-1">
-                                    <h5 class="text-sm font-medium text-gray-900 truncate">${chat.title}</h5>
+                                    <h5 class="text-sm font-medium text-gray-900 truncate flex-1">${chat.title}</h5>
                                     <span class="text-xs px-2 py-1 rounded-full ${getStatusColor(chat.status_code)}">${chat.status}</span>
                                 </div>
+                                ${chat.protocol ? `<p class="text-xs text-blue-600 font-mono mb-1">📋 ${chat.protocol}</p>` : ''}
                                 <p class="text-xs text-gray-600 truncate">${chat.last_message}</p>
                                 <div class="flex items-center justify-between mt-1">
                                     <span class="text-xs text-gray-500">${chat.updated_at}</span>
+                                    ${queueInfo}
                                     <span class="text-xs px-1 py-0.5 rounded ${getPriorityColor(chat.priority)}">${chat.priority}</span>
                                 </div>
                             `;
@@ -1856,6 +2080,7 @@
 
             function getStatusColor(status) {
                 switch (status) {
+                    case 'AGUARDANDO': return 'bg-purple-100 text-purple-800';
                     case 'ABERTO': return 'bg-blue-100 text-blue-800';
                     case 'EM_ANDAMENTO': return 'bg-yellow-100 text-yellow-800';
                     case 'RESOLVIDO': return 'bg-green-100 text-green-800';
@@ -1878,6 +2103,7 @@
             window.openChat = function(chatId) {
                 console.log('openChat() called with chatId:', chatId);
                 currentChatId = chatId;
+                lastMessageId = 0;
                 
                 fetch(`/projects/support/chat/${chatId}/`)
                 .then(response => {
@@ -1889,24 +2115,35 @@
                     if (data.success) {
                         // Update chat header
                         document.getElementById('activeChatTitle').textContent = data.chat.title;
-                        document.getElementById('activeChatStatus').textContent = `Status: ${data.chat.status} | Prioridade: ${data.chat.priority}`;
+                        document.getElementById('activeChatStatus').textContent = `Status: ${data.chat.get_status_display}${data.chat.assigned_to ? ' | Atendente: ' + data.chat.assigned_to.get_full_name : ''}`;
+                        
+                        // Mostrar protocolo se existir
+                        const protocolEl = document.getElementById('activeChatProtocol');
+                        if (data.chat.protocol) {
+                            protocolEl.textContent = `Protocolo: ${data.chat.protocol}`;
+                        } else {
+                            protocolEl.textContent = '';
+                        }
+                        
+                        // Verificar e mostrar posição na fila
+                        const queueDiv = document.getElementById('queuePositionDiv');
+                        const queueText = document.getElementById('queuePositionText');
+                        if (data.chat.queue_position && ['AGUARDANDO', 'ABERTO'].includes(data.chat.status)) {
+                            queueText.textContent = `Posição na fila: ${data.chat.queue_position}º`;
+                            queueDiv.classList.remove('hidden');
+                        } else {
+                            queueDiv.classList.add('hidden');
+                        }
                         
                         // Load messages
                         const messagesContainer = document.getElementById('activeChatMessages');
                         messagesContainer.innerHTML = '';
                         
                         data.messages.forEach(msg => {
-                            const messageDiv = document.createElement('div');
-                            messageDiv.className = `flex ${msg.is_own ? 'justify-end' : 'justify-start'}`;
-                            messageDiv.innerHTML = `
-                                <div class="max-w-xs px-3 py-2 rounded-lg text-sm ${msg.is_own ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'}">
-                                    ${!msg.is_own ? `<div class="text-xs font-medium mb-1">${msg.user.name}</div>` : ''}
-                                    <div>${msg.message}</div>
-                                    <div class="text-xs ${msg.is_own ? 'text-blue-100' : 'text-gray-500'} mt-1">${msg.created_at}</div>
-                                    ${msg.is_internal ? '<div class="text-xs text-red-400 mt-1">Mensagem interna</div>' : ''}
-                                </div>
-                            `;
-                            messagesContainer.appendChild(messageDiv);
+                            appendMessage(messagesContainer, msg);
+                            if (msg.id > lastMessageId) {
+                                lastMessageId = msg.id;
+                            }
                         });
 
                         // Scroll to bottom
@@ -1917,6 +2154,9 @@
                         const activeChatView = document.getElementById('activeChatView');
                         myChatsList.classList.add('hidden');
                         activeChatView.classList.remove('hidden');
+                        
+                        // Iniciar polling para tempo real
+                        startPolling(chatId);
                         
                         console.log('Chat loaded successfully');
                     } else {
@@ -1936,10 +2176,12 @@
                     activeChatView.classList.add('hidden');
                     myChatsList.classList.remove('hidden');
                     currentChatId = null;
+                    stopPolling();
+                    clearFilePreview();
                 });
             }
 
-            // Send message
+            // Send message (com suporte a arquivos)
             const sendMessageForm = document.getElementById('sendMessageForm');
             if (sendMessageForm) {
                 sendMessageForm.addEventListener('submit', function(e) {
@@ -1950,13 +2192,21 @@
                     const messageInput = document.getElementById('messageInput');
                     const message = messageInput.value.trim();
                     
-                    if (!message) return;
+                    // Se não tem mensagem nem arquivo, não enviar
+                    if (!message && !selectedFile) return;
                     
                     const formData = new FormData();
-                    formData.append('message', message);
+                    formData.append('message', message || '');
                     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+                    
+                    // URL diferente se tem arquivo
+                    let url = `/projects/support/chat/${currentChatId}/send/`;
+                    if (selectedFile) {
+                        formData.append('file', selectedFile);
+                        url = `/projects/support/chat/${currentChatId}/upload/`;
+                    }
 
-                    fetch(`/projects/support/chat/${currentChatId}/send/`, {
+                    fetch(url, {
                         method: 'POST',
                         body: formData
                     })
@@ -1965,24 +2215,22 @@
                         if (data.success) {
                             // Add message to chat
                             const messagesContainer = document.getElementById('activeChatMessages');
-                            const messageDiv = document.createElement('div');
-                            messageDiv.className = 'flex justify-end';
-                            messageDiv.innerHTML = `
-                                <div class="max-w-xs px-3 py-2 rounded-lg text-sm bg-blue-500 text-white">
-                                    <div>${data.message.message}</div>
-                                    <div class="text-xs text-blue-100 mt-1">${data.message.created_at}</div>
-                                </div>
-                            `;
-                            messagesContainer.appendChild(messageDiv);
-                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            appendMessage(messagesContainer, data.message);
+                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            
+                            // Atualizar lastMessageId
+                            if (data.message.id > lastMessageId) {
+                                lastMessageId = data.message.id;
+                            }
                         
-                        // Clear input
-                        messageInput.value = '';
-                    } else {
-                        alert('Erro ao enviar mensagem: ' + data.error);
-                    }
-                })
-                .catch(error => {
+                            // Clear input and file
+                            messageInput.value = '';
+                            clearFilePreview();
+                        } else {
+                            alert('Erro ao enviar mensagem: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
                     console.error('Error:', error);
                     alert('Erro ao enviar mensagem');
                 });
@@ -2053,6 +2301,8 @@
             console.log('loadSectorCategories() called with sectorId:', sectorId);
             const categoryDiv = document.getElementById('categoryDiv');
             const categorySelect = document.getElementById('supportChatCategory');
+            const queueInfoDiv = document.getElementById('queueInfoDiv');
+            const queueInfoText = document.getElementById('queueInfoText');
             
             if (!categoryDiv || !categorySelect) {
                 console.error('Elementos de categoria não encontrados!');
@@ -2062,10 +2312,30 @@
             if (!sectorId) {
                 categoryDiv.classList.add('hidden');
                 categorySelect.innerHTML = '<option value="">Selecione o assunto</option>';
+                if (queueInfoDiv) queueInfoDiv.classList.add('hidden');
                 return;
             }
             
             console.log('Buscando categorias para setor:', sectorId);
+            
+            // Buscar informações da fila do setor
+            fetch(`/projects/support/queue-status/?sector_id=${sectorId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.queue.length > 0 && queueInfoDiv && queueInfoText) {
+                        const sectorQueue = data.queue[0];
+                        if (sectorQueue.waiting > 0) {
+                            queueInfoText.innerHTML = `<strong>${sectorQueue.waiting}</strong> pessoas aguardando neste setor`;
+                            queueInfoDiv.classList.remove('hidden');
+                        } else {
+                            queueInfoText.innerHTML = `Nenhuma pessoa na fila - atendimento imediato!`;
+                            queueInfoDiv.classList.remove('hidden');
+                            queueInfoDiv.className = queueInfoDiv.className.replace('bg-blue-50 border-blue-200', 'bg-green-50 border-green-200');
+                            queueInfoText.parentElement.className = queueInfoText.parentElement.className.replace('text-blue-700', 'text-green-700');
+                        }
+                    }
+                })
+                .catch(error => console.error('Erro ao buscar fila:', error));
             
             fetch(`/projects/support/sectors/${sectorId}/categories/`)
                 .then(response => {

@@ -47,6 +47,18 @@ class TaskChatMessage(models.Model):
         return f"{self.user.get_full_name()}: {self.message[:50]}..."
 
 
+import uuid
+import random
+import string
+
+def generate_protocol():
+    """Gera um protocolo único no formato: YYYYMMDD-XXXXX"""
+    from datetime import datetime
+    date_part = datetime.now().strftime('%Y%m%d')
+    random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return f"{date_part}-{random_part}"
+
+
 class SupportChat(models.Model):
     """Chat de suporte geral da plataforma"""
     user = models.ForeignKey(
@@ -55,15 +67,22 @@ class SupportChat(models.Model):
         related_name='support_chats'
     )
     title = models.CharField(max_length=200, verbose_name="Título")
+    protocol = models.CharField(
+        max_length=20, 
+        unique=True, 
+        verbose_name="Protocolo",
+        blank=True
+    )
     status = models.CharField(
         max_length=20,
         choices=[
+            ('AGUARDANDO', 'Aguardando na Fila'),
             ('ABERTO', 'Aberto'),
             ('EM_ANDAMENTO', 'Em Andamento'),
             ('RESOLVIDO', 'Resolvido'),
             ('FECHADO', 'Fechado'),
         ],
-        default='ABERTO'
+        default='AGUARDANDO'
     )
     priority = models.CharField(
         max_length=20,
@@ -92,12 +111,35 @@ class SupportChat(models.Model):
         verbose_name_plural = "Chats de Suporte"
         ordering = ['-created_at']
 
+    def save(self, *args, **kwargs):
+        if not self.protocol:
+            self.protocol = generate_protocol()
+            # Garantir unicidade
+            while SupportChat.objects.filter(protocol=self.protocol).exists():
+                self.protocol = generate_protocol()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Suporte: {self.title} - {self.user.get_full_name()}"
+        return f"[{self.protocol}] {self.title} - {self.user.get_full_name()}"
 
     def close_chat(self):
         self.status = 'FECHADO'
         self.closed_at = timezone.now()
+    
+    def get_queue_position(self):
+        """Retorna a posição na fila do setor"""
+        if self.status not in ['AGUARDANDO', 'ABERTO']:
+            return None
+        if not self.sector:
+            return None
+        
+        # Contar quantos chats do mesmo setor estão na fila antes deste
+        position = SupportChat.objects.filter(
+            sector=self.sector,
+            status__in=['AGUARDANDO', 'ABERTO'],
+            created_at__lt=self.created_at
+        ).count() + 1
+        return position
         self.save()
 
 
