@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import commission_views
 
 urlpatterns = [
     path('', views.dashboard_view, name='dashboard'),
@@ -16,6 +17,11 @@ urlpatterns = [
     path('help/', views.help_view, name='help_tutorials'),
     path('help/tutorial/<int:tutorial_id>/', views.tutorial_detail_view, name='tutorial_detail'),
     path('change-password/', views.change_password_view, name='change_password'),
+    
+    # Comissionamento
+    path('commission/', commission_views.commission_view, name='commission'),
+    path('commission/refresh/', commission_views.commission_refresh, name='commission_refresh'),
+    path('api/commission/', commission_views.commission_api, name='commission_api'),
     
     # Admin URLs - usando 'manage' para evitar conflito com django admin
     path('manage/', views.admin_panel_view, name='admin_panel'),
