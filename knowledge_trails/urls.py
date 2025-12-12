@@ -33,6 +33,8 @@ urlpatterns = [
     # Gerenciamento de Quiz
     path('lesson/<int:lesson_id>/quiz/', views.edit_lesson_quiz, name='edit_lesson_quiz'),
     path('lesson/<int:lesson_id>/quiz/create-question/', views.create_quiz_question, name='create_quiz_question'),
+    path('lesson/<int:lesson_id>/quiz/answers/', views.quiz_answers_view, name='quiz_answers'),
+    path('lesson/<int:lesson_id>/quiz/user/<int:user_id>/', views.user_quiz_detail, name='user_quiz_detail'),
     path('quiz/question/<int:question_id>/edit/', views.edit_quiz_question, name='edit_quiz_question'),
     path('quiz/question/<int:question_id>/delete/', views.delete_quiz_question, name='delete_quiz_question'),
 ]

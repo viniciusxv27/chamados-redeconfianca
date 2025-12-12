@@ -28,6 +28,9 @@
                         <p class="mt-2 text-white text-opacity-90">{{ lesson.title }}</p>
                     </div>
                     <div class="flex gap-3">
+                        <a href="{% url 'knowledge_trails:quiz_answers' lesson.id %}" class="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg">
+                            <i class="fas fa-poll"></i> Ver Respostas
+                        </a>
                         <a href="{% url 'knowledge_trails:create_quiz_question' lesson.id %}" class="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg">
                             <i class="fas fa-plus"></i> Nova Questão
                         </a>

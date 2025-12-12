@@ -76,7 +76,14 @@ def video_type(filename):
     if not filename:
         return 'video/mp4'
     
-    ext = filename.lower().split('.')[-1]
+    # Converter para string caso seja um FieldFile
+    filename_str = str(filename)
+    
+    # Extrair extensão corretamente
+    if '.' in filename_str:
+        ext = filename_str.lower().rsplit('.', 1)[-1]
+    else:
+        return 'video/mp4'
     
     types = {
         'mp4': 'video/mp4',
@@ -88,6 +95,8 @@ def video_type(filename):
         'wmv': 'video/x-ms-wmv',
         'flv': 'video/x-flv',
         'mkv': 'video/x-matroska',
+        'm4v': 'video/mp4',
+        '3gp': 'video/3gpp',
     }
     
     return types.get(ext, 'video/mp4')

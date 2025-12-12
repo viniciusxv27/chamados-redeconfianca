@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 from .models import (
-    KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption,
+    KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption, QuizAnswer,
     TrailProgress, LessonProgress, Certificate
 )
 from users.models import Sector
@@ -247,16 +247,30 @@ def lesson_view(request, lesson_id):
             correct_answers = 0
             total_questions = quiz_questions.count()
             
+            # Incrementar tentativa antes de salvar respostas
+            lesson_progress.quiz_attempts += 1
+            attempt_number = lesson_progress.quiz_attempts
+            
             for question in quiz_questions:
                 selected_option_id = request.POST.get(f'question_{question.id}')
                 if selected_option_id:
                     selected_option = QuizOption.objects.filter(id=selected_option_id).first()
-                    if selected_option and selected_option.is_correct:
-                        correct_answers += 1
+                    if selected_option:
+                        is_correct = selected_option.is_correct
+                        if is_correct:
+                            correct_answers += 1
+                        
+                        # Salvar resposta do usuário
+                        QuizAnswer.objects.create(
+                            user=user,
+                            question=question,
+                            selected_option=selected_option,
+                            is_correct=is_correct,
+                            attempt_number=attempt_number
+                        )
             
             score = round((correct_answers / total_questions * 100)) if total_questions > 0 else 0
             lesson_progress.quiz_score = score
-            lesson_progress.quiz_attempts += 1
             
             # Considerar aprovado com 70% ou mais
             if score >= 70:
@@ -1110,3 +1124,150 @@ def delete_quiz_question(request, question_id):
     messages.success(request, '✅ Questão excluída com sucesso!')
     
     return redirect('knowledge_trails:edit_lesson_quiz', lesson_id=lesson.id)
+
+
+@login_required
+def quiz_answers_view(request, lesson_id):
+    """Visualizar respostas de um quiz por todos os usuários"""
+    lesson = get_object_or_404(
+        Lesson.objects.select_related('module__trail'),
+        id=lesson_id,
+        lesson_type='quiz'
+    )
+    trail = lesson.module.trail
+    user = request.user
+    
+    # Verificar permissão de gerenciamento
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+    
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para ver as respostas deste quiz.')
+        return redirect('knowledge_trails:dashboard')
+    
+    # Buscar todos os usuários que responderam o quiz
+    user_progresses = LessonProgress.objects.filter(
+        lesson=lesson,
+        quiz_attempts__gt=0
+    ).select_related('user').order_by('-quiz_score', 'completed_at')
+    
+    # Buscar questões do quiz
+    questions = lesson.quiz_questions.all().prefetch_related('options')
+    
+    # Preparar dados dos usuários com suas respostas
+    users_data = []
+    for progress in user_progresses:
+        user_answers = QuizAnswer.objects.filter(
+            user=progress.user,
+            question__lesson=lesson,
+            attempt_number=progress.quiz_attempts  # Última tentativa
+        ).select_related('question', 'selected_option')
+        
+        answers_dict = {answer.question_id: answer for answer in user_answers}
+        
+        users_data.append({
+            'user': progress.user,
+            'progress': progress,
+            'answers': answers_dict
+        })
+    
+    context = {
+        'lesson': lesson,
+        'trail': trail,
+        'questions': questions,
+        'users_data': users_data,
+        'total_users': len(users_data),
+    }
+    
+    return render(request, 'knowledge_trails/quiz_answers.html', context)
+
+
+@login_required
+def user_quiz_detail(request, lesson_id, user_id):
+    """Ver detalhes das respostas de um usuário específico em um quiz"""
+    lesson = get_object_or_404(
+        Lesson.objects.select_related('module__trail'),
+        id=lesson_id,
+        lesson_type='quiz'
+    )
+    trail = lesson.module.trail
+    current_user = request.user
+    target_user = get_object_or_404(User, id=user_id)
+    
+    # Verificar permissão
+    can_view = False
+    if current_user == target_user:
+        can_view = True
+    elif hasattr(current_user, 'hierarchy'):
+        if current_user.hierarchy in ['SUPERADMIN', 'ADMIN'] or current_user.is_superuser:
+            can_view = True
+        elif current_user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(current_user.sectors.all())
+            if current_user.sector:
+                user_sectors.append(current_user.sector)
+            can_view = trail.sector in user_sectors
+    
+    if not can_view:
+        messages.error(request, 'Você não tem permissão para ver estas respostas.')
+        return redirect('knowledge_trails:dashboard')
+    
+    # Progresso do usuário
+    lesson_progress = LessonProgress.objects.filter(
+        lesson=lesson,
+        user=target_user
+    ).first()
+    
+    if not lesson_progress:
+        messages.error(request, 'Este usuário ainda não respondeu o quiz.')
+        return redirect('knowledge_trails:quiz_answers', lesson_id=lesson.id)
+    
+    # Buscar todas as tentativas
+    attempts = QuizAnswer.objects.filter(
+        user=target_user,
+        question__lesson=lesson
+    ).values('attempt_number').distinct().order_by('-attempt_number')
+    
+    # Tentativa selecionada (última por padrão)
+    selected_attempt = request.GET.get('attempt', lesson_progress.quiz_attempts)
+    try:
+        selected_attempt = int(selected_attempt)
+    except:
+        selected_attempt = lesson_progress.quiz_attempts
+    
+    # Buscar questões com respostas do usuário para a tentativa selecionada
+    questions = lesson.quiz_questions.all().prefetch_related('options')
+    user_answers = QuizAnswer.objects.filter(
+        user=target_user,
+        question__lesson=lesson,
+        attempt_number=selected_attempt
+    ).select_related('selected_option')
+    
+    answers_dict = {answer.question_id: answer for answer in user_answers}
+    
+    # Calcular estatísticas da tentativa
+    correct_count = user_answers.filter(is_correct=True).count()
+    total_questions = questions.count()
+    attempt_score = round((correct_count / total_questions * 100)) if total_questions > 0 else 0
+    
+    context = {
+        'lesson': lesson,
+        'trail': trail,
+        'target_user': target_user,
+        'lesson_progress': lesson_progress,
+        'questions': questions,
+        'answers_dict': answers_dict,
+        'attempts': attempts,
+        'selected_attempt': selected_attempt,
+        'correct_count': correct_count,
+        'total_questions': total_questions,
+        'attempt_score': attempt_score,
+    }
+    
+    return render(request, 'knowledge_trails/user_quiz_detail.html', context)

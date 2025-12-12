@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Respostas do Quiz - {{ lesson.title }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Breadcrumb -->
+        <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">{{ trail.icon }} {{ trail.title }}</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-purple-600 transition-colors">{{ lesson.title }}</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="hover:text-purple-600 transition-colors">Gerenciar Quiz</a>
+            <i class="fas fa-chevron-right text-xs"></i>
+            <span class="text-gray-800 font-semibold">Respostas</span>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-8">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-3xl font-bold flex items-center gap-3">
+                            <i class="fas fa-poll"></i>
+                            Respostas do Quiz
+                        </h2>
+                        <p class="mt-2 text-white text-opacity-90">{{ lesson.title }}</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="px-6 py-3 bg-white bg-opacity-10 hover:bg-opacity-20 border-2 border-white border-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
+                            <i class="fas fa-arrow-left"></i> Voltar ao Quiz
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-8">
+                <!-- Estatísticas Gerais -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-blue-100 text-sm font-medium">Total de Participantes</p>
+                                <p class="text-3xl font-bold mt-1">{{ users_data|length }}</p>
+                            </div>
+                            <div class="bg-blue-400 bg-opacity-30 rounded-xl p-3">
+                                <i class="fas fa-users text-2xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-5 text-white shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-green-100 text-sm font-medium">Questões no Quiz</p>
+                                <p class="text-3xl font-bold mt-1">{{ total_questions }}</p>
+                            </div>
+                            <div class="bg-green-400 bg-opacity-30 rounded-xl p-3">
+                                <i class="fas fa-question-circle text-2xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-purple-100 text-sm font-medium">Média de Acertos</p>
+                                <p class="text-3xl font-bold mt-1">
+                                    {% if users_data %}
+                                        {% widthratio total_correct total_answered 100 %}%
+                                    {% else %}
+                                        --
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="bg-purple-400 bg-opacity-30 rounded-xl p-3">
+                                <i class="fas fa-chart-line text-2xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-orange-100 text-sm font-medium">Total de Respostas</p>
+                                <p class="text-3xl font-bold mt-1">{{ total_answered }}</p>
+                            </div>
+                            <div class="bg-orange-400 bg-opacity-30 rounded-xl p-3">
+                                <i class="fas fa-clipboard-check text-2xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if users_data %}
+                <!-- Tabela de Usuários -->
+                <div class="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200">
+                    <div class="px-6 py-4 bg-gray-100 border-b border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <i class="fas fa-list-alt text-purple-600"></i>
+                            Participantes
+                        </h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Usuário</th>
+                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acertos</th>
+                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Erros</th>
+                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Porcentagem</th>
+                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Tentativa</th>
+                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Data</th>
+                                    <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for data in users_data %}
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            {% if data.user.profile_picture %}
+                                            <img src="{{ data.user.profile_picture.url }}" alt="{{ data.user.get_full_name }}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-200">
+                                            {% else %}
+                                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+                                                {{ data.user.first_name|slice:":1"|upper }}{{ data.user.last_name|slice:":1"|upper }}
+                                            </div>
+                                            {% endif %}
+                                            <div>
+                                                <p class="font-semibold text-gray-800">{{ data.user.get_full_name|default:data.user.username }}</p>
+                                                <p class="text-sm text-gray-500">{{ data.user.email }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
+                                            <i class="fas fa-check mr-1"></i> {{ data.correct }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
+                                            <i class="fas fa-times mr-1"></i> {{ data.wrong }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <div class="flex items-center justify-center gap-2">
+                                            <div class="w-20 bg-gray-200 rounded-full h-2.5">
+                                                <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-500" style="width: {{ data.percentage }}%"></div>
+                                            </div>
+                                            <span class="text-sm font-semibold text-gray-700">{{ data.percentage|floatformat:0 }}%</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800">
+                                            {{ data.attempt }}ª
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center text-sm text-gray-600">
+                                        {{ data.last_answer|date:"d/m/Y H:i" }}
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <a href="{% url 'knowledge_trails:user_quiz_detail' lesson.id data.user.id %}" 
+                                           class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-md hover:shadow-lg">
+                                            <i class="fas fa-eye mr-2"></i> Ver Detalhes
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-16">
+                    <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-clipboard-list text-4xl text-gray-400"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-700 mb-2">Nenhuma resposta ainda</h3>
+                    <p class="text-gray-500 max-w-md mx-auto">
+                        Ainda não há respostas para este quiz. Quando os usuários responderem às questões, as respostas aparecerão aqui.
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -388,6 +388,40 @@ class QuizOption(models.Model):
         return self.option_text
 
 
+class QuizAnswer(models.Model):
+    """Resposta do usuário em uma questão de quiz"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='quiz_answers',
+        verbose_name='Usuário'
+    )
+    question = models.ForeignKey(
+        QuizQuestion,
+        on_delete=models.CASCADE,
+        related_name='user_answers',
+        verbose_name='Pergunta'
+    )
+    selected_option = models.ForeignKey(
+        QuizOption,
+        on_delete=models.CASCADE,
+        related_name='user_selections',
+        verbose_name='Opção Selecionada'
+    )
+    is_correct = models.BooleanField(default=False, verbose_name='Resposta Correta')
+    attempt_number = models.PositiveIntegerField(default=1, verbose_name='Número da Tentativa')
+    answered_at = models.DateTimeField(auto_now_add=True, verbose_name='Respondido em')
+    
+    class Meta:
+        verbose_name = 'Resposta do Quiz'
+        verbose_name_plural = 'Respostas do Quiz'
+        ordering = ['-answered_at']
+        
+    def __str__(self):
+        return f'{self.user.get_full_name()} - {self.question.lesson.title} - Q{self.question.order + 1}'
+
+
 class TrailProgress(models.Model):
     """Progresso do usuário em uma trilha"""
     
