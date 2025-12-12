@@ -166,22 +166,22 @@
                             data-value="{{ pilar.media }}"/>
                     </svg>
                     <div class="absolute inset-0 flex items-center justify-center">
-                        <span class="text-sm font-bold text-gray-700">{{ pilar.media|floatformat:0 }}%</span>
+                        <span class="text-sm font-bold text-gray-700">{{ pilar.media|floatformat:2 }}%</span>
                     </div>
                 </div>
                 
                 <div class="space-y-1 text-xs text-gray-500">
                     <div class="flex justify-between">
                         <span>{{ meses.m1 }}:</span>
-                        <span class="font-medium text-gray-700">{{ pilar.pct_1|floatformat:0 }}%</span>
+                        <span class="font-medium text-gray-700">{{ pilar.pct_1|floatformat:2 }}%</span>
                     </div>
                     <div class="flex justify-between">
                         <span>{{ meses.m2 }}:</span>
-                        <span class="font-medium text-gray-700">{{ pilar.pct_2|floatformat:0 }}%</span>
+                        <span class="font-medium text-gray-700">{{ pilar.pct_2|floatformat:2 }}%</span>
                     </div>
                     <div class="flex justify-between">
                         <span>{{ meses.m3 }}:</span>
-                        <span class="font-medium text-gray-700">{{ pilar.pct_3|floatformat:0 }}%</span>
+                        <span class="font-medium text-gray-700">{{ pilar.pct_3|floatformat:2 }}%</span>
                     </div>
                 </div>
             </div>
@@ -298,27 +298,27 @@
             <div class="grid grid-cols-3 gap-3">
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Móvel</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.movel|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.movel|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Fixa</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.fixa|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.fixa|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Smart</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.smartphone|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.smartphone|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Seguro</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.seguro|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.seguro|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">SVA</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.sva|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.bonus.sva|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-primary/10 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Total</p>
-                    <p class="font-bold text-primary">R$ {{ data.bonus.total|floatformat:0 }}</p>
+                    <p class="font-bold text-primary">R$ {{ data.bonus.total|floatformat:2 }}</p>
                 </div>
             </div>
         </div>
@@ -329,27 +329,27 @@
             <div class="grid grid-cols-3 gap-3">
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Móvel</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.movel|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Fixa</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.fixa|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Smart</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.smartphone|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Eletro</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Essenciais</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.essenciais|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.essenciais|floatformat:2 }}</p>
                 </div>
                 <div class="text-center p-3 bg-gray-50 rounded-xl">
                     <p class="text-xs text-gray-500 mb-1">Seguros</p>
-                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.seguros|floatformat:0 }}</p>
+                    <p class="font-semibold text-gray-800">R$ {{ data.hunter.seguros|floatformat:2 }}</p>
                 </div>
             </div>
         </div>
@@ -361,27 +361,27 @@
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div class="p-4 bg-green-50 rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">6 Pilares</p>
-                <p class="text-lg font-bold text-green-600">R$ {{ data.aceleradores.seis_pilares|floatformat:0 }}</p>
+                <p class="text-lg font-bold text-green-600">R$ {{ data.aceleradores.seis_pilares|floatformat:2 }}</p>
             </div>
             <div class="p-4 bg-blue-50 rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">IQ Acel. Móvel</p>
-                <p class="text-lg font-bold text-blue-600">R$ {{ data.aceleradores.iq_acelerador_movel|floatformat:0 }}</p>
+                <p class="text-lg font-bold text-blue-600">R$ {{ data.aceleradores.iq_acelerador_movel|floatformat:2 }}</p>
             </div>
             <div class="p-4 bg-blue-50 rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">IQ Acel. Fixa</p>
-                <p class="text-lg font-bold text-blue-600">R$ {{ data.aceleradores.iq_acelerador_fixa|floatformat:0 }}</p>
+                <p class="text-lg font-bold text-blue-600">R$ {{ data.aceleradores.iq_acelerador_fixa|floatformat:2 }}</p>
             </div>
             <div class="p-4 {% if data.aceleradores.iq_deflator_movel < 0 %}bg-red-50{% else %}bg-gray-50{% endif %} rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">IQ Defl. Móvel</p>
-                <p class="text-lg font-bold {% if data.aceleradores.iq_deflator_movel < 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.aceleradores.iq_deflator_movel|floatformat:0 }}</p>
+                <p class="text-lg font-bold {% if data.aceleradores.iq_deflator_movel < 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.aceleradores.iq_deflator_movel|floatformat:2 }}</p>
             </div>
             <div class="p-4 {% if data.aceleradores.iq_deflator_fixa < 0 %}bg-red-50{% else %}bg-gray-50{% endif %} rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">IQ Defl. Fixa</p>
-                <p class="text-lg font-bold {% if data.aceleradores.iq_deflator_fixa < 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.aceleradores.iq_deflator_fixa|floatformat:0 }}</p>
+                <p class="text-lg font-bold {% if data.aceleradores.iq_deflator_fixa < 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.aceleradores.iq_deflator_fixa|floatformat:2 }}</p>
             </div>
             <div class="p-4 bg-primary/10 rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">Rem. com IQ</p>
-                <p class="text-lg font-bold text-primary">R$ {{ data.aceleradores.remuneracao_iq|floatformat:0 }}</p>
+                <p class="text-lg font-bold text-primary">R$ {{ data.aceleradores.remuneracao_iq|floatformat:2 }}</p>
             </div>
         </div>
     </div>
