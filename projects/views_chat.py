@@ -395,6 +395,13 @@ def get_user_sectors(request):
 def get_sector_categories(request, sector_id):
     """Buscar categorias de um setor específico"""
     from .models_chat import SupportCategory
+    from users.models import Sector
+    
+    # Verificar se é o setor Ilha de Qualidade
+    try:
+        sector = Sector.objects.get(id=sector_id)
+    except Sector.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Setor não encontrado'})
     
     categories = SupportCategory.objects.filter(
         sector_id=sector_id, 
@@ -402,6 +409,27 @@ def get_sector_categories(request, sector_id):
     ).order_by('name')
     
     categories_data = [{'id': c.id, 'name': c.name, 'description': c.description} for c in categories]
+    
+    # Se for Ilha de Qualidade e não houver categorias, criar as categorias virtuais automaticamente
+    if 'ilha de qualidade' in sector.name.lower():
+        # Verificar se as categorias já existem, senão criar
+        lojas_cat, _ = SupportCategory.objects.get_or_create(
+            name='ILHA - SUPORTE LOJAS',
+            sector=sector,
+            defaults={'description': 'Suporte para lojas', 'is_active': True}
+        )
+        logins_cat, _ = SupportCategory.objects.get_or_create(
+            name='ILHA - SUPORTE LOGINS',
+            sector=sector,
+            defaults={'description': 'Suporte para logins', 'is_active': True}
+        )
+        
+        # Recarregar categorias
+        categories = SupportCategory.objects.filter(
+            sector_id=sector_id, 
+            is_active=True
+        ).order_by('name')
+        categories_data = [{'id': c.id, 'name': c.name, 'description': c.description} for c in categories]
     
     return JsonResponse({'success': True, 'categories': categories_data})
 
@@ -1022,13 +1050,193 @@ def support_metrics(request):
 
 
 def export_metrics_report(request):
-    """Exporta relatório de métricas em PDF/Excel"""
+    """Exporta relatório de métricas em Excel"""
+    from datetime import datetime, timedelta
+    from django.db.models import Count, Avg, Q
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+    
     # Permitir acesso para SUPERVISOR ou maior
     if not (request.user.is_superuser or request.user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']):
         return JsonResponse({'error': 'Acesso negado'}, status=403)
     
-    # Implementar exportação
-    return JsonResponse({'message': 'Exportação não implementada ainda'})
+    # Período selecionado (padrão: 30 dias)
+    period_days = int(request.GET.get('period', 30))
+    start_date = datetime.now() - timedelta(days=period_days)
+    
+    # Criar workbook
+    wb = Workbook()
+    
+    # ========== ABA 1: Resumo Geral ==========
+    ws_resumo = wb.active
+    ws_resumo.title = 'Resumo Geral'
+    
+    # Estilos
+    header_font = Font(bold=True, color='FFFFFF', size=12)
+    header_fill = PatternFill(start_color='FF6B35', end_color='FF6B35', fill_type='solid')
+    title_font = Font(bold=True, size=14)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Título
+    ws_resumo['A1'] = f'Relatório de Métricas de Suporte - Últimos {period_days} dias'
+    ws_resumo['A1'].font = title_font
+    ws_resumo.merge_cells('A1:E1')
+    ws_resumo['A2'] = f'Gerado em: {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+    
+    # Estatísticas principais
+    total_tickets = SupportChat.objects.filter(created_at__gte=start_date).count()
+    resolved_tickets = SupportChat.objects.filter(created_at__gte=start_date, status='FECHADO').count()
+    resolution_rate = round((resolved_tickets / total_tickets * 100) if total_tickets > 0 else 0, 1)
+    avg_rating = round(SupportChatRating.objects.filter(
+        chat__created_at__gte=start_date
+    ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0, 1)
+    
+    # Headers das métricas
+    ws_resumo['A4'] = 'Métrica'
+    ws_resumo['B4'] = 'Valor'
+    for col in ['A', 'B']:
+        ws_resumo[f'{col}4'].font = header_font
+        ws_resumo[f'{col}4'].fill = header_fill
+        ws_resumo[f'{col}4'].border = border
+    
+    # Dados das métricas
+    metricas = [
+        ('Total de Atendimentos', total_tickets),
+        ('Atendimentos Resolvidos', resolved_tickets),
+        ('Taxa de Resolução', f'{resolution_rate}%'),
+        ('Avaliação Média', f'{avg_rating}/5'),
+    ]
+    
+    for i, (nome, valor) in enumerate(metricas, start=5):
+        ws_resumo[f'A{i}'] = nome
+        ws_resumo[f'B{i}'] = valor
+        ws_resumo[f'A{i}'].border = border
+        ws_resumo[f'B{i}'].border = border
+    
+    # Ajustar larguras
+    ws_resumo.column_dimensions['A'].width = 30
+    ws_resumo.column_dimensions['B'].width = 20
+    
+    # ========== ABA 2: Por Categoria ==========
+    ws_cat = wb.create_sheet('Por Categoria')
+    
+    # Headers
+    headers_cat = ['Categoria', 'Setor', 'Total', 'Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']
+    for col, header in enumerate(headers_cat, start=1):
+        cell = ws_cat.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    # Dados por categoria
+    categories = SupportCategory.objects.annotate(
+        total=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date)),
+        abertos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='ABERTO')),
+        em_andamento=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='EM_ANDAMENTO')),
+        resolvidos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='RESOLVIDO')),
+        fechados=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='FECHADO'))
+    ).select_related('sector').order_by('-total')
+    
+    for row, cat in enumerate(categories, start=2):
+        ws_cat.cell(row=row, column=1, value=cat.name).border = border
+        ws_cat.cell(row=row, column=2, value=cat.sector.name if cat.sector else 'N/A').border = border
+        ws_cat.cell(row=row, column=3, value=cat.total).border = border
+        ws_cat.cell(row=row, column=4, value=cat.abertos).border = border
+        ws_cat.cell(row=row, column=5, value=cat.em_andamento).border = border
+        ws_cat.cell(row=row, column=6, value=cat.resolvidos).border = border
+        ws_cat.cell(row=row, column=7, value=cat.fechados).border = border
+    
+    # Ajustar larguras
+    for col in range(1, 8):
+        ws_cat.column_dimensions[get_column_letter(col)].width = 18
+    
+    # ========== ABA 3: Por Agente ==========
+    ws_agente = wb.create_sheet('Por Agente')
+    
+    # Headers
+    headers_agente = ['Agente', 'Total Atendimentos', 'Resolvidos', 'Taxa de Resolução', 'Avaliação Média']
+    for col, header in enumerate(headers_agente, start=1):
+        cell = ws_agente.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    # Dados por agente
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    
+    agents = SupportAgent.objects.filter(is_active=True).select_related('user')
+    row_num = 2
+    for agent in agents:
+        total = SupportChat.objects.filter(assigned_to=agent.user, created_at__gte=start_date).count()
+        resolved = SupportChat.objects.filter(assigned_to=agent.user, created_at__gte=start_date, status='FECHADO').count()
+        rate = round((resolved / total * 100) if total > 0 else 0, 1)
+        avg = SupportChatRating.objects.filter(
+            chat__assigned_to=agent.user,
+            chat__created_at__gte=start_date
+        ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
+        
+        if total > 0:
+            ws_agente.cell(row=row_num, column=1, value=agent.user.get_full_name()).border = border
+            ws_agente.cell(row=row_num, column=2, value=total).border = border
+            ws_agente.cell(row=row_num, column=3, value=resolved).border = border
+            ws_agente.cell(row=row_num, column=4, value=f'{rate}%').border = border
+            ws_agente.cell(row=row_num, column=5, value=round(avg, 1)).border = border
+            row_num += 1
+    
+    # Ajustar larguras
+    for col in range(1, 6):
+        ws_agente.column_dimensions[get_column_letter(col)].width = 22
+    
+    # ========== ABA 4: Todos os Chats ==========
+    ws_chats = wb.create_sheet('Todos os Chats')
+    
+    # Headers
+    headers_chats = ['ID', 'Protocolo', 'Título', 'Cliente', 'Setor', 'Categoria', 'Status', 'Agente', 'Criado em', 'Fechado em']
+    for col, header in enumerate(headers_chats, start=1):
+        cell = ws_chats.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    # Todos os chats do período
+    chats = SupportChat.objects.filter(
+        created_at__gte=start_date
+    ).select_related('user', 'sector', 'category', 'assigned_to').order_by('-created_at')
+    
+    for row, chat in enumerate(chats, start=2):
+        ws_chats.cell(row=row, column=1, value=chat.id).border = border
+        ws_chats.cell(row=row, column=2, value=getattr(chat, 'protocol', '') or '').border = border
+        ws_chats.cell(row=row, column=3, value=chat.title).border = border
+        ws_chats.cell(row=row, column=4, value=chat.user.get_full_name()).border = border
+        ws_chats.cell(row=row, column=5, value=chat.sector.name if chat.sector else 'N/A').border = border
+        ws_chats.cell(row=row, column=6, value=chat.category.name if chat.category else 'N/A').border = border
+        ws_chats.cell(row=row, column=7, value=chat.get_status_display()).border = border
+        ws_chats.cell(row=row, column=8, value=chat.assigned_to.get_full_name() if chat.assigned_to else 'Não atribuído').border = border
+        ws_chats.cell(row=row, column=9, value=chat.created_at.strftime('%d/%m/%Y %H:%M')).border = border
+        ws_chats.cell(row=row, column=10, value=chat.closed_at.strftime('%d/%m/%Y %H:%M') if chat.closed_at else '').border = border
+    
+    # Ajustar larguras
+    widths = [8, 18, 40, 25, 20, 25, 15, 25, 18, 18]
+    for col, width in enumerate(widths, start=1):
+        ws_chats.column_dimensions[get_column_letter(col)].width = width
+    
+    # Preparar resposta
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    filename = f'metricas_suporte_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    wb.save(response)
+    return response
 
 
 @login_required

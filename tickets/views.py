@@ -186,8 +186,8 @@ def tickets_list_view(request):
             models.Q(id__icontains=search)
         )
     
-    # Aplicar ordenação
-    tickets = tickets.order_by('-created_at')
+    # Aplicar ordenação por data de atualização (mais recente primeiro)
+    tickets = tickets.order_by('-updated_at')
     
     # Configurar paginação
     paginator = Paginator(tickets, 10)  # 10 tickets por página
@@ -1007,7 +1007,7 @@ def tickets_list_view_duplicate(request):
         ).exclude(status='FECHADO').distinct()
     
     context = {
-        'tickets': tickets.order_by('-created_at'),
+        'tickets': tickets.order_by('-updated_at'),
         'user': user,
     }
     return render(request, 'tickets/list.html', context)
@@ -2163,8 +2163,8 @@ def tickets_export_view(request):
                     models.Q(status__in=['RESOLVIDO', 'FECHADO'])
                 )
     
-    # Ordenar
-    tickets = tickets.order_by('-created_at')
+    # Ordenar por data de atualização
+    tickets = tickets.order_by('-updated_at')
     
     # Verificar formato de exportação (padrão: Excel)
     export_format = request.GET.get('export', 'excel')
