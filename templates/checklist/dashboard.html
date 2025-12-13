@@ -14,8 +14,9 @@
             </h1>
             <p class="text-sm sm:text-base text-gray-600 mt-1">Gerencie suas atividades diárias</p>
         </div>
-        {% if is_supervisor %}
+        {% if can_create_checklist %}
         <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            {% if is_supervisor %}
             <a href="{% url 'sector_checklists' %}" 
                class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base text-center">
                 <i class="fas fa-users-cog mr-2"></i>Gerenciar Setor
@@ -24,6 +25,12 @@
                class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base text-center">
                 <i class="fas fa-plus mr-2"></i>Criar Template
             </a>
+            {% else %}
+            <a href="{% url 'create_daily_checklist' %}" 
+               class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base text-center">
+                <i class="fas fa-plus mr-2"></i>Criar Checklist
+            </a>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -150,26 +157,41 @@
     </div>
     {% endif %}
 
-    <!-- Checklists do Setor (Supervisores) -->
-    {% if is_supervisor and sector_checklists %}
+    <!-- Checklists do Setor (Supervisores) / Checklists Criados (Usuários Padrão) -->
+    {% if sector_checklists %}
     <div class="bg-white rounded-lg shadow-lg mb-8">
         <div class="px-6 py-4 border-b border-gray-200">
             <div class="flex justify-between items-center">
                 <h2 class="text-xl font-semibold">
+                    {% if is_supervisor %}
                     <i class="fas fa-users-cog text-orange-500 mr-2"></i>
                     Checklists do Meu Setor
+                    {% else %}
+                    <i class="fas fa-clipboard-check text-green-500 mr-2"></i>
+                    Checklists que Criei
+                    {% endif %}
                 </h2>
                 <div class="flex items-center gap-3">
+                    {% if sector_stats.completion_rate %}
                     <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-sm">
                         {{ sector_stats.completion_rate }}% de conclusão
                     </span>
+                    {% endif %}
+                    {% if is_supervisor %}
                     <a href="{% url 'sector_checklists' %}" 
                        class="text-orange-600 hover:text-orange-800 text-sm font-medium">
                         Ver todos <i class="fas fa-arrow-right ml-1"></i>
                     </a>
+                    {% endif %}
                 </div>
             </div>
-            <p class="text-gray-600 text-sm mt-1">Checklists que você criou para usuários do seu setor</p>
+            <p class="text-gray-600 text-sm mt-1">
+                {% if is_supervisor %}
+                Checklists que você criou para usuários do seu setor
+                {% else %}
+                Checklists que você criou para outros usuários do seu setor
+                {% endif %}
+            </p>
         </div>
         
         <div class="p-6">

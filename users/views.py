@@ -2779,6 +2779,9 @@ def checklist_dashboard_view(request):
     user = request.user
     is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
     
+    # Usuários padrões também podem criar checklists para outros usuários padrões do mesmo setor
+    can_create_checklist = is_supervisor or (user.hierarchy == 'PADRAO' and (user.sector or user.sectors.exists()))
+    
     # Checklist de hoje do usuário
     today_checklist = DailyChecklist.objects.filter(
         user=user,
@@ -2795,6 +2798,7 @@ def checklist_dashboard_view(request):
     
     # Para supervisores: checklists que criaram para usuários dos seus setores
     # Para SUPERADMIN: todos os checklists
+    # Para usuários padrões: checklists que criaram para outros usuários padrões do mesmo setor
     sector_checklists = []
     if is_supervisor:
         if user.hierarchy == 'SUPERADMIN':
@@ -2830,6 +2834,31 @@ def checklist_dashboard_view(request):
                     date__gte=week_ago,
                     date__lte=today
                 ).select_related('user', 'template', 'user__sector').prefetch_related('items').order_by('-date')
+    elif user.hierarchy == 'PADRAO' and can_create_checklist:
+        # Usuários padrões veem checklists que criaram para outros usuários padrões do setor
+        from django.db.models import Q
+        
+        # Obter setores do usuário
+        user_sectors = user.sectors.all()
+        
+        # Criar filtro para todos os setores do usuário
+        sector_filter = Q()
+        
+        # Adicionar setores múltiplos
+        if user_sectors.exists():
+            sector_filter |= Q(sectors__in=user_sectors)
+        
+        # Adicionar setor principal se existir
+        if user.sector:
+            sector_filter |= Q(sector=user.sector)
+        
+        if sector_filter:
+            # Buscar checklists criados pelo usuário para outros usuários do mesmo setor
+            sector_checklists = DailyChecklist.objects.filter(
+                created_by=user,
+                date__gte=week_ago,
+                date__lte=today
+            ).exclude(user=user).select_related('user', 'template', 'user__sector').prefetch_related('items').order_by('-date')
     
     # Estatísticas
     total_checklists = DailyChecklist.objects.filter(user=user).count()
@@ -2846,9 +2875,9 @@ def checklist_dashboard_view(request):
     from core.models import ChecklistTemplate
     user_templates = ChecklistTemplate.objects.filter(created_by=user, is_active=True).prefetch_related('items')
     
-    # Estatísticas para supervisores
+    # Estatísticas para supervisores e usuários padrões que criaram checklists
     sector_stats = {}
-    if is_supervisor and hasattr(sector_checklists, 'exists') and sector_checklists.exists():
+    if hasattr(sector_checklists, 'exists') and sector_checklists.exists():
         total_sector_checklists = sector_checklists.count()
         completed_sector_checklists = sector_checklists.filter(completed_at__isnull=False).count()
         sector_completion_rate = 0
@@ -2869,6 +2898,7 @@ def checklist_dashboard_view(request):
         'completed_checklists': completed_checklists,
         'user_templates': user_templates,
         'is_supervisor': is_supervisor,
+        'can_create_checklist': can_create_checklist,
         'sector_checklists': sector_checklists,
         'sector_stats': sector_stats,
         'today': today,
@@ -3032,12 +3062,21 @@ def checklist_detail_view(request, checklist_id):
             checklist = checklist_query.first()
         
         else:
-            # Usuários comuns só veem seus próprios checklists
-            try:
-                checklist = DailyChecklist.objects.get(id=checklist_id, user=user)
-            except DailyChecklist.DoesNotExist:
-                messages.error(request, 'Você só pode visualizar seus próprios checklists.')
+            # Usuários comuns podem ver:
+            # 1. Seus próprios checklists
+            # 2. Checklists que criaram para outros usuários padrões do mesmo setor
+            checklist_query = DailyChecklist.objects.filter(
+                id=checklist_id
+            ).filter(
+                models.Q(user=user) |                          # Próprios checklists
+                models.Q(created_by=user)                      # Checklists que criou
+            )
+            
+            if not checklist_query.exists():
+                messages.error(request, 'Você não tem permissão para visualizar este checklist.')
                 return redirect('checklist_dashboard')
+            
+            checklist = checklist_query.first()
                 
     except DailyChecklist.DoesNotExist:
         raise Http404("Checklist não encontrado")
@@ -3573,12 +3612,17 @@ def create_recurring_checklists(parent_checklist, template=None):
 @login_required
 def create_daily_checklist(request):
     """Criar checklist diário para usuários"""
-    if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_staff):
-        messages.error(request, 'Você não tem permissão para acessar esta página.')
-        return redirect('dashboard')
-    """Criar checklist diário para usuários"""
     from core.models import ChecklistTemplate, DailyChecklist, ChecklistItem
     from datetime import date, timedelta
+    
+    user = request.user
+    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_staff
+    # Usuários padrões também podem criar checklists para outros usuários padrões do mesmo setor
+    can_create_checklist = is_supervisor or (user.hierarchy == 'PADRAO' and (user.sector or user.sectors.exists()))
+    
+    if not can_create_checklist:
+        messages.error(request, 'Você não tem permissão para acessar esta página.')
+        return redirect('dashboard')
     
     if request.method == 'POST':
         # Verificar se é criação baseada em template ou customizada
@@ -3786,12 +3830,12 @@ def create_daily_checklist(request):
     # GET - mostrar formulário
     templates = ChecklistTemplate.objects.all().order_by('title')
     
-    # Filtrar usuários por setor para SUPERVISOR e ADMINISTRATIVO
-    if request.user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
+    # Filtrar usuários por setor para SUPERVISOR, ADMINISTRATIVO e PADRAO
+    if user.hierarchy in ['SUPERVISOR', 'ADMINISTRATIVO']:
         # Pegar setores do usuário atual (tanto ManyToMany quanto ForeignKey)
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
         
         if user_sectors:
             # Filtrar usuários que pertencem aos mesmos setores (considerando ambos os campos)
@@ -3801,19 +3845,39 @@ def create_daily_checklist(request):
             ).filter(
                 Q(sectors__in=user_sectors) | Q(sector__in=user_sectors)
             ).exclude(
-                id=request.user.id  # Excluir o próprio usuário
+                id=user.id  # Excluir o próprio usuário
             ).distinct().order_by('first_name', 'username')
         else:
             # Se não tem setor definido, não pode criar para ninguém
             users = User.objects.none()
+    elif user.hierarchy == 'PADRAO':
+        # Usuários padrões só podem criar para outros usuários padrões do mesmo setor
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        
+        if user_sectors:
+            from django.db.models import Q
+            # Filtrar apenas usuários PADRAO que pertencem aos mesmos setores
+            users = User.objects.filter(
+                is_staff=False,
+                hierarchy='PADRAO'
+            ).filter(
+                Q(sectors__in=user_sectors) | Q(sector__in=user_sectors)
+            ).exclude(
+                id=user.id  # Excluir o próprio usuário
+            ).distinct().order_by('first_name', 'username')
+        else:
+            users = User.objects.none()
     else:
         # ADMIN e SUPERADMIN podem criar para todos (exceto eles mesmos)
-        users = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
+        users = User.objects.filter(is_staff=False).exclude(id=user.id).order_by('first_name', 'username')
     
     context = {
         'templates': templates,
         'users': users,
         'today': date.today(),
+        'is_supervisor': is_supervisor,
     }
     return render(request, 'admin_panel/create_daily_checklist.html', context)
 
