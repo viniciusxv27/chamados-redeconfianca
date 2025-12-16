@@ -465,6 +465,7 @@ function renderTickets(tickets) {
     console.log('renderTickets chamado com', tickets.length, 'tickets');
     
     const containers = {
+        'AGUARDANDO': document.getElementById('open-tickets'),
         'ABERTO': document.getElementById('open-tickets'),
         'EM_ANDAMENTO': document.getElementById('progress-tickets'),
         'RESOLVIDO': document.getElementById('resolved-tickets'),
@@ -744,6 +745,7 @@ function renderChatMessages(messages) {
 
 function getStatusColor(status) {
     const colors = {
+        'AGUARDANDO': 'red',
         'ABERTO': 'red',
         'EM_ANDAMENTO': 'yellow',
         'RESOLVIDO': 'blue',

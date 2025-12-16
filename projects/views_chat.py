@@ -582,7 +582,7 @@ def support_admin_dashboard(request):
     
     # Estatísticas filtradas por setor
     total_chats = SupportChat.objects.filter(base_filter).count()
-    open_chats = SupportChat.objects.filter(base_filter, status='ABERTO').count()
+    open_chats = SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count()
     in_progress_chats = SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count()
     resolved_chats = SupportChat.objects.filter(base_filter, status='RESOLVIDO').count()
     
@@ -882,7 +882,7 @@ def support_admin_template(request):
     # Estatísticas básicas para o template (filtradas por setor)
     stats = {
         'total': SupportChat.objects.filter(chats_filter).count(),
-        'open': SupportChat.objects.filter(chats_filter, status='ABERTO').count(),
+        'open': SupportChat.objects.filter(chats_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(chats_filter, status='EM_ANDAMENTO').count(),
         'resolved': SupportChat.objects.filter(chats_filter, status='RESOLVIDO').count(),
         'avg_rating': round(SupportChatRating.objects.filter(
@@ -972,7 +972,7 @@ def support_metrics(request):
     
     # Distribuição por status
     status_data = [
-        SupportChat.objects.filter(status='ABERTO').count(),
+        SupportChat.objects.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
         SupportChat.objects.filter(status='EM_ANDAMENTO').count(),
         SupportChat.objects.filter(status='RESOLVIDO').count(),
         SupportChat.objects.filter(status='FECHADO').count(),
@@ -1138,7 +1138,7 @@ def export_metrics_report(request):
     # Dados por categoria
     categories = SupportCategory.objects.annotate(
         total=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date)),
-        abertos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='ABERTO')),
+        abertos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status__in=['AGUARDANDO', 'ABERTO'])),
         em_andamento=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='EM_ANDAMENTO')),
         resolvidos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='RESOLVIDO')),
         fechados=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='FECHADO'))
@@ -1800,7 +1800,7 @@ def support_metrics(request):
                 categories_stats.append({
                     'name': category.name,
                     'total': total,
-                    'open': cat_tickets.filter(status='ABERTO').count(),
+                    'open': cat_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                     'resolved': cat_tickets.filter(status='RESOLVIDO').count()
                 })
         
