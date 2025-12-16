@@ -2009,6 +2009,18 @@
                         // Clear form
                         this.reset();
                         document.getElementById('categoryDiv').classList.add('hidden');
+                        
+                        // Mostrar notificação de sucesso
+                        const message = data.queue_position 
+                            ? `Chat criado com sucesso! Protocolo: ${data.protocol}. Você está na posição ${data.queue_position} da fila.`
+                            : `Chat criado com sucesso! Protocolo: ${data.protocol}`;
+                        
+                        if (typeof showToast === 'function') {
+                            showToast(message, 'success');
+                        } else {
+                            alert(message);
+                        }
+                        
                         // Switch to my chats and load the new chat
                         switchTab('my');
                         window.loadMyChats();

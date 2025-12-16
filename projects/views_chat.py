@@ -1828,6 +1828,101 @@ def support_metrics(request):
 # ============ NOVAS VIEWS PARA TEMPO REAL E MELHORIAS ============
 
 @login_required
+def poll_dashboard_updates(request):
+    """Polling para atualizações em tempo real do dashboard"""
+    from django.db.models import Q
+    from users.models import Sector
+    
+    # Verificar permissões
+    is_support_agent = SupportAgent.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
+    if not (is_supervisor_or_higher or is_support_agent):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    # Obter timestamp da última verificação
+    last_check = request.GET.get('last_check')
+    if last_check:
+        try:
+            from datetime import datetime
+            last_check_time = datetime.fromisoformat(last_check.replace('Z', '+00:00'))
+        except:
+            last_check_time = None
+    else:
+        last_check_time = None
+    
+    # Obter setores do usuário
+    if request.user.is_superuser:
+        user_sectors = Sector.objects.all()
+        base_filter = Q()
+    else:
+        user_sectors_list = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors_list.append(request.user.sector)
+        user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list])
+        base_filter = Q(sector__in=user_sectors)
+    
+    # Verificar se há novos tickets desde a última verificação
+    has_updates = False
+    new_tickets = []
+    
+    if last_check_time:
+        new_chats = SupportChat.objects.filter(
+            base_filter,
+            created_at__gt=last_check_time
+        ).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')[:5]
+        
+        if new_chats.exists():
+            has_updates = True
+            for chat in new_chats:
+                new_tickets.append({
+                    'id': chat.id,
+                    'title': chat.title,
+                    'protocol': getattr(chat, 'protocol', None),
+                    'status': chat.status,
+                    'get_status_display': chat.get_status_display(),
+                    'priority': chat.priority.lower() if chat.priority else 'media',
+                    'get_priority_display': chat.get_priority_display(),
+                    'user': {
+                        'id': chat.user.id,
+                        'get_full_name': chat.user.get_full_name()
+                    },
+                    'sector': {
+                        'id': chat.sector.id,
+                        'name': chat.sector.name
+                    } if chat.sector else None,
+                    'category': {
+                        'id': chat.category.id,
+                        'name': chat.category.name
+                    } if chat.category else None,
+                    'assigned_to': {
+                        'id': chat.assigned_to.id,
+                        'get_full_name': chat.assigned_to.get_full_name()
+                    } if chat.assigned_to else None,
+                    'created_at': chat.created_at.isoformat()
+                })
+    
+    # Estatísticas atualizadas
+    stats = {
+        'total': SupportChat.objects.filter(base_filter).count(),
+        'open': SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
+        'in_progress': SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count(),
+        'resolved': SupportChat.objects.filter(base_filter, status='RESOLVIDO').count(),
+    }
+    
+    return JsonResponse({
+        'success': True,
+        'has_updates': has_updates,
+        'new_tickets': new_tickets,
+        'stats': stats,
+        'timestamp': timezone.now().isoformat()
+    })
+
+
+@login_required
 def poll_chat_updates(request, chat_id):
     """Polling para atualizações em tempo real do chat"""
     import json

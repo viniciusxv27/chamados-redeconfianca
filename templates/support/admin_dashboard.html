@@ -419,6 +419,8 @@ function getCsrfToken() {
 
 // Variável global para armazenar se é agente
 const isCurrentUserAgent = {{ is_support_agent|yesno:"true,false" }};
+let originalTitle = document.title;
+let blinkTitleInterval = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== Dashboard de Suporte Carregado ===');
@@ -427,9 +429,116 @@ document.addEventListener('DOMContentLoaded', function() {
     
     loadSupportTickets();
     
-    // Atualizar a cada 30 segundos
-    setInterval(loadSupportTickets, 30000);
+    // Polling em tempo real para atualizações (a cada 3 segundos)
+    let lastCheckTimestamp = new Date().toISOString();
+    setInterval(pollForUpdates, 3000);
+    
+    // Parar piscada do título quando a página receber foco
+    window.addEventListener('focus', stopTitleBlink);
 });
+
+function pollForUpdates() {
+    fetch(`/projects/support/api/poll-updates/?last_check=${encodeURIComponent(lastCheckTimestamp)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                lastCheckTimestamp = data.timestamp;
+                
+                if (data.has_updates) {
+                    console.log('Novas atualizações detectadas:', data.new_tickets.length, 'novos tickets');
+                    
+                    // Recarregar todos os tickets para garantir ordem correta
+                    loadSupportTickets();
+                    
+                    // Atualizar contadores
+                    if (data.stats) {
+                        updateStatCounters(data.stats);
+                    }
+                    
+                    // Notificação visual destacada
+                    const ticketWord = data.new_tickets.length === 1 ? 'ticket' : 'tickets';
+                    showToast(`🔔 ${data.new_tickets.length} novo(s) ${ticketWord} recebido(s)!`, 'success');
+                    
+                    // Efeito visual na coluna de abertos
+                    const openTicketsContainer = document.getElementById('open-tickets');
+                    if (openTicketsContainer && openTicketsContainer.parentElement) {
+                        openTicketsContainer.parentElement.classList.add('ring-2', 'ring-red-400');
+                        setTimeout(() => {
+                            openTicketsContainer.parentElement.classList.remove('ring-2', 'ring-red-400');
+                        }, 2000);
+                    }
+                    
+                    // Notificação sonora opcional (apenas se o usuário permitir)
+                    try {
+                        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSt9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFAg+muDyvmwhBSp9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFA');
+                        audio.volume = 0.3;
+                        audio.play().catch(() => {}); // Ignora erro se não permitido
+                    } catch (e) {
+                        // Notificação sonora não disponível
+                    }
+                    
+                    // Piscar título da página se não estiver em foco
+                    if (document.hidden) {
+                        startTitleBlink(data.new_tickets.length);
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erro no polling:', error);
+        });
+}
+
+function startTitleBlink(count) {
+    if (blinkTitleInterval) return; // Já está piscando
+    
+    let isOriginal = true;
+    const newTitle = `(${count}) Novo${count > 1 ? 's' : ''} ticket${count > 1 ? 's' : ''}!`;
+    
+    blinkTitleInterval = setInterval(() => {
+        document.title = isOriginal ? newTitle : originalTitle;
+        isOriginal = !isOriginal;
+    }, 1000);
+}
+
+function stopTitleBlink() {
+    if (blinkTitleInterval) {
+        clearInterval(blinkTitleInterval);
+        blinkTitleInterval = null;
+        document.title = originalTitle;
+    }
+}
+
+function updateStatCounters(stats) {
+    // Atualizar os contadores no topo do dashboard
+    const containers = document.querySelectorAll('.grid > div');
+    if (containers.length >= 2) {
+        // Abertos
+        const openCounter = containers[1].querySelector('.text-3xl');
+        if (openCounter) openCounter.textContent = stats.open;
+        
+        // Em Andamento
+        if (containers.length >= 3) {
+            const progressCounter = containers[2].querySelector('.text-3xl');
+            if (progressCounter) progressCounter.textContent = stats.in_progress;
+        }
+        
+        // Resolvidos
+        if (containers.length >= 4) {
+            const resolvedCounter = containers[3].querySelector('.text-3xl');
+            if (resolvedCounter) resolvedCounter.textContent = stats.resolved;
+        }
+    }
+    
+    // Atualizar badges nas colunas
+    const openBadge = document.querySelector('#open-tickets').previousElementSibling?.querySelector('.bg-red-200');
+    if (openBadge) openBadge.textContent = stats.open;
+    
+    const progressBadge = document.querySelector('#progress-tickets').previousElementSibling?.querySelector('.bg-yellow-200');
+    if (progressBadge) progressBadge.textContent = stats.in_progress;
+    
+    const resolvedBadge = document.querySelector('#resolved-tickets').previousElementSibling?.querySelector('.bg-blue-200');
+    if (resolvedBadge) resolvedBadge.textContent = stats.resolved;
 
 function loadSupportTickets() {
     console.log('Carregando tickets...');
@@ -715,8 +824,15 @@ function renderTicketDetails(data) {
                 
                 <div class="border-t p-4 flex-shrink-0 bg-white">
                     <div class="flex space-x-2">
+                        <input type="file" id="fileInput-${data.chat.id}" class="hidden" onchange="handleFileUpload(${data.chat.id}, this)">
+                        <button onclick="document.getElementById('fileInput-${data.chat.id}').click()" 
+                                class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-md text-sm flex-shrink-0"
+                                title="Anexar arquivo">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
                         <input type="text" id="messageInput" placeholder="Digite sua resposta..." 
-                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               onkeypress="if(event.key==='Enter') sendSupportMessage(${data.chat.id})">
                         <button onclick="sendSupportMessage(${data.chat.id})" 
                                 class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md text-sm whitespace-nowrap flex-shrink-0">
                             <i class="fas fa-paper-plane mr-2"></i>Enviar
@@ -729,18 +845,49 @@ function renderTicketDetails(data) {
 }
 
 function renderChatMessages(messages) {
-    return messages.map(msg => `
-        <div class="mb-4 ${msg.is_own ? 'text-right' : ''}">
-            <div class="inline-block max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                msg.is_own 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-gray-200 text-gray-800'
-            }">
-                <p class="text-sm">${msg.message}</p>
-                <p class="text-xs opacity-75 mt-1">${msg.user.name} - ${msg.created_at}</p>
+    return messages.map(msg => {
+        // Renderizar arquivos se existirem
+        let filesHtml = '';
+        if (msg.files && msg.files.length > 0) {
+            filesHtml = msg.files.map(file => {
+                if (file.type === 'IMAGE') {
+                    return `<a href="${file.url}" target="_blank" class="block mt-2">
+                        <img src="${file.url}" class="max-w-full rounded" style="max-height: 200px;" alt="${file.name}">
+                    </a>`;
+                } else if (file.type === 'VIDEO') {
+                    return `<video src="${file.url}" controls class="max-w-full rounded mt-2" style="max-height: 200px;"></video>`;
+                } else if (file.type === 'AUDIO') {
+                    return `<audio src="${file.url}" controls class="w-full mt-2"></audio>`;
+                } else {
+                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 text-white hover:underline ${msg.is_own ? 'text-white' : 'text-blue-600'}">
+                        <i class="fas fa-file mr-2"></i>${file.name} (${formatFileSize(file.size)})
+                    </a>`;
+                }
+            }).join('');
+        }
+        
+        return `
+            <div class="mb-4 ${msg.is_own ? 'text-right' : ''}">
+                <div class="inline-block max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    msg.is_own 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-gray-200 text-gray-800'
+                }">
+                    <p class="text-sm whitespace-pre-wrap">${escapeHtml(msg.message)}</p>
+                    ${filesHtml}
+                    <p class="text-xs opacity-75 mt-1">${msg.user.name} - ${msg.created_at}</p>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
 
 function getStatusColor(status) {
@@ -812,6 +959,79 @@ function assignChatToMe(chatId) {
     .catch(error => {
         console.error('Erro:', error);
         showToast('Erro ao assumir atendimento', 'error');
+    });
+}
+
+function sendSupportMessage(chatId) {
+    const messageInput = document.getElementById('messageInput');
+    const message = messageInput.value.trim();
+    
+    if (!message) {
+        showToast('Digite uma mensagem', 'error');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+    
+    fetch(`/projects/support/chat/${chatId}/send/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            messageInput.value = '';
+            // Recarregar o chat para mostrar a nova mensagem
+            openTicketModal(chatId);
+        } else {
+            showToast('Erro ao enviar mensagem: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('Erro ao enviar mensagem', 'error');
+    });
+}
+
+function handleFileUpload(chatId, input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    // Validar tamanho (25MB)
+    if (file.size > 25 * 1024 * 1024) {
+        showToast('Arquivo muito grande! Máximo: 25MB', 'error');
+        input.value = '';
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('message', `📎 ${file.name}`);
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+    
+    // Mostrar indicador de upload
+    showToast('Enviando arquivo...', 'info');
+    
+    fetch(`/projects/support/chat/${chatId}/upload/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Arquivo enviado com sucesso!', 'success');
+            input.value = '';
+            // Recarregar o chat para mostrar o arquivo
+            openTicketModal(chatId);
+        } else {
+            showToast('Erro ao enviar arquivo: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('Erro ao enviar arquivo', 'error');
     });
 }
 

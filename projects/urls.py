@@ -68,6 +68,7 @@ urlpatterns = [
     path('support/api/categories/', views_chat.get_support_categories_api, name='support_categories_api'),
     path('support/api/agents/', views_chat.get_support_agents_api, name='support_agents_api'),
     path('support/api/available-users/', views_chat.get_available_users_api, name='support_available_users_api'),
+    path('support/api/poll-updates/', views_chat.poll_dashboard_updates, name='poll_dashboard_updates'),
     
     # API
     path('api/sectors/<int:sector_id>/users/', api_views.sector_users_api, name='sector_users_api'),

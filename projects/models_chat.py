@@ -4,6 +4,14 @@ from django.utils import timezone
 from projects.models import Activity
 
 
+def get_media_storage():
+    """Return media storage backend"""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage()
+    return None
+
+
 class TaskChat(models.Model):
     """Chat de uma tarefa específica"""
     activity = models.OneToOneField(
@@ -238,7 +246,10 @@ class SupportChatFile(models.Model):
         on_delete=models.CASCADE,
         related_name='files'
     )
-    file = models.FileField(upload_to='support_chat_files/%Y/%m/')
+    file = models.FileField(
+        upload_to='support_chat_files/%Y/%m/',
+        storage=get_media_storage()
+    )
     file_type = models.CharField(max_length=20, choices=MESSAGE_TYPES)
     original_name = models.CharField(max_length=255)
     file_size = models.IntegerField()
