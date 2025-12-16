@@ -421,6 +421,7 @@ function getCsrfToken() {
 const isCurrentUserAgent = {{ is_support_agent|yesno:"true,false" }};
 let originalTitle = document.title;
 let blinkTitleInterval = null;
+let lastCheckTimestamp = new Date().toISOString(); // Variável global para polling
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== Dashboard de Suporte Carregado ===');
@@ -430,7 +431,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSupportTickets();
     
     // Polling em tempo real para atualizações (a cada 3 segundos)
-    let lastCheckTimestamp = new Date().toISOString();
     setInterval(pollForUpdates, 3000);
     
     // Parar piscada do título quando a página receber foco
@@ -441,17 +441,20 @@ function pollForUpdates() {
     fetch(`/projects/support/api/poll-updates/?last_check=${encodeURIComponent(lastCheckTimestamp)}`)
         .then(response => response.json())
         .then(data => {
+            console.log('[Polling] Resposta recebida:', data);
             if (data.success) {
                 lastCheckTimestamp = data.timestamp;
                 
                 if (data.has_updates) {
-                    console.log('Novas atualizações detectadas:', data.new_tickets.length, 'novos tickets');
+                    console.log('[Polling] Novas atualizações detectadas:', data.new_tickets.length, 'novos tickets');
+                    console.log('[Polling] Novos tickets:', data.new_tickets);
                     
                     // Recarregar todos os tickets para garantir ordem correta
                     loadSupportTickets();
                     
                     // Atualizar contadores
                     if (data.stats) {
+                        console.log('[Polling] Atualizando contadores:', data.stats);
                         updateStatCounters(data.stats);
                     }
                     
@@ -539,28 +542,33 @@ function updateStatCounters(stats) {
     
     const resolvedBadge = document.querySelector('#resolved-tickets').previousElementSibling?.querySelector('.bg-blue-200');
     if (resolvedBadge) resolvedBadge.textContent = stats.resolved;
+}
 
 function loadSupportTickets() {
-    console.log('Carregando tickets...');
+    console.log('[LoadTickets] Iniciando carregamento de tickets...');
     fetch('/projects/support/admin/?format=json')
         .then(response => {
-            console.log('Response status:', response.status);
+            console.log('[LoadTickets] Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Dados recebidos:', data);
-            console.log('Tickets:', data.recent_chats);
+            console.log('[LoadTickets] Dados recebidos:', data);
+            console.log('[LoadTickets] Número de tickets:', data.recent_chats ? data.recent_chats.length : 0);
             if (data.recent_chats && data.recent_chats.length > 0) {
+                console.log('[LoadTickets] Chamando renderTickets com', data.recent_chats.length, 'tickets');
                 renderTickets(data.recent_chats);
             } else {
-                console.warn('Nenhum ticket encontrado');
+                console.warn('[LoadTickets] Nenhum ticket encontrado');
                 // Limpar containers
                 ['open-tickets', 'progress-tickets', 'resolved-tickets', 'closed-tickets'].forEach(id => {
                     const container = document.getElementById(id);
-                    if (container) container.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Nenhum ticket</div>';
+                    if (container) {
+                        container.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Nenhum ticket</div>';
+                        console.log('[LoadTickets] Container', id, 'limpo');
+                    }
                 });
             }
         })

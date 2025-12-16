@@ -344,7 +344,8 @@ def send_support_message(request, chat_id):
             'message': message.message,
             'is_internal': message.is_internal,
             'created_at': message.created_at.strftime('%d/%m/%Y %H:%M'),
-            'is_own': True
+            'is_own': True,
+            'files': []
         }
     })
 
@@ -1832,6 +1833,9 @@ def poll_dashboard_updates(request):
     """Polling para atualizações em tempo real do dashboard"""
     from django.db.models import Q
     from users.models import Sector
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     # Verificar permissões
     is_support_agent = SupportAgent.objects.filter(
@@ -1849,21 +1853,26 @@ def poll_dashboard_updates(request):
         try:
             from datetime import datetime
             last_check_time = datetime.fromisoformat(last_check.replace('Z', '+00:00'))
+            logger.info(f'[Polling] Last check time: {last_check_time}')
         except:
             last_check_time = None
+            logger.warning('[Polling] Failed to parse last_check time')
     else:
         last_check_time = None
+        logger.info('[Polling] No last_check provided')
     
     # Obter setores do usuário
     if request.user.is_superuser:
         user_sectors = Sector.objects.all()
         base_filter = Q()
+        logger.info('[Polling] User is superuser - see all tickets')
     else:
         user_sectors_list = list(request.user.sectors.all())
         if request.user.sector:
             user_sectors_list.append(request.user.sector)
         user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list])
         base_filter = Q(sector__in=user_sectors)
+        logger.info(f'[Polling] User sectors: {[s.name for s in user_sectors]}')
     
     # Verificar se há novos tickets desde a última verificação
     has_updates = False
@@ -1875,9 +1884,12 @@ def poll_dashboard_updates(request):
             created_at__gt=last_check_time
         ).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')[:5]
         
+        logger.info(f'[Polling] Found {new_chats.count()} new chats since {last_check_time}')
+        
         if new_chats.exists():
             has_updates = True
             for chat in new_chats:
+                logger.info(f'[Polling] New chat: {chat.id} - {chat.title} - Status: {chat.status}')
                 new_tickets.append({
                     'id': chat.id,
                     'title': chat.title,
@@ -1912,6 +1924,9 @@ def poll_dashboard_updates(request):
         'in_progress': SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count(),
         'resolved': SupportChat.objects.filter(base_filter, status='RESOLVIDO').count(),
     }
+    
+    logger.info(f'[Polling] Stats: {stats}')
+    logger.info(f'[Polling] Has updates: {has_updates}, New tickets count: {len(new_tickets)}')
     
     return JsonResponse({
         'success': True,
