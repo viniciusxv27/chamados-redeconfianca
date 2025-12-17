@@ -991,6 +991,39 @@ function sendSupportMessage(chatId) {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
     
+    // Se há imagem colada, enviar como arquivo
+    if (typeof pastedImageFile !== 'undefined' && pastedImageFile) {
+        const formData = new FormData();
+        formData.append('file', pastedImageFile);
+        formData.append('message', message || '🖼️ Imagem');
+        formData.append('csrfmiddlewaretoken', getCsrfToken());
+        
+        showToast('Enviando imagem...', 'info');
+        
+        fetch(`/projects/support/chat/${chatId}/upload/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Imagem enviada com sucesso!', 'success');
+                messageInput.value = '';
+                clearPastedImage(chatId);
+                openTicketModal(chatId);
+            } else {
+                showToast('Erro ao enviar imagem: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            showToast('Erro ao enviar imagem', 'error');
+        });
+        
+        return;
+    }
+    
+    // Enviar mensagem de texto normal
     if (!message) {
         showToast('Digite uma mensagem', 'error');
         return;
@@ -1150,94 +1183,6 @@ function closeChat(chatId) {
     .catch(error => {
         console.error('Erro:', error);
         alert('Erro ao fechar ticket');
-    });
-}
-
-function sendSupportMessage(chatId) {
-    const messageInput = document.getElementById('messageInput');
-    const message = messageInput.value.trim();
-    
-    // Se há imagem colada, enviar como arquivo
-    if (pastedImageFile) {
-        const formData = new FormData();
-        formData.append('file', pastedImageFile);
-        formData.append('message', message || '🖼️ Imagem');
-        formData.append('csrfmiddlewaretoken', getCsrfToken());
-        
-        showToast('Enviando imagem...', 'info');
-        
-        fetch(`/projects/support/chat/${chatId}/upload/`, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast('Imagem enviada com sucesso!', 'success');
-                messageInput.value = '';
-                clearPastedImage(chatId);
-                openTicketModal(chatId);
-            } else {
-                showToast('Erro ao enviar imagem: ' + data.error, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            showToast('Erro ao enviar imagem', 'error');
-        });
-        
-        return;
-    }
-    
-    // Enviar mensagem de texto normal
-    if (!message) {
-        showToast('Digite uma mensagem', 'error');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('message', message);
-    formData.append('csrfmiddlewaretoken', getCsrfToken());
-    
-    fetch(`/projects/support/chat/${chatId}/send/`, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            messageInput.value = '';
-            // Recarregar o chat para mostrar a nova mensagem
-            openTicketModal(chatId);
-        } else {
-            showToast('Erro ao enviar mensagem: ' + data.error, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        showToast('Erro ao enviar mensagem', 'error');
-    });
-}
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({ message: message })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            messageInput.value = '';
-            // Recarregar mensagens
-            openTicketModal(chatId);
-        } else {
-            alert('Erro ao enviar mensagem: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao enviar mensagem');
     });
 }
 
