@@ -324,7 +324,7 @@
         <div class="flex-1 overflow-y-auto p-6">
             <!-- Filtros -->
             <div class="bg-gray-50 p-4 rounded-lg mb-6">
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-4 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
                         <input type="date" id="metricsStartDate" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
@@ -336,6 +336,11 @@
                     <div class="flex items-end">
                         <button onclick="loadMetrics()" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-md">
                             <i class="fas fa-search mr-2"></i>Buscar
+                        </button>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="exportMetricsToExcel()" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md">
+                            <i class="fas fa-file-excel mr-2"></i>Exportar Excel
                         </button>
                     </div>
                 </div>
@@ -376,7 +381,7 @@
                                     <th class="px-3 py-2 text-center">Taxa</th>
                                 </tr>
                             </thead>
-                            <tbody id="metricsAgentTable">
+                            <tbody id="metricAgentsTable">
                                 <tr><td colspan="4" class="text-center text-gray-500 py-4">Carregando...</td></tr>
                             </tbody>
                         </table>
@@ -396,7 +401,7 @@
                                     <th class="px-3 py-2 text-center">Resolvidos</th>
                                 </tr>
                             </thead>
-                            <tbody id="metricsCategoryTable">
+                            <tbody id="metricCategoriesTable">
                                 <tr><td colspan="4" class="text-center text-gray-500 py-4">Carregando...</td></tr>
                             </tbody>
                         </table>
@@ -838,13 +843,25 @@ function renderTicketDetails(data) {
                                 title="Anexar arquivo">
                             <i class="fas fa-paperclip"></i>
                         </button>
-                        <input type="text" id="messageInput" placeholder="Digite sua resposta..." 
+                        <input type="text" id="messageInput" placeholder="Digite sua resposta ou cole uma imagem (Ctrl+V)..." 
                                class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                               onkeypress="if(event.key==='Enter') sendSupportMessage(${data.chat.id})">
+                               onkeypress="if(event.key==='Enter') sendSupportMessage(${data.chat.id})"
+                               onpaste="handlePaste(event, ${data.chat.id})">
                         <button onclick="sendSupportMessage(${data.chat.id})" 
                                 class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md text-sm whitespace-nowrap flex-shrink-0">
                             <i class="fas fa-paper-plane mr-2"></i>Enviar
                         </button>
+                    </div>
+                    <div id="pastePreview-${data.chat.id}" class="mt-2 hidden">
+                        <div class="bg-gray-50 p-2 rounded-lg flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <img id="pasteImage-${data.chat.id}" class="h-16 w-16 object-cover rounded" alt="Preview">
+                                <span class="text-sm text-gray-600">Imagem colada - Pronta para enviar</span>
+                            </div>
+                            <button onclick="clearPastedImage(${data.chat.id})" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1043,6 +1060,51 @@ function handleFileUpload(chatId, input) {
     });
 }
 
+// Variável global para armazenar imagem colada
+let pastedImageFile = null;
+
+function handlePaste(event, chatId) {
+    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    
+    for (let item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            event.preventDefault();
+            
+            const blob = item.getAsFile();
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                // Mostrar preview
+                const preview = document.getElementById(`pastePreview-${chatId}`);
+                const img = document.getElementById(`pasteImage-${chatId}`);
+                
+                if (preview && img) {
+                    img.src = e.target.result;
+                    preview.classList.remove('hidden');
+                    
+                    // Armazenar arquivo para envio
+                    pastedImageFile = new File([blob], `imagem-colada-${Date.now()}.png`, {
+                        type: blob.type
+                    });
+                    
+                    showToast('Imagem colada! Clique em Enviar para anexar.', 'info');
+                }
+            };
+            
+            reader.readAsDataURL(blob);
+            break;
+        }
+    }
+}
+
+function clearPastedImage(chatId) {
+    const preview = document.getElementById(`pastePreview-${chatId}`);
+    if (preview) {
+        preview.classList.add('hidden');
+    }
+    pastedImageFile = null;
+}
+
 function resolveChat(chatId) {
     if (!confirm('Marcar este ticket como resolvido?')) return;
     
@@ -1095,9 +1157,67 @@ function sendSupportMessage(chatId) {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
     
-    if (!message) return;
+    // Se há imagem colada, enviar como arquivo
+    if (pastedImageFile) {
+        const formData = new FormData();
+        formData.append('file', pastedImageFile);
+        formData.append('message', message || '🖼️ Imagem');
+        formData.append('csrfmiddlewaretoken', getCsrfToken());
+        
+        showToast('Enviando imagem...', 'info');
+        
+        fetch(`/projects/support/chat/${chatId}/upload/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Imagem enviada com sucesso!', 'success');
+                messageInput.value = '';
+                clearPastedImage(chatId);
+                openTicketModal(chatId);
+            } else {
+                showToast('Erro ao enviar imagem: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            showToast('Erro ao enviar imagem', 'error');
+        });
+        
+        return;
+    }
+    
+    // Enviar mensagem de texto normal
+    if (!message) {
+        showToast('Digite uma mensagem', 'error');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
     
     fetch(`/projects/support/chat/${chatId}/send/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            messageInput.value = '';
+            // Recarregar o chat para mostrar a nova mensagem
+            openTicketModal(chatId);
+        } else {
+            showToast('Erro ao enviar mensagem: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('Erro ao enviar mensagem', 'error');
+    });
+}
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1580,7 +1700,7 @@ function loadMetrics() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                renderMetrics(data.metrics);
+                updateMetricsDisplay(data.metrics);
             } else {
                 alert('Erro ao carregar métricas: ' + data.error);
             }
@@ -1589,6 +1709,63 @@ function loadMetrics() {
             console.error('Erro:', error);
             alert('Erro ao carregar métricas');
         });
+}
+
+function exportMetricsToExcel() {
+    const startDate = document.getElementById('metricsStartDate').value;
+    const endDate = document.getElementById('metricsEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Por favor, selecione o período antes de exportar');
+        return;
+    }
+    
+    showToast('Gerando relatório em Excel...', 'info');
+    
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate
+    });
+    
+    // Abrir em nova aba para download
+    window.open(`/projects/support/metrics/export/?${params}`, '_blank');
+    
+    setTimeout(() => {
+        showToast('Download iniciado!', 'success');
+    }, 1000);
+}
+
+function updateMetricsDisplay(metrics) {
+    // Atualizar estatísticas gerais
+    document.getElementById('metricTotalTickets').textContent = metrics.total_tickets || 0;
+    document.getElementById('metricResolved').textContent = metrics.resolved_tickets || 0;
+    document.getElementById('metricAvgTime').textContent = metrics.avg_resolution_time || '0h';
+    document.getElementById('metricSatisfaction').textContent = (metrics.satisfaction_rate || 0) + '%';
+    
+    // Atualizar tabela de agentes
+    const agentTableBody = document.getElementById('metricAgentsTable');
+    if (agentTableBody && metrics.by_agent) {
+        agentTableBody.innerHTML = metrics.by_agent.map(agent => `
+            <tr class="border-b">
+                <td class="py-2">${agent.name}</td>
+                <td class="text-center">${agent.total}</td>
+                <td class="text-center">${agent.resolved}</td>
+            </tr>
+        `).join('');
+    }
+    
+    // Atualizar tabela de categorias
+    const categoryTableBody = document.getElementById('metricCategoriesTable');
+    if (categoryTableBody && metrics.by_category) {
+        categoryTableBody.innerHTML = metrics.by_category.map(cat => `
+            <tr class="border-b">
+                <td class="py-2">${cat.name}</td>
+                <td class="text-center">${cat.total}</td>
+                <td class="text-center">${cat.open}</td>
+                <td class="text-center">${cat.resolved}</td>
+            </tr>
+        `).join('');
+    }
 }
 
 function renderMetrics(metrics) {
