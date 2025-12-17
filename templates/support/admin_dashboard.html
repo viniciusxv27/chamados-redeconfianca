@@ -992,9 +992,9 @@ function sendSupportMessage(chatId) {
     const message = messageInput.value.trim();
     
     // Se há imagem colada, enviar como arquivo
-    if (typeof pastedImageFile !== 'undefined' && pastedImageFile) {
+    if (typeof window.pastedImageFile !== 'undefined' && window.pastedImageFile) {
         const formData = new FormData();
-        formData.append('file', pastedImageFile);
+        formData.append('file', window.pastedImageFile);
         formData.append('message', message || '🖼️ Imagem');
         formData.append('csrfmiddlewaretoken', getCsrfToken());
         
@@ -1093,34 +1093,53 @@ function handleFileUpload(chatId, input) {
     });
 }
 
-// Variável global para armazenar imagem colada
-let pastedImageFile = null;
+// Variável global para armazenar imagem colada (usar window para evitar conflitos)
+window.pastedImageFile = window.pastedImageFile || null;
 
 function handlePaste(event, chatId) {
-    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    console.log('handlePaste chamado para chat:', chatId);
+    
+    const clipboardData = event.clipboardData || event.originalEvent?.clipboardData;
+    if (!clipboardData) {
+        console.log('Sem clipboardData');
+        return;
+    }
+    
+    const items = clipboardData.items;
+    console.log('Items no clipboard:', items.length);
     
     for (let item of items) {
+        console.log('Item type:', item.type);
         if (item.type.indexOf('image') !== -1) {
+            console.log('Imagem detectada!');
             event.preventDefault();
             
             const blob = item.getAsFile();
+            console.log('Blob:', blob);
             const reader = new FileReader();
             
             reader.onload = function(e) {
+                console.log('FileReader onload');
                 // Mostrar preview
                 const preview = document.getElementById(`pastePreview-${chatId}`);
                 const img = document.getElementById(`pasteImage-${chatId}`);
+                
+                console.log('Preview element:', preview);
+                console.log('Img element:', img);
                 
                 if (preview && img) {
                     img.src = e.target.result;
                     preview.classList.remove('hidden');
                     
                     // Armazenar arquivo para envio
-                    pastedImageFile = new File([blob], `imagem-colada-${Date.now()}.png`, {
+                    window.pastedImageFile = new File([blob], `imagem-colada-${Date.now()}.png`, {
                         type: blob.type
                     });
                     
+                    console.log('pastedImageFile criado:', window.pastedImageFile);
                     showToast('Imagem colada! Clique em Enviar para anexar.', 'info');
+                } else {
+                    console.error('Elementos de preview não encontrados');
                 }
             };
             
@@ -1135,7 +1154,7 @@ function clearPastedImage(chatId) {
     if (preview) {
         preview.classList.add('hidden');
     }
-    pastedImageFile = null;
+    window.pastedImageFile = null;
 }
 
 function resolveChat(chatId) {
