@@ -2348,13 +2348,26 @@
                 sendMessageForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     
-                    if (!currentChatId) return;
+                    console.log('[Envio] Formulário submetido');
+                    console.log('[Envio] currentChatId:', currentChatId);
+                    
+                    if (!currentChatId) {
+                        console.error('[Envio] Nenhum chat ativo');
+                        return;
+                    }
                     
                     const messageInput = document.getElementById('messageInput');
                     const message = messageInput.value.trim();
                     
+                    console.log('[Envio] Mensagem:', message);
+                    console.log('[Envio] Arquivo:', selectedFile);
+                    console.log('[Envio] Imagem colada:', window.pastedImageFile);
+                    
                     // Se não tem mensagem nem arquivo nem imagem colada, não enviar
-                    if (!message && !selectedFile && !window.pastedImageFile) return;
+                    if (!message && !selectedFile && !window.pastedImageFile) {
+                        console.log('[Envio] Nada para enviar');
+                        return;
+                    }
                     
                     const formData = new FormData();
                     formData.append('message', message || '');
@@ -2371,17 +2384,25 @@
                         url = `/projects/support/chat/${currentChatId}/upload/`;
                     }
 
+                    console.log('[Envio] URL:', url);
+
                     fetch(url, {
                         method: 'POST',
                         body: formData
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        console.log('[Envio] Resposta status:', response.status);
+                        return response.json();
+                    })
                     .then(data => {
+                        console.log('[Envio] Resposta data:', data);
                         if (data.success) {
                             // Add message to chat
                             const messagesContainer = document.getElementById('activeChatMessages');
-                            appendMessage(messagesContainer, data.message);
-                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            if (messagesContainer) {
+                                appendMessage(messagesContainer, data.message);
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            }
                             
                             // Atualizar lastMessageId
                             if (data.message.id > lastMessageId) {
@@ -2390,17 +2411,22 @@
                         
                             // Clear input and file
                             messageInput.value = '';
-                            clearFilePreview();
-                            clearPastedImage();
+                            if (window.clearFilePreview) window.clearFilePreview();
+                            if (window.clearPastedImage) window.clearPastedImage();
+                            
+                            console.log('[Envio] Mensagem enviada com sucesso');
                         } else {
+                            console.error('[Envio] Erro no envio:', data.error);
                             alert('Erro ao enviar mensagem: ' + data.error);
                         }
                     })
                     .catch(error => {
-                    console.error('Error:', error);
-                    alert('Erro ao enviar mensagem');
+                        console.error('[Envio] Erro na requisição:', error);
+                        alert('Erro ao enviar mensagem');
+                    });
                 });
-                });
+            } else {
+                console.error('[Envio] Formulário sendMessageForm não encontrado');
             }
         });
 
