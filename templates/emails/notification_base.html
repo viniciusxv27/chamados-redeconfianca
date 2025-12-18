@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        /* Reset */
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; }
+        
+        /* Base */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+            color: #333333;
+            line-height: 1.6;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            padding: 30px 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .header .logo {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 15px;
+        }
+        
+        /* Content */
+        .content {
+            padding: 30px 25px;
+        }
+        
+        .greeting {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .message-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #FF6B35;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .message-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2C3E50;
+            margin: 0 0 10px 0;
+        }
+        
+        .message-content {
+            font-size: 15px;
+            color: #555;
+            margin: 0;
+        }
+        
+        /* Info Box */
+        .info-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+        
+        .info-box.success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        
+        .info-box.info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        
+        .info-box.danger {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        
+        /* Details */
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .details-table th,
+        .details-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .details-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            width: 35%;
+        }
+        
+        .details-table td {
+            color: #333;
+        }
+        
+        /* Button */
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 14px 35px;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .button:hover {
+            box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: #2C3E50;
+            padding: 25px 20px;
+            text-align: center;
+        }
+        
+        .footer p {
+            color: #aaa;
+            font-size: 12px;
+            margin: 5px 0;
+        }
+        
+        .footer a {
+            color: #FF6B35;
+            text-decoration: none;
+        }
+        
+        /* Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-badge.aberto { background-color: #e3f2fd; color: #1976d2; }
+        .status-badge.em_andamento { background-color: #fff3e0; color: #f57c00; }
+        .status-badge.resolvido { background-color: #e8f5e9; color: #388e3c; }
+        .status-badge.fechado { background-color: #f5f5f5; color: #757575; }
+        
+        /* Priority Badge */
+        .priority-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .priority-badge.baixa { background-color: #e8f5e9; color: #388e3c; }
+        .priority-badge.media { background-color: #fff3e0; color: #f57c00; }
+        .priority-badge.alta { background-color: #ffebee; color: #d32f2f; }
+        .priority-badge.critica { background-color: #d32f2f; color: #ffffff; }
+        
+        /* Responsive */
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                width: 100% !important;
+            }
+            .content {
+                padding: 20px 15px !important;
+            }
+            .button {
+                display: block !important;
+                text-align: center !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+        <tr>
+            <td align="center" style="padding: 20px 10px;">
+                <table class="email-container" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td class="header">
+                            <img src="{{ base_url }}/static/images/logo.png" alt="Rede Confiança" class="logo" style="width: 60px; height: 60px;">
+                            <h1>Rede Confiança</h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td class="content">
+                            <p class="greeting">Olá, <strong>{{ user_name|default:"Usuário" }}</strong>!</p>
+                            
+                            <!-- Message Box -->
+                            <div class="message-box">
+                                <h2 class="message-title">{{ title }}</h2>
+                                <p class="message-content">{{ message|linebreaks }}</p>
+                            </div>
+                            
+                            {% if ticket %}
+                            <!-- Ticket Details -->
+                            <table class="details-table">
+                                <tr>
+                                    <th>Chamado</th>
+                                    <td>#{{ ticket.id }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Título</th>
+                                    <td>{{ ticket.title }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Setor</th>
+                                    <td>{{ ticket.sector.name|default:"-" }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Status</th>
+                                    <td>
+                                        <span class="status-badge {{ ticket.status|lower }}">
+                                            {{ ticket.get_status_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Prioridade</th>
+                                    <td>
+                                        <span class="priority-badge {{ ticket.priority|lower }}">
+                                            {{ ticket.get_priority_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% if ticket.assigned_to %}
+                                <tr>
+                                    <th>Responsável</th>
+                                    <td>{{ ticket.assigned_to.full_name }}</td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                            {% endif %}
+                            
+                            {% if communication %}
+                            <!-- Communication Details -->
+                            <table class="details-table">
+                                <tr>
+                                    <th>Comunicado</th>
+                                    <td>{{ communication.title }}</td>
+                                </tr>
+                                <tr>
+                                    <th>De</th>
+                                    <td>{{ communication.sender.full_name }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Data</th>
+                                    <td>{{ communication.created_at|date:"d/m/Y H:i" }}</td>
+                                </tr>
+                                {% if communication.is_pinned %}
+                                <tr>
+                                    <th>Importância</th>
+                                    <td><span class="priority-badge alta">Fixado</span></td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                            {% endif %}
+                            
+                            {% if old_status and new_status %}
+                            <!-- Status Change Info -->
+                            <div class="info-box info">
+                                <strong>Mudança de Status:</strong><br>
+                                {{ old_status }} → {{ new_status }}
+                                {% if changed_by %}
+                                <br><small>Por: {{ changed_by.full_name }}</small>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            
+                            {% if assigned_by %}
+                            <!-- Assignment Info -->
+                            <div class="info-box success">
+                                <strong>Atribuição:</strong><br>
+                                Você foi atribuído a este chamado por <strong>{{ assigned_by.full_name }}</strong>.
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Action Button -->
+                            <div class="button-container">
+                                <a href="{{ base_url }}{{ action_url }}" class="button">
+                                    {{ action_text|default:"Ver Detalhes" }}
+                                </a>
+                            </div>
+                            
+                            <p style="color: #888; font-size: 13px; text-align: center;">
+                                Se o botão não funcionar, copie e cole este link no navegador:<br>
+                                <a href="{{ base_url }}{{ action_url }}" style="color: #FF6B35;">{{ base_url }}{{ action_url }}</a>
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td class="footer">
+                            <p>Esta é uma notificação automática do sistema <strong>Rede Confiança</strong>.</p>
+                            <p>Não responda a este email.</p>
+                            <p style="margin-top: 15px;">
+                                <a href="{{ base_url }}/notifications/settings/">Gerenciar preferências de notificação</a>
+                            </p>
+                            <p style="margin-top: 10px; color: #666;">
+                                © {% now "Y" %} Rede Confiança. Todos os direitos reservados.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

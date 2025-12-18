@@ -139,8 +139,8 @@ class Ticket(models.Model):
             if self.category and self.category.webhook_url:
                 self.trigger_webhook()
             
-            # Enviar notificação push para novo ticket
-            self._send_push_notification_new_ticket()
+            # Notificação via signals (notifications/signals.py)
+            # Não chamar mais diretamente aqui para evitar duplicação
             
             # Verificar se é ordem de compra e iniciar fluxo de aprovação
             if self.category and self.category.name.lower() == 'ordem de compra':
@@ -148,13 +148,11 @@ class Ticket(models.Model):
         elif old_status != self.status:
             if self.status == 'RESOLVIDO':
                 self.trigger_webhooks('TICKET_RESOLVED')
-                self._send_push_notification_status_change('resolvido')
             elif self.status == 'FECHADO':
                 self.trigger_webhooks('TICKET_CLOSED')
-                self._send_push_notification_status_change('fechado')
             else:
                 self.trigger_webhooks('TICKET_UPDATED')
-                self._send_push_notification_status_change('atualizado')
+            # Notificação de mudança de status via signals (notifications/signals.py)
     
     def trigger_webhooks(self, event_type, user=None):
         """Dispara todos os webhooks configurados para o evento"""

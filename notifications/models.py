@@ -288,3 +288,86 @@ class DeviceToken(models.Model):
     
     def __str__(self):
         return f"{self.user.get_full_name()} - {self.get_device_type_display()}"
+
+
+class NotificationPreference(models.Model):
+    """Preferências de notificação do usuário"""
+    
+    user = models.OneToOneField(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='notification_preferences',
+        verbose_name="Usuário"
+    )
+    
+    # Canais habilitados
+    in_app_enabled = models.BooleanField(default=True, verbose_name="Notificações In-App")
+    push_enabled = models.BooleanField(default=True, verbose_name="Notificações Push/Browser")
+    email_enabled = models.BooleanField(default=True, verbose_name="Notificações por Email")
+    
+    # Tipos de notificação habilitados
+    ticket_created = models.BooleanField(default=True, verbose_name="Novos Chamados")
+    ticket_assigned = models.BooleanField(default=True, verbose_name="Atribuição de Chamados")
+    ticket_status_changed = models.BooleanField(default=True, verbose_name="Mudança de Status")
+    ticket_comment = models.BooleanField(default=True, verbose_name="Novos Comentários")
+    communication_new = models.BooleanField(default=True, verbose_name="Novos Comunicados")
+    
+    # Configurações de horário
+    quiet_hours_enabled = models.BooleanField(default=False, verbose_name="Horário Silencioso")
+    quiet_hours_start = models.TimeField(null=True, blank=True, verbose_name="Início do Silêncio")
+    quiet_hours_end = models.TimeField(null=True, blank=True, verbose_name="Fim do Silêncio")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Preferência de Notificação"
+        verbose_name_plural = "Preferências de Notificações"
+    
+    def __str__(self):
+        return f"Preferências de {self.user.full_name}"
+    
+    def is_channel_enabled(self, channel: str) -> bool:
+        """Verifica se um canal está habilitado"""
+        channel_map = {
+            'in_app': self.in_app_enabled,
+            'push': self.push_enabled,
+            'browser': self.push_enabled,
+            'email': self.email_enabled,
+        }
+        return channel_map.get(channel, True)
+    
+    def is_type_enabled(self, notification_type: str) -> bool:
+        """Verifica se um tipo de notificação está habilitado"""
+        type_map = {
+            'ticket_created': self.ticket_created,
+            'ticket_assigned': self.ticket_assigned,
+            'ticket_status_changed': self.ticket_status_changed,
+            'ticket_comment': self.ticket_comment,
+            'communication_new': self.communication_new,
+        }
+        return type_map.get(notification_type, True)
+    
+    def is_quiet_hours(self) -> bool:
+        """Verifica se está em horário silencioso"""
+        if not self.quiet_hours_enabled:
+            return False
+        
+        if not self.quiet_hours_start or not self.quiet_hours_end:
+            return False
+        
+        from django.utils import timezone
+        current_time = timezone.localtime().time()
+        
+        if self.quiet_hours_start <= self.quiet_hours_end:
+            return self.quiet_hours_start <= current_time <= self.quiet_hours_end
+        else:
+            # Horário atravessa meia-noite (ex: 22:00 - 07:00)
+            return current_time >= self.quiet_hours_start or current_time <= self.quiet_hours_end
+    
+    @classmethod
+    def get_or_create_for_user(cls, user):
+        """Obtém ou cria preferências para um usuário"""
+        preferences, created = cls.objects.get_or_create(user=user)
+        return preferences

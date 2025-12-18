@@ -15,11 +15,171 @@
                 Configurações de Notificações
             </h1>
 
+            <!-- Preferências de Notificação -->
+            <form method="POST" class="mb-8">
+                {% csrf_token %}
+                
+                <!-- Canais de Notificação -->
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-broadcast-tower mr-2"></i>
+                        Canais de Notificação
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-4">Escolha como deseja receber suas notificações:</p>
+                    
+                    <div class="space-y-3">
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-desktop text-blue-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Notificações In-App</span>
+                                    <p class="text-sm text-gray-500">Notificações dentro do sistema (sino)</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="in_app_enabled" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.in_app_enabled %}checked{% endif %}>
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-mobile-alt text-green-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Push Notifications</span>
+                                    <p class="text-sm text-gray-500">Notificações no celular e navegador</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="push_enabled" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.push_enabled %}checked{% endif %}>
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-envelope text-red-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Email</span>
+                                    <p class="text-sm text-gray-500">Notificações importantes por email</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="email_enabled" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.email_enabled %}checked{% endif %}>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Tipos de Notificação -->
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-list-check mr-2"></i>
+                        Tipos de Notificação
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-4">Selecione quais tipos de eventos você deseja receber:</p>
+                    
+                    <div class="space-y-3">
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-ticket-alt text-blue-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Novos Chamados</span>
+                                    <p class="text-sm text-gray-500">Quando um chamado é criado no seu setor</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="ticket_created" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.ticket_created %}checked{% endif %}>
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-user-tag text-purple-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Atribuição de Chamados</span>
+                                    <p class="text-sm text-gray-500">Quando você é atribuído a um chamado</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="ticket_assigned" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.ticket_assigned %}checked{% endif %}>
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-exchange-alt text-orange-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Mudança de Status</span>
+                                    <p class="text-sm text-gray-500">Quando o status do seu chamado muda</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="ticket_status_changed" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.ticket_status_changed %}checked{% endif %}>
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-comment text-teal-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Novos Comentários</span>
+                                    <p class="text-sm text-gray-500">Quando há novos comentários nos seus chamados</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="ticket_comment" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.ticket_comment %}checked{% endif %}>
+                        </label>
+                        
+                        <label class="flex items-center justify-between p-3 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                            <div class="flex items-center">
+                                <i class="fas fa-bullhorn text-yellow-500 mr-3"></i>
+                                <div>
+                                    <span class="font-medium">Novos Comunicados</span>
+                                    <p class="text-sm text-gray-500">Comunicados enviados para você</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" name="communication_new" class="h-5 w-5 text-blue-600 rounded"
+                                   {% if preferences.communication_new %}checked{% endif %}>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Horário Silencioso -->
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-moon mr-2"></i>
+                        Horário Silencioso
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-4">Pause as notificações durante um período específico:</p>
+                    
+                    <label class="flex items-center mb-4">
+                        <input type="checkbox" name="quiet_hours_enabled" class="h-5 w-5 text-blue-600 rounded mr-3"
+                               {% if preferences.quiet_hours_enabled %}checked{% endif %}
+                               onchange="toggleQuietHours(this.checked)">
+                        <span class="font-medium">Ativar horário silencioso</span>
+                    </label>
+                    
+                    <div id="quietHoursInputs" class="flex space-x-4 {% if not preferences.quiet_hours_enabled %}opacity-50{% endif %}">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">Início</label>
+                            <input type="time" name="quiet_hours_start" 
+                                   value="{{ preferences.quiet_hours_start|time:'H:i'|default:'22:00' }}"
+                                   class="border rounded px-3 py-2"
+                                   {% if not preferences.quiet_hours_enabled %}disabled{% endif %}>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">Fim</label>
+                            <input type="time" name="quiet_hours_end"
+                                   value="{{ preferences.quiet_hours_end|time:'H:i'|default:'07:00' }}"
+                                   class="border rounded px-3 py-2"
+                                   {% if not preferences.quiet_hours_enabled %}disabled{% endif %}>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="w-full bg-primary hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-save mr-2"></i>Salvar Preferências
+                </button>
+            </form>
+
             <!-- Push Notifications Section -->
             <div class="bg-gray-50 rounded-lg p-6 mb-6">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">
                     <i class="fas fa-mobile-alt mr-2"></i>
-                    Notificações Push
+                    Notificações Push no Navegador
                 </h2>
                 
                 <div id="pushNotificationStatus">
@@ -46,7 +206,7 @@
                 <div id="deviceTokensList">
                     {% if user_tokens %}
                         {% for token in user_tokens %}
-                        <div class="flex items-center justify-between p-3 bg-white rounded border">
+                        <div class="flex items-center justify-between p-3 bg-white rounded border mb-2">
                             <div>
                                 <div class="font-medium">{{ token.get_device_type_display }}</div>
                                 <div class="text-sm text-gray-500">
@@ -96,6 +256,12 @@
 </div>
 
 <script>
+function toggleQuietHours(enabled) {
+    const inputs = document.getElementById('quietHoursInputs');
+    inputs.classList.toggle('opacity-50', !enabled);
+    inputs.querySelectorAll('input').forEach(input => input.disabled = !enabled);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const enablePushBtn = document.getElementById('enablePushBtn');
     const testNotificationBtn = document.getElementById('testNotificationBtn');

@@ -442,11 +442,44 @@ def delete_device_token(request, token_id):
 def notification_settings(request):
     """Configurações de notificações do usuário"""
     from django.conf import settings
+    from .models import NotificationPreference
+    
+    # Obter ou criar preferências do usuário
+    preferences, created = NotificationPreference.objects.get_or_create(user=request.user)
+    
+    if request.method == 'POST':
+        # Atualizar preferências
+        preferences.in_app_enabled = request.POST.get('in_app_enabled') == 'on'
+        preferences.push_enabled = request.POST.get('push_enabled') == 'on'
+        preferences.email_enabled = request.POST.get('email_enabled') == 'on'
+        
+        preferences.ticket_created = request.POST.get('ticket_created') == 'on'
+        preferences.ticket_assigned = request.POST.get('ticket_assigned') == 'on'
+        preferences.ticket_status_changed = request.POST.get('ticket_status_changed') == 'on'
+        preferences.ticket_comment = request.POST.get('ticket_comment') == 'on'
+        preferences.communication_new = request.POST.get('communication_new') == 'on'
+        
+        preferences.quiet_hours_enabled = request.POST.get('quiet_hours_enabled') == 'on'
+        
+        quiet_start = request.POST.get('quiet_hours_start')
+        quiet_end = request.POST.get('quiet_hours_end')
+        
+        if quiet_start:
+            from datetime import datetime
+            preferences.quiet_hours_start = datetime.strptime(quiet_start, '%H:%M').time()
+        if quiet_end:
+            from datetime import datetime
+            preferences.quiet_hours_end = datetime.strptime(quiet_end, '%H:%M').time()
+        
+        preferences.save()
+        messages.success(request, 'Preferências de notificação salvas com sucesso!')
+        return redirect('notifications:settings')
     
     context = {
         'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
         'user_tokens': DeviceToken.objects.filter(user=request.user, is_active=True),
-        'user': request.user
+        'user': request.user,
+        'preferences': preferences
     }
     
     return render(request, 'notifications/settings_simple.html', context)

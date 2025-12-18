@@ -133,8 +133,8 @@ class Communication(models.Model):
             if is_new:
                 self.trigger_notification()
                 self.trigger_webhooks('COMMUNICATION_CREATED')
-                # Enviar notificação push para nova comunicação
-                self._send_push_notification_new_communication()
+                # Notificação via signals (notifications/signals.py)
+                # Não chamar mais diretamente aqui para evitar duplicação
             else:
                 self.trigger_webhooks('COMMUNICATION_UPDATED')
     
