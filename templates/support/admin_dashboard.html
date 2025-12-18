@@ -436,6 +436,10 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSupportTickets();
     
     // Polling em tempo real para atualizações (a cada 3 segundos)
+    console.log('[Dashboard] Iniciando polling em tempo real');
+    // Primeira chamada imediata
+    pollForUpdates();
+    // Depois repetir a cada 3 segundos
     setInterval(pollForUpdates, 3000);
     
     // Parar piscada do título quando a página receber foco
@@ -444,7 +448,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function pollForUpdates() {
     fetch(`/projects/support/api/poll-updates/?last_check=${encodeURIComponent(lastCheckTimestamp)}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             console.log('[Polling] Resposta recebida:', data);
             if (data.success) {
@@ -493,7 +502,9 @@ function pollForUpdates() {
             }
         })
         .catch(error => {
-            console.error('Erro no polling:', error);
+            console.error('[Polling] Erro (continuando polling):', error);
+            // NÃO parar o polling, apenas log do erro
+            // O setInterval continuará automaticamente
         });
 }
 

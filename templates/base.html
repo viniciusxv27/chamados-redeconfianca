@@ -1828,61 +1828,86 @@
         
         // ============ FUNÇÕES DE POLLING TEMPO REAL ============
         function startPolling(chatId) {
+            console.log('[Polling] Iniciando polling para chat:', chatId);
             stopPolling();
+            
+            // Primeira chamada imediata
+            pollChatUpdates(chatId);
             
             pollingInterval = setInterval(() => {
                 pollChatUpdates(chatId);
             }, 3000); // A cada 3 segundos
+            
+            console.log('[Polling] Polling ativo a cada 3 segundos');
         }
         
         function stopPolling() {
             if (pollingInterval) {
+                console.log('[Polling] Parando polling');
                 clearInterval(pollingInterval);
                 pollingInterval = null;
             }
         }
         
         function pollChatUpdates(chatId) {
+            if (!chatId || !currentChatId) {
+                console.log('[Polling] Chat não está ativo, ignorando');
+                return;
+            }
+            
             fetch(`/projects/support/chat/${chatId}/poll/?last_message_id=${lastMessageId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         // Adicionar novas mensagens
                         if (data.messages && data.messages.length > 0) {
                             const messagesContainer = document.getElementById('activeChatMessages');
-                            
-                            data.messages.forEach(msg => {
-                                if (msg.id > lastMessageId) {
-                                    appendMessage(messagesContainer, msg);
-                                    lastMessageId = msg.id;
-                                }
-                            });
-                            
-                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            if (messagesContainer) {
+                                data.messages.forEach(msg => {
+                                    if (msg.id > lastMessageId) {
+                                        appendMessage(messagesContainer, msg);
+                                        lastMessageId = msg.id;
+                                    }
+                                });
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            }
                         }
                         
                         // Atualizar status
-                        document.getElementById('activeChatStatus').textContent = 
-                            `Status: ${data.chat_status_display}${data.assigned_to ? ' | Atendente: ' + data.assigned_to : ''}`;
+                        const statusEl = document.getElementById('activeChatStatus');
+                        if (statusEl) {
+                            statusEl.textContent = `Status: ${data.chat_status_display}${data.assigned_to ? ' | Atendente: ' + data.assigned_to : ''}`;
+                        }
                         
                         // Atualizar posição na fila
                         const queueDiv = document.getElementById('queuePositionDiv');
                         const queueText = document.getElementById('queuePositionText');
                         
-                        if (data.queue_position && data.chat_status !== 'EM_ANDAMENTO' && data.chat_status !== 'RESOLVIDO' && data.chat_status !== 'FECHADO') {
-                            queueText.textContent = `Posição na fila: ${data.queue_position}º`;
-                            queueDiv.classList.remove('hidden');
-                        } else {
-                            queueDiv.classList.add('hidden');
+                        if (queueDiv && queueText) {
+                            if (data.queue_position && data.chat_status !== 'EM_ANDAMENTO' && data.chat_status !== 'RESOLVIDO' && data.chat_status !== 'FECHADO') {
+                                queueText.textContent = `Posição na fila: ${data.queue_position}º`;
+                                queueDiv.classList.remove('hidden');
+                            } else {
+                                queueDiv.classList.add('hidden');
+                            }
                         }
                         
                         // Atualizar protocolo se disponível
-                        if (data.protocol) {
-                            document.getElementById('activeChatProtocol').textContent = `Protocolo: ${data.protocol}`;
+                        const protocolEl = document.getElementById('activeChatProtocol');
+                        if (protocolEl && data.protocol) {
+                            protocolEl.textContent = `Protocolo: ${data.protocol}`;
                         }
                     }
                 })
-                .catch(error => console.error('Erro no polling:', error));
+                .catch(error => {
+                    console.error('[Polling] Erro:', error);
+                    // NÃO parar o polling, apenas log do erro
+                });
         }
         
         function appendMessage(container, msg) {
