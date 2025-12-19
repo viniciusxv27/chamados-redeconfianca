@@ -88,10 +88,7 @@
                         Descrição Completa *
                     </label>
                     <div id="editor-container" class="bg-white"></div>
-                    <textarea name="full_description" 
-                              id="full_description_hidden"
-                              required
-                              style="display: none;">{{ benefit.full_description|default:'' }}</textarea>
+                    <input type="hidden" name="full_description" id="full_description_hidden">
                     <p class="text-xs text-gray-500 mt-1">
                         <i class="fas fa-info-circle mr-1"></i>
                         Use a barra de ferramentas para formatar o texto (negrito, itálico, listas, etc.)
@@ -240,16 +237,26 @@ var quill = new Quill('#editor-container', {
 });
 
 // Load existing content
-var existingContent = document.getElementById('full_description_hidden').value;
-if (existingContent) {
-    quill.root.innerHTML = existingContent;
-}
+{% if benefit.full_description %}
+(function() {
+    var existingContent = "{{ benefit.full_description|escapejs }}";
+    if (existingContent && existingContent.trim()) {
+        // Verifica se o conteúdo já é HTML ou é texto simples
+        if (existingContent.indexOf('<') === -1) {
+            // Texto simples - converte quebras de linha para parágrafos
+            var paragraphs = existingContent.split(/\\n|\n/).filter(function(p) { return p.trim(); });
+            existingContent = paragraphs.map(function(p) { return '<p>' + p + '</p>'; }).join('');
+        }
+        quill.root.innerHTML = existingContent;
+    }
+})();
+{% endif %}
 
-// Update hidden textarea before form submit
+// Update hidden input before form submit
 document.querySelector('form').addEventListener('submit', function(e) {
     var content = quill.root.innerHTML;
     // Se o conteúdo estiver vazio (só tem <p><br></p>), deixa vazio
-    if (content === '<p><br></p>' || content.trim() === '') {
+    if (content === '<p><br></p>' || content.trim() === '' || content === '<p></p>') {
         document.getElementById('full_description_hidden').value = '';
     } else {
         document.getElementById('full_description_hidden').value = content;
