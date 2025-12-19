@@ -154,22 +154,6 @@
                 <div class="text-2xl mb-2">{{ pilar.icon }}</div>
                 <p class="text-sm font-medium text-gray-700 mb-3">{{ pilar.nome }}</p>
                 
-                <!-- Progress Circle -->
-                <div class="relative w-16 h-16 mx-auto mb-3">
-                    <svg class="w-16 h-16 transform -rotate-90" viewBox="0 0 64 64">
-                        <circle cx="32" cy="32" r="28" fill="none" stroke="#f3f4f6" stroke-width="4"/>
-                        <circle cx="32" cy="32" r="28" fill="none" stroke="#FF6B35" stroke-width="4"
-                            stroke-dasharray="176" 
-                            stroke-dashoffset="176"
-                            stroke-linecap="round"
-                            class="progress-circle"
-                            data-value="{{ pilar.media }}"/>
-                    </svg>
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <span class="text-sm font-bold text-gray-700">{{ pilar.media|floatformat:2 }}%</span>
-                    </div>
-                </div>
-                
                 <div class="space-y-1 text-xs text-gray-500">
                     <div class="flex justify-between">
                         <span>Total:</span>
@@ -189,177 +173,91 @@
         </div>
     </div>
     
-    <!-- Tabelas Side by Side -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Comissões -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">Detalhamento de Comissões</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">📱 Móvel</span>
-                    <span class="font-medium {% if data.comissoes.movel > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">🏠 Fixa</span>
-                    <span class="font-medium {% if data.comissoes.fixa > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">📲 Smartphone</span>
-                    <span class="font-medium {% if data.comissoes.smartphone > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">💻 Eletrônicos A</span>
-                    <span class="font-medium {% if data.comissoes.eletronicos_a > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_a|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">💻 Eletrônicos B</span>
-                    <span class="font-medium {% if data.comissoes.eletronicos_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">⭐ Essenciais A</span>
-                    <span class="font-medium {% if data.comissoes.essenciais_a > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_a|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">⭐ Essenciais B</span>
-                    <span class="font-medium {% if data.comissoes.essenciais_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">🛡️ Seguro</span>
-                    <span class="font-medium {% if data.comissoes.seguro > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">📦 SVA</span>
-                    <span class="font-medium {% if data.comissoes.sva > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-4 bg-primary/5">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-primary text-lg">R$ {{ data.comissoes.total|floatformat:2 }}</span>
-                </div>
-            </div>
+    <!-- Tabela Consolidada de Remuneração -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800">Detalhamento Completo</h2>
         </div>
-        
-        <!-- Alto Desempenho -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">🏆 Alto Desempenho</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguro</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-4 bg-amber-50">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-amber-600 text-lg">R$ {{ data.alto_desempenho.total|floatformat:2 }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Bônus e Hunter -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Bônus Carteira -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">💰 Bônus Carteira</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.eletronicos|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.essenciais|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguro</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 bg-blue-50">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Hunter -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">🎯 Hunter</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.essenciais|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguros</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.seguros|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.sva|floatformat:2 }}</span>
-                </div>
-            </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-3 text-left">Pilar</th>
+                        <th class="px-4 py-3 text-right">💵 Comissões</th>
+                        <th class="px-4 py-3 text-right">🏆 Alto Desempenho</th>
+                        <th class="px-4 py-3 text-right">💰 Bônus Carteira</th>
+                        <th class="px-4 py-3 text-right">🎯 Hunter</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">📱 Móvel</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.movel > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.movel|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.movel|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">🏠 Fixa</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.fixa > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">📲 Smartphone</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.smartphone > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">💻 Eletrônicos A</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.eletronicos_a > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_a|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">💻 Eletrônicos B</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.eletronicos_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_b|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">⭐ Essenciais A</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.essenciais_a > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_a|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">⭐ Essenciais B</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.essenciais_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_b|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">🛡️ Seguro</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.seguro > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.seguros|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-gray-600">📦 SVA</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.sva > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.sva|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-50 font-semibold">
+                        <td class="px-4 py-4 text-gray-800">Total</td>
+                        <td class="px-4 py-4 text-right text-primary text-lg">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-4 py-4 text-right text-amber-600 text-lg">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-4 py-4 text-right text-blue-600 text-lg">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-4 py-4 text-right text-gray-800 text-lg">-</td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
     </div>
     
