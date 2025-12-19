@@ -92,42 +92,15 @@
                         <i class="fas fa-info-circle text-purple-500"></i>
                         Sobre este benefício
                     </h2>
-                    <div class="benefit-content text-gray-700 leading-relaxed text-lg">
+                    <div class="prose max-w-none text-gray-700">
                         {{ benefit.full_description|safe }}
                     </div>
                 </div>
                 
-                <style>
-                    .benefit-content {
-                        font-size: 1.125rem;
-                        line-height: 1.75;
-                    }
-                    .benefit-content h1 { font-size: 2rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 1rem; color: #1f2937; }
-                    .benefit-content h2 { font-size: 1.5rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: 0.75rem; color: #1f2937; }
-                    .benefit-content h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: #374151; }
-                    .benefit-content p { margin-bottom: 1rem; }
-                    .benefit-content strong { font-weight: 700; }
-                    .benefit-content em { font-style: italic; }
-                    .benefit-content u { text-decoration: underline; }
-                    .benefit-content s { text-decoration: line-through; }
-                    .benefit-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
-                    .benefit-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; }
-                    .benefit-content li { margin-bottom: 0.5rem; }
-                    .benefit-content a { color: #7c3aed; text-decoration: underline; }
-                    .benefit-content a:hover { color: #5b21b6; }
-                    .benefit-content br { display: block; content: ""; margin-top: 0.5rem; }
-                    /* Quill specific classes */
-                    .benefit-content .ql-align-center { text-align: center; }
-                    .benefit-content .ql-align-right { text-align: right; }
-                    .benefit-content .ql-align-justify { text-align: justify; }
-                    .benefit-content .ql-indent-1 { padding-left: 3rem; }
-                    .benefit-content .ql-indent-2 { padding-left: 6rem; }
-                </style>
-                
                 <script>
                 // Converte texto simples para HTML se necessário
                 document.addEventListener('DOMContentLoaded', function() {
-                    var contentDiv = document.querySelector('.benefit-content');
+                    var contentDiv = document.querySelector('.prose');
                     if (contentDiv) {
                         var content = contentDiv.innerHTML.trim();
                         // Se não tem tags HTML (exceto entidades), converte quebras de linha
