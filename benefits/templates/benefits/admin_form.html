@@ -3,29 +3,6 @@
 
 {% block title %}{% if action == 'create' %}Criar{% else %}Editar{% endif %} Benefício{% endblock %}
 
-{% block extra_head %}
-<!-- Quill Editor CSS -->
-<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
-<style>
-    .ql-editor {
-        min-height: 200px;
-        font-size: 16px;
-    }
-    .ql-toolbar.ql-snow {
-        border-radius: 12px 12px 0 0;
-        border-color: #e5e7eb;
-    }
-    .ql-container.ql-snow {
-        border-radius: 0 0 12px 12px;
-        border-color: #e5e7eb;
-    }
-    .ql-editor.ql-blank::before {
-        font-style: normal;
-        color: #9ca3af;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
     <div class="max-w-4xl mx-auto">
@@ -87,8 +64,55 @@
                         <i class="fas fa-file-alt text-purple-500 mr-1"></i>
                         Descrição Completa *
                     </label>
-                    <div id="editor-container" class="bg-white"></div>
+                    
+                    <!-- Rich Text Editor Toolbar -->
+                    <div class="border border-gray-300 rounded-lg overflow-hidden">
+                        <div class="bg-gray-50 px-3 py-2 border-b border-gray-300">
+                            <div class="flex items-center space-x-1">
+                                <button type="button" onclick="formatText('bold')" class="p-2 hover:bg-gray-200 rounded" title="Negrito">
+                                    <i class="fas fa-bold text-gray-600"></i>
+                                </button>
+                                <button type="button" onclick="formatText('italic')" class="p-2 hover:bg-gray-200 rounded" title="Itálico">
+                                    <i class="fas fa-italic text-gray-600"></i>
+                                </button>
+                                <button type="button" onclick="formatText('underline')" class="p-2 hover:bg-gray-200 rounded" title="Sublinhado">
+                                    <i class="fas fa-underline text-gray-600"></i>
+                                </button>
+                                <div class="w-px h-6 bg-gray-300 mx-2"></div>
+                                <button type="button" onclick="formatText('insertUnorderedList')" class="p-2 hover:bg-gray-200 rounded" title="Lista">
+                                    <i class="fas fa-list-ul text-gray-600"></i>
+                                </button>
+                                <button type="button" onclick="formatText('insertOrderedList')" class="p-2 hover:bg-gray-200 rounded" title="Lista Numerada">
+                                    <i class="fas fa-list-ol text-gray-600"></i>
+                                </button>
+                                <div class="w-px h-6 bg-gray-300 mx-2"></div>
+                                <button type="button" onclick="formatText('justifyLeft')" class="p-2 hover:bg-gray-200 rounded" title="Alinhar à Esquerda">
+                                    <i class="fas fa-align-left text-gray-600"></i>
+                                </button>
+                                <button type="button" onclick="formatText('justifyCenter')" class="p-2 hover:bg-gray-200 rounded" title="Centralizar">
+                                    <i class="fas fa-align-center text-gray-600"></i>
+                                </button>
+                                <button type="button" onclick="formatText('justifyRight')" class="p-2 hover:bg-gray-200 rounded" title="Alinhar à Direita">
+                                    <i class="fas fa-align-right text-gray-600"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Editor Area -->
+                        <div 
+                            id="full-description-editor" 
+                            class="min-h-[200px] p-4 outline-none focus:ring-0 bg-white"
+                            contenteditable="true"
+                            placeholder="Descrição detalhada com todas as informações do benefício, como usar, onde usar, etc."
+                            style="max-height: 400px; overflow-y: auto;"
+                            onkeyup="syncContent()"
+                            onpaste="handlePaste(event)"
+                        >{% if benefit.full_description %}{{ benefit.full_description|safe }}{% endif %}</div>
+                    </div>
+                    
+                    <!-- Hidden input for form submission -->
                     <input type="hidden" name="full_description" id="full_description_hidden">
+                    
                     <p class="text-xs text-gray-500 mt-1">
                         <i class="fas fa-info-circle mr-1"></i>
                         Use a barra de ferramentas para formatar o texto (negrito, itálico, listas, etc.)
@@ -217,50 +241,61 @@
 </div>
 
 <!-- Quill Editor JS -->
-<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
-// Initialize Quill Editor
-var quill = new Quill('#editor-container', {
-    theme: 'snow',
-    placeholder: 'Descrição detalhada com todas as informações do benefício, como usar, onde usar, etc.',
-    modules: {
-        toolbar: [
-            [{ 'header': [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'color': [] }, { 'background': [] }],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-            [{ 'align': [] }],
-            ['link'],
-            ['clean']
-        ]
-    }
-});
+// Rich Text Editor Functions
+function formatText(command) {
+    document.execCommand(command, false, null);
+    document.getElementById('full-description-editor').focus();
+    syncContent();
+}
 
-// Load existing content
-{% if benefit.full_description %}
-(function() {
-    var existingContent = "{{ benefit.full_description|escapejs }}";
-    if (existingContent && existingContent.trim()) {
-        // Verifica se o conteúdo já é HTML ou é texto simples
-        if (existingContent.indexOf('<') === -1) {
-            // Texto simples - converte quebras de linha para parágrafos
-            var paragraphs = existingContent.split(/\\n|\n/).filter(function(p) { return p.trim(); });
-            existingContent = paragraphs.map(function(p) { return '<p>' + p + '</p>'; }).join('');
+function syncContent() {
+    const editor = document.getElementById('full-description-editor');
+    const hiddenInput = document.getElementById('full_description_hidden');
+    hiddenInput.value = editor.innerHTML;
+}
+
+function handlePaste(event) {
+    event.preventDefault();
+    
+    // Get pasted data
+    const paste = (event.clipboardData || window.clipboardData).getData('text');
+    
+    // Insert as plain text to avoid unwanted formatting
+    document.execCommand('insertText', false, paste);
+    syncContent();
+}
+
+// CSS for placeholder
+const style = document.createElement('style');
+style.textContent = `
+    #full-description-editor:empty:before {
+        content: attr(placeholder);
+        color: #9CA3AF;
+        pointer-events: none;
+        font-style: italic;
+    }
+    #full-description-editor:focus:before {
+        display: none;
+    }
+`;
+document.head.appendChild(style);
+
+// Initialize - sync content on load
+document.addEventListener('DOMContentLoaded', function() {
+    syncContent();
+    
+    // Sync before form submit
+    document.querySelector('form').addEventListener('submit', function(e) {
+        syncContent();
+        
+        const editor = document.getElementById('full-description-editor');
+        const content = editor.textContent.trim();
+        
+        if (!content) {
+            document.getElementById('full_description_hidden').value = '';
         }
-        quill.root.innerHTML = existingContent;
-    }
-})();
-{% endif %}
-
-// Update hidden input before form submit
-document.querySelector('form').addEventListener('submit', function(e) {
-    var content = quill.root.innerHTML;
-    // Se o conteúdo estiver vazio (só tem <p><br></p>), deixa vazio
-    if (content === '<p><br></p>' || content.trim() === '' || content === '<p></p>') {
-        document.getElementById('full_description_hidden').value = '';
-    } else {
-        document.getElementById('full_description_hidden').value = content;
-    }
+    });
 });
 
 // Auto uppercase coupon code
