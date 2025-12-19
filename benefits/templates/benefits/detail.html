@@ -92,10 +92,26 @@
                         <i class="fas fa-info-circle text-purple-500"></i>
                         Sobre este benefício
                     </h2>
-                    <div class="prose max-w-none text-gray-700 leading-relaxed text-lg">
-                        {{ benefit.full_description|linebreaks }}
+                    <div class="prose prose-lg max-w-none text-gray-700 leading-relaxed benefit-content">
+                        {{ benefit.full_description|safe }}
                     </div>
                 </div>
+                
+                <style>
+                    .benefit-content h1 { font-size: 1.75rem; font-weight: bold; margin-bottom: 0.5rem; color: #1f2937; }
+                    .benefit-content h2 { font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem; color: #1f2937; }
+                    .benefit-content h3 { font-size: 1.25rem; font-weight: bold; margin-bottom: 0.5rem; color: #1f2937; }
+                    .benefit-content p { margin-bottom: 1rem; }
+                    .benefit-content strong, .benefit-content b { font-weight: bold; }
+                    .benefit-content em, .benefit-content i { font-style: italic; }
+                    .benefit-content u { text-decoration: underline; }
+                    .benefit-content s { text-decoration: line-through; }
+                    .benefit-content ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 1rem; }
+                    .benefit-content ol { list-style-type: decimal; margin-left: 1.5rem; margin-bottom: 1rem; }
+                    .benefit-content li { margin-bottom: 0.25rem; }
+                    .benefit-content a { color: #7c3aed; text-decoration: underline; }
+                    .benefit-content a:hover { color: #5b21b6; }
+                </style>
                 
                 <!-- Coupon Section -->
                 {% if has_redeemed %}

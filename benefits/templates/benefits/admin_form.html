@@ -3,6 +3,29 @@
 
 {% block title %}{% if action == 'create' %}Criar{% else %}Editar{% endif %} Benefício{% endblock %}
 
+{% block extra_head %}
+<!-- Quill Editor CSS -->
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<style>
+    .ql-editor {
+        min-height: 200px;
+        font-size: 16px;
+    }
+    .ql-toolbar.ql-snow {
+        border-radius: 12px 12px 0 0;
+        border-color: #e5e7eb;
+    }
+    .ql-container.ql-snow {
+        border-radius: 0 0 12px 12px;
+        border-color: #e5e7eb;
+    }
+    .ql-editor.ql-blank::before {
+        font-style: normal;
+        color: #9ca3af;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
     <div class="max-w-4xl mx-auto">
@@ -58,18 +81,21 @@
                     <p class="text-xs text-gray-500 mt-1">Esta descrição aparece nos cards da lista de benefícios</p>
                 </div>
 
-                <!-- Full Description -->
+                <!-- Full Description with Rich Text Editor -->
                 <div>
                     <label class="block text-sm font-bold text-gray-700 mb-2">
                         <i class="fas fa-file-alt text-purple-500 mr-1"></i>
                         Descrição Completa *
                     </label>
+                    <div id="editor-container" class="bg-white"></div>
                     <textarea name="full_description" 
+                              id="full_description_hidden"
                               required
-                              rows="6"
-                              class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                              placeholder="Descrição detalhada com todas as informações do benefício, como usar, onde usar, etc.">{{ benefit.full_description|default:'' }}</textarea>
-                    <p class="text-xs text-gray-500 mt-1">Esta descrição aparece na página de detalhes do benefício</p>
+                              style="display: none;">{{ benefit.full_description|default:'' }}</textarea>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Use a barra de ferramentas para formatar o texto (negrito, itálico, listas, etc.)
+                    </p>
                 </div>
 
                 <!-- Coupon Code -->
@@ -87,29 +113,6 @@
                            placeholder="Ex: PIZZA50OFF"
                            style="text-transform: uppercase;">
                     <p class="text-xs text-gray-500 mt-1">Este código será exibido ao usuário após resgatar o benefício</p>
-                </div>
-
-                <!-- Image -->
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">
-                        <i class="fas fa-image text-purple-500 mr-1"></i>
-                        Imagem do Benefício
-                    </label>
-                    
-                    {% if benefit.image %}
-                        <div class="mb-4">
-                            <p class="text-sm text-gray-600 mb-2">Imagem atual:</p>
-                            <img src="{{ benefit.image.url }}" 
-                                 alt="Imagem atual"
-                                 class="w-64 h-48 object-cover rounded-lg shadow-md">
-                        </div>
-                    {% endif %}
-                    
-                    <input type="file" 
-                           name="image" 
-                           accept="image/*"
-                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer">
-                    <p class="text-xs text-gray-500 mt-1">Recomendado: 800x600px (JPG, PNG ou WebP)</p>
                 </div>
 
                 <!-- Settings Row -->
@@ -174,6 +177,29 @@
                     </div>
                 </div>
 
+                <!-- Image (moved to bottom) -->
+                <div class="pt-6 border-t border-gray-200">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+                        <i class="fas fa-image text-purple-500 mr-1"></i>
+                        Imagem do Benefício
+                    </label>
+                    
+                    {% if benefit.image %}
+                        <div class="mb-4 p-4 bg-gray-50 rounded-xl">
+                            <p class="text-sm text-gray-600 mb-2 font-medium">Imagem atual:</p>
+                            <img src="{{ benefit.image.url }}" 
+                                 alt="Imagem atual"
+                                 class="w-full max-w-md h-auto object-cover rounded-lg shadow-md">
+                        </div>
+                    {% endif %}
+                    
+                    <input type="file" 
+                           name="image" 
+                           accept="image/*"
+                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer">
+                    <p class="text-xs text-gray-500 mt-1">Recomendado: 800x600px (JPG, PNG ou WebP)</p>
+                </div>
+
                 <!-- Action Buttons -->
                 <div class="flex items-center justify-end gap-4 pt-6 border-t-2 border-gray-200">
                     <a href="{% url 'benefits:admin_list' %}" 
@@ -193,7 +219,43 @@
     </div>
 </div>
 
+<!-- Quill Editor JS -->
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
+// Initialize Quill Editor
+var quill = new Quill('#editor-container', {
+    theme: 'snow',
+    placeholder: 'Descrição detalhada com todas as informações do benefício, como usar, onde usar, etc.',
+    modules: {
+        toolbar: [
+            [{ 'header': [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'align': [] }],
+            ['link'],
+            ['clean']
+        ]
+    }
+});
+
+// Load existing content
+var existingContent = document.getElementById('full_description_hidden').value;
+if (existingContent) {
+    quill.root.innerHTML = existingContent;
+}
+
+// Update hidden textarea before form submit
+document.querySelector('form').addEventListener('submit', function(e) {
+    var content = quill.root.innerHTML;
+    // Se o conteúdo estiver vazio (só tem <p><br></p>), deixa vazio
+    if (content === '<p><br></p>' || content.trim() === '') {
+        document.getElementById('full_description_hidden').value = '';
+    } else {
+        document.getElementById('full_description_hidden').value = content;
+    }
+});
+
 // Auto uppercase coupon code
 document.querySelector('input[name="coupon_code"]').addEventListener('input', function(e) {
     e.target.value = e.target.value.toUpperCase();
