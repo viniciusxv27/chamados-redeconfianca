@@ -187,6 +187,7 @@
                         <th class="px-4 py-3 text-right">🏆 Alto Desempenho</th>
                         <th class="px-4 py-3 text-right">💰 Bônus Carteira</th>
                         <th class="px-4 py-3 text-right">🎯 Hunter</th>
+                        <th class="px-4 py-3 text-right bg-gray-100">📊 Total</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
@@ -196,6 +197,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.movel|add:data.alto_desempenho.movel|add:data.bonus.movel|add:data.hunter.movel|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 text-gray-600">🏠 Fixa</td>
@@ -203,6 +205,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.fixa|add:data.alto_desempenho.fixa|add:data.bonus.fixa|add:data.hunter.fixa|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 text-gray-600">📲 Smartphone</td>
@@ -210,28 +213,23 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.smartphone|add:data.alto_desempenho.smartphone|add:data.bonus.smartphone|add:data.hunter.smartphone|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3 text-gray-600">💻 Eletrônicos A</td>
-                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.eletronicos_a > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_a|floatformat:2 }}</td>
-                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
-                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
-                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-gray-600">💻 Eletrônicos</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.eletronicos_a > 0 or data.comissoes.eletronicos_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|add:data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|add:data.bonus.eletronicos|add:data.hunter.eletronicos|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3 text-gray-600">💻 Eletrônicos B</td>
-                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.eletronicos_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.eletronicos_b|floatformat:2 }}</td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3 text-gray-600">⭐ Essenciais A</td>
-                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.essenciais_a > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_a|floatformat:2 }}</td>
-                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
-                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
-                        <td class="px-4 py-3 text-right font-medium text-gray-800" rowspan="2">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3 text-gray-600">⭐ Essenciais B</td>
-                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.essenciais_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-gray-600">⭐ Essenciais</td>
+                        <td class="px-4 py-3 text-right font-medium {% if data.comissoes.essenciais_a > 0 or data.comissoes.essenciais_b > 0 %}text-green-600{% else %}text-gray-400{% endif %}">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|add:data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|add:data.bonus.essenciais|add:data.hunter.essenciais|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 text-gray-600">🛡️ Seguro</td>
@@ -239,6 +237,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.seguros|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.seguro|add:data.alto_desempenho.seguro|add:data.bonus.seguro|add:data.hunter.seguros|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 text-gray-600">📦 SVA</td>
@@ -246,15 +245,17 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.sva|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.sva|add:data.alto_desempenho.sva|add:data.bonus.sva|add:data.hunter.sva|floatformat:2 }}</td>
                     </tr>
                 </tbody>
                 <tfoot>
-                    <tr class="bg-gray-50 font-semibold">
-                        <td class="px-4 py-4 text-gray-800">Total</td>
+                    <tr class="bg-gray-100 font-semibold">
+                        <td class="px-4 py-4 text-gray-800">Total Geral</td>
                         <td class="px-4 py-4 text-right text-primary text-lg">R$ {{ data.comissoes.total|floatformat:2 }}</td>
                         <td class="px-4 py-4 text-right text-amber-600 text-lg">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
                         <td class="px-4 py-4 text-right text-blue-600 text-lg">R$ {{ data.bonus.total|floatformat:2 }}</td>
                         <td class="px-4 py-4 text-right text-gray-800 text-lg">-</td>
+                        <td class="px-4 py-4 text-right text-primary text-xl bg-primary/10">R$ {{ data.comissoes.total|add:data.alto_desempenho.total|add:data.bonus.total|floatformat:2 }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -338,19 +339,6 @@
                 <p class="text-sm text-gray-500 mb-2">IQ {{ data.totais.cargo_label }}</p>
                 <p class="text-3xl font-bold {% if data.totais.iq_cargo >= 0 %}text-green-600{% else %}text-red-600{% endif %}">R$ {{ data.totais.iq_cargo|floatformat:2 }}</p>
             </div>
-        </div>
-        
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {% if not target_is_gerente %}
-            <div class="p-4 bg-gray-50 rounded-xl text-center">
-                <p class="text-xs text-gray-500 mb-1">CN Pleno</p>
-                <p class="text-lg font-semibold text-gray-700">R$ {{ data.totais.cn_pleno|floatformat:2 }}</p>
-            </div>
-            <div class="p-4 bg-gray-50 rounded-xl text-center">
-                <p class="text-xs text-gray-500 mb-1">Campanha</p>
-                <p class="text-lg font-semibold text-gray-700">R$ {{ data.totais.campanha|floatformat:2 }}</p>
-            </div>
-            {% endif %}
         </div>
     </div>
     
