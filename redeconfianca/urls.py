@@ -77,6 +77,7 @@ urlpatterns = [
     path('', home_feed, name='home'),  # Home feed como página inicial
     path('login/', login_view, name='login'),  # Login na raiz
     path('logout/', logout_view, name='logout'),  # Logout na raiz
+    path('commission/', include('users.urls_commission')),  # Comissionamento na raiz
     path('users/', include('users.urls')),
     path('tickets/', include('tickets.urls')),
     path('communications/', include('communications.urls')),

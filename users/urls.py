@@ -21,6 +21,7 @@ urlpatterns = [
     # Comissionamento
     path('commission/', commission_views.commission_view, name='commission'),
     path('commission/refresh/', commission_views.commission_refresh, name='commission_refresh'),
+    path('commission/export/', commission_views.export_commission_excel, name='commission_export'),
     path('api/commission/', commission_views.commission_api, name='commission_api'),
     
     # Admin URLs - usando 'manage' para evitar conflito com django admin
