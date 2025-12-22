@@ -193,19 +193,6 @@
         </div>
     </div>
     
-    <!-- Gráfico de Linha - Evolução dos Atingimentos -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-        <div class="flex items-center justify-between mb-6">
-            <div>
-                <h2 class="text-lg font-semibold text-gray-800">Evolução dos Atingimentos</h2>
-                <p class="text-sm text-gray-500">{{ meses.m3 }} → {{ meses.m2 }} → {{ meses.m1 }}</p>
-            </div>
-        </div>
-        <div class="h-72">
-            <canvas id="chartEvolucao"></canvas>
-        </div>
-    </div>
-    
     <!-- Grid de Gráficos -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <!-- Gráfico de Barras - Comissões -->
@@ -227,197 +214,227 @@
         </div>
     </div>
     
-    <!-- Atingimentos por Pilar -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-6">Atingimentos por Pilar</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
-            {% for pilar in data.pilares %}
-            <div class="text-center p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                <div class="text-2xl mb-2">{{ pilar.icon }}</div>
-                <p class="text-sm font-medium text-gray-700 mb-3">{{ pilar.nome }}</p>
-                
-                <div class="space-y-1 text-xs text-gray-500">
-                    <div class="flex justify-between">
-                        <span>Total:</span>
-                        <span class="font-medium text-gray-700">R$ {{ pilar.total|floatformat:2 }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Pago:</span>
-                        <span class="font-medium text-green-600">R$ {{ pilar.pago|floatformat:2 }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Exclusão:</span>
-                        <span class="font-medium text-red-600">R$ {{ pilar.exclusao|floatformat:2 }}</span>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
+    <!-- Tabela Consolidada de Comissionamento -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar</h2>
+            <p class="text-sm text-gray-500">Visão consolidada de todas as comissões e bônus</p>
         </div>
-    </div>
-    
-    <!-- Tabelas de Detalhamento -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Comissões -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">Detalhamento de Comissões</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguro</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 bg-primary/5">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Bônus -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">Bônus Carteira</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.eletronicos|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.essenciais|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguro</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.bonus.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 bg-blue-50">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Hunter e Alto Desempenho -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Hunter -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">🎯 Hunter</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.essenciais|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguros</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.seguros|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.sva|floatformat:2 }}</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Alto Desempenho -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">🏆 Alto Desempenho</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguro</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 bg-amber-50">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</span>
-                </div>
-            </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-3 text-left">Pilar</th>
+                        <th class="px-3 py-3 text-right">Comissões</th>
+                        <th class="px-3 py-3 text-right">Bônus Carteira</th>
+                        <th class="px-3 py-3 text-right">Alto Desemp.</th>
+                        <th class="px-3 py-3 text-right">Hunter</th>
+                        <th class="px-3 py-3 text-right">Bônus Hunter</th>
+                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">Pago</th>
+                        <th class="px-3 py-3 text-right bg-red-50 text-red-700">Exclusão</th>
+                        <th class="px-3 py-3 text-center bg-green-50 text-green-700">% Pago</th>
+                        <th class="px-3 py-3 text-center bg-red-50 text-red-700">% Exclusão</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <!-- Móvel -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📱</span>
+                                <span class="font-medium text-gray-800">Móvel</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.0.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.0.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.0.pago data.pilares.0.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.0.exclusao data.pilares.0.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Fixa -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🏠</span>
+                                <span class="font-medium text-gray-800">Fixa</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.1.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.1.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.1.pago data.pilares.1.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.1.exclusao data.pilares.1.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Smartphone -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📲</span>
+                                <span class="font-medium text-gray-800">Smartphone</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.2.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.2.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.2.pago data.pilares.2.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.2.exclusao data.pilares.2.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Eletrônicos -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">💻</span>
+                                <span class="font-medium text-gray-800">Eletrônicos</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.3.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.3.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.3.pago data.pilares.3.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.3.exclusao data.pilares.3.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Essenciais -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🛒</span>
+                                <span class="font-medium text-gray-800">Essenciais</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.4.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.4.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.4.pago data.pilares.4.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.4.exclusao data.pilares.4.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Seguro -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🛡️</span>
+                                <span class="font-medium text-gray-800">Seguro</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguros|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.5.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.5.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.5.pago data.pilares.5.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.5.exclusao data.pilares.5.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- SVA -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">⭐</span>
+                                <span class="font-medium text-gray-800">SVA</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.6.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.6.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.6.pago data.pilares.6.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.6.exclusao data.pilares.6.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-100 font-semibold">
+                        <td class="px-4 py-3 text-gray-800">Total</td>
+                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-indigo-600">-</td>
+                        <td class="px-3 py-3 text-right text-green-700 bg-green-100">R$ {{ data.totais.total_pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-red-700 bg-red-100">R$ {{ data.totais.total_exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-100">-</td>
+                        <td class="px-3 py-3 text-center bg-red-100">-</td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
     </div>
     

@@ -35,6 +35,9 @@ EXCEL_COMISSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQDiTJg7g9b_R6wn6uXnd
 # Planilha de Vendas e Metas
 EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URSLAQ5r634qBo9-GicO2D8ZfmY"
 
+# Planilha BASE_PAGAMENTO (Pago e Exclusão por pilar)
+EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBezFFjFizLR4rR-OJxo4pxAQfwwbhlrdiqaS5UjY75wyo"
+
 # Nome das sheets na planilha de comissionamento
 SHEET_GERENTE = "REMUNERAÇÃO GERENTE"
 SHEET_CN = "REMUNERAÇÃO CN"
@@ -410,36 +413,25 @@ def fetch_all_users_from_sheet(sheet_name, excel_url=None):
 
 def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     """
-    Busca Total, Pago e Exclusão por pilar de sheets específicas.
+    Busca Pago e Exclusão por pilar da planilha BASE_PAGAMENTO.
     
-    Para Gerente: busca por Filial (setor da loja)
-    Para CN: busca por Vendedor (nome)
+    Planilha: BASE_PAGAMENTO
+    Sheet: Planilha1
+    Colunas: Filial, UF, Nº da Venda, Data, Vendedor, Nome Cliente, CPF/CNPJ, 
+             Plano/Produto, NUMERO ACESSO, Receita, COORDENACAO, PILAR
     
-    Sheets de Pago:
-    - BASE PAGA FIXA, BASE PAGA MOVEL, BASE PAGA SEGURO, 
-    - BASE PAGA SVA, BASE PAGA SMARTPHONE, BASE PAGA ESSENCIAIS
-    
-    Sheets de Exclusão:
-    - BASE DE EXCLUSÃO, BASE EXCLUSÃO PRODUTOS
+    Filtra por Filial (para gerente) ou Vendedor (para CN)
+    Agrupa por PILAR e soma Receita
     """
     # Cache key diferente para gerente vs CN
     cache_suffix = f"gerente_{user_sector}" if is_gerente else f"cn_{user_name}"
-    cache_key = f"metas_pilar_{cache_suffix.replace(' ', '_')}"
+    cache_key = f"metas_pilar_v2_{cache_suffix.replace(' ', '_')}"
+    
+    # Verificar cache
     cached_data = cache.get(cache_key)
-    
     if cached_data:
+        print(f"[fetch_metas_por_pilar] Usando cache para {cache_suffix}")
         return cached_data
-    
-    # Mapeamento de sheets para pilares (busca parcial)
-    sheets_pago_mapping = {
-        'MOVEL': 'movel',
-        'MÓVEL': 'movel',
-        'FIXA': 'fixa',
-        'SMARTPHONE': 'smartphone',
-        'ESSENCIAIS': 'essenciais',
-        'SEGURO': 'seguro',
-        'SVA': 'sva',
-    }
     
     # Inicializar metas
     metas = {
@@ -454,11 +446,8 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     
     # Mapeamento de texto do pilar para chave
     pilar_mapping = {
-        'MOVEL': 'movel',
         'MÓVEL': 'movel',
-        'MOV': 'movel',
         'FIXA': 'fixa',
-        'FIX': 'fixa',
         'SMART': 'smartphone',
         'SMARTPHONE': 'smartphone',
         'ELETRO': 'eletronicos',
@@ -480,11 +469,7 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
         return str(text).strip().upper()
     
     def normalize_sector(sector_name):
-        """
-        Normaliza nome do setor para comparação.
-        Sistema: "Loja Serra Sede" -> "SERRA SEDE"
-        Planilha: "SERRA SEDE"
-        """
+        """Normaliza nome do setor para comparação."""
         if not sector_name:
             return ""
         normalized = str(sector_name).strip().upper()
@@ -493,16 +478,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
         for prefix in prefixes:
             if normalized.startswith(prefix):
                 normalized = normalized[len(prefix):]
-        # Substituições comuns
-        replacements = {
-            'SA PADUA': 'SANTO ANTONIO DE PADUA',
-            'SÃO PADUA': 'SANTO ANTONIO DE PADUA',
-            'S.A. PADUA': 'SANTO ANTONIO DE PADUA',
-            'STO ANTONIO DE PADUA': 'SANTO ANTONIO DE PADUA',
-        }
-        for old, new in replacements.items():
-            if old in normalized:
-                normalized = normalized.replace(old, new)
         return normalized
     
     def sectors_match(sector1, sector2):
@@ -520,7 +495,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
         # Comparar palavras principais
         words1 = set(s1.split())
         words2 = set(s2.split())
-        # Se há interseção significativa de palavras
         common = words1 & words2
         if len(common) >= 1 and len(common) >= min(len(words1), len(words2)) * 0.5:
             return True
@@ -529,191 +503,192 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     user_name_normalized = normalize_text(user_name)
     user_sector_normalized = normalize_sector(user_sector) if user_sector else ""
     
+    print(f"[fetch_metas_por_pilar] user_name={user_name}, is_gerente={is_gerente}, user_sector={user_sector}")
+    print(f"[fetch_metas_por_pilar] user_sector_normalized={user_sector_normalized}")
+    
     try:
-        excel_file, error = download_excel_file(EXCEL_VENDAS_URL, "vendas_metas")
+        # Baixar planilha BASE_PAGAMENTO
+        excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
         if error:
+            print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_PAGAMENTO: {error}")
             return metas
         
-        # Ler todas as sheets disponíveis
+        # Ler a sheet "Planilha1"
         try:
             excel_file.seek(0)
-            xl = pd.ExcelFile(excel_file, engine='openpyxl')
-            available_sheets = xl.sheet_names
+            df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
+            print(f"[fetch_metas_por_pilar] Colunas da BASE_PAGAMENTO: {list(df.columns)}")
+            print(f"[fetch_metas_por_pilar] Total de linhas: {len(df)}")
         except Exception as e:
+            print(f"[fetch_metas_por_pilar] Erro ao ler planilha: {e}")
             return metas
         
-        # Processar sheets de PAGO
-        for sheet_name in available_sheets:
-            sheet_upper = sheet_name.upper()
+        # Encontrar colunas necessárias
+        filial_col = None
+        receita_col = None
+        pilar_col = None
+        vendedor_col = None
+        
+        for col in df.columns:
+            col_upper = str(col).strip().upper()
+            if col_upper == 'FILIAL':
+                filial_col = col
+            elif col_upper == 'RECEITA':
+                receita_col = col
+            elif col_upper == 'PILAR':
+                pilar_col = col
+            elif col_upper == 'VENDEDOR':
+                vendedor_col = col
+        
+        print(f"[fetch_metas_por_pilar] filial_col={filial_col}, receita_col={receita_col}, pilar_col={pilar_col}, vendedor_col={vendedor_col}")
+        
+        if receita_col is None or pilar_col is None:
+            print(f"[fetch_metas_por_pilar] ERRO: Colunas obrigatórias não encontradas")
+            return metas
+        
+        # Debug: mostrar valores únicos de filial e pilar
+        if filial_col:
+            filiais_unicas = df[filial_col].dropna().unique()[:15]
+            print(f"[fetch_metas_por_pilar] Filiais na planilha (amostra): {list(filiais_unicas)}")
+        
+        pilares_unicos = df[pilar_col].dropna().unique()
+        print(f"[fetch_metas_por_pilar] Pilares na planilha: {list(pilares_unicos)}")
+        
+        # Debug: Filtrar apenas por filial EXATA "SERRA SEDE" e contar
+        df_serra = df[df[filial_col].astype(str).str.strip().str.upper() == 'SERRA SEDE']
+        print(f"[DEBUG] Linhas com Filial EXATA 'SERRA SEDE': {len(df_serra)}")
+        
+        # Contar e somar por pilar apenas para SERRA SEDE exato
+        for pilar_nome in df_serra[pilar_col].dropna().unique():
+            df_pilar = df_serra[df_serra[pilar_col] == pilar_nome]
+            soma = df_pilar[receita_col].sum()
+            count = len(df_pilar)
+            print(f"[DEBUG SERRA SEDE] Pilar={pilar_nome}, Qtd={count}, Soma Receita={soma}")
+        
+        # Processar cada linha - USAR COMPARAÇÃO EXATA para filial
+        for idx, row in df.iterrows():
+            # Verificar filtro (Filial para gerente, Vendedor para CN)
+            match = False
             
-            # Verificar se é uma sheet de BASE PAGA
-            if 'BASE' in sheet_upper and 'PAGA' in sheet_upper:
-                # Identificar qual pilar
+            if is_gerente and filial_col:
+                row_filial = str(row.get(filial_col, '')).strip().upper()
+                # Comparação EXATA - normalizar ambos para comparar
+                match = (row_filial == user_sector_normalized)
+            elif not is_gerente and vendedor_col:
+                row_vendedor = normalize_text(row.get(vendedor_col, ''))
+                match = (row_vendedor == user_name_normalized or 
+                        user_name_normalized in row_vendedor or 
+                        row_vendedor in user_name_normalized)
+            
+            if match:
+                # Identificar o pilar desta linha
+                pilar_val = normalize_text(row.get(pilar_col, ''))
+                
+                # Mapear para chave do pilar
                 pilar_key = None
-                for pilar_text, pkey in sheets_pago_mapping.items():
-                    if pilar_text in sheet_upper:
-                        pilar_key = pkey
+                for key, value in pilar_mapping.items():
+                    if key in pilar_val or pilar_val == key:
+                        pilar_key = value
                         break
                 
                 if pilar_key:
-                    try:
-                        df = pd.read_excel(xl, sheet_name=sheet_name)
-                        
-                        # Encontrar coluna de Receita
-                        receita_col = None
-                        for col in df.columns:
-                            if str(col).strip().upper() == 'RECEITA':
-                                receita_col = col
-                                break
-                        
-                        if is_gerente:
-                            # GERENTE: buscar por Filial (setor)
-                            filial_col = None
-                            for col in df.columns:
-                                if str(col).strip().upper() == 'FILIAL':
-                                    filial_col = col
-                                    break
-                            
-                            if filial_col is None:
-                                continue
-                            
-                            # Somar Receita da filial
-                            total_receita = 0
-                            for idx, row in df.iterrows():
-                                row_filial = str(row.get(filial_col, '')).strip()
-                                if sectors_match(row_filial, user_sector):
-                                    if receita_col:
-                                        val = row.get(receita_col)
-                                        if pd.notna(val) and isinstance(val, (int, float)):
-                                            total_receita += float(val)
-                                    else:
-                                        total_receita += 1  # Fallback: contar se não tiver Receita
-                            
-                            metas[pilar_key]['pago'] += total_receita
-                        else:
-                            # CN: buscar por Vendedor (nome)
-                            nome_col = None
-                            for col in df.columns:
-                                if str(col).strip().upper() == 'VENDEDOR':
-                                    nome_col = col
-                                    break
-                            
-                            if nome_col is None:
-                                continue
-                            
-                            # Somar Receita do vendedor
-                            total_receita = 0
-                            for idx, row in df.iterrows():
-                                row_name = normalize_text(row.get(nome_col, ''))
-                                if row_name and (row_name == user_name_normalized or 
-                                                user_name_normalized in row_name or 
-                                                row_name in user_name_normalized):
-                                    if receita_col:
-                                        val = row.get(receita_col)
-                                        if pd.notna(val) and isinstance(val, (int, float)):
-                                            total_receita += float(val)
-                                    else:
-                                        total_receita += 1  # Fallback: contar se não tiver Receita
-                            
-                            metas[pilar_key]['pago'] += total_receita
-                        
-                    except Exception as e:
-                        continue
+                    # Somar receita ao pago
+                    val = row.get(receita_col)
+                    if pd.notna(val):
+                        try:
+                            valor_float = float(val)
+                            metas[pilar_key]['pago'] += valor_float
+                        except (ValueError, TypeError):
+                            pass
         
-        # Processar sheets de EXCLUSÃO
-        for sheet_name in available_sheets:
-            sheet_upper = sheet_name.upper()
+        # =====================================================
+        # PROCESSAR SHEET DE EXCLUSÃO
+        # =====================================================
+        try:
+            excel_file.seek(0)
+            df_exclusao = pd.read_excel(excel_file, sheet_name='EXCLUSAO', engine='openpyxl')
+            print(f"[fetch_metas_por_pilar] Colunas da sheet EXCLUSÃO: {list(df_exclusao.columns)}")
+            print(f"[fetch_metas_por_pilar] Total de linhas EXCLUSÃO: {len(df_exclusao)}")
             
-            # Verificar se é uma sheet de EXCLUSÃO
-            if 'EXCLUS' in sheet_upper or 'EXCLUSA' in sheet_upper:
-                try:
-                    df = pd.read_excel(xl, sheet_name=sheet_name)
+            # Encontrar colunas na sheet de exclusão
+            filial_col_exc = None
+            receita_col_exc = None
+            pilar_col_exc = None
+            
+            for col in df_exclusao.columns:
+                col_upper = str(col).strip().upper()
+                if col_upper == 'FILIAL':
+                    filial_col_exc = col
+                elif col_upper == 'RECEITA':
+                    receita_col_exc = col
+                elif col_upper == 'PILAR':
+                    pilar_col_exc = col
+            
+            print(f"[fetch_metas_por_pilar] EXCLUSÃO - filial_col={filial_col_exc}, receita_col={receita_col_exc}, pilar_col={pilar_col_exc}")
+            
+            if filial_col_exc and receita_col_exc and pilar_col_exc:
+                # Debug: mostrar soma por pilar para SERRA SEDE na sheet de exclusão
+                df_exc_serra = df_exclusao[df_exclusao[filial_col_exc].astype(str).str.strip().str.upper() == user_sector_normalized]
+                print(f"[DEBUG EXCLUSÃO] Linhas com Filial '{user_sector_normalized}': {len(df_exc_serra)}")
+                
+                for pilar_nome in df_exc_serra[pilar_col_exc].dropna().unique():
+                    df_pilar = df_exc_serra[df_exc_serra[pilar_col_exc] == pilar_nome]
+                    soma = df_pilar[receita_col_exc].sum()
+                    count = len(df_pilar)
+                    print(f"[DEBUG EXCLUSÃO {user_sector_normalized}] Pilar={pilar_nome}, Qtd={count}, Soma Receita={soma}")
+                
+                # Processar cada linha da sheet de exclusão
+                for idx, row in df_exclusao.iterrows():
+                    row_filial = str(row.get(filial_col_exc, '')).strip().upper()
                     
-                    # Coluna de pilar
-                    pilar_col = None
-                    for col in df.columns:
-                        if str(col).strip().upper() == 'PILAR':
-                            pilar_col = col
-                            break
-                    
-                    # Encontrar coluna de Receita
-                    receita_col = None
-                    for col in df.columns:
-                        if str(col).strip().upper() == 'RECEITA':
-                            receita_col = col
-                            break
-                    
-                    if is_gerente:
-                        # GERENTE: buscar por Filial
-                        filial_col = None
-                        for col in df.columns:
-                            if str(col).strip().upper() == 'FILIAL':
-                                filial_col = col
+                    # Comparação EXATA
+                    if row_filial == user_sector_normalized:
+                        pilar_val = normalize_text(row.get(pilar_col_exc, ''))
+                        
+                        # Mapear para chave do pilar
+                        pilar_key = None
+                        for key, value in pilar_mapping.items():
+                            if key in pilar_val or pilar_val == key:
+                                pilar_key = value
                                 break
                         
-                        if filial_col is None:
-                            continue
-                        
-                        for idx, row in df.iterrows():
-                            row_filial = str(row.get(filial_col, '')).strip()
-                            if sectors_match(row_filial, user_sector):
-                                if pilar_col:
-                                    pilar_val = str(row.get(pilar_col, '')).strip().upper()
-                                    for key, value in pilar_mapping.items():
-                                        if key in pilar_val or pilar_val == key:
-                                            # Somar Receita
-                                            if receita_col:
-                                                val = row.get(receita_col)
-                                                if pd.notna(val) and isinstance(val, (int, float)):
-                                                    metas[value]['exclusao'] += float(val)
-                                                else:
-                                                    metas[value]['exclusao'] += 1
-                                            else:
-                                                metas[value]['exclusao'] += 1
-                                            break
-                    else:
-                        # CN: buscar por Vendedor
-                        nome_col = None
-                        for col in df.columns:
-                            if str(col).strip().upper() == 'VENDEDOR':
-                                nome_col = col
-                                break
-                        
-                        if nome_col is None:
-                            continue
-                        
-                        for idx, row in df.iterrows():
-                            row_name = normalize_text(row.get(nome_col, ''))
-                            if row_name and (row_name == user_name_normalized or 
-                                            user_name_normalized in row_name or 
-                                            row_name in user_name_normalized):
-                                if pilar_col:
-                                    pilar_val = str(row.get(pilar_col, '')).strip().upper()
-                                    for key, value in pilar_mapping.items():
-                                        if key in pilar_val or pilar_val == key:
-                                            # Somar Receita
-                                            if receita_col:
-                                                val = row.get(receita_col)
-                                                if pd.notna(val) and isinstance(val, (int, float)):
-                                                    metas[value]['exclusao'] += float(val)
-                                                else:
-                                                    metas[value]['exclusao'] += 1
-                                            else:
-                                                metas[value]['exclusao'] += 1
-                                            break
-                    
-                except Exception as e:
-                    continue
+                        if pilar_key:
+                            val = row.get(receita_col_exc)
+                            if pd.notna(val):
+                                try:
+                                    valor_float = float(val)
+                                    metas[pilar_key]['exclusao'] += valor_float
+                                except (ValueError, TypeError):
+                                    pass
+            else:
+                print(f"[fetch_metas_por_pilar] AVISO: Colunas obrigatórias não encontradas na sheet EXCLUSÃO")
+                
+        except Exception as e:
+            print(f"[fetch_metas_por_pilar] Erro ao ler sheet EXCLUSÃO: {e}")
         
-        # Calcular Total = Pago + Exclusão para cada pilar
+        # Calcular totais
+        total_geral_pago = 0
+        total_geral_exclusao = 0
         for pilar_key in metas:
-            metas[pilar_key]['total'] = metas[pilar_key]['pago'] + metas[pilar_key]['exclusao']
+            pago = metas[pilar_key]['pago']
+            exclusao = metas[pilar_key]['exclusao']
+            total_geral_pago += pago
+            total_geral_exclusao += exclusao
+            # Total = Pago + Exclusão para calcular porcentagem
+            metas[pilar_key]['total'] = (pago + exclusao) if (pago + exclusao) > 0 else 1
         
+        print(f"[fetch_metas_por_pilar] RESULTADO FINAL: {metas}")
+        print(f"[fetch_metas_por_pilar] Total geral pago: {total_geral_pago}, Total geral exclusão: {total_geral_exclusao}")
+        
+        # Salvar no cache por 5 minutos
         cache.set(cache_key, metas, 300)
         
         return metas
         
     except Exception as e:
+        print(f"[fetch_metas_por_pilar] Erro geral: {e}")
+        import traceback
+        traceback.print_exc()
         return metas
 
 
@@ -1052,6 +1027,29 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
         'seguros': safe_float(data.get('HUNTER_SEGUROS')),
         'sva': safe_float(data.get('HUNTER_SVA')),
     }
+    # Calcular total do Hunter
+    processed['hunter']['total'] = sum([
+        processed['hunter']['movel'],
+        processed['hunter']['fixa'],
+        processed['hunter']['smartphone'],
+        processed['hunter']['eletronicos'],
+        processed['hunter']['essenciais'],
+        processed['hunter']['seguros'],
+        processed['hunter']['sva'],
+    ])
+    
+    # Bônus Hunter (H_MÓVEL, H_FIXA, etc.)
+    bonus_hunter_valores = {
+        'movel': data.get('H_MÓVEL'),
+        'fixa': data.get('H_FIXA'),
+        'smartphone': data.get('H_SMARTPHONE'),
+        'eletronicos': data.get('H_ELETRONICOS'),
+        'essenciais': data.get('H_ESSENCIAIS'),
+        'seguro': data.get('H_SEGURO'),
+        'sva': data.get('H_SVA'),
+    }
+    bonus_hunter_valores['total'] = 0
+    processed['bonus_hunter'] = bonus_hunter_valores
     
     # Aceleradores e IQ
     processed['aceleradores'] = {
@@ -1100,6 +1098,12 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
             'campanha': safe_float(data.get('CAMPANHA')),
         }
         processed['totais']['cargo_label'] = 'CN'
+    
+    # Calcular totais de Pago e Exclusão (soma de todos os pilares)
+    total_pago = sum(p['pago'] for p in processed['pilares'])
+    total_exclusao = sum(p['exclusao'] for p in processed['pilares'])
+    processed['totais']['total_pago'] = total_pago
+    processed['totais']['total_exclusao'] = total_exclusao
     
     processed['habilitados'] = {
         'pilares_67': data.get('6/7PILARES'),
@@ -1276,6 +1280,22 @@ def process_coordenador_commission_data(data):
         'essenciais': safe_float(data.get('HUNTER_ESSENCIAIS')),
         'seguros': safe_float(data.get('HUNTER_SEGUROS')),
         'sva': safe_float(data.get('HUNTER_SVA')),
+    }
+    # Calcular total do Hunter
+    processed['hunter']['total'] = sum([
+        processed['hunter']['movel'],
+        processed['hunter']['fixa'],
+        processed['hunter']['smartphone'],
+        processed['hunter']['eletronicos'],
+        processed['hunter']['essenciais'],
+        processed['hunter']['seguros'],
+        processed['hunter']['sva'],
+    ])
+    
+    # Bônus Hunter - Coordenador não tem
+    processed['bonus_hunter'] = {
+        'movel': 0, 'fixa': 0, 'smartphone': 0,
+        'eletronicos': 0, 'essenciais': 0, 'seguro': 0, 'sva': 0, 'total': 0
     }
     
     # Aceleradores e IQ
@@ -1561,7 +1581,9 @@ def commission_gerente_view(request):
         # Buscar metas por pilar - Gerente busca por filial, CN busca por nome
         target_name = target_user.get_full_name() or target_user.first_name
         target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
+        print(f"[commission_gerente_view] target_name={target_name}, target_is_gerente={target_is_gerente}, target_sector={target_sector}")
         metas_pilar = fetch_metas_por_pilar(target_name, target_is_gerente, target_sector)
+        print(f"[commission_gerente_view] metas_pilar retornado: {metas_pilar}")
         processed = process_commission_data(result['data'], target_is_gerente, metas_pilar)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
