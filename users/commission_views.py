@@ -878,6 +878,8 @@ def get_month_names():
 def fetch_vendedores_por_filial(user_sector):
     """
     Busca todos os vendedores e suas comissões por pilar da BASE_PAGAMENTO para uma filial.
+    Busca também os percentuais de atingimento da planilha REMUNERAÇÃO CN.
+    Retorna no formato esperado pelo template (com lista de pilares).
     """
     if not user_sector:
         print("[fetch_vendedores_por_filial] user_sector vazio")
@@ -903,8 +905,127 @@ def fetch_vendedores_por_filial(user_sector):
         'SVA': 'sva',
     }
     
+    # Ordem dos pilares para o template
+    pilares_ordem = ['movel', 'fixa', 'smartphone', 'eletronicos', 'essenciais', 'seguro', 'sva']
+    pilares_nomes = {
+        'movel': 'Móvel', 'fixa': 'Fixa', 'smartphone': 'Smartphone',
+        'eletronicos': 'Eletrônicos', 'essenciais': 'Essenciais', 'seguro': 'Seguro', 'sva': 'SVA'
+    }
+    
+    # Mapeamento de colunas %ATING_ da planilha REMUNERAÇÃO CN
+    ating_cols_map = {
+        'movel': ['%ATING_MOVEL', '%ATING_MÓVEL', 'ATING_MOVEL', '%MOVEL'],
+        'fixa': ['%ATING_FIXA', 'ATING_FIXA', '%FIXA'],
+        'smartphone': ['%ATING_SMART', 'ATING_SMART', '%SMART', '%ATING_SMARTPHONE'],
+        'eletronicos': ['%ATING_ELETRO', 'ATING_ELETRO', '%ELETRO', '%ATING_ELETRONICOS'],
+        'essenciais': ['%ATING_ESSEN', 'ATING_ESSEN', '%ESSEN', '%ATING_ESSENCIAIS'],
+        'seguro': ['%ATING_SEG', 'ATING_SEG', '%SEG', '%ATING_SEGURO'],
+        'sva': ['%ATING_SVA', 'ATING_SVA', '%SVA'],
+    }
+    
     try:
-        # Baixar planilha usando a função de download que trata URLs do OneDrive
+        # 1. Buscar dados da planilha REMUNERAÇÃO CN (percentuais de atingimento)
+        excel_file_rem, error = download_excel_file(EXCEL_COMISSAO_URL, "remuneracao_cn")
+        ating_por_vendedor = {}  # {vendedor_nome_upper: {pilar: pct}}
+        remuneracao_por_vendedor = {}  # {vendedor_nome_upper: remuneracao_final}
+        
+        if not error:
+            try:
+                excel_file_rem.seek(0)
+                df_rem = pd.read_excel(excel_file_rem, sheet_name='REMUNERAÇÃO CN', engine='openpyxl')
+                print(f"[fetch_vendedores_por_filial] Colunas REMUNERAÇÃO CN: {list(df_rem.columns)}")
+                
+                # Encontrar coluna de nome
+                nome_col_rem = None
+                for col in df_rem.columns:
+                    if 'NOME' in str(col).upper():
+                        nome_col_rem = col
+                        break
+                
+                # Encontrar coluna PDV para filtrar por filial
+                pdv_col_rem = None
+                for col in df_rem.columns:
+                    if 'PDV' in str(col).upper() or 'FILIAL' in str(col).upper():
+                        pdv_col_rem = col
+                        break
+                
+                # Encontrar coluna de remuneração final
+                rem_final_col = None
+                for col in df_rem.columns:
+                    col_upper = str(col).upper()
+                    if 'REMUNERAÇÃO' in col_upper or 'REMUNERACAO' in col_upper:
+                        if 'FINAL' in col_upper or 'TOTAL' in col_upper:
+                            rem_final_col = col
+                            break
+                if not rem_final_col:
+                    for col in df_rem.columns:
+                        col_upper = str(col).upper()
+                        if 'REMUNERAÇÃO' in col_upper or 'REMUNERACAO' in col_upper:
+                            rem_final_col = col
+                            break
+                
+                # Mapear colunas de atingimento
+                ating_cols = {}
+                for pilar_key, possible_cols in ating_cols_map.items():
+                    for col in df_rem.columns:
+                        col_upper = str(col).upper().replace(' ', '_')
+                        for possible in possible_cols:
+                            if possible.upper() in col_upper or col_upper == possible.upper():
+                                ating_cols[pilar_key] = col
+                                break
+                        if pilar_key in ating_cols:
+                            break
+                
+                print(f"[fetch_vendedores_por_filial] Colunas de atingimento mapeadas: {ating_cols}")
+                print(f"[fetch_vendedores_por_filial] Coluna remuneração final: {rem_final_col}")
+                
+                # Filtrar por filial se possível
+                if pdv_col_rem:
+                    df_rem['pdv_norm'] = df_rem[pdv_col_rem].astype(str).str.strip().str.upper()
+                    # Filtrar por filial
+                    mask = df_rem['pdv_norm'].str.contains(user_sector_normalized, case=False, na=False)
+                    df_rem_filial = df_rem[mask]
+                    if df_rem_filial.empty:
+                        df_rem_filial = df_rem  # Se não encontrar, usar todos
+                else:
+                    df_rem_filial = df_rem
+                
+                # Extrair dados de cada vendedor
+                for idx, row in df_rem_filial.iterrows():
+                    if nome_col_rem:
+                        nome = str(row[nome_col_rem]).strip().upper() if pd.notna(row[nome_col_rem]) else ''
+                        if not nome:
+                            continue
+                        
+                        # Percentuais de atingimento
+                        ating_por_vendedor[nome] = {}
+                        for pilar_key, col in ating_cols.items():
+                            val = row[col]
+                            if pd.notna(val):
+                                try:
+                                    pct = float(val)
+                                    # Se valor < 3, provavelmente está em decimal (0.95 = 95%)
+                                    if pct < 3:
+                                        pct = pct * 100
+                                    ating_por_vendedor[nome][pilar_key] = pct
+                                except (ValueError, TypeError):
+                                    pass
+                        
+                        # Remuneração final
+                        if rem_final_col and pd.notna(row[rem_final_col]):
+                            try:
+                                remuneracao_por_vendedor[nome] = float(row[rem_final_col])
+                            except (ValueError, TypeError):
+                                pass
+                
+                print(f"[fetch_vendedores_por_filial] Vendedores com atingimento: {list(ating_por_vendedor.keys())}")
+                
+            except Exception as e:
+                print(f"[fetch_vendedores_por_filial] Erro ao ler REMUNERAÇÃO CN: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # 2. Buscar dados de comissão da BASE_PAGAMENTO
         excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
         if error:
             print(f"[fetch_vendedores_por_filial] Erro ao baixar planilha: {error}")
@@ -912,7 +1033,7 @@ def fetch_vendedores_por_filial(user_sector):
         
         excel_file.seek(0)
         df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
-        print(f"[fetch_vendedores_por_filial] Total de linhas: {len(df)}")
+        print(f"[fetch_vendedores_por_filial] Total de linhas BASE_PAGAMENTO: {len(df)}")
         
         # Colunas
         colunas_lower = {col.lower(): col for col in df.columns}
@@ -943,14 +1064,10 @@ def fetch_vendedores_por_filial(user_sector):
             if vendedor_nome not in vendedores:
                 vendedores[vendedor_nome] = {
                     'nome': vendedor_nome.title(),
-                    'movel_comissao': 0,
-                    'fixa_comissao': 0,
-                    'smartphone_comissao': 0,
-                    'eletronicos_comissao': 0,
-                    'essenciais_comissao': 0,
-                    'seguro_comissao': 0,
-                    'sva_comissao': 0,
+                    'nome_upper': vendedor_nome,
+                    'pilares_valores': {p: 0 for p in pilares_ordem},
                     'comissao_total': 0,
+                    'remuneracao_final': 0,
                 }
             
             # Identificar pilar
@@ -967,15 +1084,53 @@ def fetch_vendedores_por_filial(user_sector):
                 if pd.notna(receita):
                     try:
                         valor = float(receita)
-                        vendedores[vendedor_nome][f'{pilar_key}_comissao'] += valor
+                        vendedores[vendedor_nome]['pilares_valores'][pilar_key] += valor
                         vendedores[vendedor_nome]['comissao_total'] += valor
                     except (ValueError, TypeError):
                         pass
         
-        result = list(vendedores.values())
+        # Converter para formato esperado pelo template
+        result = []
+        for vendedor_nome, dados in vendedores.items():
+            nome_upper = dados['nome_upper']
+            
+            # Criar lista de pilares com percentual de ATINGIMENTO
+            pilares = []
+            for p in pilares_ordem:
+                valor = dados['pilares_valores'][p]
+                # Buscar percentual de atingimento da planilha REMUNERAÇÃO CN
+                pct = 0
+                if nome_upper in ating_por_vendedor and p in ating_por_vendedor[nome_upper]:
+                    pct = ating_por_vendedor[nome_upper][p]
+                
+                pilares.append({
+                    'nome': pilares_nomes[p],
+                    'pct': pct,
+                    'comissao': valor,
+                })
+            
+            # Remuneração final da planilha REMUNERAÇÃO CN ou usar comissao_total
+            remuneracao = remuneracao_por_vendedor.get(nome_upper, dados['comissao_total'])
+            
+            result.append({
+                'nome': dados['nome'],
+                'pilares': pilares,
+                'comissao_total': dados['comissao_total'],
+                'remuneracao_final': remuneracao,
+                # Campos individuais para o gráfico de representatividade
+                'movel_comissao': dados['pilares_valores']['movel'],
+                'fixa_comissao': dados['pilares_valores']['fixa'],
+                'smartphone_comissao': dados['pilares_valores']['smartphone'],
+                'eletronicos_comissao': dados['pilares_valores']['eletronicos'],
+                'essenciais_comissao': dados['pilares_valores']['essenciais'],
+                'seguro_comissao': dados['pilares_valores']['seguro'],
+                'sva_comissao': dados['pilares_valores']['sva'],
+            })
+        
         print(f"[fetch_vendedores_por_filial] Total vendedores encontrados: {len(result)}")
         for v in result:
-            print(f"  - {v['nome']}: R$ {v['comissao_total']:.2f}")
+            pcts = [f"{p['nome']}:{p['pct']:.0f}%" for p in v['pilares']]
+            print(f"  - {v['nome']}: R$ {v['comissao_total']:.2f} | {', '.join(pcts)}")
         
         return result
         
