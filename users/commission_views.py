@@ -985,7 +985,9 @@ def fetch_vendedores_por_filial(user_sector):
                     # Filtrar por filial
                     mask = df_rem['pdv_norm'].str.contains(user_sector_normalized, case=False, na=False)
                     df_rem_filial = df_rem[mask]
+                    print(f"[fetch_vendedores_por_filial] Filtro PDV '{user_sector_normalized}': {len(df_rem_filial)} registros")
                     if df_rem_filial.empty:
+                        print(f"[fetch_vendedores_por_filial] PDVs na planilha: {list(df_rem['pdv_norm'].unique())[:10]}")
                         df_rem_filial = df_rem  # Se não encontrar, usar todos
                 else:
                     df_rem_filial = df_rem
@@ -1094,14 +1096,36 @@ def fetch_vendedores_por_filial(user_sector):
         for vendedor_nome, dados in vendedores.items():
             nome_upper = dados['nome_upper']
             
+            # Buscar percentual de atingimento - tentar match exato primeiro, depois fuzzy
+            vendedor_ating = None
+            if nome_upper in ating_por_vendedor:
+                vendedor_ating = ating_por_vendedor[nome_upper]
+            else:
+                # Tentar match parcial/fuzzy
+                for ating_nome in ating_por_vendedor.keys():
+                    # Remover espaços extras e comparar
+                    nome_clean = ' '.join(nome_upper.split())
+                    ating_clean = ' '.join(ating_nome.split())
+                    if nome_clean == ating_clean:
+                        vendedor_ating = ating_por_vendedor[ating_nome]
+                        break
+                    # Comparar primeiras palavras (nome e sobrenome)
+                    nome_parts = nome_clean.split()
+                    ating_parts = ating_clean.split()
+                    if len(nome_parts) >= 2 and len(ating_parts) >= 2:
+                        if nome_parts[0] == ating_parts[0] and nome_parts[-1] == ating_parts[-1]:
+                            vendedor_ating = ating_por_vendedor[ating_nome]
+                            print(f"[fetch_vendedores_por_filial] Match fuzzy: '{nome_upper}' <-> '{ating_nome}'")
+                            break
+            
             # Criar lista de pilares com percentual de ATINGIMENTO
             pilares = []
             for p in pilares_ordem:
                 valor = dados['pilares_valores'][p]
                 # Buscar percentual de atingimento da planilha REMUNERAÇÃO CN
                 pct = 0
-                if nome_upper in ating_por_vendedor and p in ating_por_vendedor[nome_upper]:
-                    pct = ating_por_vendedor[nome_upper][p]
+                if vendedor_ating and p in vendedor_ating:
+                    pct = vendedor_ating[p]
                 
                 pilares.append({
                     'nome': pilares_nomes[p],
