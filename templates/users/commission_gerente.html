@@ -214,6 +214,43 @@
         </div>
     </div>
     
+    <!-- Card Gráfico de Rosca - Representatividade por Vendedor -->
+    {% if cns_resumo and not viewing_other %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-800">Representatividade de Comissões</h2>
+                <p class="text-sm text-gray-500">Participação de cada vendedor no pilar selecionado</p>
+            </div>
+            <select id="pilarSelect" 
+                class="text-sm border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-[180px]">
+                <option value="total">Total Geral</option>
+                <option value="0">📱 Móvel</option>
+                <option value="1">🏠 Fixa</option>
+                <option value="2">📲 Smartphone</option>
+                <option value="3">💻 Eletrônicos</option>
+                <option value="4">🛒 Essenciais</option>
+                <option value="5">🛡️ Seguro</option>
+                <option value="6">⭐ SVA</option>
+            </select>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Gráfico de Rosca -->
+            <div class="relative">
+                <div class="h-80">
+                    <canvas id="chartRepresentatividade"></canvas>
+                </div>
+            </div>
+            
+            <!-- Lista de Vendedores -->
+            <div id="listaVendedores" class="space-y-2 max-h-80 overflow-y-auto">
+                <!-- Preenchido via JavaScript -->
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Tabela Consolidada de Comissionamento -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
         <div class="px-6 py-4 border-b border-gray-100">
@@ -584,6 +621,129 @@ document.addEventListener('DOMContentLoaded', function() {
             circle.style.strokeDashoffset = Math.max(offset, 0);
         }, 100);
     });
+    
+    // =====================================================
+    // Gráfico de Rosca - Representatividade por Vendedor com filtro de Pilar
+    // =====================================================
+    {% if cns_resumo %}
+    var vendedoresData = [
+        {% for cn in cns_resumo %}{
+            nome: "{{ cn.nome|escapejs }}",
+            total: parseFloat("{{ cn.comissao_total|default_if_none:0 }}".replace(',', '.')) || 0,
+            pilares: [
+                parseFloat("{{ cn.movel_comissao|default_if_none:0 }}".replace(',', '.')) || 0,
+                parseFloat("{{ cn.fixa_comissao|default_if_none:0 }}".replace(',', '.')) || 0,
+                parseFloat("{{ cn.smartphone_comissao|default_if_none:0 }}".replace(',', '.')) || 0,
+                parseFloat("{{ cn.eletronicos_comissao|default_if_none:0 }}".replace(',', '.')) || 0,
+                parseFloat("{{ cn.essenciais_comissao|default_if_none:0 }}".replace(',', '.')) || 0,
+                parseFloat("{{ cn.seguro_comissao|default_if_none:0 }}".replace(',', '.')) || 0,
+                parseFloat("{{ cn.sva_comissao|default_if_none:0 }}".replace(',', '.')) || 0
+            ]
+        }{% if not forloop.last %}, {% endif %}{% endfor %}
+    ];
+    
+    var pilarNomes = ['Móvel', 'Fixa', 'Smartphone', 'Eletrônicos', 'Essenciais', 'Seguro', 'SVA'];
+    var chartColors = ['#660099', '#9B30FF', '#BA55D3', '#9370DB', '#8A2BE2', '#7B68EE', '#6A5ACD', '#FF6B35', '#00B4D8', '#95C623', '#FFC107', '#E91E63', '#00BCD4', '#4CAF50', '#FF5722'];
+    
+    var representatividadeChart = null;
+    var representatividadeCtx = document.getElementById('chartRepresentatividade');
+    
+    function atualizarGraficoRepresentatividade(pilarIndex) {
+        var nomes = [];
+        var valores = [];
+        var total = 0;
+        
+        vendedoresData.forEach(function(v) {
+            var valor = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
+            if (valor > 0) {
+                nomes.push(v.nome);
+                valores.push(valor);
+                total += valor;
+            }
+        });
+        
+        // Atualiza lista de vendedores
+        var listaDiv = document.getElementById('listaVendedores');
+        if (listaDiv) {
+            var html = '';
+            vendedoresData.forEach(function(v, idx) {
+                var valor = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
+                var percent = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
+                html += '<div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">';
+                html += '<div class="flex items-center gap-3">';
+                html += '<div class="w-3 h-3 rounded-full" style="background-color: ' + chartColors[idx % chartColors.length] + '"></div>';
+                html += '<span class="font-medium text-gray-700 text-sm">' + v.nome + '</span>';
+                html += '</div>';
+                html += '<div class="text-right">';
+                if (valor > 0) {
+                    html += '<span class="font-semibold text-gray-800 text-sm">R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
+                    html += '<span class="text-gray-500 text-xs ml-2">(' + percent + '%)</span>';
+                } else {
+                    html += '<span class="text-gray-400 text-sm">-</span>';
+                }
+                html += '</div>';
+                html += '</div>';
+            });
+            
+            html += '<div class="flex items-center justify-between py-3 px-3 bg-primary/10 rounded-lg mt-4 border-t-2 border-primary">';
+            html += '<span class="font-semibold text-gray-800">Total ' + (pilarIndex === 'total' ? 'Geral' : pilarNomes[parseInt(pilarIndex)]) + '</span>';
+            html += '<span class="font-bold text-primary text-lg">R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
+            html += '</div>';
+            
+            listaDiv.innerHTML = html;
+        }
+        
+        // Atualiza gráfico
+        if (representatividadeChart) {
+            representatividadeChart.destroy();
+        }
+        
+        if (representatividadeCtx && nomes.length > 0) {
+            representatividadeChart = new Chart(representatividadeCtx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: nomes,
+                    datasets: [{
+                        data: valores,
+                        backgroundColor: chartColors.slice(0, nomes.length),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    var valor = context.raw;
+                                    var percent = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + ' (' + percent + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    // Inicializa com Total Geral
+    atualizarGraficoRepresentatividade('total');
+    
+    // Event listener para mudança de pilar
+    var pilarSelect = document.getElementById('pilarSelect');
+    if (pilarSelect) {
+        pilarSelect.addEventListener('change', function() {
+            atualizarGraficoRepresentatividade(this.value);
+        });
+    }
+    {% endif %}
 });
 </script>
 {% endif %}

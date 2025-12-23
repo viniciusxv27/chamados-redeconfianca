@@ -875,6 +875,117 @@ def get_month_names():
     }
 
 
+def fetch_vendedores_por_filial(user_sector):
+    """
+    Busca todos os vendedores e suas comissões por pilar da BASE_PAGAMENTO para uma filial.
+    """
+    if not user_sector:
+        print("[fetch_vendedores_por_filial] user_sector vazio")
+        return []
+    
+    # Normalizar nome do setor
+    user_sector_normalized = str(user_sector).strip().upper()
+    prefixes = ['LOJA ', 'LOJA_', 'PDV ', 'PDV_']
+    for prefix in prefixes:
+        if user_sector_normalized.startswith(prefix):
+            user_sector_normalized = user_sector_normalized[len(prefix):]
+    
+    print(f"[fetch_vendedores_por_filial] Buscando vendedores para filial: {user_sector_normalized}")
+    
+    # Mapeamento de pilares
+    pilar_mapping = {
+        'MÓVEL': 'movel', 'MOVEL': 'movel',
+        'FIXA': 'fixa',
+        'SMARTPHONE': 'smartphone', 'SMART': 'smartphone',
+        'ELETRONICOS': 'eletronicos', 'ELETRÔNICOS': 'eletronicos', 'ELETRO': 'eletronicos',
+        'ESSENCIAIS': 'essenciais', 'ESSEN': 'essenciais',
+        'SEGURO': 'seguro', 'SEGUROS': 'seguro', 'SEG': 'seguro',
+        'SVA': 'sva',
+    }
+    
+    try:
+        # Baixar planilha usando a função de download que trata URLs do OneDrive
+        excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
+        if error:
+            print(f"[fetch_vendedores_por_filial] Erro ao baixar planilha: {error}")
+            return []
+        
+        excel_file.seek(0)
+        df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
+        print(f"[fetch_vendedores_por_filial] Total de linhas: {len(df)}")
+        
+        # Colunas
+        colunas_lower = {col.lower(): col for col in df.columns}
+        filial_col = colunas_lower.get('filial') or df.columns[df.columns.str.lower().str.contains('filial')].tolist()[0] if any(df.columns.str.lower().str.contains('filial')) else None
+        vendedor_col = colunas_lower.get('vendedor') or df.columns[df.columns.str.lower().str.contains('vendedor')].tolist()[0] if any(df.columns.str.lower().str.contains('vendedor')) else None
+        receita_col = colunas_lower.get('receita') or df.columns[df.columns.str.lower().str.contains('receita')].tolist()[0] if any(df.columns.str.lower().str.contains('receita')) else None
+        pilar_col = colunas_lower.get('pilar') or df.columns[df.columns.str.lower().str.contains('pilar')].tolist()[0] if any(df.columns.str.lower().str.contains('pilar')) else None
+        
+        if not all([filial_col, vendedor_col, receita_col, pilar_col]):
+            print(f"[fetch_vendedores_por_filial] Colunas não encontradas")
+            return []
+        
+        # Filtrar por filial exata
+        df['filial_norm'] = df[filial_col].astype(str).str.strip().str.upper()
+        df_filial = df[df['filial_norm'] == user_sector_normalized]
+        print(f"[fetch_vendedores_por_filial] Linhas para {user_sector_normalized}: {len(df_filial)}")
+        
+        if df_filial.empty:
+            return []
+        
+        # Agrupar por vendedor e pilar
+        vendedores = {}
+        for idx, row in df_filial.iterrows():
+            vendedor_nome = str(row[vendedor_col]).strip().upper() if pd.notna(row[vendedor_col]) else ''
+            if not vendedor_nome:
+                continue
+                
+            if vendedor_nome not in vendedores:
+                vendedores[vendedor_nome] = {
+                    'nome': vendedor_nome.title(),
+                    'movel_comissao': 0,
+                    'fixa_comissao': 0,
+                    'smartphone_comissao': 0,
+                    'eletronicos_comissao': 0,
+                    'essenciais_comissao': 0,
+                    'seguro_comissao': 0,
+                    'sva_comissao': 0,
+                    'comissao_total': 0,
+                }
+            
+            # Identificar pilar
+            pilar_val = str(row[pilar_col]).strip().upper() if pd.notna(row[pilar_col]) else ''
+            pilar_key = None
+            for key, value in pilar_mapping.items():
+                if key in pilar_val or pilar_val == key:
+                    pilar_key = value
+                    break
+            
+            # Somar receita
+            if pilar_key:
+                receita = row[receita_col]
+                if pd.notna(receita):
+                    try:
+                        valor = float(receita)
+                        vendedores[vendedor_nome][f'{pilar_key}_comissao'] += valor
+                        vendedores[vendedor_nome]['comissao_total'] += valor
+                    except (ValueError, TypeError):
+                        pass
+        
+        result = list(vendedores.values())
+        print(f"[fetch_vendedores_por_filial] Total vendedores encontrados: {len(result)}")
+        for v in result:
+            print(f"  - {v['nome']}: R$ {v['comissao_total']:.2f}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"[fetch_vendedores_por_filial] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
 def process_commission_data(data, is_gerente=False, metas_pilar=None):
     """
     Processa os dados brutos da planilha e organiza em seções.
@@ -1150,31 +1261,41 @@ def process_simple_commission_data(data, is_gerente=False):
     Versão simplificada para listar múltiplos usuários
     """
     pilares_config = [
-        {'nome': 'Móvel', 'key': 'MOVEL'},
-        {'nome': 'Fixa', 'key': 'FIXA'},
-        {'nome': 'Smartphone', 'key': 'SMART'},
-        {'nome': 'Eletrônicos', 'key': 'ELETRO'},
-        {'nome': 'Essenciais', 'key': 'ESSEN'},
-        {'nome': 'Seguro', 'key': 'SEG'},
-        {'nome': 'SVA', 'key': 'SVA'},
+        {'nome': 'Móvel', 'key': 'MOVEL', 'com_key': 'COM_MÓVEL', 'field': 'movel_comissao'},
+        {'nome': 'Fixa', 'key': 'FIXA', 'com_key': 'COM_FIXA', 'field': 'fixa_comissao'},
+        {'nome': 'Smartphone', 'key': 'SMART', 'com_key': 'COM_SMARTPHONE', 'field': 'smartphone_comissao'},
+        {'nome': 'Eletrônicos', 'key': 'ELETRO', 'com_key': 'COM_ELETRONICOS', 'field': 'eletronicos_comissao'},
+        {'nome': 'Essenciais', 'key': 'ESSEN', 'com_key': 'COM_ESSENCIAIS', 'field': 'essenciais_comissao'},
+        {'nome': 'Seguro', 'key': 'SEG', 'com_key': 'COM_SEGURO', 'field': 'seguro_comissao'},
+        {'nome': 'SVA', 'key': 'SVA', 'com_key': 'COM_SVA', 'field': 'sva_comissao'},
     ]
     
     pilares = []
-    for pilar in pilares_config:
-        key = pilar['key']
-        pct_1_raw = safe_float(data.get(f'%ATING_{key}_1'))
-        pilares.append({
-            'nome': pilar['nome'],
-            'pct': convert_percentage(pct_1_raw),
-        })
-    
-    return {
+    result = {
         'nome': data.get('NOME', ''),
         'pdv': data.get('PDV', ''),
-        'pilares': pilares,
         'remuneracao_final': safe_float(data.get('REMUNERAÇÃO_FINAL_TOTAL') or data.get('REMUNERAÇÃO FINAL TOTAL')),
         'comissao_total': safe_float(data.get('Total Comissão')),
     }
+    
+    for pilar in pilares_config:
+        key = pilar['key']
+        pct_1_raw = safe_float(data.get(f'%ATING_{key}_1'))
+        
+        # Buscar comissão do pilar
+        comissao = safe_float(data.get(pilar['com_key'])) or safe_float(data.get(f"COM_{pilar['nome'].upper()}"))
+        
+        pilares.append({
+            'nome': pilar['nome'],
+            'pct': convert_percentage(pct_1_raw),
+            'comissao': comissao,
+        })
+        
+        # Adicionar campo individual de comissão para o gráfico
+        result[pilar['field']] = comissao
+    
+    result['pilares'] = pilares
+    return result
 
 
 def process_coordenador_commission_data(data):
@@ -1544,23 +1665,10 @@ def commission_gerente_view(request):
     # Buscar dados de comissionamento
     result = fetch_excel_data(sheet_name, user_full_name)
     
-    # Buscar resumo de todos os CNs da loja
-    cns_resumo = []
-    all_cns_result = fetch_all_users_from_sheet(SHEET_CN)
-    
-    if all_cns_result.get('success'):
-        # Filtrar apenas CNs do mesmo setor
-        for cn_data in all_cns_result['users']:
-            # Buscar usuário no sistema pelo nome
-            cn_nome = cn_data['nome'].upper()
-            for cn in sector_cns:
-                cn_full_name = (cn.get_full_name() or cn.first_name).upper()
-                if cn_full_name in cn_nome or cn_nome in cn_full_name:
-                    processed = process_simple_commission_data(cn_data['data'])
-                    processed['user_id'] = cn.id
-                    processed['user_obj'] = cn
-                    cns_resumo.append(processed)
-                    break
+    # Buscar resumo de todos os vendedores da loja diretamente da BASE_PAGAMENTO
+    target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
+    cns_resumo = fetch_vendedores_por_filial(target_sector)
+    print(f"[commission_gerente_view] cns_resumo da BASE_PAGAMENTO: {len(cns_resumo)} vendedores")
     
     meses = get_month_names()
     
