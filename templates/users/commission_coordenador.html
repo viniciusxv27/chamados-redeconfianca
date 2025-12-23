@@ -138,89 +138,188 @@
         </div>
     </div>
     
-    <!-- Detalhamento de Comissões e Hunter -->
+    <!-- Grid de Gráficos do Coordenador -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Comissões -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">Detalhamento de Comissões</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguro</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.seguro|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.comissoes.sva|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 bg-primary/5">
-                    <span class="font-semibold text-gray-800">Total</span>
-                    <span class="font-bold text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</span>
-                </div>
+        <!-- Gráfico de Barras - Comissões -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-1">Comissões por Pilar</h2>
+            <p class="text-sm text-gray-500 mb-6">Valores em R$</p>
+            <div class="h-64">
+                <canvas id="chartComissoesCoord"></canvas>
             </div>
         </div>
         
-        <!-- Hunter -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">🎯 Hunter</h2>
-            </div>
-            <div class="divide-y divide-gray-50">
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Móvel</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Fixa</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Smartphone</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Eletrônicos</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Essenciais</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.essenciais|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">Seguros</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.seguros|floatformat:2 }}</span>
-                </div>
-                <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
-                    <span class="text-gray-600">SVA</span>
-                    <span class="font-medium text-gray-800">R$ {{ data.hunter.sva|floatformat:2 }}</span>
-                </div>
+        <!-- Gráfico Donut - Composição -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-1">Composição da Remuneração</h2>
+            <p class="text-sm text-gray-500 mb-6">Distribuição por categoria</p>
+            <div class="h-64">
+                <canvas id="chartComposicaoCoord"></canvas>
             </div>
         </div>
     </div>
     
-    {% endif %}
+    <!-- Tabela Consolidada de Detalhamento por Pilar -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar</h2>
+            <p class="text-sm text-gray-500">Visão consolidada de todas as comissões e bônus</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-3 text-left">Pilar</th>
+                        <th class="px-3 py-3 text-right">Comissões</th>
+                        <th class="px-3 py-3 text-right">Bônus Carteira</th>
+                        <th class="px-3 py-3 text-right">Alto Desemp.</th>
+                        <th class="px-3 py-3 text-right">Hunter</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <!-- Móvel -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">📱</span>
+                                <span class="font-medium text-gray-800">Móvel</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Fixa -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🏠</span>
+                                <span class="font-medium text-gray-800">Fixa</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Smartphone -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">📲</span>
+                                <span class="font-medium text-gray-800">Smartphone</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Eletrônicos -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">💻</span>
+                                <span class="font-medium text-gray-800">Eletrônicos</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Essenciais -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🛒</span>
+                                <span class="font-medium text-gray-800">Essenciais</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Seguro -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🛡️</span>
+                                <span class="font-medium text-gray-800">Seguro</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguros|floatformat:2 }}</td>
+                    </tr>
+                    <!-- SVA -->
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">⭐</span>
+                                <span class="font-medium text-gray-800">SVA</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-100 font-semibold">
+                        <td class="px-4 py-3 text-gray-800">Total</td>
+                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-green-600">-</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
     
+    <!-- Card Gráfico de Rosca - Representatividade por Loja -->
+    {% if lojas_resumo %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-800">Representatividade de Comissões por Loja</h2>
+                <p class="text-sm text-gray-500">Participação de cada loja no pilar selecionado</p>
+            </div>
+            <select id="pilarSelectLoja" 
+                class="text-sm border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-[180px]">
+                <option value="total">Total Geral</option>
+                <option value="0">📱 Móvel</option>
+                <option value="1">🏠 Fixa</option>
+                <option value="2">📲 Smartphone</option>
+                <option value="3">💻 Eletrônicos</option>
+                <option value="4">🛒 Essenciais</option>
+                <option value="5">🛡️ Seguro</option>
+                <option value="6">⭐ SVA</option>
+            </select>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Gráfico de Rosca -->
+            <div class="relative">
+                <div class="h-80">
+                    <canvas id="chartRepresentatividadeLoja"></canvas>
+                </div>
+            </div>
+            
+            <!-- Lista de Lojas -->
+            <div id="listaLojas" class="space-y-2 max-h-80 overflow-y-auto">
+                <!-- Preenchido via JavaScript -->
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% endif %}
     <!-- Resumo das Lojas -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <div class="flex items-center justify-between mb-6">
@@ -661,25 +760,30 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const chartData = {{ charts_json|safe }};
+    const colors = [
+        'rgba(102, 0, 153, 0.8)',
+        'rgba(155, 48, 255, 0.8)',
+        'rgba(186, 85, 211, 0.8)',
+        'rgba(147, 112, 219, 0.8)',
+        'rgba(138, 43, 226, 0.8)',
+        'rgba(123, 104, 238, 0.8)',
+        'rgba(106, 90, 205, 0.8)'
+    ];
     
-    // Gráfico de Comissões
-    const ctxComissoes = document.getElementById('chartComissoes');
-    if (ctxComissoes) {
-        new Chart(ctxComissoes, {
+    // ===========================================
+    // GRÁFICOS DO COORDENADOR (quando é própria view)
+    // ===========================================
+    
+    // Gráfico de Comissões do Coordenador
+    const ctxComissoesCoord = document.getElementById('chartComissoesCoord');
+    if (ctxComissoesCoord && chartData.comissoes) {
+        new Chart(ctxComissoesCoord, {
             type: 'bar',
             data: {
                 labels: chartData.comissoes.labels,
                 datasets: [{
                     data: chartData.comissoes.data,
-                    backgroundColor: [
-                        'rgba(102, 0, 153, 0.8)',
-                        'rgba(155, 48, 255, 0.8)',
-                        'rgba(186, 85, 211, 0.8)',
-                        'rgba(147, 112, 219, 0.8)',
-                        'rgba(138, 43, 226, 0.8)',
-                        'rgba(123, 104, 238, 0.8)',
-                        'rgba(106, 90, 205, 0.8)'
-                    ],
+                    backgroundColor: colors,
                     borderRadius: 6
                 }]
             },
@@ -687,9 +791,171 @@ document.addEventListener('DOMContentLoaded', function() {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: false
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
                     }
+                }
+            }
+        });
+    }
+    
+    // Gráfico de Composição do Coordenador
+    const ctxComposicaoCoord = document.getElementById('chartComposicaoCoord');
+    if (ctxComposicaoCoord && chartData.composicao) {
+        new Chart(ctxComposicaoCoord, {
+            type: 'doughnut',
+            data: {
+                labels: chartData.composicao.labels,
+                datasets: [{
+                    data: chartData.composicao.data,
+                    backgroundColor: ['#660099', '#FF6B35', '#00B4D8', '#95C623', '#FFC107'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' }
+                },
+                cutout: '60%'
+            }
+        });
+    }
+    
+    // Gráfico de Representatividade por Loja
+    {% if lojas_resumo %}
+    const lojasResumo = {{ lojas_resumo_json|safe }};
+    let chartRepLoja = null;
+    const lojaColors = [
+        '#660099', '#FF6B35', '#00B4D8', '#95C623', '#FFC107',
+        '#E91E63', '#9C27B0', '#3F51B5', '#009688', '#FF5722',
+        '#795548', '#607D8B', '#2196F3', '#4CAF50', '#FFEB3B'
+    ];
+    
+    function updateRepresentatividadeLoja(pilarIndex) {
+        const container = document.getElementById('listaLojas');
+        const canvas = document.getElementById('chartRepresentatividadeLoja');
+        
+        if (!container || !canvas) return;
+        
+        let dados = [];
+        if (pilarIndex === 'total') {
+            lojasResumo.forEach(loja => {
+                dados.push({
+                    nome: loja.pdv,
+                    valor: loja.total || 0
+                });
+            });
+        } else {
+            const idx = parseInt(pilarIndex);
+            const pilarKeys = ['movel', 'fixa', 'smartphone', 'eletronicos', 'essenciais', 'seguro', 'sva'];
+            const key = pilarKeys[idx];
+            lojasResumo.forEach(loja => {
+                dados.push({
+                    nome: loja.pdv,
+                    valor: loja[key] || 0
+                });
+            });
+        }
+        
+        // Ordenar por valor
+        dados.sort((a, b) => b.valor - a.valor);
+        
+        // Calcular total
+        const total = dados.reduce((sum, d) => sum + d.valor, 0);
+        
+        // Atualizar lista
+        container.innerHTML = dados.map((d, i) => {
+            const pct = total > 0 ? ((d.valor / total) * 100).toFixed(1) : 0;
+            return `
+                <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                    <div class="w-3 h-3 rounded-full" style="background: ${lojaColors[i % lojaColors.length]}"></div>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-800">${d.nome}</p>
+                        <p class="text-xs text-gray-500">R$ ${d.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-700">${pct}%</span>
+                </div>
+            `;
+        }).join('');
+        
+        // Atualizar gráfico
+        if (chartRepLoja) {
+            chartRepLoja.destroy();
+        }
+        
+        chartRepLoja = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: dados.map(d => d.nome),
+                datasets: [{
+                    data: dados.map(d => d.valor),
+                    backgroundColor: lojaColors.slice(0, dados.length),
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const valor = context.raw;
+                                const pct = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
+                                return `R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})} (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '60%'
+            }
+        });
+    }
+    
+    // Listener do select de pilar para lojas
+    const selectLoja = document.getElementById('pilarSelectLoja');
+    if (selectLoja) {
+        selectLoja.addEventListener('change', function() {
+            updateRepresentatividadeLoja(this.value);
+        });
+        // Inicializar
+        updateRepresentatividadeLoja('total');
+    }
+    {% endif %}
+    
+    // ===========================================
+    // GRÁFICOS DO USUÁRIO SELECIONADO (gerente/CN)
+    // ===========================================
+    
+    // Gráfico de Comissões
+    const ctxComissoes = document.getElementById('chartComissoes');
+    if (ctxComissoes && chartData.comissoes) {
+        new Chart(ctxComissoes, {
+            type: 'bar',
+            data: {
+                labels: chartData.comissoes.labels,
+                datasets: [{
+                    data: chartData.comissoes.data,
+                    backgroundColor: colors,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
                 },
                 scales: {
                     y: {
@@ -707,20 +973,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Gráfico de Composição
     const ctxComposicao = document.getElementById('chartComposicao');
-    if (ctxComposicao) {
+    if (ctxComposicao && chartData.composicao) {
         new Chart(ctxComposicao, {
             type: 'doughnut',
             data: {
                 labels: chartData.composicao.labels,
                 datasets: [{
                     data: chartData.composicao.data,
-                    backgroundColor: [
-                        '#660099',
-                        '#FF6B35',
-                        '#00B4D8',
-                        '#95C623',
-                        '#FFC107'
-                    ],
+                    backgroundColor: ['#660099', '#FF6B35', '#00B4D8', '#95C623', '#FFC107'],
                     borderWidth: 0
                 }]
             },
@@ -728,9 +988,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'right'
-                    }
+                    legend: { position: 'right' }
                 },
                 cutout: '60%'
             }

@@ -23,6 +23,8 @@ urlpatterns = [
     path('commission/refresh/', commission_views.commission_refresh, name='commission_refresh'),
     path('commission/export/', commission_views.export_commission_excel, name='commission_export'),
     path('api/commission/', commission_views.commission_api, name='commission_api'),
+    path('api/vendas-pilar/', commission_views.api_vendas_por_pilar, name='api_vendas_pilar'),
+    path('api/vendas-pilar/export/', commission_views.export_vendas_pilar_excel, name='export_vendas_pilar'),
     
     # Admin URLs - usando 'manage' para evitar conflito com django admin
     path('manage/', views.admin_panel_view, name='admin_panel'),

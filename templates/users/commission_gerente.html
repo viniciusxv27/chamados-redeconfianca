@@ -65,80 +65,6 @@
     </div>
     {% endif %}
     
-    <!-- Resumo dos CNs da Loja -->
-    {% if not viewing_other and cns_resumo %}
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-        <div class="flex items-center justify-between mb-6">
-            <div>
-                <h2 class="text-lg font-semibold text-gray-800">CNs da Loja</h2>
-                <p class="text-sm text-gray-500">{{ cns_resumo|length }} consultores na equipe</p>
-            </div>
-        </div>
-        
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <th class="pb-3 pr-4">Nome</th>
-                        <th class="pb-3 px-2 text-center">Móvel</th>
-                        <th class="pb-3 px-2 text-center">Fixa</th>
-                        <th class="pb-3 px-2 text-center">Smart</th>
-                        <th class="pb-3 px-2 text-center">Eletro</th>
-                        <th class="pb-3 px-2 text-center">Essen</th>
-                        <th class="pb-3 px-2 text-center">Seguro</th>
-                        <th class="pb-3 px-2 text-center">SVA</th>
-                        <th class="pb-3 px-2 text-right">Comissão</th>
-                        <th class="pb-3 pl-4 text-right">Remuneração</th>
-                        <th class="pb-3 pl-4"></th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    {% for cn in cns_resumo %}
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="py-3 pr-4">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-                                    {{ cn.nome|slice:":1" }}
-                                </div>
-                                <span class="font-medium text-gray-800">{{ cn.nome }}</span>
-                            </div>
-                        </td>
-                        {% for pilar in cn.pilares %}
-                        <td class="py-3 px-2 text-center">
-                            <span class="inline-flex items-center justify-center w-14 py-1 text-xs font-medium rounded-full
-                                {% if pilar.pct >= 100 %}bg-green-100 text-green-700
-                                {% elif pilar.pct >= 80 %}bg-yellow-100 text-yellow-700
-                                {% elif pilar.pct > 0 %}bg-red-100 text-red-700
-                                {% else %}bg-gray-100 text-gray-500{% endif %}">
-                                {{ pilar.pct|floatformat:0 }}%
-                            </span>
-                        </td>
-                        {% endfor %}
-                        <td class="py-3 px-2 text-right font-medium text-gray-700">
-                            R$ {{ cn.comissao_total|floatformat:2 }}
-                        </td>
-                        <td class="py-3 pl-4 text-right font-semibold text-primary">
-                            R$ {{ cn.remuneracao_final|floatformat:2 }}
-                        </td>
-                        <td class="py-3 pl-4">
-                            <a href="?user={{ cn.user_id }}" class="text-primary hover:text-primary/80 text-sm font-medium">
-                                Ver detalhes
-                            </a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="11" class="py-8 text-center text-gray-500">
-                            Nenhum CN encontrado na loja
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-    
     {% if result.error %}
     <!-- Estado de Erro -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
@@ -213,13 +139,258 @@
             </div>
         </div>
     </div>
+
+    <!-- Tabela Consolidada de Comissionamento -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar</h2>
+            <p class="text-sm text-gray-500">Visão consolidada de todas as comissões e bônus</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-3 text-left">Pilar</th>
+                        <th class="px-3 py-3 text-right">Comissões</th>
+                        <th class="px-3 py-3 text-right">B. Carteira</th>
+                        <th class="px-3 py-3 text-right">Alto Desemp.</th>
+                        <th class="px-3 py-3 text-right">Hunter</th>
+                        <th class="px-3 py-3 text-right">Id. Hunter</th>
+                        <th class="px-3 py-3 text-right bg-primary/10 text-primary">Total</th>
+                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">B. Pago</th>
+                        <th class="px-3 py-3 text-right bg-red-50 text-red-700">B. Exclusão</th>
+                        <th class="px-3 py-3 text-center bg-green-50 text-green-700">% Pago</th>
+                        <th class="px-3 py-3 text-center bg-red-50 text-red-700">% Exclusão</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <!-- Móvel -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="MOVEL" data-pilar-nome="Móvel" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📱</span>
+                                <span class="font-medium text-gray-800">Móvel</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.0.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.0.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.0.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.0.pago data.pilares.0.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.0.exclusao data.pilares.0.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Fixa -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="FIXA" data-pilar-nome="Fixa" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🏠</span>
+                                <span class="font-medium text-gray-800">Fixa</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.1.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.1.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.1.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.1.pago data.pilares.1.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.1.exclusao data.pilares.1.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Smartphone -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SMARTPHONE" data-pilar-nome="Smartphone" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📲</span>
+                                <span class="font-medium text-gray-800">Smartphone</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.2.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.2.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.2.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.2.pago data.pilares.2.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.2.exclusao data.pilares.2.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Eletrônicos -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="ELETRONICOS" data-pilar-nome="Eletrônicos" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">💻</span>
+                                <span class="font-medium text-gray-800">Eletrônicos</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.3.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.3.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.3.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.3.pago data.pilares.3.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.3.exclusao data.pilares.3.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Essenciais -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="ESSENCIAIS" data-pilar-nome="Essenciais" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🛒</span>
+                                <span class="font-medium text-gray-800">Essenciais</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.4.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.4.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.4.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.4.pago data.pilares.4.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.4.exclusao data.pilares.4.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- Seguro -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SEGURO" data-pilar-nome="Seguro" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🛡️</span>
+                                <span class="font-medium text-gray-800">Seguro</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguros|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.5.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.5.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.5.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.5.pago data.pilares.5.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.5.exclusao data.pilares.5.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- SVA -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SVA" data-pilar-nome="SVA" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">⭐</span>
+                                <span class="font-medium text-gray-800">SVA</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.6.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.6.pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.6.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                {% widthratio data.pilares.6.pago data.pilares.6.total 100 %}%
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-center bg-red-50/50">
+                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                {% widthratio data.pilares.6.exclusao data.pilares.6.total 100 %}%
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-100 font-semibold">
+                        <td class="px-4 py-3 text-gray-800">Total</td>
+                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-indigo-600">-</td>
+                        <td class="px-3 py-3 text-right text-primary bg-primary/10">R$ {{ data.totais.total_pilares|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-green-700 bg-green-100">R$ {{ data.totais.total_pago|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-red-700 bg-red-100">R$ {{ data.totais.total_exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-center bg-green-100">-</td>
+                        <td class="px-3 py-3 text-center bg-red-100">-</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
     
     <!-- Card Gráfico de Rosca - Representatividade por Vendedor -->
     {% if cns_resumo and not viewing_other %}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
-                <h2 class="text-lg font-semibold text-gray-800">Representatividade de Comissões</h2>
+                <h2 class="text-lg font-semibold text-gray-800">
+                    Representatividade de Comissões
+                    <span class="ml-2 text-green-600 text-base font-bold">
+                        R$ {{ data.totais.total_pilares|floatformat:2 }}
+                    </span>
+                </h2>
                 <p class="text-sm text-gray-500">Participação de cada vendedor no pilar selecionado</p>
             </div>
             <select id="pilarSelect" 
@@ -251,230 +422,80 @@
     </div>
     {% endif %}
     
-    <!-- Tabela Consolidada de Comissionamento -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-        <div class="px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar</h2>
-            <p class="text-sm text-gray-500">Visão consolidada de todas as comissões e bônus</p>
+    {% endif %}
+
+    <!-- Resumo dos CNs da Loja -->
+    {% if not viewing_other and cns_resumo %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-800">CNs da Loja</h2>
+                <p class="text-sm text-gray-500">{{ cns_resumo|length }} consultores na equipe</p>
+            </div>
         </div>
+        
         <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full">
                 <thead>
-                    <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <th class="px-4 py-3 text-left">Pilar</th>
-                        <th class="px-3 py-3 text-right">Comissões</th>
-                        <th class="px-3 py-3 text-right">Bônus Carteira</th>
-                        <th class="px-3 py-3 text-right">Alto Desemp.</th>
-                        <th class="px-3 py-3 text-right">Hunter</th>
-                        <th class="px-3 py-3 text-right">Bônus Hunter</th>
-                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">Pago</th>
-                        <th class="px-3 py-3 text-right bg-red-50 text-red-700">Exclusão</th>
-                        <th class="px-3 py-3 text-center bg-green-50 text-green-700">% Pago</th>
-                        <th class="px-3 py-3 text-center bg-red-50 text-red-700">% Exclusão</th>
+                    <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="pb-3 pr-4">Nome</th>
+                        <th class="pb-3 px-2 text-center">Móvel</th>
+                        <th class="pb-3 px-2 text-center">Fixa</th>
+                        <th class="pb-3 px-2 text-center">Smart</th>
+                        <th class="pb-3 px-2 text-center">Eletro</th>
+                        <th class="pb-3 px-2 text-center">Essen</th>
+                        <th class="pb-3 px-2 text-center">Seguro</th>
+                        <th class="pb-3 px-2 text-center">SVA</th>
+                        <th class="pb-3 px-2 text-right">Comissão</th>
+                        <th class="pb-3 pl-4 text-right">Remuneração</th>
+                        <th class="pb-3 pl-4"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                    <!-- Móvel -->
+                    {% for cn in cns_resumo %}
                     <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">📱</span>
-                                <span class="font-medium text-gray-800">Móvel</span>
+                        <td class="py-3 pr-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                                    {{ cn.nome|slice:":1" }}
+                                </div>
+                                <span class="font-medium text-gray-800">{{ cn.nome }}</span>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.movel|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.movel|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.0.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.0.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.0.pago data.pilares.0.total 100 %}%
+                        {% for pilar in cn.pilares %}
+                        <td class="py-3 px-2 text-center">
+                            <span class="inline-flex items-center justify-center w-14 py-1 text-xs font-medium rounded-full
+                                {% if pilar.pct >= 100 %}bg-green-100 text-green-700
+                                {% elif pilar.pct >= 80 %}bg-yellow-100 text-yellow-700
+                                {% elif pilar.pct > 0 %}bg-red-100 text-red-700
+                                {% else %}bg-gray-100 text-gray-500{% endif %}">
+                                {{ pilar.pct|floatformat:0 }}%
                             </span>
                         </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.0.exclusao data.pilares.0.total 100 %}%
-                            </span>
+                        {% endfor %}
+                        <td class="py-3 px-2 text-right font-medium text-gray-700">
+                            R$ {{ cn.comissao_total|floatformat:2 }}
+                        </td>
+                        <td class="py-3 pl-4 text-right font-semibold text-primary">
+                            R$ {{ cn.remuneracao_final|floatformat:2 }}
+                        </td>
+                        <td class="py-3 pl-4">
+                            <a href="?user={{ cn.user_id }}" class="text-primary hover:text-primary/80 text-sm font-medium">
+                                Ver detalhes
+                            </a>
                         </td>
                     </tr>
-                    <!-- Fixa -->
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">🏠</span>
-                                <span class="font-medium text-gray-800">Fixa</span>
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.1.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.1.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.1.pago data.pilares.1.total 100 %}%
-                            </span>
-                        </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.1.exclusao data.pilares.1.total 100 %}%
-                            </span>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11" class="py-8 text-center text-gray-500">
+                            Nenhum CN encontrado na loja
                         </td>
                     </tr>
-                    <!-- Smartphone -->
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">📲</span>
-                                <span class="font-medium text-gray-800">Smartphone</span>
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.2.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.2.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.2.pago data.pilares.2.total 100 %}%
-                            </span>
-                        </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.2.exclusao data.pilares.2.total 100 %}%
-                            </span>
-                        </td>
-                    </tr>
-                    <!-- Eletrônicos -->
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">💻</span>
-                                <span class="font-medium text-gray-800">Eletrônicos</span>
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.3.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.3.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.3.pago data.pilares.3.total 100 %}%
-                            </span>
-                        </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.3.exclusao data.pilares.3.total 100 %}%
-                            </span>
-                        </td>
-                    </tr>
-                    <!-- Essenciais -->
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">🛒</span>
-                                <span class="font-medium text-gray-800">Essenciais</span>
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.4.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.4.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.4.pago data.pilares.4.total 100 %}%
-                            </span>
-                        </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.4.exclusao data.pilares.4.total 100 %}%
-                            </span>
-                        </td>
-                    </tr>
-                    <!-- Seguro -->
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">🛡️</span>
-                                <span class="font-medium text-gray-800">Seguro</span>
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguros|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.5.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.5.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.5.pago data.pilares.5.total 100 %}%
-                            </span>
-                        </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.5.exclusao data.pilares.5.total 100 %}%
-                            </span>
-                        </td>
-                    </tr>
-                    <!-- SVA -->
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">⭐</span>
-                                <span class="font-medium text-gray-800">SVA</span>
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.6.pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.6.exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                {% widthratio data.pilares.6.pago data.pilares.6.total 100 %}%
-                            </span>
-                        </td>
-                        <td class="px-3 py-3 text-center bg-red-50/50">
-                            <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                                {% widthratio data.pilares.6.exclusao data.pilares.6.total 100 %}%
-                            </span>
-                        </td>
-                    </tr>
+                    {% endfor %}
                 </tbody>
-                <tfoot>
-                    <tr class="bg-gray-100 font-semibold">
-                        <td class="px-4 py-3 text-gray-800">Total</td>
-                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-indigo-600">-</td>
-                        <td class="px-3 py-3 text-right text-green-700 bg-green-100">R$ {{ data.totais.total_pago|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-red-700 bg-red-100">R$ {{ data.totais.total_exclusao|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-center bg-green-100">-</td>
-                        <td class="px-3 py-3 text-center bg-red-100">-</td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
     </div>
-    
     {% endif %}
 </div>
 
@@ -642,6 +663,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }{% if not forloop.last %}, {% endif %}{% endfor %}
     ];
     
+    // Total do Detalhamento por Pilar do Gerente
+    var totalPilaresGerente = parseFloat("{{ data.totais.total_pilares|default_if_none:0 }}".replace(',', '.')) || 0;
+    
     var pilarNomes = ['Móvel', 'Fixa', 'Smartphone', 'Eletrônicos', 'Essenciais', 'Seguro', 'SVA'];
     var chartColors = ['#660099', '#9B30FF', '#BA55D3', '#9370DB', '#8A2BE2', '#7B68EE', '#6A5ACD', '#FF6B35', '#00B4D8', '#95C623', '#FFC107', '#E91E63', '#00BCD4', '#4CAF50', '#FF5722'];
     
@@ -668,16 +692,18 @@ document.addEventListener('DOMContentLoaded', function() {
             var html = '';
             vendedoresData.forEach(function(v, idx) {
                 var valor = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
-                var percent = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
+                var percent = total > 0 ? ((valor / total) * 100) : 0;
+                var valorRefTotal = (percent / 100) * totalPilaresGerente;
                 html += '<div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">';
                 html += '<div class="flex items-center gap-3">';
                 html += '<div class="w-3 h-3 rounded-full" style="background-color: ' + chartColors[idx % chartColors.length] + '"></div>';
                 html += '<span class="font-medium text-gray-700 text-sm">' + v.nome + '</span>';
                 html += '</div>';
-                html += '<div class="text-right">';
+                html += '<div class="text-right flex items-center gap-2">';
                 if (valor > 0) {
+                    html += '<span class="font-bold text-green-600 text-sm">R$ ' + valorRefTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
                     html += '<span class="font-semibold text-gray-800 text-sm">R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
-                    html += '<span class="text-gray-500 text-xs ml-2">(' + percent + '%)</span>';
+                    html += '<span class="text-gray-500 text-xs">(' + percent.toFixed(1) + '%)</span>';
                 } else {
                     html += '<span class="text-gray-400 text-sm">-</span>';
                 }
@@ -744,7 +770,312 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     {% endif %}
+    
+    // =====================================================
+    // Modal de Vendas por Pilar
+    // =====================================================
+    
+    // Event listener para clique nas linhas de pilar
+    document.querySelectorAll('.pilar-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+            var pilar = this.dataset.pilar;
+            var pilarNome = this.dataset.pilarNome;
+            abrirModalVendas(pilar, pilarNome);
+        });
+    });
+    
+    function abrirModalVendas(pilar, pilarNome) {
+        var modal = document.getElementById('modalVendasPilar');
+        var titulo = document.getElementById('modalVendasTitulo');
+        var conteudo = document.getElementById('modalVendasConteudo');
+        var loading = document.getElementById('modalVendasLoading');
+        var btnExportar = document.getElementById('btnExportarVendas');
+        
+        // Mostrar modal com loading
+        titulo.textContent = 'Vendas - ' + pilarNome;
+        conteudo.innerHTML = '';
+        loading.classList.remove('hidden');
+        btnExportar.classList.add('hidden');
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        
+        // Buscar dados via API
+        fetch('{% url "api_vendas_pilar" %}?pilar=' + encodeURIComponent(pilar))
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                loading.classList.add('hidden');
+                
+                if (data.error) {
+                    conteudo.innerHTML = '<div class="text-center py-8 text-red-500"><svg class="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg><p>' + data.error + '</p></div>';
+                    return;
+                }
+                
+                var html = '';
+                
+                // Resumo
+                html += '<div class="grid grid-cols-2 gap-4 mb-6">';
+                html += '<div class="bg-green-50 border border-green-200 rounded-xl p-4 text-center">';
+                html += '<p class="text-green-600 text-sm font-medium">Vendas Pagas</p>';
+                html += '<p class="text-2xl font-bold text-green-700">' + data.total_pago + '</p>';
+                html += '</div>';
+                html += '<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">';
+                html += '<p class="text-red-600 text-sm font-medium">Vendas Exclusão</p>';
+                html += '<p class="text-2xl font-bold text-red-700">' + data.total_exclusao + '</p>';
+                html += '</div>';
+                html += '</div>';
+                
+                // Armazenar vendas separadamente para exportar
+                vendasPagoGlobal = data.vendas_pago || [];
+                vendasExclusaoGlobal = data.vendas_exclusao || [];
+                
+                // Tabs
+                html += '<div class="border-b border-gray-200 mb-4">';
+                html += '<nav class="flex gap-4" id="vendasTabs">';
+                html += '<button type="button" class="tab-btn active px-4 py-2 text-sm font-medium text-primary border-b-2 border-primary" data-tab="pago">Pagas (' + data.total_pago + ')</button>';
+                html += '<button type="button" class="tab-btn px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700" data-tab="exclusao">Exclusão (' + data.total_exclusao + ')</button>';
+                html += '</nav>';
+                html += '</div>';
+                
+                // Tabela Pago
+                html += '<div id="tabPago" class="tab-content">';
+                if (data.vendas_pago.length > 0) {
+                    html += renderTabelaVendas(data.vendas_pago, 'pago');
+                } else {
+                    html += '<div class="text-center py-8 text-gray-500"><svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><p>Nenhuma venda paga encontrada</p></div>';
+                }
+                html += '</div>';
+                
+                // Tabela Exclusão
+                html += '<div id="tabExclusao" class="tab-content hidden">';
+                if (data.vendas_exclusao.length > 0) {
+                    html += renderTabelaVendas(data.vendas_exclusao, 'exclusao');
+                } else {
+                    html += '<div class="text-center py-8 text-gray-500"><svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><p>Nenhuma venda em exclusão encontrada</p></div>';
+                }
+                html += '</div>';
+                
+                conteudo.innerHTML = html;
+                btnExportar.classList.remove('hidden');
+                btnExportar.setAttribute('data-pilar', pilarNome);
+                
+                // Adicionar eventos das tabs
+                document.querySelectorAll('.tab-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        document.querySelectorAll('.tab-btn').forEach(function(b) {
+                            b.classList.remove('active', 'text-primary', 'border-b-2', 'border-primary');
+                            b.classList.add('text-gray-500');
+                        });
+                        this.classList.add('active', 'text-primary', 'border-b-2', 'border-primary');
+                        this.classList.remove('text-gray-500');
+                        
+                        var tab = this.dataset.tab;
+                        document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.add('hidden'); });
+                        document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.remove('hidden');
+                    });
+                });
+            })
+            .catch(function(error) {
+                loading.classList.add('hidden');
+                conteudo.innerHTML = '<div class="text-center py-8 text-red-500"><p>Erro ao carregar vendas</p></div>';
+            });
+    }
+    
+    function renderTabelaVendas(vendas, tipo) {
+        if (!vendas || vendas.length === 0) return '';
+        
+        // Colunas principais para exibir
+        var colunasExibir = ['Nº da Venda', 'Data', 'Vendedor', 'Nome Cliente', 'CPF/CNPJ', 'Plano/Produto', 'NUMERO ACESSO', 'Receita', 'PILAR'];
+        var colunas = [];
+        
+        // Pegar todas as colunas da primeira venda
+        var todasColunas = Object.keys(vendas[0]).filter(function(c) { return !c.startsWith('_'); });
+        
+        // Usar colunas principais que existem ou todas se não encontrar
+        colunasExibir.forEach(function(col) {
+            var found = todasColunas.find(function(c) { return c.toUpperCase() === col.toUpperCase(); });
+            if (found) colunas.push(found);
+        });
+        
+        if (colunas.length < 3) colunas = todasColunas.slice(0, 8);
+        
+        var html = '<div class="overflow-x-auto rounded-xl border border-gray-200">';
+        html += '<table class="w-full text-sm">';
+        html += '<thead><tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">';
+        colunas.forEach(function(col) {
+            html += '<th class="px-4 py-3 text-left whitespace-nowrap">' + col + '</th>';
+        });
+        html += '</tr></thead>';
+        html += '<tbody class="divide-y divide-gray-100">';
+        
+        vendas.forEach(function(venda, idx) {
+            var rowClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
+            if (tipo === 'exclusao') rowClass += ' text-red-700';
+            html += '<tr class="' + rowClass + ' hover:bg-gray-100 transition-colors">';
+            colunas.forEach(function(col) {
+                var valor = venda[col];
+                if (valor === null || valor === undefined) valor = '-';
+                // Formatar Receita
+                if (col.toUpperCase() === 'RECEITA' && typeof valor === 'number') {
+                    valor = 'R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                }
+                // Formatar Data (remover horário)
+                if (col.toUpperCase() === 'DATA' && valor && valor !== '-') {
+                    var dataStr = String(valor);
+                    if (dataStr.includes(' ')) {
+                        valor = dataStr.split(' ')[0];
+                    } else if (dataStr.includes('T')) {
+                        valor = dataStr.split('T')[0];
+                    }
+                    // Converter de YYYY-MM-DD para DD/MM/YYYY se necessário
+                    if (valor.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        var partes = valor.split('-');
+                        valor = partes[2] + '/' + partes[1] + '/' + partes[0];
+                    }
+                }
+                html += '<td class="px-4 py-3 whitespace-nowrap">' + valor + '</td>';
+            });
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table></div>';
+        return html;
+    }
+    
+    // Fechar modal ao clicar fora
+    document.getElementById('modalVendasPilar')?.addEventListener('click', function(e) {
+        if (e.target === this) fecharModalVendas();
+    });
+    
+    // Fechar modal com ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') fecharModalVendas();
+    });
 });
+
+// Funções globais para o modal
+function fecharModalVendas() {
+    var modal = document.getElementById('modalVendasPilar');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+    }
+}
+
+var vendasPagoGlobal = [];
+var vendasExclusaoGlobal = [];
+
+function exportarVendasExcel() {
+    var pilar = document.getElementById('btnExportarVendas')?.getAttribute('data-pilar') || 'Pilar';
+    
+    if ((!vendasPagoGlobal || vendasPagoGlobal.length === 0) && 
+        (!vendasExclusaoGlobal || vendasExclusaoGlobal.length === 0)) {
+        alert('Sem vendas para exportar');
+        return;
+    }
+    
+    // Usar SheetJS (xlsx) para criar Excel com múltiplas sheets
+    // Carregar biblioteca dinamicamente se não existir
+    if (typeof XLSX === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+        script.onload = function() {
+            criarExcelComSheets(pilar);
+        };
+        document.head.appendChild(script);
+    } else {
+        criarExcelComSheets(pilar);
+    }
+}
+
+function criarExcelComSheets(pilar) {
+    var wb = XLSX.utils.book_new();
+    
+    // Função para formatar dados da venda
+    function formatarVendas(vendas) {
+        return vendas.map(function(venda) {
+            var novaVenda = {};
+            Object.keys(venda).forEach(function(col) {
+                if (col.startsWith('_')) return;
+                var valor = venda[col];
+                // Formatar data
+                if (col.toUpperCase() === 'DATA' && valor) {
+                    var dataStr = String(valor);
+                    if (dataStr.includes(' ')) valor = dataStr.split(' ')[0];
+                    else if (dataStr.includes('T')) valor = dataStr.split('T')[0];
+                    if (String(valor).match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        var partes = valor.split('-');
+                        valor = partes[2] + '/' + partes[1] + '/' + partes[0];
+                    }
+                }
+                novaVenda[col] = valor;
+            });
+            return novaVenda;
+        });
+    }
+    
+    // Sheet Pago
+    if (vendasPagoGlobal && vendasPagoGlobal.length > 0) {
+        var wsPago = XLSX.utils.json_to_sheet(formatarVendas(vendasPagoGlobal));
+        XLSX.utils.book_append_sheet(wb, wsPago, 'Pago');
+    } else {
+        var wsPagoVazio = XLSX.utils.aoa_to_sheet([['Sem vendas pagas']]);
+        XLSX.utils.book_append_sheet(wb, wsPagoVazio, 'Pago');
+    }
+    
+    // Sheet Exclusão
+    if (vendasExclusaoGlobal && vendasExclusaoGlobal.length > 0) {
+        var wsExclusao = XLSX.utils.json_to_sheet(formatarVendas(vendasExclusaoGlobal));
+        XLSX.utils.book_append_sheet(wb, wsExclusao, 'Exclusao');
+    } else {
+        var wsExclusaoVazio = XLSX.utils.aoa_to_sheet([['Sem vendas em exclusão']]);
+        XLSX.utils.book_append_sheet(wb, wsExclusaoVazio, 'Exclusao');
+    }
+    
+    // Download
+    var nomeArquivo = 'vendas_' + pilar + '_' + new Date().toISOString().slice(0,10) + '.xlsx';
+    XLSX.writeFile(wb, nomeArquivo);
+}
 </script>
+
+<!-- Modal de Vendas por Pilar -->
+<div id="modalVendasPilar" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"></div>
+        
+        <!-- Modal Content -->
+        <div class="relative inline-block w-full max-w-5xl my-8 text-left align-middle transition-all transform bg-white rounded-2xl shadow-2xl">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-primary to-purple-700 rounded-t-2xl">
+                <h3 id="modalVendasTitulo" class="text-xl font-bold text-white">Vendas do Pilar</h3>
+                <div class="flex items-center gap-3">
+                    <button id="btnExportarVendas" onclick="exportarVendasExcel()" class="hidden inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Exportar Excel
+                    </button>
+                    <button onclick="fecharModalVendas()" class="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Body -->
+            <div class="px-6 py-6 max-h-[70vh] overflow-y-auto">
+                <!-- Loading -->
+                <div id="modalVendasLoading" class="flex flex-col items-center justify-center py-12">
+                    <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                    <p class="mt-4 text-gray-500">Carregando vendas...</p>
+                </div>
+                
+                <!-- Conteúdo -->
+                <div id="modalVendasConteudo"></div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 {% endblock %}

@@ -882,7 +882,6 @@ def fetch_vendedores_por_filial(user_sector):
     Retorna no formato esperado pelo template (com lista de pilares).
     """
     if not user_sector:
-        print("[fetch_vendedores_por_filial] user_sector vazio")
         return []
     
     # Normalizar nome do setor
@@ -891,8 +890,6 @@ def fetch_vendedores_por_filial(user_sector):
     for prefix in prefixes:
         if user_sector_normalized.startswith(prefix):
             user_sector_normalized = user_sector_normalized[len(prefix):]
-    
-    print(f"[fetch_vendedores_por_filial] Buscando vendedores para filial: {user_sector_normalized}")
     
     # Mapeamento de pilares
     pilar_mapping = {
@@ -933,7 +930,6 @@ def fetch_vendedores_por_filial(user_sector):
             try:
                 excel_file_rem.seek(0)
                 df_rem = pd.read_excel(excel_file_rem, sheet_name='REMUNERAÇÃO CN', engine='openpyxl')
-                print(f"[fetch_vendedores_por_filial] Colunas REMUNERAÇÃO CN: {list(df_rem.columns)}")
                 
                 # Encontrar coluna de nome
                 nome_col_rem = None
@@ -976,18 +972,13 @@ def fetch_vendedores_por_filial(user_sector):
                         if pilar_key in ating_cols:
                             break
                 
-                print(f"[fetch_vendedores_por_filial] Colunas de atingimento mapeadas: {ating_cols}")
-                print(f"[fetch_vendedores_por_filial] Coluna remuneração final: {rem_final_col}")
-                
                 # Filtrar por filial se possível
                 if pdv_col_rem:
                     df_rem['pdv_norm'] = df_rem[pdv_col_rem].astype(str).str.strip().str.upper()
                     # Filtrar por filial
                     mask = df_rem['pdv_norm'].str.contains(user_sector_normalized, case=False, na=False)
                     df_rem_filial = df_rem[mask]
-                    print(f"[fetch_vendedores_por_filial] Filtro PDV '{user_sector_normalized}': {len(df_rem_filial)} registros")
                     if df_rem_filial.empty:
-                        print(f"[fetch_vendedores_por_filial] PDVs na planilha: {list(df_rem['pdv_norm'].unique())[:10]}")
                         df_rem_filial = df_rem  # Se não encontrar, usar todos
                 else:
                     df_rem_filial = df_rem
@@ -1020,22 +1011,16 @@ def fetch_vendedores_por_filial(user_sector):
                             except (ValueError, TypeError):
                                 pass
                 
-                print(f"[fetch_vendedores_por_filial] Vendedores com atingimento: {list(ating_por_vendedor.keys())}")
-                
             except Exception as e:
-                print(f"[fetch_vendedores_por_filial] Erro ao ler REMUNERAÇÃO CN: {e}")
-                import traceback
-                traceback.print_exc()
+                pass  # Silently handle errors reading REMUNERAÇÃO CN
         
         # 2. Buscar dados de comissão da BASE_PAGAMENTO
         excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
         if error:
-            print(f"[fetch_vendedores_por_filial] Erro ao baixar planilha: {error}")
             return []
         
         excel_file.seek(0)
         df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
-        print(f"[fetch_vendedores_por_filial] Total de linhas BASE_PAGAMENTO: {len(df)}")
         
         # Colunas
         colunas_lower = {col.lower(): col for col in df.columns}
@@ -1045,13 +1030,11 @@ def fetch_vendedores_por_filial(user_sector):
         pilar_col = colunas_lower.get('pilar') or df.columns[df.columns.str.lower().str.contains('pilar')].tolist()[0] if any(df.columns.str.lower().str.contains('pilar')) else None
         
         if not all([filial_col, vendedor_col, receita_col, pilar_col]):
-            print(f"[fetch_vendedores_por_filial] Colunas não encontradas")
             return []
         
         # Filtrar por filial exata
         df['filial_norm'] = df[filial_col].astype(str).str.strip().str.upper()
         df_filial = df[df['filial_norm'] == user_sector_normalized]
-        print(f"[fetch_vendedores_por_filial] Linhas para {user_sector_normalized}: {len(df_filial)}")
         
         if df_filial.empty:
             return []
@@ -1115,7 +1098,6 @@ def fetch_vendedores_por_filial(user_sector):
                     if len(nome_parts) >= 2 and len(ating_parts) >= 2:
                         if nome_parts[0] == ating_parts[0] and nome_parts[-1] == ating_parts[-1]:
                             vendedor_ating = ating_por_vendedor[ating_nome]
-                            print(f"[fetch_vendedores_por_filial] Match fuzzy: '{nome_upper}' <-> '{ating_nome}'")
                             break
             
             # Criar lista de pilares com percentual de ATINGIMENTO
@@ -1136,8 +1118,28 @@ def fetch_vendedores_por_filial(user_sector):
             # Remuneração final da planilha REMUNERAÇÃO CN ou usar comissao_total
             remuneracao = remuneracao_por_vendedor.get(nome_upper, dados['comissao_total'])
             
+            # Buscar user_id no Django para o link "Ver detalhes"
+            user_id = None
+            nome_parts = nome_upper.split()
+            if len(nome_parts) >= 2:
+                user_obj = User.objects.filter(
+                    first_name__iexact=nome_parts[0],
+                    last_name__icontains=nome_parts[-1],
+                    is_active=True
+                ).first()
+                if user_obj:
+                    user_id = user_obj.id
+            if not user_id and len(nome_parts) >= 1:
+                user_obj = User.objects.filter(
+                    first_name__iexact=nome_parts[0],
+                    is_active=True
+                ).first()
+                if user_obj:
+                    user_id = user_obj.id
+            
             result.append({
                 'nome': dados['nome'],
+                'user_id': user_id,
                 'pilares': pilares,
                 'comissao_total': dados['comissao_total'],
                 'remuneracao_final': remuneracao,
@@ -1151,17 +1153,9 @@ def fetch_vendedores_por_filial(user_sector):
                 'sva_comissao': dados['pilares_valores']['sva'],
             })
         
-        print(f"[fetch_vendedores_por_filial] Total vendedores encontrados: {len(result)}")
-        for v in result:
-            pcts = [f"{p['nome']}:{p['pct']:.0f}%" for p in v['pilares']]
-            print(f"  - {v['nome']}: R$ {v['comissao_total']:.2f} | {', '.join(pcts)}")
-        
         return result
         
     except Exception as e:
-        print(f"[fetch_vendedores_por_filial] Erro: {e}")
-        import traceback
-        traceback.print_exc()
         return []
 
 
@@ -1389,11 +1383,36 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
         }
         processed['totais']['cargo_label'] = 'CN'
     
+    # Calcular soma (comissões + bônus + alto desempenho + hunter) para cada pilar
+    pilar_keys = ['movel', 'fixa', 'smartphone', 'eletronicos', 'essenciais', 'seguro', 'sva']
+    for i, pilar_key in enumerate(pilar_keys):
+        if i < len(processed['pilares']):
+            # Comissão do pilar
+            if pilar_key == 'eletronicos':
+                com_valor = processed['comissoes'].get('eletronicos_a', 0) + processed['comissoes'].get('eletronicos_b', 0)
+                ad_valor = processed['alto_desempenho'].get('eletronicos_a', 0) + processed['alto_desempenho'].get('eletronicos_b', 0)
+            elif pilar_key == 'essenciais':
+                com_valor = processed['comissoes'].get('essenciais_a', 0) + processed['comissoes'].get('essenciais_b', 0)
+                ad_valor = processed['alto_desempenho'].get('essenciais_a', 0) + processed['alto_desempenho'].get('essenciais_b', 0)
+            else:
+                com_valor = processed['comissoes'].get(pilar_key, 0)
+                ad_valor = processed['alto_desempenho'].get(pilar_key, 0)
+            
+            bonus_valor = processed['bonus'].get(pilar_key, 0)
+            # Hunter usa 'seguros' para seguro
+            hunter_key = 'seguros' if pilar_key == 'seguro' else pilar_key
+            hunter_valor = processed['hunter'].get(hunter_key, 0)
+            
+            # Guardar a soma de comissões+bônus+alto+hunter em campo separado
+            processed['pilares'][i]['soma'] = com_valor + bonus_valor + ad_valor + hunter_valor
+    
     # Calcular totais de Pago e Exclusão (soma de todos os pilares)
     total_pago = sum(p['pago'] for p in processed['pilares'])
     total_exclusao = sum(p['exclusao'] for p in processed['pilares'])
+    total_soma = sum(p.get('soma', 0) for p in processed['pilares'])
     processed['totais']['total_pago'] = total_pago
     processed['totais']['total_exclusao'] = total_exclusao
+    processed['totais']['total_pilares'] = total_soma
     
     processed['habilitados'] = {
         'pilares_67': data.get('6/7PILARES'),
@@ -1847,7 +1866,6 @@ def commission_gerente_view(request):
     # Buscar resumo de todos os vendedores da loja diretamente da BASE_PAGAMENTO
     target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
     cns_resumo = fetch_vendedores_por_filial(target_sector)
-    print(f"[commission_gerente_view] cns_resumo da BASE_PAGAMENTO: {len(cns_resumo)} vendedores")
     
     meses = get_month_names()
     
@@ -1978,12 +1996,33 @@ def commission_coordenador_view(request):
     
     meses = get_month_names()
     
+    # Calcular resumo de comissões por loja para o gráfico de representatividade
+    lojas_resumo = []
+    for loja in lojas:
+        gerente_data = loja.get('gerente_data', {})
+        if gerente_data:
+            pilares = gerente_data.get('pilares', [])
+            # Cada pilar tem 'nome', 'pct', 'comissao'
+            lojas_resumo.append({
+                'pdv': loja['pdv'],
+                'movel': pilares[0].get('comissao', 0) if len(pilares) > 0 else 0,
+                'fixa': pilares[1].get('comissao', 0) if len(pilares) > 1 else 0,
+                'smartphone': pilares[2].get('comissao', 0) if len(pilares) > 2 else 0,
+                'eletronicos': pilares[3].get('comissao', 0) if len(pilares) > 3 else 0,
+                'essenciais': pilares[4].get('comissao', 0) if len(pilares) > 4 else 0,
+                'seguro': pilares[5].get('comissao', 0) if len(pilares) > 5 else 0,
+                'sva': pilares[6].get('comissao', 0) if len(pilares) > 6 else 0,
+                'total': gerente_data.get('remuneracao_final', 0),
+            })
+    
     context = {
         'user': user,
         'target_user': viewing_user if viewing_user else user,
         'viewing_other': viewing_user is not None,
         'lojas': lojas,
         'lojas_coordenador': lojas_coordenador,
+        'lojas_resumo': lojas_resumo,
+        'lojas_resumo_json': json.dumps(lojas_resumo),
         'gerentes_data': gerentes_data,
         'result': result,
         'meses': meses,
@@ -2188,6 +2227,252 @@ def export_commission_excel(request):
     )
     from datetime import datetime
     filename = f'comissionamento_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    wb.save(response)
+    return response
+
+
+@login_required
+def api_vendas_por_pilar(request):
+    """
+    API para buscar vendas de um pilar específico via AJAX.
+    Retorna lista de vendas filtradas por pilar (Pago e Exclusão).
+    """
+    user = request.user
+    pilar = request.GET.get('pilar', '').upper()
+    
+    if not pilar:
+        return JsonResponse({'error': 'Pilar não especificado'}, status=400)
+    
+    role = get_user_role(user)
+    is_gerente_user = role in ['gerente', 'coordenador']
+    user_full_name = user.get_full_name() or user.first_name
+    user_sector = user.sector.name if hasattr(user, 'sector') and user.sector else None
+    
+    # Mapeamento de pilar
+    pilar_mapping = {
+        'MOVEL': ['MÓVEL', 'MOVEL'],
+        'MÓVEL': ['MÓVEL', 'MOVEL'],
+        'FIXA': ['FIXA'],
+        'SMARTPHONE': ['SMART', 'SMARTPHONE'],
+        'ELETRONICOS': ['ELETRO', 'ELETRÔNICO', 'ELETRONICOS', 'ELETRÔNICOS'],
+        'ESSENCIAIS': ['ESSEN', 'ESSENCIAL', 'ESSENCIAIS'],
+        'SEGURO': ['SEG', 'SEGURO', 'SEGUROS'],
+        'SVA': ['SVA'],
+    }
+    
+    # Normalizar o pilar recebido
+    pilar_filtros = pilar_mapping.get(pilar, [pilar])
+    
+    def normalize_text(text):
+        if pd.isna(text):
+            return ""
+        return str(text).strip().upper()
+    
+    def normalize_sector(sector_name):
+        if not sector_name:
+            return ""
+        normalized = str(sector_name).strip().upper()
+        prefixes = ['LOJA ', 'LOJA_', 'PDV ', 'PDV_']
+        for prefix in prefixes:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix):]
+        return normalized
+    
+    user_name_normalized = normalize_text(user_full_name)
+    user_sector_normalized = normalize_sector(user_sector) if user_sector else ""
+    
+    vendas_pago = []
+    vendas_exclusao = []
+    colunas = []
+    
+    try:
+        # Baixar planilha BASE_PAGAMENTO
+        excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento_vendas")
+        if error:
+            return JsonResponse({'error': f'Erro ao baixar planilha: {error}'}, status=500)
+        
+        # ================== SHEET PAGO (Planilha1) ==================
+        try:
+            excel_file.seek(0)
+            df_pago = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
+            colunas = list(df_pago.columns)
+        except Exception as e:
+            return JsonResponse({'error': f'Erro ao ler planilha: {str(e)}'}, status=500)
+        
+        # Encontrar colunas
+        filial_col = None
+        pilar_col = None
+        vendedor_col = None
+        
+        for col in df_pago.columns:
+            col_upper = str(col).strip().upper()
+            if col_upper == 'FILIAL':
+                filial_col = col
+            elif col_upper == 'PILAR':
+                pilar_col = col
+            elif col_upper == 'VENDEDOR':
+                vendedor_col = col
+        
+        if pilar_col is None:
+            return JsonResponse({'error': 'Coluna PILAR não encontrada'}, status=500)
+        
+        # Filtrar vendas PAGO
+        for idx, row in df_pago.iterrows():
+            # Verificar pilar
+            row_pilar = normalize_text(row.get(pilar_col, ''))
+            pilar_match = any(filtro in row_pilar or row_pilar == filtro for filtro in pilar_filtros)
+            
+            if not pilar_match:
+                continue
+            
+            # Verificar filtro (Filial para gerente, Vendedor para CN)
+            match = False
+            if is_gerente_user and filial_col:
+                row_filial = str(row.get(filial_col, '')).strip().upper()
+                match = (row_filial == user_sector_normalized)
+            elif not is_gerente_user and vendedor_col:
+                row_vendedor = normalize_text(row.get(vendedor_col, ''))
+                match = (row_vendedor == user_name_normalized or 
+                        user_name_normalized in row_vendedor or 
+                        row_vendedor in user_name_normalized)
+            
+            if match:
+                row_data = {}
+                for col in df_pago.columns:
+                    value = row.get(col)
+                    if pd.isna(value):
+                        row_data[str(col)] = None
+                    elif isinstance(value, (int, float)):
+                        row_data[str(col)] = float(value) if isinstance(value, float) else int(value)
+                    else:
+                        row_data[str(col)] = str(value)
+                vendas_pago.append(row_data)
+        
+        # ================== SHEET EXCLUSÃO ==================
+        try:
+            excel_file.seek(0)
+            df_exclusao = pd.read_excel(excel_file, sheet_name='EXCLUSAO', engine='openpyxl')
+            
+            filial_col_exc = None
+            pilar_col_exc = None
+            vendedor_col_exc = None
+            
+            for col in df_exclusao.columns:
+                col_upper = str(col).strip().upper()
+                if col_upper == 'FILIAL':
+                    filial_col_exc = col
+                elif col_upper == 'PILAR':
+                    pilar_col_exc = col
+                elif col_upper == 'VENDEDOR':
+                    vendedor_col_exc = col
+            
+            if pilar_col_exc:
+                for idx, row in df_exclusao.iterrows():
+                    row_pilar = normalize_text(row.get(pilar_col_exc, ''))
+                    pilar_match = any(filtro in row_pilar or row_pilar == filtro for filtro in pilar_filtros)
+                    
+                    if not pilar_match:
+                        continue
+                    
+                    match = False
+                    if is_gerente_user and filial_col_exc:
+                        row_filial = str(row.get(filial_col_exc, '')).strip().upper()
+                        match = (row_filial == user_sector_normalized)
+                    elif not is_gerente_user and vendedor_col_exc:
+                        row_vendedor = normalize_text(row.get(vendedor_col_exc, ''))
+                        match = (row_vendedor == user_name_normalized or 
+                                user_name_normalized in row_vendedor or 
+                                row_vendedor in user_name_normalized)
+                    
+                    if match:
+                        row_data = {}
+                        for col in df_exclusao.columns:
+                            value = row.get(col)
+                            if pd.isna(value):
+                                row_data[str(col)] = None
+                            elif isinstance(value, (int, float)):
+                                row_data[str(col)] = float(value) if isinstance(value, float) else int(value)
+                            else:
+                                row_data[str(col)] = str(value)
+                        row_data['_tipo'] = 'exclusao'
+                        vendas_exclusao.append(row_data)
+        except Exception:
+            pass  # Sheet de exclusão pode não existir
+        
+        return JsonResponse({
+            'success': True,
+            'pilar': pilar,
+            'vendas_pago': vendas_pago,
+            'vendas_exclusao': vendas_exclusao,
+            'total_pago': len(vendas_pago),
+            'total_exclusao': len(vendas_exclusao),
+            'colunas': colunas
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao processar: {str(e)}'}, status=500)
+
+
+@login_required
+def export_vendas_pilar_excel(request):
+    """
+    Exporta vendas de um pilar específico para Excel.
+    """
+    import json
+    from datetime import datetime
+    
+    pilar = request.GET.get('pilar', 'Pilar')
+    vendas_json = request.GET.get('vendas', '[]')
+    
+    try:
+        vendas = json.loads(vendas_json)
+    except:
+        vendas = []
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f'Vendas {pilar}'
+    
+    # Estilos
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    header_fill = PatternFill(start_color='660099', end_color='660099', fill_type='solid')
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    if vendas:
+        # Obter colunas da primeira venda
+        colunas = [col for col in vendas[0].keys() if not col.startswith('_')]
+        
+        # Header
+        for col_idx, col_name in enumerate(colunas, 1):
+            cell = ws.cell(row=1, column=col_idx, value=col_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = border
+        
+        # Dados
+        for row_idx, venda in enumerate(vendas, 2):
+            for col_idx, col_name in enumerate(colunas, 1):
+                value = venda.get(col_name, '')
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.border = border
+        
+        # Ajustar larguras
+        for col_idx in range(1, len(colunas) + 1):
+            ws.column_dimensions[get_column_letter(col_idx)].width = 18
+    else:
+        ws['A1'] = 'Sem vendas para exibir'
+    
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    filename = f'vendas_{pilar}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     
     wb.save(response)
