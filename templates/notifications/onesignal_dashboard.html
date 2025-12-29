@@ -73,6 +73,25 @@
             </div>
         </div>
         
+        <!-- Banner para Aceitar Notificações -->
+        <div id="subscriptionBanner" class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 mb-8 hidden">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-bell text-2xl text-white"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-white">Ativar Notificações Push</h3>
+                        <p class="text-blue-100 text-sm">Você ainda não está inscrito para receber notificações neste navegador.</p>
+                    </div>
+                </div>
+                <button onclick="requestPushPermission()" class="px-6 py-3 bg-white text-blue-600 font-semibold rounded-xl hover:bg-blue-50 transition-all shadow-lg">
+                    <i class="fas fa-bell mr-2"></i>
+                    Aceitar Notificações
+                </button>
+            </div>
+        </div>
+        
         <!-- Stats Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <!-- Total Usuários -->
@@ -581,5 +600,36 @@
             closeSyncModal();
         }
     });
+    
+    // Verificar status de inscrição do OneSignal
+    function checkSubscriptionStatus() {
+        if (typeof window.isPushSubscribed === 'function') {
+            window.isPushSubscribed().then(function(isSubscribed) {
+                const banner = document.getElementById('subscriptionBanner');
+                if (!isSubscribed && banner) {
+                    banner.classList.remove('hidden');
+                }
+            });
+        } else {
+            // Tentar novamente após 2 segundos se OneSignal ainda não carregou
+            setTimeout(checkSubscriptionStatus, 2000);
+        }
+    }
+    
+    // Verificar após carregar a página
+    setTimeout(checkSubscriptionStatus, 3000);
+    
+    // Função para solicitar permissão (usa a função global do OneSignal)
+    function requestPushPermission() {
+        if (typeof window.requestPushPermission === 'function') {
+            window.requestPushPermission();
+            // Esconder banner após alguns segundos
+            setTimeout(function() {
+                document.getElementById('subscriptionBanner').classList.add('hidden');
+            }, 5000);
+        } else {
+            showToast('OneSignal ainda não carregou. Aguarde alguns segundos.', 'info');
+        }
+    }
 </script>
 {% endblock %}
