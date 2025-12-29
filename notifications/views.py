@@ -891,6 +891,66 @@ def onesignal_segments(request):
     return JsonResponse(result)
 
 
+@login_required
+def onesignal_debug(request):
+    """Debug endpoint para verificar status do OneSignal"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({'error': 'Permissão negada'}, status=403)
+    
+    from .onesignal_service import onesignal_service
+    import requests
+    from django.conf import settings
+    
+    app_id = getattr(settings, 'ONESIGNAL_APP_ID', '')
+    api_key = getattr(settings, 'ONESIGNAL_REST_API_KEY', '')
+    
+    debug_info = {
+        'app_id': app_id[:10] + '...' if app_id else 'Não configurado',
+        'api_key': api_key[:15] + '...' if api_key else 'Não configurado',
+        'service_enabled': onesignal_service.enabled,
+    }
+    
+    # Testar API do OneSignal
+    try:
+        headers = {
+            'Authorization': f'Basic {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Obter info do app
+        app_response = requests.get(
+            f'https://onesignal.com/api/v1/apps/{app_id}',
+            headers=headers,
+            timeout=10
+        )
+        debug_info['app_api_status'] = app_response.status_code
+        
+        if app_response.status_code == 200:
+            app_data = app_response.json()
+            debug_info['total_players'] = app_data.get('players', 0)
+            debug_info['messageable_players'] = app_data.get('messageable_players', 0)
+            debug_info['app_name'] = app_data.get('name', 'N/A')
+        else:
+            debug_info['app_api_error'] = app_response.text[:500]
+        
+        # Testar envio de notificação de teste (sem enviar)
+        test_payload = {
+            'app_id': app_id,
+            'headings': {'en': 'Teste'},
+            'contents': {'en': 'Mensagem de teste'},
+            'included_segments': ['Subscribed Users'],
+            # dry_run não existe no OneSignal, mas podemos verificar a resposta
+        }
+        
+        # Verificar quantos usuários receberiam
+        debug_info['test_segment'] = 'Subscribed Users'
+        
+    except Exception as e:
+        debug_info['error'] = str(e)
+    
+    return JsonResponse(debug_info)
+
+
 @csrf_exempt
 def api_onesignal_config(request):
     """API para obter configuração do OneSignal para o cliente"""
