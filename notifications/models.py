@@ -371,3 +371,158 @@ class NotificationPreference(models.Model):
         """Obtém ou cria preferências para um usuário"""
         preferences, created = cls.objects.get_or_create(user=user)
         return preferences
+
+
+class OneSignalPlayer(models.Model):
+    """
+    Modelo para vincular Player IDs do OneSignal a usuários do sistema.
+    Permite enviar notificações para usuários específicos.
+    """
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='onesignal_players',
+        verbose_name="Usuário",
+        null=True,
+        blank=True
+    )
+    player_id = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name="Player ID OneSignal"
+    )
+    
+    # Informações do dispositivo
+    device_type = models.CharField(
+        max_length=50,
+        default='web',
+        verbose_name="Tipo de Dispositivo"
+    )
+    browser = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Navegador"
+    )
+    os = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Sistema Operacional"
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    
+    # Metadados
+    extra_data = models.JSONField(default=dict, blank=True, verbose_name="Dados Extras")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Player OneSignal"
+        verbose_name_plural = "Players OneSignal"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        if self.user:
+            return f"{self.user.get_full_name()} - {self.player_id[:20]}..."
+        return f"Anônimo - {self.player_id[:20]}..."
+
+
+class OneSignalNotificationLog(models.Model):
+    """
+    Log de notificações enviadas via OneSignal.
+    Permite rastrear histórico e métricas.
+    """
+    
+    # Conteúdo da notificação
+    title = models.CharField(max_length=200, verbose_name="Título")
+    message = models.TextField(verbose_name="Mensagem")
+    url = models.CharField(max_length=500, blank=True, verbose_name="URL de Destino")
+    
+    # Alvo
+    segment = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Segmento"
+    )
+    sent_to_all = models.BooleanField(default=True, verbose_name="Enviado para Todos")
+    
+    # Resultado
+    success = models.BooleanField(default=False, verbose_name="Sucesso")
+    sent_count = models.IntegerField(default=0, verbose_name="Quantidade Enviada")
+    notification_id = models.CharField(max_length=255, blank=True, verbose_name="ID da Notificação OneSignal")
+    response_data = models.JSONField(default=dict, blank=True, verbose_name="Resposta da API")
+    error_message = models.TextField(blank=True, verbose_name="Mensagem de Erro")
+    
+    # Quem enviou
+    sent_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='onesignal_notifications_sent',
+        verbose_name="Enviado por"
+    )
+    
+    # Metadados
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Log de Notificação OneSignal"
+        verbose_name_plural = "Logs de Notificações OneSignal"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        status = "✓" if self.success else "✗"
+        return f"[{status}] {self.title} - {self.created_at.strftime('%d/%m/%Y %H:%M')}"
+
+
+# Modelos legados (Truepush) - mantidos para compatibilidade com migrações existentes
+class TruepushSubscriber(models.Model):
+    """DEPRECATED: Use OneSignalPlayer instead"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='truepush_subscriptions',
+        verbose_name="Usuário",
+        null=True,
+        blank=True
+    )
+    subscriber_id = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name="ID do Assinante Truepush"
+    )
+    device_type = models.CharField(max_length=50, default='web')
+    browser = models.CharField(max_length=100, blank=True)
+    os = models.CharField(max_length=100, blank=True)
+    is_active = models.BooleanField(default=True)
+    extra_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Assinante Truepush (Legado)"
+        verbose_name_plural = "Assinantes Truepush (Legado)"
+
+
+class TruepushNotificationLog(models.Model):
+    """DEPRECATED: Use OneSignalNotificationLog instead"""
+    
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    url = models.URLField(blank=True)
+    segment_id = models.CharField(max_length=255, blank=True)
+    sent_to_all = models.BooleanField(default=True)
+    success = models.BooleanField(default=False)
+    sent_count = models.IntegerField(default=0)
+    response_data = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='truepush_notifications_sent')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Log Truepush (Legado)"
+        verbose_name_plural = "Logs Truepush (Legado)"

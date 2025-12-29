@@ -11,6 +11,9 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import PushNotification, NotificationCategory, UserNotification, DeviceToken
 from users.models import Sector, User
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def is_superuser_or_admin(user):
@@ -675,3 +678,243 @@ def api_subscribe_push(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+# =============================================================================
+# ONESIGNAL INTEGRATION VIEWS
+# =============================================================================
+
+@login_required
+def onesignal_dashboard(request):
+    """Dashboard de configuração do OneSignal (apenas SUPERADMINs)"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Apenas SUPERADMINs podem acessar esta página.')
+        return redirect('dashboard')
+    
+    from .onesignal_service import onesignal_service
+    
+    # Verificar configuração
+    is_configured = onesignal_service.enabled
+    
+    # Obter estatísticas se configurado
+    stats = None
+    player_count = 0
+    segments = []
+    recent_notifications = []
+    
+    if is_configured:
+        # Obter contagem de players
+        count_result = onesignal_service.get_player_count()
+        if count_result.get('success'):
+            player_count = count_result.get('count', 0)
+        
+        # Obter segmentos
+        segments_result = onesignal_service.get_segments()
+        if segments_result.get('success'):
+            segments = segments_result.get('segments', [])
+        
+        # Obter notificações recentes
+        notifications_result = onesignal_service.get_notifications(limit=10)
+        if notifications_result.get('success'):
+            recent_notifications = notifications_result.get('notifications', [])
+    
+    context = {
+        'is_configured': is_configured,
+        'stats': stats,
+        'player_count': player_count,
+        'segments': segments,
+        'recent_notifications': recent_notifications,
+        'onesignal_app_id': onesignal_service.app_id if is_configured else '',
+    }
+    
+    return render(request, 'notifications/onesignal_dashboard.html', context)
+
+
+@login_required
+@require_POST
+def onesignal_send_notification(request):
+    """API para enviar notificação via OneSignal (apenas SUPERADMINs)"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({
+            'success': False,
+            'error': 'Permissão negada'
+        }, status=403)
+    
+    try:
+        from .onesignal_service import onesignal_service
+        
+        data = json.loads(request.body)
+        
+        title = data.get('title', '')
+        message = data.get('message', '')
+        url = data.get('url', '/')
+        segment = data.get('segment', 'Subscribed Users')
+        icon = data.get('icon')
+        image = data.get('image')
+        
+        if not title or not message:
+            return JsonResponse({
+                'success': False,
+                'error': 'Título e mensagem são obrigatórios'
+            }, status=400)
+        
+        # Enviar notificação
+        result = onesignal_service.send_notification(
+            title=title,
+            message=message,
+            url=url,
+            segment=segment,
+            icon=icon,
+            image=image,
+            sent_by=request.user
+        )
+        
+        if result.get('success'):
+            # Registrar a notificação no sistema local também
+            try:
+                category, _ = NotificationCategory.objects.get_or_create(
+                    name='OneSignal',
+                    defaults={'icon': 'fas fa-broadcast-tower', 'color': 'purple'}
+                )
+                
+                notification = PushNotification.objects.create(
+                    title=title,
+                    message=message,
+                    category=category,
+                    notification_type='CUSTOM',
+                    priority='NORMAL',
+                    icon='fas fa-broadcast-tower',
+                    action_url=url,
+                    created_by=request.user,
+                    send_to_all=True,
+                    is_sent=True,
+                    sent_at=timezone.now(),
+                    extra_data={'onesignal': True, 'notification_id': result.get('notification_id'), 'recipients': result.get('recipients', 0)}
+                )
+            except Exception as e:
+                logger.error(f"Erro ao registrar notificação OneSignal localmente: {e}")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Notificação enviada com sucesso via OneSignal',
+                'sent_count': result.get('recipients', 0),
+                'notification_id': result.get('notification_id')
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Erro ao enviar notificação')
+            }, status=400)
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'JSON inválido'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+def onesignal_stats(request):
+    """API para obter estatísticas do OneSignal"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({
+            'success': False,
+            'error': 'Permissão negada'
+        }, status=403)
+    
+    from .onesignal_service import onesignal_service
+    
+    result = onesignal_service.get_app_info()
+    
+    return JsonResponse(result)
+
+
+@login_required
+def onesignal_player_count(request):
+    """API para obter contagem de players OneSignal"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({
+            'success': False,
+            'error': 'Permissão negada'
+        }, status=403)
+    
+    from .onesignal_service import onesignal_service
+    
+    result = onesignal_service.get_player_count()
+    
+    return JsonResponse(result)
+
+
+@login_required
+def onesignal_segments(request):
+    """API para listar segmentos do OneSignal"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({
+            'success': False,
+            'error': 'Permissão negada'
+        }, status=403)
+    
+    from .onesignal_service import onesignal_service
+    
+    result = onesignal_service.get_segments()
+    
+    return JsonResponse(result)
+
+
+@csrf_exempt
+def api_onesignal_config(request):
+    """API para obter configuração do OneSignal para o cliente"""
+    from django.conf import settings
+    
+    app_id = getattr(settings, 'ONESIGNAL_APP_ID', '')
+    
+    if not app_id:
+        return JsonResponse({
+            'success': False,
+            'enabled': False,
+            'message': 'OneSignal não configurado'
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'enabled': True,
+        'app_id': app_id
+    })
+
+
+# Legacy Truepush views (redirects to OneSignal)
+@login_required
+def truepush_dashboard(request):
+    """Redirect para OneSignal dashboard"""
+    return redirect('notifications:onesignal_dashboard')
+
+@login_required
+@require_POST
+def truepush_send_notification(request):
+    """Redirect para OneSignal"""
+    return onesignal_send_notification(request)
+
+@login_required
+def truepush_stats(request):
+    """Redirect para OneSignal"""
+    return onesignal_stats(request)
+
+@login_required
+def truepush_subscriber_count(request):
+    """Redirect para OneSignal"""
+    return onesignal_player_count(request)
+
+@login_required
+def truepush_segments(request):
+    """Redirect para OneSignal"""
+    return onesignal_segments(request)
+
+@csrf_exempt
+def api_truepush_config(request):
+    """Redirect para OneSignal config"""
+    return api_onesignal_config(request)

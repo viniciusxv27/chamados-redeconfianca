@@ -30,4 +30,20 @@ urlpatterns = [
     path('api/test-push/', views.test_push_notification, name='test_push'),
     path('api/vapid-key/', views.api_vapid_key, name='api_vapid_key'),
     path('api/subscribe/', views.api_subscribe_push, name='api_subscribe'),
+    
+    # OneSignal Integration
+    path('onesignal/', views.onesignal_dashboard, name='onesignal_dashboard'),
+    path('onesignal/send/', views.onesignal_send_notification, name='onesignal_send'),
+    path('onesignal/stats/', views.onesignal_stats, name='onesignal_stats'),
+    path('onesignal/players/', views.onesignal_player_count, name='onesignal_players'),
+    path('onesignal/segments/', views.onesignal_segments, name='onesignal_segments'),
+    path('api/onesignal/config/', views.api_onesignal_config, name='api_onesignal_config'),
+    
+    # Legacy Truepush Routes (redirect to OneSignal)
+    path('truepush/', views.truepush_dashboard, name='truepush_dashboard'),
+    path('truepush/send/', views.truepush_send_notification, name='truepush_send'),
+    path('truepush/stats/', views.truepush_stats, name='truepush_stats'),
+    path('truepush/subscribers/', views.truepush_subscriber_count, name='truepush_subscribers'),
+    path('truepush/segments/', views.truepush_segments, name='truepush_segments'),
+    path('api/truepush/config/', views.api_truepush_config, name='api_truepush_config'),
 ]

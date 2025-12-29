@@ -1368,6 +1368,94 @@
         }
     </script>
     
+    <!-- OneSignal Integration Script -->
+    <script>
+        (function() {
+            // Verificar se OneSignal está configurado
+            fetch('/notifications/api/onesignal/config/')
+                .then(response => response.json())
+                .then(config => {
+                    if (config.enabled && config.app_id) {
+                        // Carregar script do OneSignal dinamicamente
+                        var onesignalScript = document.createElement('script');
+                        onesignalScript.type = 'text/javascript';
+                        onesignalScript.async = true;
+                        onesignalScript.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+                        onesignalScript.defer = true;
+                        onesignalScript.onload = function() {
+                            // Inicializar OneSignal após carregar o script
+                            window.OneSignalDeferred = window.OneSignalDeferred || [];
+                            OneSignalDeferred.push(async function(OneSignal) {
+                                await OneSignal.init({
+                                    appId: config.app_id,
+                                    allowLocalhostAsSecureOrigin: true,
+                                    promptOptions: {
+                                        slidedown: {
+                                            prompts: [{
+                                                type: "push",
+                                                autoPrompt: false,
+                                                text: {
+                                                    actionMessage: "Deseja receber notificações sobre seus chamados e atualizações do sistema?",
+                                                    acceptButton: "Sim, quero receber",
+                                                    cancelButton: "Agora não"
+                                                },
+                                                delay: {
+                                                    pageViews: 1,
+                                                    timeDelay: 5
+                                                }
+                                            }]
+                                        }
+                                    },
+                                    welcomeNotification: {
+                                        title: "Bem-vindo às notificações!",
+                                        message: "Você receberá atualizações importantes do sistema."
+                                    }
+                                });
+                                console.log('OneSignal initialized successfully');
+                                
+                                // Expor função global para solicitar permissão
+                                window.requestPushPermission = function() {
+                                    OneSignal.Slidedown.promptPush()
+                                        .then(function() {
+                                            console.log('OneSignal permission requested');
+                                        })
+                                        .catch(function(err) {
+                                            console.error('OneSignal permission request failed:', err);
+                                        });
+                                };
+                                
+                                // Função para verificar se está inscrito
+                                window.isPushSubscribed = async function() {
+                                    return await OneSignal.User.PushSubscription.optedIn;
+                                };
+                                
+                                // Associar usuário atual (se logado)
+                                {% if user.is_authenticated %}
+                                try {
+                                    await OneSignal.login("{{ user.id }}");
+                                    await OneSignal.User.addTags({
+                                        user_id: "{{ user.id }}",
+                                        email: "{{ user.email|default:'' }}",
+                                        hierarchy: "{{ user.hierarchy|default:'' }}",
+                                        sector: "{{ user.sector.name|default:'' }}"
+                                    });
+                                } catch(e) {
+                                    console.log('OneSignal user login error:', e);
+                                }
+                                {% endif %}
+                            });
+                        };
+                        document.head.appendChild(onesignalScript);
+                    } else {
+                        console.log('OneSignal not configured');
+                    }
+                })
+                .catch(error => {
+                    console.log('Could not load OneSignal config:', error);
+                });
+        })();
+    </script>
+    
     <!-- Notification Detail Modal -->
     <div id="notificationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 hidden">
         <div class="relative top-20 mx-auto p-5 border w-11/12 sm:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">

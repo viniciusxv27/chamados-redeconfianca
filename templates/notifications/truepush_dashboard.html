@@ -1,0 +1,358 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Truepush - Notificações Push{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-broadcast-tower text-purple-500"></i>
+                Truepush - Notificações Push
+            </h1>
+            <p class="text-gray-600 mt-1">Gerencie notificações push para web e mobile</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'notifications:dashboard' %}" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>Voltar
+            </a>
+            {% if is_configured %}
+            <button onclick="openSendModal()" class="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors">
+                <i class="fas fa-paper-plane mr-2"></i>Enviar Notificação
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not is_configured %}
+    <!-- Configuração Necessária -->
+    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+        <div class="flex items-start gap-4">
+            <div class="bg-yellow-100 p-3 rounded-full">
+                <i class="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-yellow-800">Configuração Necessária</h3>
+                <p class="text-yellow-700 mt-1">
+                    O Truepush ainda não está configurado. Siga os passos abaixo para ativar:
+                </p>
+                <ol class="list-decimal list-inside mt-3 space-y-2 text-yellow-700">
+                    <li>Acesse <a href="https://app.truepush.com/" target="_blank" class="text-purple-600 hover:underline font-medium">app.truepush.com</a> e crie uma conta gratuita</li>
+                    <li>Crie um novo projeto para o seu site</li>
+                    <li>Copie a <strong>API Key</strong> e o <strong>Project ID</strong></li>
+                    <li>Adicione as variáveis no seu arquivo <code class="bg-yellow-100 px-1 rounded">.env</code>:</li>
+                </ol>
+                <div class="bg-gray-800 text-green-400 p-4 rounded-lg mt-3 font-mono text-sm">
+                    TRUEPUSH_API_KEY=sua_api_key_aqui<br>
+                    TRUEPUSH_PROJECT_ID=seu_project_id_aqui
+                </div>
+                <p class="text-yellow-700 mt-3">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Após configurar, reinicie o servidor para aplicar as alterações.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Dashboard Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Assinantes -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Total de Assinantes</p>
+                    <p class="text-3xl font-bold text-gray-800" id="subscriber-count">{{ subscriber_count }}</p>
+                </div>
+                <div class="bg-purple-100 p-3 rounded-full">
+                    <i class="fas fa-users text-purple-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm text-green-600">
+                <i class="fas fa-check-circle mr-1"></i>
+                Ativos
+            </div>
+        </div>
+
+        <!-- Segmentos -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Segmentos</p>
+                    <p class="text-3xl font-bold text-gray-800">{{ segments|length }}</p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-full">
+                    <i class="fas fa-layer-group text-blue-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm text-gray-500">
+                <i class="fas fa-tag mr-1"></i>
+                Grupos de usuários
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Status</p>
+                    <p class="text-xl font-bold text-green-600">Ativo</p>
+                </div>
+                <div class="bg-green-100 p-3 rounded-full">
+                    <i class="fas fa-check-circle text-green-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center text-sm text-gray-500">
+                <i class="fas fa-plug mr-1"></i>
+                Conectado
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuração do Script -->
+    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-code text-purple-500 mr-2"></i>
+            Script de Integração
+        </h3>
+        <p class="text-gray-600 mb-4">
+            O script do Truepush já está integrado ao sistema. Os usuários podem se inscrever para receber notificações push.
+        </p>
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div class="flex items-center gap-2 text-green-700">
+                <i class="fas fa-check-circle"></i>
+                <span>Script ativo - Project ID: <strong>{{ truepush_project_id }}</strong></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Segmentos -->
+    {% if segments %}
+    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-layer-group text-blue-500 mr-2"></i>
+            Segmentos Disponíveis
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for segment in segments %}
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <h4 class="font-medium text-gray-800">{{ segment.name }}</h4>
+                <p class="text-sm text-gray-500 mt-1">{{ segment.description|default:"Sem descrição" }}</p>
+                <p class="text-xs text-gray-400 mt-2">ID: {{ segment.id }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Enviar Notificação Rápida -->
+    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-paper-plane text-purple-500 mr-2"></i>
+            Enviar Notificação Rápida
+        </h3>
+        <form id="quick-notification-form" class="space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Título</label>
+                    <input type="text" name="title" id="notif-title" required maxlength="100"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                           placeholder="Título da notificação">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">URL de Destino</label>
+                    <input type="text" name="url" id="notif-url" value="/"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                           placeholder="Ex: /notifications/">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
+                <textarea name="message" id="notif-message" required rows="3" maxlength="500"
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder="Mensagem da notificação"></textarea>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2">
+                    <i class="fas fa-paper-plane"></i>
+                    Enviar para Todos
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Informações sobre Truepush -->
+    <div class="bg-gradient-to-r from-purple-500 to-purple-700 rounded-xl p-6 text-white">
+        <div class="flex flex-col md:flex-row items-center gap-6">
+            <div class="flex-shrink-0">
+                <i class="fas fa-bell text-6xl opacity-80"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold">Sobre o Truepush</h3>
+                <p class="mt-2 opacity-90">
+                    Truepush é uma plataforma de notificações push gratuita que permite enviar notificações
+                    para navegadores web (Chrome, Firefox, Safari, Edge) e dispositivos móveis.
+                    Com ele, você pode engajar seus usuários mesmo quando eles não estão no site.
+                </p>
+                <div class="mt-4 flex flex-wrap gap-4">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-check"></i>
+                        <span>Web Push</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-check"></i>
+                        <span>Mobile Browser</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-check"></i>
+                        <span>Segmentação</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-check"></i>
+                        <span>Gratuito</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Envio (alternativa ao formulário rápido) -->
+<div id="send-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl max-w-lg w-full mx-4 p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">Enviar Notificação Push</h3>
+            <button onclick="closeSendModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <form id="modal-notification-form" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
+                <input type="text" name="title" required maxlength="100"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mensagem *</label>
+                <textarea name="message" required rows="3" maxlength="500"
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">URL de Destino</label>
+                <input type="text" name="url" value="/"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Segmento (opcional)</label>
+                <select name="segment_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                    <option value="">Todos os assinantes</option>
+                    {% for segment in segments %}
+                    <option value="{{ segment.id }}">{{ segment.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeSendModal()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancelar
+                </button>
+                <button type="submit" class="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 transition-colors">
+                    <i class="fas fa-paper-plane mr-2"></i>Enviar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Função para abrir modal
+function openSendModal() {
+    document.getElementById('send-modal').classList.remove('hidden');
+    document.getElementById('send-modal').classList.add('flex');
+}
+
+// Função para fechar modal
+function closeSendModal() {
+    document.getElementById('send-modal').classList.add('hidden');
+    document.getElementById('send-modal').classList.remove('flex');
+}
+
+// Enviar notificação via formulário rápido
+document.getElementById('quick-notification-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    await sendNotification(this);
+});
+
+// Enviar notificação via modal
+document.getElementById('modal-notification-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    await sendNotification(this);
+    closeSendModal();
+});
+
+async function sendNotification(form) {
+    const formData = new FormData(form);
+    const data = {
+        title: formData.get('title'),
+        message: formData.get('message'),
+        url: formData.get('url') || '/',
+        segment_id: formData.get('segment_id') || null
+    };
+    
+    try {
+        const response = await fetch('{% url "notifications:truepush_send" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Notificação enviada com sucesso!', 'success');
+            form.reset();
+        } else {
+            showToast(result.error || 'Erro ao enviar notificação', 'error');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro ao enviar notificação', 'error');
+    }
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    } text-white`;
+    toast.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+// Atualizar contador de assinantes periodicamente
+setInterval(async () => {
+    try {
+        const response = await fetch('{% url "notifications:truepush_subscribers" %}');
+        const data = await response.json();
+        if (data.success && data.count !== undefined) {
+            document.getElementById('subscriber-count').textContent = data.count;
+        }
+    } catch (e) {}
+}, 60000); // Atualizar a cada minuto
+</script>
+{% endblock %}

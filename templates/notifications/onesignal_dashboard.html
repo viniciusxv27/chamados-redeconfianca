@@ -1,0 +1,433 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}OneSignal - Push Notifications{% endblock %}
+
+{% block extra_css %}
+<style>
+    .onesignal-header {
+        background: linear-gradient(135deg, #E54B4D 0%, #C62E30 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    
+    .onesignal-logo {
+        width: 48px;
+        height: 48px;
+        background: white;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: #E54B4D;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+    
+    .stat-icon.purple { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; }
+    .stat-icon.green { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
+    .stat-icon.blue { background: rgba(59, 130, 246, 0.15); color: #3B82F6; }
+    .stat-icon.red { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+    
+    .segment-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        background: #F1F5F9;
+        border-radius: 20px;
+        font-size: 13px;
+        margin: 4px;
+    }
+    
+    .notification-form {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .form-control:focus {
+        border-color: #E54B4D;
+        box-shadow: 0 0 0 3px rgba(229, 75, 77, 0.15);
+    }
+    
+    .btn-onesignal {
+        background: linear-gradient(135deg, #E54B4D 0%, #C62E30 100%);
+        border: none;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .btn-onesignal:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(229, 75, 77, 0.4);
+        color: white;
+    }
+    
+    .recent-notifications {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .notification-item {
+        border-left: 3px solid #E54B4D;
+        padding: 12px;
+        margin-bottom: 8px;
+        background: #F8FAFC;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .setup-guide {
+        background: #FFF7ED;
+        border: 1px solid #FDBA74;
+        border-radius: 12px;
+        padding: 20px;
+    }
+    
+    .code-block {
+        background: #1E293B;
+        color: #E2E8F0;
+        padding: 16px;
+        border-radius: 8px;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 13px;
+        overflow-x: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="onesignal-header">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+                <div class="onesignal-logo">
+                    <i class="fas fa-bell"></i>
+                </div>
+                <div>
+                    <h2 class="mb-1">OneSignal Push Notifications</h2>
+                    <p class="mb-0 opacity-75">Gerencie notificações push para web e mobile</p>
+                </div>
+            </div>
+            <div>
+                {% if is_configured %}
+                <span class="badge bg-success fs-6">
+                    <i class="fas fa-check-circle me-1"></i>Configurado
+                </span>
+                {% else %}
+                <span class="badge bg-warning fs-6">
+                    <i class="fas fa-exclamation-triangle me-1"></i>Não Configurado
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if not is_configured %}
+    <!-- Setup Guide -->
+    <div class="setup-guide mb-4">
+        <h5><i class="fas fa-book me-2"></i>Guia de Configuração</h5>
+        <p>Para configurar o OneSignal, siga os passos abaixo:</p>
+        
+        <ol class="mb-3">
+            <li class="mb-2">Crie uma conta gratuita em <a href="https://onesignal.com" target="_blank">onesignal.com</a></li>
+            <li class="mb-2">Crie um novo App e configure Web Push</li>
+            <li class="mb-2">Copie o <strong>App ID</strong> e a <strong>REST API Key</strong></li>
+            <li class="mb-2">Adicione ao seu arquivo <code>.env</code>:</li>
+        </ol>
+        
+        <div class="code-block">
+ONESIGNAL_APP_ID=seu-app-id-aqui<br>
+ONESIGNAL_REST_API_KEY=sua-rest-api-key-aqui
+        </div>
+        
+        <p class="mt-3 mb-0">
+            <i class="fas fa-info-circle me-1"></i>
+            O plano gratuito do OneSignal suporta até 10.000 assinantes web push ilimitados.
+        </p>
+    </div>
+    {% else %}
+    
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon purple">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Players/Assinantes</div>
+                        <div class="fs-4 fw-bold" id="playerCount">{{ player_count }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon green">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Segmentos</div>
+                        <div class="fs-4 fw-bold">{{ segments|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-paper-plane"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Notificações Recentes</div>
+                        <div class="fs-4 fw-bold">{{ recent_notifications|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon red">
+                        <i class="fas fa-fingerprint"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">App ID</div>
+                        <div class="fs-6 text-truncate" style="max-width: 150px;" title="{{ onesignal_app_id }}">
+                            {{ onesignal_app_id|truncatechars:15 }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <!-- Send Notification Form -->
+        <div class="col-lg-6">
+            <div class="notification-form">
+                <h5 class="mb-4">
+                    <i class="fas fa-paper-plane me-2 text-danger"></i>
+                    Enviar Notificação
+                </h5>
+                
+                <form id="notificationForm">
+                    <div class="mb-3">
+                        <label class="form-label">Título *</label>
+                        <input type="text" class="form-control" id="notifTitle" required 
+                               placeholder="Ex: Novo chamado atribuído">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Mensagem *</label>
+                        <textarea class="form-control" id="notifMessage" rows="3" required
+                                  placeholder="Ex: Você recebeu um novo chamado para análise"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">URL de Destino</label>
+                        <input type="text" class="form-control" id="notifUrl" 
+                               placeholder="/" value="/">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Segmento</label>
+                        <select class="form-select" id="notifSegment">
+                            <option value="Subscribed Users">Todos os Assinantes</option>
+                            {% for segment in segments %}
+                            <option value="{{ segment.name }}">{{ segment.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">URL do Ícone (opcional)</label>
+                            <input type="url" class="form-control" id="notifIcon" 
+                                   placeholder="https://...">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">URL da Imagem (opcional)</label>
+                            <input type="url" class="form-control" id="notifImage" 
+                                   placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-onesignal w-100">
+                        <i class="fas fa-paper-plane me-2"></i>
+                        Enviar Notificação Push
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Recent Notifications & Segments -->
+        <div class="col-lg-6">
+            <!-- Segments -->
+            <div class="notification-form mb-4">
+                <h5 class="mb-3">
+                    <i class="fas fa-layer-group me-2 text-success"></i>
+                    Segmentos Disponíveis
+                </h5>
+                
+                <div class="d-flex flex-wrap">
+                    {% for segment in segments %}
+                    <span class="segment-badge">
+                        <i class="fas fa-tag me-1"></i>
+                        {{ segment.name }}
+                    </span>
+                    {% empty %}
+                    <p class="text-muted mb-0">Nenhum segmento configurado</p>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Recent Notifications -->
+            <div class="notification-form">
+                <h5 class="mb-3">
+                    <i class="fas fa-history me-2 text-primary"></i>
+                    Notificações Recentes
+                </h5>
+                
+                <div class="recent-notifications">
+                    {% for notif in recent_notifications %}
+                    <div class="notification-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <strong>{{ notif.headings.en|default:"Sem título" }}</strong>
+                            <small class="text-muted">
+                                {% if notif.successful %}
+                                <span class="text-success">✓ {{ notif.successful }}</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        <p class="mb-1 small text-muted">{{ notif.contents.en|default:""|truncatechars:100 }}</p>
+                        <small class="text-muted">ID: {{ notif.id|truncatechars:20 }}</small>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted mb-0">Nenhuma notificação enviada recentemente</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Toast Notification -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="liveToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i class="fas fa-bell text-danger me-2"></i>
+            <strong class="me-auto">OneSignal</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastBody"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('notificationForm');
+    const toast = new bootstrap.Toast(document.getElementById('liveToast'));
+    
+    if (form) {
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enviando...';
+            
+            try {
+                const response = await fetch('{% url "notifications:onesignal_send" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({
+                        title: document.getElementById('notifTitle').value,
+                        message: document.getElementById('notifMessage').value,
+                        url: document.getElementById('notifUrl').value,
+                        segment: document.getElementById('notifSegment').value,
+                        icon: document.getElementById('notifIcon').value,
+                        image: document.getElementById('notifImage').value
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`✅ Notificação enviada para ${data.sent_count} dispositivos!`, 'success');
+                    form.reset();
+                    document.getElementById('notifUrl').value = '/';
+                } else {
+                    showToast(`❌ Erro: ${data.error}`, 'danger');
+                }
+            } catch (error) {
+                showToast(`❌ Erro de conexão: ${error.message}`, 'danger');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        });
+    }
+    
+    function showToast(message, type) {
+        const toastBody = document.getElementById('toastBody');
+        toastBody.textContent = message;
+        toastBody.className = `toast-body text-${type}`;
+        toast.show();
+    }
+    
+    // Refresh player count
+    async function refreshPlayerCount() {
+        try {
+            const response = await fetch('{% url "notifications:onesignal_players" %}');
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('playerCount').textContent = data.count;
+            }
+        } catch (e) {}
+    }
+    
+    // Refresh every 30 seconds
+    setInterval(refreshPlayerCount, 30000);
+});
+</script>
+{% endblock %}

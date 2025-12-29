@@ -280,3 +280,16 @@ VAPID_PUBLIC_KEY = "BAkSptgssK-lAp8BrNBv4fRfJyo9LGp6Hx8EwBmVHBBXnDboULSlQQd0Rk67
 VAPID_CLAIMS = {
     "sub": "mailto:admin@redeconfianca.com"
 }
+
+# OneSignal Configuration for Web/Mobile Push Notifications
+# Obtenha suas credenciais em: https://onesignal.com/
+# Plano gratuito: até 10.000 assinantes web push ilimitados
+ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID', default='')
+ONESIGNAL_REST_API_KEY = config('ONESIGNAL_REST_API_KEY', default='')
+
+# Legacy Truepush Configuration (descontinuado - use OneSignal)
+TRUEPUSH_API_KEY = config('TRUEPUSH_API_KEY', default='')
+TRUEPUSH_PROJECT_ID = config('TRUEPUSH_PROJECT_ID', default='')
+
+# URL base do sistema (usado para URLs em notificações)
+BASE_URL = config('BASE_URL', default='https://chamados.redeconfianca.com.br')

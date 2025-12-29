@@ -27,6 +27,8 @@ class NotificationChannel:
     PUSH = 'push'
     EMAIL = 'email'
     BROWSER = 'browser'
+    ONESIGNAL = 'onesignal'
+    TRUEPUSH = 'truepush'  # Legacy - use ONESIGNAL
     ALL = 'all'
 
 
@@ -45,12 +47,14 @@ class NotificationType:
 class NotificationService:
     """
     Serviço principal para gerenciar notificações em todos os canais.
-    Centraliza a lógica de envio para In-App, Push, Email e Browser.
+    Centraliza a lógica de envio para In-App, Push, Email, Browser e OneSignal.
     """
     
     def __init__(self):
         self.email_enabled = self._check_email_config()
         self.push_enabled = self._check_push_config()
+        self.onesignal_enabled = self._check_onesignal_config()
+        self.truepush_enabled = self._check_truepush_config()  # Legacy
         
     def _check_email_config(self) -> bool:
         """Verifica se email está configurado"""
@@ -61,6 +65,16 @@ class NotificationService:
         """Verifica se push está configurado"""
         return bool(getattr(settings, 'VAPID_PRIVATE_KEY', '')) and \
                bool(getattr(settings, 'VAPID_PUBLIC_KEY', ''))
+    
+    def _check_onesignal_config(self) -> bool:
+        """Verifica se OneSignal está configurado"""
+        return bool(getattr(settings, 'ONESIGNAL_APP_ID', '')) and \
+               bool(getattr(settings, 'ONESIGNAL_REST_API_KEY', ''))
+    
+    def _check_truepush_config(self) -> bool:
+        """Verifica se Truepush está configurado (Legacy - use OneSignal)"""
+        return bool(getattr(settings, 'TRUEPUSH_API_KEY', '')) and \
+               bool(getattr(settings, 'TRUEPUSH_PROJECT_ID', ''))
     
     def _filter_by_preferences(self, recipients: List[User], notification_type: str) -> List[User]:
         """Filtra usuários com base nas preferências de tipo de notificação"""
@@ -214,6 +228,33 @@ class NotificationService:
                 )
             else:
                 results['email'] = {'success': True, 'sent_count': 0, 'message': 'Nenhum destinatário habilitado para email'}
+        
+        # 4. OneSignal (Web/Mobile Push via OneSignal Service)
+        if NotificationChannel.ONESIGNAL in channels or NotificationChannel.ALL in channels:
+            if self.onesignal_enabled:
+                results['onesignal'] = self._send_onesignal(
+                    title=title,
+                    message=message,
+                    action_url=action_url,
+                    icon=icon,
+                    extra_data=extra_data,
+                    recipients=recipients
+                )
+            else:
+                results['onesignal'] = {'success': False, 'sent_count': 0, 'message': 'OneSignal não configurado'}
+        
+        # 4b. Truepush Legacy (fallback se OneSignal não configurado)
+        if NotificationChannel.TRUEPUSH in channels:
+            if self.truepush_enabled and not self.onesignal_enabled:
+                results['truepush'] = self._send_truepush(
+                    title=title,
+                    message=message,
+                    action_url=action_url,
+                    icon=icon,
+                    extra_data=extra_data
+                )
+            else:
+                results['truepush'] = {'success': False, 'sent_count': 0, 'message': 'Use OneSignal ao invés de Truepush'}
         
         # Calcular sucesso geral
         overall_success = any(r.get('success', False) for r in results.values())
@@ -439,6 +480,121 @@ class NotificationService:
             'failed_count': failed_count,
             'errors': errors if errors else None
         }
+    
+    def _send_onesignal(
+        self,
+        title: str,
+        message: str,
+        action_url: str,
+        icon: str,
+        extra_data: Dict,
+        recipients: List[User] = None
+    ) -> Dict[str, Any]:
+        """Envia notificação via OneSignal para assinantes web/mobile"""
+        try:
+            from .onesignal_service import onesignal_service
+            
+            if not onesignal_service.enabled:
+                logger.warning("OneSignal não configurado")
+                return {
+                    'success': False,
+                    'error': 'OneSignal não configurado',
+                    'sent_count': 0
+                }
+            
+            # Preparar URL completa
+            base_url = getattr(settings, 'BASE_URL', 'https://chamados.redeconfianca.com.br')
+            full_url = action_url if action_url.startswith('http') else f"{base_url}{action_url}"
+            
+            # Preparar ícone
+            icon_url = icon if icon and icon.startswith('http') else f"{base_url}/static/images/logo.png"
+            
+            # Se há destinatários específicos, enviar para external_user_ids
+            if recipients and len(recipients) > 0:
+                external_user_ids = [str(user.id) for user in recipients]
+                result = onesignal_service.send_to_external_users(
+                    title=title,
+                    message=message,
+                    external_user_ids=external_user_ids,
+                    url=full_url,
+                    icon=icon_url,
+                    data=extra_data
+                )
+            else:
+                # Enviar para todos os assinantes
+                result = onesignal_service.send_to_all(
+                    title=title,
+                    message=message,
+                    url=full_url,
+                    icon=icon_url,
+                    data=extra_data
+                )
+            
+            if result.get('success'):
+                logger.info(f"OneSignal: Notificação enviada - {title}")
+            else:
+                logger.error(f"OneSignal: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"OneSignal: Erro inesperado - {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'sent_count': 0
+            }
+    
+    def _send_truepush(
+        self,
+        title: str,
+        message: str,
+        action_url: str,
+        icon: str,
+        extra_data: Dict
+    ) -> Dict[str, Any]:
+        """Envia notificação via Truepush para todos os assinantes web/mobile"""
+        try:
+            from .truepush_service import truepush_service
+            
+            if not truepush_service.enabled:
+                logger.warning("Truepush não configurado")
+                return {
+                    'success': False,
+                    'error': 'Truepush não configurado',
+                    'sent_count': 0
+                }
+            
+            # Preparar URL completa
+            base_url = getattr(settings, 'BASE_URL', 'https://chamados.redeconfianca.com.br')
+            full_url = action_url if action_url.startswith('http') else f"{base_url}{action_url}"
+            
+            # Preparar ícone
+            icon_url = icon if icon and icon.startswith('http') else f"{base_url}/static/images/logo.png"
+            
+            # Enviar via Truepush
+            result = truepush_service.send_to_all(
+                title=title,
+                message=message,
+                url=full_url,
+                icon=icon_url,
+                data=extra_data
+            )
+            
+            if result.get('success'):
+                logger.info(f"Truepush: Notificação enviada - {title}")
+            else:
+                logger.error(f"Truepush: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Truepush: Erro inesperado - {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'sent_count': 0
+            }
     
     # ==========================================
     # Métodos de conveniência para tipos comuns
@@ -703,3 +859,63 @@ def notify_ticket_comment(ticket, comment, comment_by):
 def notify_communication_created(communication):
     """Wrapper para notification_service.notify_communication_created"""
     return notification_service.notify_communication_created(communication)
+
+
+def send_truepush_notification(title: str, message: str, url: str = '/', **kwargs):
+    """
+    Envia notificação diretamente via Truepush para todos os assinantes.
+    Útil para notificações broadcast importantes.
+    
+    Args:
+        title: Título da notificação
+        message: Mensagem da notificação
+        url: URL de destino ao clicar
+        **kwargs: Argumentos adicionais (icon, image, data, etc.)
+    """
+    from .truepush_service import truepush_service
+    return truepush_service.send_to_all(title=title, message=message, url=url, **kwargs)
+
+
+def send_notification_all_channels(
+    title: str,
+    message: str,
+    url: str = '/',
+    recipients=None,
+    **kwargs
+):
+    """
+    Envia notificação por todos os canais disponíveis:
+    - In-App (se recipients fornecido)
+    - WebPush/VAPID (se recipients fornecido e configurado)
+    - Truepush (para todos os assinantes web/mobile)
+    
+    Útil para notificações broadcast importantes que devem atingir todos os usuários.
+    """
+    results = {}
+    
+    # Enviar via Truepush (para todos os assinantes)
+    from .truepush_service import truepush_service
+    if truepush_service.enabled:
+        results['truepush'] = truepush_service.send_to_all(
+            title=title,
+            message=message,
+            url=url,
+            **kwargs
+        )
+    
+    # Enviar via sistema interno se recipients fornecido
+    if recipients:
+        results['internal'] = notification_service.send_notification(
+            recipients=recipients,
+            title=title,
+            message=message,
+            action_url=url,
+            channels=[NotificationChannel.IN_APP, NotificationChannel.PUSH],
+            **kwargs
+        )
+    
+    return {
+        'success': any(r.get('success', False) for r in results.values()),
+        'results': results
+    }
+
