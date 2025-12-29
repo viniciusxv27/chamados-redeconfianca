@@ -1388,6 +1388,7 @@
                             OneSignalDeferred.push(async function(OneSignal) {
                                 await OneSignal.init({
                                     appId: config.app_id,
+                                    safari_web_id: config.safari_web_id || null,
                                     allowLocalhostAsSecureOrigin: true,
                                     promptOptions: {
                                         slidedown: {

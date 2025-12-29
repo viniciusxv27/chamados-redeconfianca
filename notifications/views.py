@@ -908,7 +908,8 @@ def api_onesignal_config(request):
     return JsonResponse({
         'success': True,
         'enabled': True,
-        'app_id': app_id
+        'app_id': app_id,
+        'safari_web_id': getattr(settings, 'ONESIGNAL_SAFARI_WEB_ID', '')
     })
 
 

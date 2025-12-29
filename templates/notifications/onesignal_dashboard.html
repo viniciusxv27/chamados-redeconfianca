@@ -85,7 +85,7 @@
                         <p class="text-blue-100 text-sm">Você ainda não está inscrito para receber notificações neste navegador.</p>
                     </div>
                 </div>
-                <button onclick="requestPushPermission()" class="px-6 py-3 bg-white text-blue-600 font-semibold rounded-xl hover:bg-blue-50 transition-all shadow-lg">
+                <button onclick="requestPushPermissionLocal()" class="px-6 py-3 bg-white text-blue-600 font-semibold rounded-xl hover:bg-blue-50 transition-all shadow-lg">
                     <i class="fas fa-bell mr-2"></i>
                     Aceitar Notificações
                 </button>
@@ -602,33 +602,84 @@
     });
     
     // Verificar status de inscrição do OneSignal
+    let checkAttempts = 0;
+    const maxAttempts = 10;
+    
     function checkSubscriptionStatus() {
-        if (typeof window.isPushSubscribed === 'function') {
-            window.isPushSubscribed().then(function(isSubscribed) {
-                const banner = document.getElementById('subscriptionBanner');
+        checkAttempts++;
+        console.log('Verificando status de inscrição... Tentativa:', checkAttempts);
+        
+        const banner = document.getElementById('subscriptionBanner');
+        
+        // Verificar se OneSignal está disponível
+        if (typeof OneSignal !== 'undefined' && OneSignal.User && OneSignal.User.PushSubscription) {
+            try {
+                // optedIn é uma propriedade booleana, não uma Promise
+                const isSubscribed = OneSignal.User.PushSubscription.optedIn;
+                console.log('OneSignal optedIn:', isSubscribed);
+                
                 if (!isSubscribed && banner) {
                     banner.classList.remove('hidden');
+                    console.log('Banner exibido - usuário não inscrito');
+                } else if (isSubscribed && banner) {
+                    banner.classList.add('hidden');
+                    console.log('Banner oculto - usuário já inscrito');
                 }
-            });
+            } catch(err) {
+                console.log('Erro ao verificar optedIn:', err);
+                // Mostrar banner em caso de erro
+                if (banner) banner.classList.remove('hidden');
+            }
+        } else if (checkAttempts < maxAttempts) {
+            // Tentar novamente após 1 segundo se OneSignal ainda não carregou
+            console.log('OneSignal ainda não carregou, tentando novamente...');
+            setTimeout(checkSubscriptionStatus, 1000);
         } else {
-            // Tentar novamente após 2 segundos se OneSignal ainda não carregou
-            setTimeout(checkSubscriptionStatus, 2000);
+            // Após máximo de tentativas, mostrar banner por padrão
+            console.log('Máximo de tentativas atingido, mostrando banner');
+            if (banner) banner.classList.remove('hidden');
         }
     }
     
-    // Verificar após carregar a página
-    setTimeout(checkSubscriptionStatus, 3000);
+    // Verificar após carregar a página (iniciar após 2 segundos)
+    setTimeout(checkSubscriptionStatus, 2000);
     
-    // Função para solicitar permissão (usa a função global do OneSignal)
-    function requestPushPermission() {
-        if (typeof window.requestPushPermission === 'function') {
+    // Função para solicitar permissão
+    function requestPushPermissionLocal() {
+        console.log('Solicitando permissão de notificação...');
+        
+        if (typeof OneSignal !== 'undefined' && OneSignal.Slidedown) {
+            OneSignal.Slidedown.promptPush()
+                .then(function() {
+                    console.log('Permissão solicitada via OneSignal');
+                    showToast('Permissão solicitada! Verifique o popup do navegador.', 'info');
+                    // Esconder banner após alguns segundos
+                    setTimeout(function() {
+                        document.getElementById('subscriptionBanner').classList.add('hidden');
+                    }, 3000);
+                })
+                .catch(function(err) {
+                    console.error('Erro ao solicitar permissão:', err);
+                    showToast('Erro ao solicitar permissão. Tente novamente.', 'error');
+                });
+        } else if (typeof window.requestPushPermission === 'function') {
             window.requestPushPermission();
-            // Esconder banner após alguns segundos
             setTimeout(function() {
                 document.getElementById('subscriptionBanner').classList.add('hidden');
             }, 5000);
         } else {
-            showToast('OneSignal ainda não carregou. Aguarde alguns segundos.', 'info');
+            // Fallback para API nativa do navegador
+            if ('Notification' in window) {
+                Notification.requestPermission().then(function(permission) {
+                    console.log('Permissão nativa:', permission);
+                    if (permission === 'granted') {
+                        showToast('Notificações ativadas!', 'success');
+                        document.getElementById('subscriptionBanner').classList.add('hidden');
+                    }
+                });
+            } else {
+                showToast('OneSignal ainda não carregou. Aguarde e tente novamente.', 'info');
+            }
         }
     }
 </script>
