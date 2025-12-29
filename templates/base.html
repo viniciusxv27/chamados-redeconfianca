@@ -1454,16 +1454,18 @@
                                 // Associar usuário atual (se logado)
                                 {% if user.is_authenticated %}
                                 try {
-                                    await OneSignal.login("{{ user.id }}");
+                                    // Usar setExternalUserId ao invés de login (mais compatível)
+                                    await OneSignal.User.addAlias("external_id", "{{ user.id }}");
                                     await OneSignal.User.addTags({
                                         user_id: "{{ user.id }}",
                                         email: "{{ user.email|default:'' }}",
                                         hierarchy: "{{ user.hierarchy|default:'' }}",
                                         sector: "{{ user.sector.name|default:'' }}"
                                     });
+                                    console.log('OneSignal user tags added for user {{ user.id }}');
                                     
                                     // Verificar se usuário não está inscrito e mostrar prompt após 5 segundos
-                                    setTimeout(async function() {
+                                    setTimeout(function() {
                                         const isSubscribed = OneSignal.User.PushSubscription.optedIn;
                                         console.log('Push subscription status:', isSubscribed);
                                         
@@ -1473,7 +1475,13 @@
                                         }
                                     }, 5000);
                                 } catch(e) {
-                                    console.log('OneSignal user login error:', e);
+                                    console.log('OneSignal user setup error:', e);
+                                    // Mesmo com erro, tentar mostrar o banner
+                                    setTimeout(function() {
+                                        if (!OneSignal.User.PushSubscription.optedIn) {
+                                            showPushBanner();
+                                        }
+                                    }, 5000);
                                 }
                                 {% endif %}
                                 
