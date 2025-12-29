@@ -692,6 +692,9 @@ def onesignal_dashboard(request):
         return redirect('dashboard')
     
     from .onesignal_service import onesignal_service
+    from .models import OneSignalPlayer, OneSignalNotificationLog
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
     
     # Verificar configuração
     is_configured = onesignal_service.enabled
@@ -701,6 +704,17 @@ def onesignal_dashboard(request):
     player_count = 0
     segments = []
     recent_notifications = []
+    
+    # Estatísticas de usuários
+    total_active_users = User.objects.filter(is_active=True).count()
+    onesignal_players = OneSignalPlayer.objects.select_related('user', 'user__sector').filter(user__isnull=False).order_by('-created_at')[:50]
+    registered_users = onesignal_players.exclude(player_id__startswith='pending_').count()
+    pending_users = onesignal_players.filter(player_id__startswith='pending_').count()
+    
+    # Estatísticas de notificações
+    total_notifications = OneSignalNotificationLog.objects.count()
+    successful_notifications = OneSignalNotificationLog.objects.filter(success=True).count()
+    success_rate = round((successful_notifications / total_notifications * 100) if total_notifications > 0 else 0)
     
     if is_configured:
         # Obter contagem de players
@@ -725,6 +739,12 @@ def onesignal_dashboard(request):
         'segments': segments,
         'recent_notifications': recent_notifications,
         'onesignal_app_id': onesignal_service.app_id if is_configured else '',
+        'total_active_users': total_active_users,
+        'onesignal_players': onesignal_players,
+        'registered_users': registered_users,
+        'pending_users': pending_users,
+        'total_notifications': total_notifications,
+        'success_rate': success_rate,
     }
     
     return render(request, 'notifications/onesignal_dashboard.html', context)
@@ -884,6 +904,49 @@ def api_onesignal_config(request):
         'success': True,
         'enabled': True,
         'app_id': app_id
+    })
+
+
+@login_required
+@require_POST
+def onesignal_sync_users(request):
+    """Sincroniza usuários ativos com OneSignal (cria registros pendentes)"""
+    if request.user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({
+            'success': False,
+            'error': 'Permissão negada'
+        }, status=403)
+    
+    from users.models import User
+    from .models import OneSignalPlayer
+    
+    # Buscar todos os usuários ativos
+    active_users = User.objects.filter(is_active=True)
+    
+    created_count = 0
+    existing_count = 0
+    
+    for user in active_users:
+        # Verificar se já existe registro para este usuário
+        existing = OneSignalPlayer.objects.filter(user=user).first()
+        
+        if existing:
+            existing_count += 1
+        else:
+            # Criar registro pendente (aguardando usuário se registrar no navegador)
+            OneSignalPlayer.objects.create(
+                user=user,
+                player_id=f'pending_{user.id}',
+                is_active=False  # Será ativado quando o usuário se registrar
+            )
+            created_count += 1
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Sincronização concluída',
+        'created': created_count,
+        'existing': existing_count,
+        'total_users': active_users.count()
     })
 
 
