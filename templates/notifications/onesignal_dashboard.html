@@ -5,1093 +5,581 @@
 
 {% block extra_css %}
 <style>
-    :root {
-        --onesignal-red: #E54B4D;
-        --onesignal-red-dark: #C62E30;
-        --onesignal-gradient: linear-gradient(135deg, #E54B4D 0%, #C62E30 100%);
-    }
-    
-    .onesignal-page {
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        min-height: calc(100vh - 60px);
-        padding: 24px 0;
-    }
-    
-    /* Header com animação */
-    .onesignal-header {
-        background: var(--onesignal-gradient);
-        color: white;
-        border-radius: 20px;
-        padding: 32px;
-        margin-bottom: 32px;
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 10px 40px rgba(229, 75, 77, 0.3);
-    }
-    
-    .onesignal-header::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -50%;
-        width: 100%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        animation: pulse-bg 4s ease-in-out infinite;
-    }
-    
-    @keyframes pulse-bg {
-        0%, 100% { transform: scale(1); opacity: 0.5; }
-        50% { transform: scale(1.1); opacity: 0.3; }
-    }
-    
-    .onesignal-logo {
-        width: 64px;
-        height: 64px;
-        background: white;
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 28px;
-        color: var(--onesignal-red);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        position: relative;
-        z-index: 1;
-    }
-    
-    .onesignal-logo i {
-        animation: ring 2s ease-in-out infinite;
-    }
-    
     @keyframes ring {
         0%, 100% { transform: rotate(0deg); }
         10%, 30% { transform: rotate(15deg); }
         20%, 40% { transform: rotate(-15deg); }
-        50%, 70%, 90% { transform: rotate(0deg); }
+        50% { transform: rotate(0deg); }
     }
+    .animate-ring { animation: ring 2s ease-in-out infinite; }
     
-    /* Stat Cards com hover effects */
     .stat-card {
-        background: white;
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(0,0,0,0.05);
-        position: relative;
-        overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    
-    .stat-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 4px;
-        background: var(--onesignal-gradient);
-        transform: scaleX(0);
-        transition: transform 0.3s ease;
-    }
-    
     .stat-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 12px 40px rgba(0,0,0,0.12);
-    }
-    
-    .stat-card:hover::before {
-        transform: scaleX(1);
-    }
-    
-    .stat-icon {
-        width: 56px;
-        height: 56px;
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        transition: transform 0.3s ease;
-    }
-    
-    .stat-card:hover .stat-icon {
-        transform: scale(1.1);
-    }
-    
-    .stat-icon.purple { 
-        background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%); 
-        color: #8B5CF6; 
-    }
-    .stat-icon.green { 
-        background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 100%); 
-        color: #22C55E; 
-    }
-    .stat-icon.blue { 
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%); 
-        color: #3B82F6; 
-    }
-    .stat-icon.red { 
-        background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%); 
-        color: #EF4444; 
-    }
-    .stat-icon.orange { 
-        background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%); 
-        color: #F97316; 
-    }
-    .stat-icon.cyan { 
-        background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.1) 100%); 
-        color: #06B6D4; 
-    }
-    
-    .stat-value {
-        font-size: 2rem;
-        font-weight: 700;
-        background: var(--onesignal-gradient);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .stat-label {
-        color: #64748B;
-        font-size: 0.875rem;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    /* Notification Form Card */
-    .notification-form {
-        background: white;
-        border-radius: 20px;
-        padding: 28px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        border: 1px solid rgba(0,0,0,0.05);
-        height: 100%;
-    }
-    
-    .notification-form h5 {
-        font-weight: 600;
-        color: #1E293B;
-        margin-bottom: 24px;
-        padding-bottom: 16px;
-        border-bottom: 2px solid #F1F5F9;
-    }
-    
-    .form-label {
-        font-weight: 600;
-        color: #374151;
-        margin-bottom: 8px;
-        font-size: 0.875rem;
-    }
-    
-    .form-control, .form-select {
-        border: 2px solid #E5E7EB;
-        border-radius: 12px;
-        padding: 12px 16px;
-        font-size: 0.95rem;
-        transition: all 0.2s ease;
-    }
-    
-    .form-control:focus, .form-select:focus {
-        border-color: var(--onesignal-red);
-        box-shadow: 0 0 0 4px rgba(229, 75, 77, 0.1);
-    }
-    
-    .form-control::placeholder {
-        color: #9CA3AF;
-    }
-    
-    /* Buttons */
-    .btn-onesignal {
-        background: var(--onesignal-gradient);
-        border: none;
-        color: white;
-        padding: 14px 28px;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .btn-onesignal::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-        transition: 0.5s;
-    }
-    
-    .btn-onesignal:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(229, 75, 77, 0.4);
-        color: white;
-    }
-    
-    .btn-onesignal:hover::before {
-        left: 100%;
-    }
-    
-    .btn-outline-onesignal {
-        background: transparent;
-        border: 2px solid var(--onesignal-red);
-        color: var(--onesignal-red);
-        padding: 12px 24px;
-        border-radius: 12px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    
-    .btn-outline-onesignal:hover {
-        background: var(--onesignal-gradient);
-        color: white;
-        border-color: transparent;
-    }
-    
-    /* Segment Badges */
-    .segment-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 8px 16px;
-        background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
-        border-radius: 25px;
-        font-size: 0.85rem;
-        margin: 4px;
-        font-weight: 500;
-        color: #475569;
-        border: 1px solid #E2E8F0;
-        transition: all 0.2s ease;
-    }
-    
-    .segment-badge:hover {
-        background: var(--onesignal-gradient);
-        color: white;
-        border-color: transparent;
-        transform: translateY(-2px);
-    }
-    
-    .segment-badge i {
-        margin-right: 6px;
-    }
-    
-    /* Notification Items */
-    .recent-notifications {
-        max-height: 450px;
-        overflow-y: auto;
-        padding-right: 8px;
-    }
-    
-    .recent-notifications::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    .recent-notifications::-webkit-scrollbar-track {
-        background: #F1F5F9;
-        border-radius: 3px;
-    }
-    
-    .recent-notifications::-webkit-scrollbar-thumb {
-        background: #CBD5E1;
-        border-radius: 3px;
-    }
-    
-    .notification-item {
-        border-left: 4px solid var(--onesignal-red);
-        padding: 16px;
-        margin-bottom: 12px;
-        background: linear-gradient(135deg, #FAFAFA 0%, #F5F5F5 100%);
-        border-radius: 0 12px 12px 0;
-        transition: all 0.2s ease;
-    }
-    
-    .notification-item:hover {
-        transform: translateX(4px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    
-    .notification-item .title {
-        font-weight: 600;
-        color: #1E293B;
-        margin-bottom: 4px;
-    }
-    
-    .notification-item .message {
-        color: #64748B;
-        font-size: 0.875rem;
-        margin-bottom: 8px;
-    }
-    
-    .notification-item .meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 0.75rem;
-        color: #94A3B8;
-    }
-    
-    .notification-item .status-badge {
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-weight: 600;
-    }
-    
-    .notification-item .status-badge.success {
-        background: rgba(34, 197, 94, 0.15);
-        color: #16A34A;
-    }
-    
-    /* Setup Guide */
-    .setup-guide {
-        background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
-        border: 2px solid #FDBA74;
-        border-radius: 20px;
-        padding: 28px;
-    }
-    
-    .setup-guide h5 {
-        color: #C2410C;
-        font-weight: 600;
-    }
-    
-    .setup-guide ol {
-        padding-left: 20px;
-    }
-    
-    .setup-guide ol li {
-        padding: 8px 0;
-        color: #9A3412;
-    }
-    
-    .code-block {
-        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-        color: #E2E8F0;
-        padding: 20px;
-        border-radius: 12px;
-        font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
-        font-size: 0.9rem;
-        overflow-x: auto;
-        border: 1px solid #334155;
-    }
-    
-    .code-block code {
-        color: #22D3EE;
-    }
-    
-    /* Users Table */
-    .users-table-card {
-        background: white;
-        border-radius: 20px;
-        padding: 0;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        overflow: hidden;
-    }
-    
-    .users-table-card .card-header {
-        background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
-        padding: 20px 24px;
-        border-bottom: 1px solid #E2E8F0;
-    }
-    
-    .users-table {
-        margin: 0;
-    }
-    
-    .users-table thead th {
-        background: #F8FAFC;
-        font-weight: 600;
-        color: #475569;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.5px;
-        padding: 16px;
-        border-bottom: 2px solid #E2E8F0;
-    }
-    
-    .users-table tbody td {
-        padding: 16px;
-        vertical-align: middle;
-        border-bottom: 1px solid #F1F5F9;
-    }
-    
-    .users-table tbody tr:hover {
-        background: #FAFAFA;
-    }
-    
-    .user-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        background: var(--onesignal-gradient);
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-    
-    .status-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
-    }
-    
-    .status-dot.active { background: #22C55E; }
-    .status-dot.pending { background: #F59E0B; }
-    .status-dot.inactive { background: #EF4444; }
-    
-    /* Toast customizado */
-    .toast-onesignal {
-        border-radius: 12px;
-        border: none;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-    }
-    
-    .toast-onesignal .toast-header {
-        background: var(--onesignal-gradient);
-        color: white;
-        border-radius: 12px 12px 0 0;
-    }
-    
-    .toast-onesignal .toast-header .btn-close {
-        filter: brightness(0) invert(1);
-    }
-    
-    /* Animações */
-    .fade-in {
-        animation: fadeIn 0.5s ease-out;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .slide-in {
-        animation: slideIn 0.5s ease-out;
-    }
-    
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    
-    /* Quick Actions */
-    .quick-actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-    }
-    
-    .quick-action-btn {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 16px;
-        background: white;
-        border: 2px solid #E5E7EB;
-        border-radius: 10px;
-        font-weight: 500;
-        color: #475569;
-        transition: all 0.2s ease;
-        cursor: pointer;
-    }
-    
-    .quick-action-btn:hover {
-        border-color: var(--onesignal-red);
-        color: var(--onesignal-red);
-        transform: translateY(-2px);
-    }
-    
-    .quick-action-btn i {
-        font-size: 1.1rem;
-    }
-    
-    /* Responsive */
-    @media (max-width: 768px) {
-        .onesignal-header {
-            padding: 20px;
-        }
-        
-        .stat-card {
-            padding: 16px;
-        }
-        
-        .stat-value {
-            font-size: 1.5rem;
-        }
+        transform: translateY(-4px);
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="onesignal-page">
-    <div class="container-fluid">
+<div class="min-h-screen bg-gray-900 py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
         <!-- Header -->
-        <div class="onesignal-header fade-in">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                <div class="d-flex align-items-center gap-4">
-                    <div class="onesignal-logo">
-                        <i class="fas fa-bell"></i>
+        <div class="relative overflow-hidden bg-gradient-to-r from-red-600 to-red-700 rounded-2xl shadow-2xl mb-8">
+            <div class="absolute inset-0 overflow-hidden">
+                <div class="absolute -top-1/2 -right-1/4 w-96 h-96 bg-white/10 rounded-full"></div>
+            </div>
+            
+            <div class="relative px-8 py-10">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                    <div class="flex items-center gap-5">
+                        <div class="w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center">
+                            <i class="fas fa-bell text-3xl text-red-600 animate-ring"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-3xl font-bold text-white">OneSignal</h1>
+                            <p class="text-red-100 mt-1">Gerenciamento de Push Notifications</p>
+                        </div>
                     </div>
-                    <div class="position-relative" style="z-index: 1;">
-                        <h2 class="mb-1 fw-bold">OneSignal Push Notifications</h2>
-                        <p class="mb-0 opacity-75">
-                            <i class="fas fa-globe me-1"></i>
-                            Gerencie notificações push para web e mobile
-                        </p>
+                    
+                    <div class="flex flex-wrap gap-3">
+                        <button onclick="openSyncModal()" class="inline-flex items-center px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl transition-all border border-white/30">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Sincronizar Todos
+                        </button>
+                        <button onclick="refreshStats()" class="inline-flex items-center px-5 py-2.5 bg-white hover:bg-gray-100 text-red-600 font-medium rounded-xl transition-all shadow-lg">
+                            <i class="fas fa-chart-line mr-2"></i>
+                            Atualizar Stats
+                        </button>
                     </div>
                 </div>
-                <div class="d-flex align-items-center gap-3 position-relative" style="z-index: 1;">
+                
+                <!-- Status Badge -->
+                <div class="mt-6">
                     {% if is_configured %}
-                    <span class="badge bg-white text-success px-3 py-2 fs-6 d-flex align-items-center gap-2">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Configurado</span>
+                    <span class="inline-flex items-center px-4 py-2 bg-green-500/30 text-green-100 rounded-full text-sm font-medium border border-green-400/50">
+                        <span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+                        API Configurada e Ativa
                     </span>
-                    <a href="https://dashboard.onesignal.com" target="_blank" class="btn btn-light btn-sm">
-                        <i class="fas fa-external-link-alt me-1"></i>
-                        Dashboard OneSignal
-                    </a>
                     {% else %}
-                    <span class="badge bg-warning text-dark px-3 py-2 fs-6">
-                        <i class="fas fa-exclamation-triangle me-1"></i>Não Configurado
+                    <span class="inline-flex items-center px-4 py-2 bg-yellow-500/30 text-yellow-100 rounded-full text-sm font-medium border border-yellow-400/50">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        Configuração Pendente
                     </span>
                     {% endif %}
                 </div>
             </div>
         </div>
-
-        {% if not is_configured %}
-        <!-- Setup Guide -->
-        <div class="setup-guide mb-4 fade-in">
-            <h5 class="mb-3">
-                <i class="fas fa-book me-2"></i>Guia de Configuração Rápida
-            </h5>
-            <p class="text-muted">Siga os passos abaixo para configurar o OneSignal:</p>
-            
-            <div class="row">
-                <div class="col-lg-6">
-                    <ol class="mb-3">
-                        <li class="mb-2">
-                            <strong>Crie uma conta gratuita</strong> em 
-                            <a href="https://onesignal.com" target="_blank" class="text-danger">
-                                onesignal.com <i class="fas fa-external-link-alt"></i>
-                            </a>
-                        </li>
-                        <li class="mb-2"><strong>Crie um novo App</strong> e configure Web Push</li>
-                        <li class="mb-2">Copie o <strong>App ID</strong> e a <strong>REST API Key</strong></li>
-                        <li class="mb-2">Adicione ao seu arquivo <code>.env</code>:</li>
-                    </ol>
-                </div>
-                <div class="col-lg-6">
-                    <div class="code-block">
-                        <code>ONESIGNAL_APP_ID</code>=seu-app-id-aqui<br>
-                        <code>ONESIGNAL_REST_API_KEY</code>=sua-rest-api-key-aqui
+        
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Usuários -->
+            <div class="stat-card bg-gray-800 rounded-2xl p-6 border border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wider">Total Usuários</p>
+                        <p class="text-3xl font-bold text-white mt-2">{{ total_active_users }}</p>
+                        <p class="text-xs text-gray-500 mt-1">usuários ativos</p>
+                    </div>
+                    <div class="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center">
+                        <i class="fas fa-users text-white text-xl"></i>
                     </div>
                 </div>
             </div>
             
-            <div class="alert alert-info mt-3 mb-0 d-flex align-items-center">
-                <i class="fas fa-info-circle fa-lg me-3"></i>
-                <div>
-                    <strong>Plano Gratuito:</strong> O OneSignal oferece até 10.000 assinantes web push ilimitados gratuitamente!
+            <!-- Sincronizados -->
+            <div class="stat-card bg-gray-800 rounded-2xl p-6 border border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wider">Sincronizados</p>
+                        <p class="text-3xl font-bold text-white mt-2">{{ total_synced|default:0 }}</p>
+                        <p class="text-xs text-gray-500 mt-1">registros criados</p>
+                    </div>
+                    <div class="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center">
+                        <i class="fas fa-database text-white text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    {% if total_active_users > 0 %}
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="bg-purple-500 h-2 rounded-full" style="width: {% widthratio total_synced total_active_users 100 %}%"></div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">{% widthratio total_synced total_active_users 100 %}% sincronizado</p>
+                    {% endif %}
                 </div>
             </div>
-        </div>
-        {% else %}
-        
-        <!-- Stats Cards -->
-        <div class="row g-4 mb-4">
-            <div class="col-6 col-lg-2">
-                <div class="stat-card fade-in" style="animation-delay: 0.1s;">
-                    <div class="d-flex flex-column align-items-center text-center">
-                        <div class="stat-icon purple mb-3">
-                            <i class="fas fa-users"></i>
-                        </div>
-                        <div class="stat-value" id="playerCount">{{ player_count }}</div>
-                        <div class="stat-label">Players</div>
+            
+            <!-- Com Push Ativo -->
+            <div class="stat-card bg-gray-800 rounded-2xl p-6 border border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wider">Push Ativo</p>
+                        <p class="text-3xl font-bold text-white mt-2">{{ registered_users }}</p>
+                        <p class="text-xs text-gray-500 mt-1">dispositivos ativos</p>
+                    </div>
+                    <div class="w-14 h-14 bg-green-600 rounded-2xl flex items-center justify-center">
+                        <i class="fas fa-check-circle text-white text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <div class="flex items-center text-sm text-gray-400">
+                        <i class="fas fa-clock mr-2 text-yellow-500"></i>
+                        {{ pending_users }} pendentes
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="stat-card fade-in" style="animation-delay: 0.15s;">
-                    <div class="d-flex flex-column align-items-center text-center">
-                        <div class="stat-icon green mb-3">
-                            <i class="fas fa-user-check"></i>
-                        </div>
-                        <div class="stat-value">{{ registered_users }}</div>
-                        <div class="stat-label">Registrados</div>
+            
+            <!-- Players API -->
+            <div class="stat-card bg-gray-800 rounded-2xl p-6 border border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-400 uppercase tracking-wider">Players API</p>
+                        <p class="text-3xl font-bold text-white mt-2" id="playerCount">{{ player_count }}</p>
+                        <p class="text-xs text-gray-500 mt-1">na API OneSignal</p>
+                    </div>
+                    <div class="w-14 h-14 bg-red-600 rounded-2xl flex items-center justify-center">
+                        <i class="fas fa-mobile-alt text-white text-xl"></i>
                     </div>
                 </div>
-            </div>
-            <div class="col-6 col-lg-2">
-                <div class="stat-card fade-in" style="animation-delay: 0.2s;">
-                    <div class="d-flex flex-column align-items-center text-center">
-                        <div class="stat-icon orange mb-3">
-                            <i class="fas fa-clock"></i>
-                        </div>
-                        <div class="stat-value">{{ pending_users }}</div>
-                        <div class="stat-label">Pendentes</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-6 col-lg-2">
-                <div class="stat-card fade-in" style="animation-delay: 0.25s;">
-                    <div class="d-flex flex-column align-items-center text-center">
-                        <div class="stat-icon blue mb-3">
-                            <i class="fas fa-layer-group"></i>
-                        </div>
-                        <div class="stat-value">{{ segments|length }}</div>
-                        <div class="stat-label">Segmentos</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-6 col-lg-2">
-                <div class="stat-card fade-in" style="animation-delay: 0.3s;">
-                    <div class="d-flex flex-column align-items-center text-center">
-                        <div class="stat-icon cyan mb-3">
-                            <i class="fas fa-paper-plane"></i>
-                        </div>
-                        <div class="stat-value">{{ total_notifications }}</div>
-                        <div class="stat-label">Enviadas</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-6 col-lg-2">
-                <div class="stat-card fade-in" style="animation-delay: 0.35s;">
-                    <div class="d-flex flex-column align-items-center text-center">
-                        <div class="stat-icon red mb-3">
-                            <i class="fas fa-chart-line"></i>
-                        </div>
-                        <div class="stat-value">{{ success_rate }}%</div>
-                        <div class="stat-label">Taxa Sucesso</div>
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <div class="flex items-center text-sm text-gray-400">
+                        <i class="fas fa-chart-pie mr-2 text-red-500"></i>
+                        {{ success_rate }}% sucesso ({{ total_notifications }} envios)
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Quick Actions -->
-        <div class="notification-form mb-4 fade-in">
-            <h5 class="d-flex align-items-center gap-2">
-                <i class="fas fa-bolt text-warning"></i>
-                Ações Rápidas
-            </h5>
-            <div class="quick-actions">
-                <button type="button" class="quick-action-btn" onclick="syncAllUsers()">
-                    <i class="fas fa-sync text-primary"></i>
-                    Sincronizar Usuários
-                </button>
-                <button type="button" class="quick-action-btn" onclick="refreshStats()">
-                    <i class="fas fa-chart-bar text-success"></i>
-                    Atualizar Estatísticas
-                </button>
-                <button type="button" class="quick-action-btn" onclick="testNotification()">
-                    <i class="fas fa-vial text-purple"></i>
-                    Enviar Teste
-                </button>
-                <a href="https://dashboard.onesignal.com" target="_blank" class="quick-action-btn">
-                    <i class="fas fa-external-link-alt text-info"></i>
-                    Abrir Dashboard
-                </a>
-            </div>
-        </div>
-        
-        <div class="row g-4">
-            <!-- Send Notification Form -->
-            <div class="col-lg-6">
-                <div class="notification-form slide-in">
-                    <h5>
-                        <i class="fas fa-paper-plane text-danger me-2"></i>
-                        Enviar Notificação Push
-                    </h5>
-                    
-                    <form id="notificationForm">
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="fas fa-heading me-1 text-muted"></i>
-                                Título *
-                            </label>
-                            <input type="text" class="form-control" id="notifTitle" required 
-                                   placeholder="Ex: Novo chamado atribuído">
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="fas fa-comment me-1 text-muted"></i>
-                                Mensagem *
-                            </label>
-                            <textarea class="form-control" id="notifMessage" rows="3" required
-                                      placeholder="Ex: Você recebeu um novo chamado para análise"></textarea>
-                            <small class="text-muted"><span id="charCount">0</span>/200 caracteres</small>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-link me-1 text-muted"></i>
-                                    URL de Destino
-                                </label>
-                                <input type="text" class="form-control" id="notifUrl" 
-                                       placeholder="/" value="/">
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Enviar Notificação -->
+            <div class="lg:col-span-2">
+                <div class="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+                    <div class="px-6 py-5 border-b border-gray-700 bg-gray-800/50">
+                        <h2 class="text-lg font-semibold text-white flex items-center">
+                            <i class="fas fa-paper-plane text-red-500 mr-3"></i>
+                            Enviar Notificação
+                        </h2>
+                    </div>
+                    <div class="p-6">
+                        <form id="sendNotificationForm" class="space-y-5">
+                            {% csrf_token %}
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Título *</label>
+                                <input type="text" name="title" required maxlength="100"
+                                    class="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all placeholder-gray-400"
+                                    placeholder="Título da notificação">
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-users me-1 text-muted"></i>
-                                    Segmento
-                                </label>
-                                <select class="form-select" id="notifSegment">
-                                    <option value="Subscribed Users">✓ Todos os Assinantes</option>
-                                    {% for segment in segments %}
-                                    <option value="{{ segment.name }}">{{ segment.name }}</option>
-                                    {% endfor %}
-                                </select>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Mensagem *</label>
+                                <textarea name="message" required rows="3" maxlength="500"
+                                    class="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all resize-none placeholder-gray-400"
+                                    placeholder="Mensagem da notificação"></textarea>
                             </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-image me-1 text-muted"></i>
-                                    URL do Ícone
-                                </label>
-                                <input type="url" class="form-control" id="notifIcon" 
-                                       placeholder="https://...">
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">URL de Destino</label>
+                                    <input type="url" name="url" 
+                                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all placeholder-gray-400"
+                                        placeholder="https://exemplo.com/pagina">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">Segmento</label>
+                                    <select name="segment" 
+                                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all">
+                                        <option value="Subscribed Users">Todos Inscritos</option>
+                                        <option value="Active Users">Usuários Ativos</option>
+                                        <option value="Inactive Users">Usuários Inativos</option>
+                                        {% for segment in segments %}
+                                        <option value="{{ segment.name }}">{{ segment.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">
-                                    <i class="fas fa-photo-video me-1 text-muted"></i>
-                                    URL da Imagem
-                                </label>
-                                <input type="url" class="form-control" id="notifImage" 
-                                       placeholder="https://...">
+                            
+                            <div class="pt-4">
+                                <button type="submit" 
+                                    class="w-full inline-flex items-center justify-center px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all shadow-lg">
+                                    <i class="fas fa-paper-plane mr-2"></i>
+                                    Enviar Notificação
+                                </button>
                             </div>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-onesignal w-100">
-                            <i class="fas fa-paper-plane me-2"></i>
-                            Enviar Notificação Push
-                        </button>
-                    </form>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Notificações Recentes -->
+                <div class="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden mt-8">
+                    <div class="px-6 py-5 border-b border-gray-700 bg-gray-800/50">
+                        <h2 class="text-lg font-semibold text-white flex items-center">
+                            <i class="fas fa-history text-purple-500 mr-3"></i>
+                            Notificações Recentes
+                        </h2>
+                    </div>
+                    <div class="divide-y divide-gray-700">
+                        {% if recent_notifications %}
+                            {% for notif in recent_notifications %}
+                            <div class="px-6 py-4 hover:bg-gray-700/50 transition-colors">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="flex-1 min-w-0">
+                                        <h4 class="font-medium text-white truncate">{{ notif.headings.en|default:"Sem título" }}</h4>
+                                        <p class="text-sm text-gray-400 mt-1 line-clamp-2">{{ notif.contents.en|default:"" }}</p>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        <span class="inline-flex items-center px-2.5 py-1 bg-green-600/20 text-green-400 text-xs font-medium rounded-full border border-green-500/30">
+                                            {{ notif.successful|default:0 }} entregues
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="px-6 py-12 text-center">
+                                <div class="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-inbox text-2xl text-gray-500"></i>
+                                </div>
+                                <p class="text-gray-400">Nenhuma notificação enviada ainda</p>
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             
             <!-- Sidebar -->
-            <div class="col-lg-6">
-                <!-- Segments -->
-                <div class="notification-form mb-4 slide-in" style="animation-delay: 0.1s;">
-                    <h5>
-                        <i class="fas fa-layer-group text-success me-2"></i>
-                        Segmentos Disponíveis
-                    </h5>
-                    
-                    <div class="d-flex flex-wrap">
-                        {% for segment in segments %}
-                        <span class="segment-badge">
-                            <i class="fas fa-tag"></i>
-                            {{ segment.name }}
-                        </span>
-                        {% empty %}
-                        <div class="text-center w-100 py-4">
-                            <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
-                            <p class="text-muted mb-0">Nenhum segmento configurado</p>
+            <div class="space-y-6">
+                
+                <!-- Usuários Sincronizados -->
+                <div class="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+                    <div class="px-6 py-5 border-b border-gray-700 bg-gray-800/50">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-semibold text-white flex items-center">
+                                <i class="fas fa-user-check text-green-500 mr-3"></i>
+                                Usuários
+                            </h2>
+                            <span class="text-xs bg-gray-700 text-gray-300 px-2.5 py-1 rounded-full font-medium">
+                                {{ total_synced|default:0 }} total
+                            </span>
                         </div>
-                        {% endfor %}
+                    </div>
+                    <div class="max-h-80 overflow-y-auto">
+                        {% if onesignal_players %}
+                            <div class="divide-y divide-gray-700">
+                                {% for player in onesignal_players %}
+                                <div class="px-4 py-3 hover:bg-gray-700/50 transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-9 h-9 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                            {% if player.user.profile_picture %}
+                                            <img src="{{ player.user.profile_picture.url }}" alt="" class="w-9 h-9 rounded-full object-cover">
+                                            {% else %}
+                                            <i class="fas fa-user text-gray-500 text-sm"></i>
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-medium text-white truncate">{{ player.user.get_full_name|default:player.user.username }}</p>
+                                            <p class="text-xs text-gray-500 truncate">{{ player.user.sector.name|default:"Sem setor" }}</p>
+                                        </div>
+                                        <div class="flex-shrink-0">
+                                            {% if player.player_id|slice:":7" == "pending" %}
+                                            <span class="px-2 py-0.5 bg-yellow-600/20 text-yellow-400 text-xs rounded-full border border-yellow-500/30">Pendente</span>
+                                            {% else %}
+                                            <span class="px-2 py-0.5 bg-green-600/20 text-green-400 text-xs rounded-full border border-green-500/30">Ativo</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% if total_synced > 100 %}
+                            <div class="px-4 py-3 bg-gray-700/50 text-center">
+                                <p class="text-xs text-gray-400">Mostrando 100 de {{ total_synced }} usuários</p>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="px-6 py-12 text-center">
+                                <div class="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-users text-2xl text-gray-500"></i>
+                                </div>
+                                <p class="text-gray-400 text-sm">Nenhum usuário sincronizado</p>
+                                <button onclick="openSyncModal()" class="mt-3 text-red-400 hover:text-red-300 text-sm font-medium">
+                                    <i class="fas fa-sync-alt mr-1"></i> Sincronizar agora
+                                </button>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
                 
-                <!-- Recent Notifications -->
-                <div class="notification-form slide-in" style="animation-delay: 0.2s;">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">
-                            <i class="fas fa-history text-primary me-2"></i>
-                            Notificações Recentes
-                        </h5>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="refreshNotifications()">
-                            <i class="fas fa-sync"></i>
+                <!-- Ações Rápidas -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 border border-gray-700">
+                    <h3 class="font-semibold text-lg text-white mb-4">Ações Rápidas</h3>
+                    <div class="space-y-3">
+                        <button onclick="openSyncModal()" class="w-full flex items-center gap-3 px-4 py-3 bg-blue-600/20 hover:bg-blue-600/30 rounded-xl transition-all border border-blue-500/30 text-blue-400">
+                            <i class="fas fa-sync-alt"></i>
+                            <span class="text-sm">Sincronizar Todos Usuários</span>
                         </button>
-                    </div>
-                    
-                    <div class="recent-notifications" id="recentNotifications">
-                        {% for notif in recent_notifications %}
-                        <div class="notification-item">
-                            <div class="title">{{ notif.headings.en|default:"Sem título" }}</div>
-                            <div class="message">{{ notif.contents.en|default:""|truncatechars:100 }}</div>
-                            <div class="meta">
-                                <span>ID: {{ notif.id|truncatechars:15 }}</span>
-                                {% if notif.successful %}
-                                <span class="status-badge success">
-                                    <i class="fas fa-check me-1"></i>{{ notif.successful }} enviadas
-                                </span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% empty %}
-                        <div class="text-center py-5">
-                            <i class="fas fa-bell-slash fa-3x text-muted mb-3"></i>
-                            <p class="text-muted mb-0">Nenhuma notificação enviada ainda</p>
-                        </div>
-                        {% endfor %}
+                        <button onclick="testNotification()" class="w-full flex items-center gap-3 px-4 py-3 bg-green-600/20 hover:bg-green-600/30 rounded-xl transition-all border border-green-500/30 text-green-400">
+                            <i class="fas fa-vial"></i>
+                            <span class="text-sm">Enviar Notificação Teste</span>
+                        </button>
+                        <a href="https://onesignal.com/login" target="_blank" class="w-full flex items-center gap-3 px-4 py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-xl transition-all border border-purple-500/30 text-purple-400">
+                            <i class="fas fa-external-link-alt"></i>
+                            <span class="text-sm">Abrir Painel OneSignal</span>
+                        </a>
                     </div>
                 </div>
+                
+                <!-- Info Box -->
+                <div class="bg-yellow-600/10 border border-yellow-500/30 rounded-2xl p-5">
+                    <div class="flex gap-3">
+                        <i class="fas fa-info-circle text-yellow-400 mt-0.5"></i>
+                        <div>
+                            <h4 class="text-sm font-medium text-yellow-400">Como funciona?</h4>
+                            <p class="text-xs text-yellow-200/70 mt-1">
+                                1. Sincronize os usuários para criar registros<br>
+                                2. Usuários precisam aceitar notificações no navegador<br>
+                                3. Status muda de "Pendente" para "Ativo"
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
             </div>
         </div>
         
-        <!-- Users Table -->
-        <div class="users-table-card mt-4 fade-in" style="animation-delay: 0.4s;">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">
-                    <i class="fas fa-users text-primary me-2"></i>
-                    Usuários Registrados no OneSignal
-                </h5>
-                <span class="badge bg-primary">{{ registered_users }} usuários</span>
-            </div>
-            <div class="table-responsive">
-                <table class="table users-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Usuário</th>
-                            <th>Email</th>
-                            <th>Hierarquia</th>
-                            <th>Setor</th>
-                            <th>Status</th>
-                            <th>Registrado em</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for player in onesignal_players %}
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="user-avatar">
-                                        {{ player.user.full_name|slice:":2"|upper }}
-                                    </div>
-                                    <div>
-                                        <div class="fw-semibold">{{ player.user.full_name }}</div>
-                                        <small class="text-muted">ID: {{ player.player_id|truncatechars:15 }}</small>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>{{ player.user.email|default:"-" }}</td>
-                            <td>
-                                <span class="badge bg-secondary">{{ player.user.hierarchy }}</span>
-                            </td>
-                            <td>{{ player.user.sector.name|default:"-" }}</td>
-                            <td>
-                                {% if player.is_active and not player.player_id|slice:":7" == "pending" %}
-                                <span class="status-dot active"></span>Ativo
-                                {% elif player.player_id|slice:":7" == "pending" %}
-                                <span class="status-dot pending"></span>Pendente
-                                {% else %}
-                                <span class="status-dot inactive"></span>Inativo
-                                {% endif %}
-                            </td>
-                            <td>{{ player.created_at|date:"d/m/Y H:i" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6" class="text-center py-5">
-                                <i class="fas fa-user-slash fa-3x text-muted mb-3 d-block"></i>
-                                <p class="text-muted mb-2">Nenhum usuário registrado ainda</p>
-                                <button class="btn btn-outline-onesignal btn-sm" onclick="syncAllUsers()">
-                                    <i class="fas fa-sync me-1"></i>
-                                    Sincronizar Usuários Ativos
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% endif %}
     </div>
 </div>
 
-<!-- Toast Notification -->
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
-    <div id="liveToast" class="toast toast-onesignal" role="alert">
-        <div class="toast-header">
-            <i class="fas fa-bell me-2"></i>
-            <strong class="me-auto">OneSignal</strong>
-            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
-        </div>
-        <div class="toast-body" id="toastBody"></div>
-    </div>
-</div>
-
-<!-- Sync Users Modal -->
-<div class="modal fade" id="syncModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 20px; border: none;">
-            <div class="modal-header border-0" style="background: var(--onesignal-gradient); color: white; border-radius: 20px 20px 0 0;">
-                <h5 class="modal-title">
-                    <i class="fas fa-sync me-2"></i>
-                    Sincronizar Usuários
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- Modal de Sincronização -->
+<div id="syncModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeSyncModal()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-700">
+            <div class="px-6 py-5 border-b border-gray-700">
+                <h3 class="text-xl font-semibold text-white">Sincronizar Todos Usuários</h3>
+                <p class="text-sm text-gray-400 mt-1">Criar registros para todos os usuários ativos</p>
             </div>
-            <div class="modal-body p-4">
-                <p>Deseja sincronizar todos os usuários ativos do sistema com o OneSignal?</p>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>{{ total_active_users }}</strong> usuários ativos serão preparados para receber notificações.
+            <div class="p-6">
+                <div id="syncContent">
+                    <div class="text-center py-6">
+                        <div class="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+                            <i class="fas fa-users text-3xl text-blue-400"></i>
+                        </div>
+                        <p class="text-gray-300 mb-2">
+                            Esta ação irá criar registros para <strong class="text-white">{{ total_active_users }}</strong> usuários ativos.
+                        </p>
+                        <p class="text-gray-500 text-sm mb-6">
+                            {% if total_synced > 0 %}
+                            Já existem {{ total_synced }} registros sincronizados.
+                            {% else %}
+                            Nenhum usuário foi sincronizado ainda.
+                            {% endif %}
+                        </p>
+                        <div class="flex gap-3">
+                            <button onclick="closeSyncModal()" class="flex-1 px-4 py-2.5 bg-gray-700 text-gray-300 font-medium rounded-xl hover:bg-gray-600 transition-colors border border-gray-600">
+                                Cancelar
+                            </button>
+                            <button onclick="syncUsers()" class="flex-1 px-4 py-2.5 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 transition-colors">
+                                <i class="fas fa-sync-alt mr-2"></i>
+                                Sincronizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="syncLoading" class="hidden text-center py-12">
+                    <div class="w-16 h-16 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p class="text-gray-300">Sincronizando usuários...</p>
+                    <p class="text-gray-500 text-sm mt-1">Isso pode levar alguns segundos</p>
+                </div>
+                <div id="syncResult" class="hidden text-center py-6">
+                    <div class="w-20 h-20 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
+                        <i class="fas fa-check text-3xl text-green-400"></i>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-2">Sincronização Concluída!</h4>
+                    <p id="syncResultText" class="text-gray-300 mb-6"></p>
+                    <button onclick="closeSyncModal(); location.reload();" class="px-6 py-2.5 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition-colors">
+                        <i class="fas fa-check mr-2"></i>Fechar e Atualizar
+                    </button>
                 </div>
             </div>
-            <div class="modal-footer border-0">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-onesignal" onclick="confirmSync()">
-                    <i class="fas fa-sync me-2"></i>
-                    Sincronizar
-                </button>
-            </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('notificationForm');
-    const toast = new bootstrap.Toast(document.getElementById('liveToast'));
-    const messageInput = document.getElementById('notifMessage');
-    const charCount = document.getElementById('charCount');
-    
-    // Character counter
-    if (messageInput) {
-        messageInput.addEventListener('input', function() {
-            charCount.textContent = this.value.length;
-            charCount.style.color = this.value.length > 200 ? '#EF4444' : '#64748B';
-        });
+    // Modal functions
+    function openSyncModal() {
+        document.getElementById('syncModal').classList.remove('hidden');
+        document.getElementById('syncContent').classList.remove('hidden');
+        document.getElementById('syncLoading').classList.add('hidden');
+        document.getElementById('syncResult').classList.add('hidden');
     }
     
-    // Form submission
-    if (form) {
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enviando...';
-            
-            try {
-                const response = await fetch('{% url "notifications:onesignal_send" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    body: JSON.stringify({
-                        title: document.getElementById('notifTitle').value,
-                        message: document.getElementById('notifMessage').value,
-                        url: document.getElementById('notifUrl').value,
-                        segment: document.getElementById('notifSegment').value,
-                        icon: document.getElementById('notifIcon').value,
-                        image: document.getElementById('notifImage').value
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast(`✅ Notificação enviada para ${data.sent_count} dispositivos!`, 'success');
-                    form.reset();
-                    document.getElementById('notifUrl').value = '/';
-                    charCount.textContent = '0';
-                    refreshStats();
-                } else {
-                    showToast(`❌ Erro: ${data.error}`, 'danger');
+    function closeSyncModal() {
+        document.getElementById('syncModal').classList.add('hidden');
+    }
+    
+    // Sync users
+    async function syncUsers() {
+        document.getElementById('syncContent').classList.add('hidden');
+        document.getElementById('syncLoading').classList.remove('hidden');
+        
+        try {
+            const response = await fetch('{% url "notifications:onesignal_sync_users" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
                 }
-            } catch (error) {
-                showToast(`❌ Erro de conexão: ${error.message}`, 'danger');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
+            });
+            
+            const data = await response.json();
+            
+            document.getElementById('syncLoading').classList.add('hidden');
+            document.getElementById('syncResult').classList.remove('hidden');
+            
+            if (data.success) {
+                document.getElementById('syncResultText').innerHTML = `
+                    <span class="block text-green-400 text-2xl font-bold">${data.created}</span>
+                    <span class="block text-gray-400">novos registros criados</span>
+                    <span class="block text-sm text-gray-500 mt-2">${data.existing} já existiam • ${data.total_users} total</span>
+                `;
+            } else {
+                document.getElementById('syncResultText').textContent = data.error || 'Erro ao sincronizar';
             }
-        });
-    }
-    
-    // Auto refresh stats every 60 seconds
-    setInterval(refreshStats, 60000);
-});
-
-function showToast(message, type) {
-    const toastBody = document.getElementById('toastBody');
-    toastBody.innerHTML = message;
-    toastBody.className = `toast-body ${type === 'success' ? 'text-success' : type === 'danger' ? 'text-danger' : ''}`;
-    const toast = new bootstrap.Toast(document.getElementById('liveToast'));
-    toast.show();
-}
-
-async function refreshStats() {
-    try {
-        const response = await fetch('{% url "notifications:onesignal_players" %}');
-        const data = await response.json();
-        if (data.success) {
-            const playerCount = document.getElementById('playerCount');
-            if (playerCount) {
-                playerCount.textContent = data.count;
-                playerCount.style.animation = 'none';
-                playerCount.offsetHeight;
-                playerCount.style.animation = 'fadeIn 0.3s ease';
-            }
+        } catch (error) {
+            document.getElementById('syncLoading').classList.add('hidden');
+            document.getElementById('syncResult').classList.remove('hidden');
+            document.getElementById('syncResultText').textContent = 'Erro de conexão';
         }
-    } catch (e) {
-        console.error('Error refreshing stats:', e);
     }
-}
-
-function syncAllUsers() {
-    const modal = new bootstrap.Modal(document.getElementById('syncModal'));
-    modal.show();
-}
-
-async function confirmSync() {
-    const modal = bootstrap.Modal.getInstance(document.getElementById('syncModal'));
-    modal.hide();
     
-    showToast('⏳ Sincronizando usuários...', 'info');
-    
-    try {
-        const response = await fetch('{% url "notifications:onesignal_sync_users" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
+    // Send notification
+    document.getElementById('sendNotificationForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const form = e.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Enviando...';
+        
+        try {
+            const formData = new FormData(form);
+            const data = {
+                title: formData.get('title'),
+                message: formData.get('message'),
+                url: formData.get('url') || '/',
+                segment: formData.get('segment')
+            };
+            
+            const response = await fetch('{% url "notifications:onesignal_send" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast('Notificação enviada com sucesso!', 'success');
+                form.reset();
+            } else {
+                showToast(result.error || 'Erro ao enviar notificação', 'error');
             }
+        } catch (error) {
+            showToast('Erro de conexão', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    });
+    
+    // Refresh stats
+    async function refreshStats() {
+        try {
+            const response = await fetch('{% url "notifications:onesignal_players" %}');
+            const data = await response.json();
+            
+            if (data.success) {
+                document.getElementById('playerCount').textContent = data.count;
+                showToast('Estatísticas atualizadas', 'success');
+            }
+        } catch (error) {
+            showToast('Erro ao atualizar estatísticas', 'error');
+        }
+    }
+    
+    // Test notification
+    async function testNotification() {
+        try {
+            const response = await fetch('{% url "notifications:onesignal_send" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    title: '🔔 Teste de Notificação',
+                    message: 'Esta é uma notificação de teste do sistema OneSignal.',
+                    url: '/',
+                    segment: 'Subscribed Users'
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast('Notificação de teste enviada!', 'success');
+            } else {
+                showToast(result.error || 'Erro ao enviar teste', 'error');
+            }
+        } catch (error) {
+            showToast('Erro de conexão', 'error');
+        }
+    }
+    
+    // Toast notification
+    function showToast(message, type = 'info') {
+        const colors = {
+            success: 'bg-green-600',
+            error: 'bg-red-600',
+            info: 'bg-blue-600'
+        };
+        
+        const toast = document.createElement('div');
+        toast.className = `fixed bottom-4 right-4 px-6 py-3 ${colors[type]} text-white rounded-xl shadow-lg z-50 transform transition-all duration-300 translate-y-full opacity-0`;
+        toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-2"></i>${message}`;
+        
+        document.body.appendChild(toast);
+        
+        requestAnimationFrame(() => {
+            toast.classList.remove('translate-y-full', 'opacity-0');
         });
         
-        const data = await response.json();
-        
-        if (data.success) {
-            showToast(`✅ ${data.synced} usuários sincronizados!`, 'success');
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            showToast(`❌ Erro: ${data.error}`, 'danger');
-        }
-    } catch (error) {
-        showToast(`❌ Erro: ${error.message}`, 'danger');
+        setTimeout(() => {
+            toast.classList.add('translate-y-full', 'opacity-0');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
     }
-}
-
-function testNotification() {
-    document.getElementById('notifTitle').value = 'Teste de Notificação';
-    document.getElementById('notifMessage').value = 'Esta é uma notificação de teste do sistema OneSignal.';
-    document.getElementById('charCount').textContent = '54';
-    showToast('📝 Formulário preenchido com dados de teste', 'info');
-}
-
-function refreshNotifications() {
-    location.reload();
-}
+    
+    // Close modal on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeSyncModal();
+        }
+    });
 </script>
 {% endblock %}

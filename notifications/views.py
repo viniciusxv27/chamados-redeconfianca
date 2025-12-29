@@ -707,9 +707,13 @@ def onesignal_dashboard(request):
     
     # Estatísticas de usuários
     total_active_users = User.objects.filter(is_active=True).count()
-    onesignal_players = OneSignalPlayer.objects.select_related('user', 'user__sector').filter(user__isnull=False).order_by('-created_at')[:50]
-    registered_users = onesignal_players.exclude(player_id__startswith='pending_').count()
-    pending_users = onesignal_players.filter(player_id__startswith='pending_').count()
+    
+    # Consultas separadas para evitar erro de slice
+    onesignal_players_qs = OneSignalPlayer.objects.select_related('user', 'user__sector').filter(user__isnull=False)
+    registered_users = onesignal_players_qs.exclude(player_id__startswith='pending_').count()
+    pending_users = onesignal_players_qs.filter(player_id__startswith='pending_').count()
+    total_synced = onesignal_players_qs.count()
+    onesignal_players = onesignal_players_qs.order_by('-created_at')[:100]  # Mostrar últimos 100 na lista
     
     # Estatísticas de notificações
     total_notifications = OneSignalNotificationLog.objects.count()
@@ -743,6 +747,7 @@ def onesignal_dashboard(request):
         'onesignal_players': onesignal_players,
         'registered_users': registered_users,
         'pending_users': pending_users,
+        'total_synced': total_synced,
         'total_notifications': total_notifications,
         'success_rate': success_rate,
     }
