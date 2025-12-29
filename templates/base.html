@@ -1390,25 +1390,46 @@
                                     appId: config.app_id,
                                     safari_web_id: config.safari_web_id || null,
                                     allowLocalhostAsSecureOrigin: true,
+                                    autoResubscribe: true,
+                                    notifyButton: {
+                                        enable: true,
+                                        size: 'large',
+                                        position: 'bottom-right',
+                                        showCredit: false,
+                                        text: {
+                                            'tip.state.unsubscribed': 'Ativar notificações',
+                                            'tip.state.subscribed': 'Notificações ativas',
+                                            'tip.state.blocked': 'Notificações bloqueadas',
+                                            'message.prenotify': 'Clique para ativar notificações',
+                                            'message.action.subscribed': 'Obrigado por ativar!',
+                                            'message.action.resubscribed': 'Notificações reativadas!',
+                                            'message.action.unsubscribed': 'Notificações desativadas',
+                                            'dialog.main.title': 'Gerenciar Notificações',
+                                            'dialog.main.button.subscribe': 'ATIVAR',
+                                            'dialog.main.button.unsubscribe': 'DESATIVAR',
+                                            'dialog.blocked.title': 'Desbloquear Notificações',
+                                            'dialog.blocked.message': 'Siga as instruções para permitir notificações'
+                                        }
+                                    },
                                     promptOptions: {
                                         slidedown: {
                                             prompts: [{
                                                 type: "push",
                                                 autoPrompt: true,
                                                 text: {
-                                                    actionMessage: "Deseja receber notificações sobre seus chamados e atualizações do sistema?",
-                                                    acceptButton: "Sim, quero receber",
-                                                    cancelButton: "Agora não"
+                                                    actionMessage: "🔔 Receba notificações sobre seus chamados e atualizações importantes!",
+                                                    acceptButton: "✓ Ativar Notificações",
+                                                    cancelButton: "Depois"
                                                 },
                                                 delay: {
-                                                    pageViews: 2,
-                                                    timeDelay: 10
+                                                    pageViews: 1,
+                                                    timeDelay: 3
                                                 }
                                             }]
                                         }
                                     },
                                     welcomeNotification: {
-                                        title: "Bem-vindo às notificações!",
+                                        title: "🎉 Notificações Ativadas!",
                                         message: "Você receberá atualizações importantes do sistema."
                                     }
                                 });
@@ -1427,7 +1448,7 @@
                                 
                                 // Função para verificar se está inscrito
                                 window.isPushSubscribed = async function() {
-                                    return await OneSignal.User.PushSubscription.optedIn;
+                                    return OneSignal.User.PushSubscription.optedIn;
                                 };
                                 
                                 // Associar usuário atual (se logado)
@@ -1440,10 +1461,86 @@
                                         hierarchy: "{{ user.hierarchy|default:'' }}",
                                         sector: "{{ user.sector.name|default:'' }}"
                                     });
+                                    
+                                    // Verificar se usuário não está inscrito e mostrar prompt após 5 segundos
+                                    setTimeout(async function() {
+                                        const isSubscribed = OneSignal.User.PushSubscription.optedIn;
+                                        console.log('Push subscription status:', isSubscribed);
+                                        
+                                        if (!isSubscribed) {
+                                            // Mostrar banner flutuante customizado
+                                            showPushBanner();
+                                        }
+                                    }, 5000);
                                 } catch(e) {
                                     console.log('OneSignal user login error:', e);
                                 }
                                 {% endif %}
+                                
+                                // Função para mostrar banner de push
+                                window.showPushBanner = function() {
+                                    // Verificar se já foi fechado recentemente
+                                    const dismissed = localStorage.getItem('pushBannerDismissed');
+                                    if (dismissed) {
+                                        const dismissedTime = parseInt(dismissed);
+                                        const hoursPassed = (Date.now() - dismissedTime) / (1000 * 60 * 60);
+                                        if (hoursPassed < 24) return; // Não mostrar se foi fechado há menos de 24h
+                                    }
+                                    
+                                    // Criar banner flutuante
+                                    if (!document.getElementById('pushNotificationBanner')) {
+                                        const banner = document.createElement('div');
+                                        banner.id = 'pushNotificationBanner';
+                                        banner.className = 'fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-gradient-to-r from-red-600 to-red-700 text-white p-4 rounded-xl shadow-2xl z-50 transform transition-all duration-300';
+                                        banner.innerHTML = `
+                                            <div class="flex items-start gap-3">
+                                                <div class="flex-shrink-0 w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                                                    <i class="fas fa-bell text-2xl animate-bounce"></i>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <h4 class="font-bold text-lg mb-1">🔔 Ative as Notificações!</h4>
+                                                    <p class="text-sm text-red-100 mb-3">Receba alertas sobre seus chamados e atualizações importantes do sistema.</p>
+                                                    <div class="flex gap-2">
+                                                        <button onclick="activatePushFromBanner()" class="px-4 py-2 bg-white text-red-600 font-semibold rounded-lg hover:bg-red-50 transition-colors text-sm">
+                                                            <i class="fas fa-check mr-1"></i> Ativar Agora
+                                                        </button>
+                                                        <button onclick="dismissPushBanner()" class="px-4 py-2 bg-white/20 text-white font-medium rounded-lg hover:bg-white/30 transition-colors text-sm">
+                                                            Depois
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <button onclick="dismissPushBanner()" class="text-white/70 hover:text-white">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        `;
+                                        document.body.appendChild(banner);
+                                    }
+                                };
+                                
+                                // Ativar push a partir do banner
+                                window.activatePushFromBanner = function() {
+                                    OneSignal.Slidedown.promptPush();
+                                    dismissPushBanner();
+                                };
+                                
+                                // Fechar banner
+                                window.dismissPushBanner = function() {
+                                    const banner = document.getElementById('pushNotificationBanner');
+                                    if (banner) {
+                                        banner.classList.add('translate-y-full', 'opacity-0');
+                                        setTimeout(() => banner.remove(), 300);
+                                        localStorage.setItem('pushBannerDismissed', Date.now().toString());
+                                    }
+                                };
+                                
+                                // Escutar mudanças no status de inscrição
+                                OneSignal.User.PushSubscription.addEventListener('change', function(event) {
+                                    console.log('Push subscription changed:', event);
+                                    if (event.current.optedIn) {
+                                        dismissPushBanner();
+                                    }
+                                });
                             });
                         };
                         document.head.appendChild(onesignalScript);
