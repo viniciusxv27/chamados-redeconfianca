@@ -1451,22 +1451,6 @@
                                     return OneSignal.User.PushSubscription.optedIn;
                                 };
                                 
-                                // Adicionar tags do usuário (sem login/alias que causa erros)
-                                {% if user.is_authenticated %}
-                                try {
-                                    // Apenas adicionar tags - sem login ou alias
-                                    OneSignal.User.addTags({
-                                        user_id: "{{ user.id }}",
-                                        email: "{{ user.email|default:'' }}",
-                                        hierarchy: "{{ user.hierarchy|default:'' }}",
-                                        sector: "{{ user.sector.name|default:'' }}"
-                                    });
-                                    console.log('OneSignal tags added for user {{ user.id }}');
-                                } catch(e) {
-                                    console.log('OneSignal tags error:', e);
-                                }
-                                {% endif %}
-                                
                                 // Verificar se usuário não está inscrito e mostrar prompt após 5 segundos
                                 setTimeout(function() {
                                     try {
@@ -2146,7 +2130,7 @@
                     console.log('Chat window opened'); // Debug log
                     // Verificar se os setores precisam ser carregados (só se não estiverem no HTML)
                     const sectorSelect = document.getElementById('supportChatSector');
-                    const currentOptions = sectorSelect ? sectorSelect.querySelectorAll('option[value!=""]') : [];
+                    const currentOptions = sectorSelect ? sectorSelect.querySelectorAll('option:not([value=""])') : [];
                     if (currentOptions.length === 0) {
                         console.log('Setores não encontrados no HTML, tentando carregar...');
                         if (typeof window.loadSectors === 'function') {
@@ -2634,7 +2618,7 @@
             if (window.userSupportSectors && window.userSupportSectors.length > 0) {
                 console.log('Usando setores pré-carregados:', window.userSupportSectors.length);
                 // Os setores já estão no HTML, apenas verificamos
-                const currentOptions = sectorSelect.querySelectorAll('option[value!=""]');
+                const currentOptions = sectorSelect.querySelectorAll('option:not([value=""])');
                 console.log('Opções atuais no select:', currentOptions.length);
                 
                 if (currentOptions.length === 0) {
