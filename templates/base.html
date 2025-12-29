@@ -1447,43 +1447,40 @@
                                 };
                                 
                                 // Função para verificar se está inscrito
-                                window.isPushSubscribed = async function() {
+                                window.isPushSubscribed = function() {
                                     return OneSignal.User.PushSubscription.optedIn;
                                 };
                                 
-                                // Associar usuário atual (se logado)
+                                // Adicionar tags do usuário (sem login/alias que causa erros)
                                 {% if user.is_authenticated %}
                                 try {
-                                    // Usar setExternalUserId ao invés de login (mais compatível)
-                                    await OneSignal.User.addAlias("external_id", "{{ user.id }}");
-                                    await OneSignal.User.addTags({
+                                    // Apenas adicionar tags - sem login ou alias
+                                    OneSignal.User.addTags({
                                         user_id: "{{ user.id }}",
                                         email: "{{ user.email|default:'' }}",
                                         hierarchy: "{{ user.hierarchy|default:'' }}",
                                         sector: "{{ user.sector.name|default:'' }}"
                                     });
-                                    console.log('OneSignal user tags added for user {{ user.id }}');
-                                    
-                                    // Verificar se usuário não está inscrito e mostrar prompt após 5 segundos
-                                    setTimeout(function() {
+                                    console.log('OneSignal tags added for user {{ user.id }}');
+                                } catch(e) {
+                                    console.log('OneSignal tags error:', e);
+                                }
+                                {% endif %}
+                                
+                                // Verificar se usuário não está inscrito e mostrar prompt após 5 segundos
+                                setTimeout(function() {
+                                    try {
                                         const isSubscribed = OneSignal.User.PushSubscription.optedIn;
                                         console.log('Push subscription status:', isSubscribed);
                                         
                                         if (!isSubscribed) {
-                                            // Mostrar banner flutuante customizado
                                             showPushBanner();
                                         }
-                                    }, 5000);
-                                } catch(e) {
-                                    console.log('OneSignal user setup error:', e);
-                                    // Mesmo com erro, tentar mostrar o banner
-                                    setTimeout(function() {
-                                        if (!OneSignal.User.PushSubscription.optedIn) {
-                                            showPushBanner();
-                                        }
-                                    }, 5000);
-                                }
-                                {% endif %}
+                                    } catch(e) {
+                                        console.log('Error checking subscription:', e);
+                                        showPushBanner();
+                                    }
+                                }, 5000);
                                 
                                 // Função para mostrar banner de push
                                 window.showPushBanner = function() {
