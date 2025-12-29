@@ -71,9 +71,25 @@ def service_worker_view(request):
     else:
         raise Http404("Service worker not found")
 
+# View para servir o OneSignal Service Worker
+def onesignal_worker_view(request):
+    """Serve the OneSignal service worker from the root directory"""
+    sw_path = os.path.join(settings.BASE_DIR, 'OneSignalSDKWorker.js')
+    
+    if os.path.exists(sw_path):
+        with open(sw_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        response = HttpResponse(content, content_type='application/javascript')
+        response['Service-Worker-Allowed'] = '/'
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+    else:
+        raise Http404("OneSignal Service worker not found")
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('sw.js', service_worker_view, name='service_worker'),  # Service Worker na raiz
+    path('OneSignalSDKWorker.js', onesignal_worker_view, name='onesignal_worker'),  # OneSignal Service Worker
     path('', home_feed, name='home'),  # Home feed como página inicial
     path('login/', login_view, name='login'),  # Login na raiz
     path('logout/', logout_view, name='logout'),  # Logout na raiz
