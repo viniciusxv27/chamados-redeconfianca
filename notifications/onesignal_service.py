@@ -142,17 +142,8 @@ class OneSignalService:
                 'isSafari': True,
             }
             
-            # Definir alvo
-            if player_ids:
-                payload['include_player_ids'] = player_ids
-            elif external_user_ids:
-                payload['include_external_user_ids'] = external_user_ids
-                payload['channel_for_external_user_ids'] = 'push'
-            elif segment:
-                payload['included_segments'] = [segment]
-            else:
-                # Enviar para todos os assinantes
-                payload['included_segments'] = ['Subscribed Users']
+            # Sempre enviar para todos os inscritos (Subscribed Users)
+            payload['included_segments'] = ['Subscribed Users']
             
             # Configurar ícones
             base_url = getattr(settings, 'BASE_URL', 'https://chamados.redeconfianca.com.br')
