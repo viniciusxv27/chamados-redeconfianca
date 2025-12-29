@@ -218,6 +218,13 @@ class OneSignalService:
             else:
                 errors = result.get('errors', [])
                 error_msg = ', '.join(errors) if isinstance(errors, list) else str(errors)
+                
+                # Mensagem mais amigável para erros comuns
+                if 'All included players are not subscribed' in error_msg:
+                    error_msg = 'Nenhum usuário aceitou as notificações push ainda. Os usuários precisam clicar em "Permitir" no popup do navegador para receber notificações.'
+                elif 'No subscribed players' in error_msg or 'recipients' in str(result) and result.get('recipients', 0) == 0:
+                    error_msg = 'Não há usuários com push ativo. Os usuários precisam aceitar as notificações no navegador.'
+                
                 logger.error(f"OneSignal: Erro ao enviar notificação - {error_msg}")
                 
                 # Registrar log de erro
