@@ -599,6 +599,14 @@ def ticket_detail_view(request, ticket_id):
     # Buscar usuários para atribuição (todos os setores) - sempre disponível
     sector_users = User.objects.filter(is_active=True).exclude(id=user.id).order_by('sector__name', 'first_name')
     
+    # Obter URL de retorno (para o botão voltar manter filtros/busca/página)
+    from urllib.parse import unquote
+    next_url = request.GET.get('next', '')
+    if next_url:
+        next_url = unquote(next_url)
+    else:
+        next_url = '/tickets/'  # URL padrão se não houver parâmetro next
+    
     context = {
         'ticket': ticket,
         'logs': ticket.logs.all(),
@@ -610,6 +618,7 @@ def ticket_detail_view(request, ticket_id):
         'assigned_users': ticket.get_all_assigned_users(),
         'additional_assignments': ticket.additional_assignments.filter(is_active=True).select_related('user', 'assigned_by'),
         'sector_users': sector_users,
+        'next_url': next_url,
     }
     return render(request, 'tickets/detail.html', context)
 

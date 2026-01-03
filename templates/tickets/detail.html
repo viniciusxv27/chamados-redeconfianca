@@ -90,6 +90,10 @@
                 <p class="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Visualizar e responder chamado</p>
             </div>
             <div class="flex space-x-3">
+                <a href="{{ next_url|default:'/tickets/' }}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm sm:text-base flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
                 {% if ticket.created_by == user and ticket.status == 'RESOLVIDO' %}
                     <button class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm sm:text-base">
                         Concluir e Fechar

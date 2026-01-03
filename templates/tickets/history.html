@@ -40,7 +40,7 @@
                     <div class="px-6 py-4 hover:bg-gray-50">
                         <div class="grid grid-cols-6 gap-4">
                             <div class="flex items-center">
-                                <a href="{% url 'ticket_detail' ticket.id %}" class="text-blue-600 hover:text-blue-800 font-medium">
+                                <a href="{% url 'ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}" class="text-blue-600 hover:text-blue-800 font-medium">
                                     #{{ ticket.id }}
                                 </a>
                             </div>

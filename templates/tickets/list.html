@@ -430,7 +430,7 @@
                             <span>• {{ ticket.created_by.first_name }}</span>
                         </div>
                         <div class="flex space-x-2">
-                            <a href="{% url 'ticket_detail' ticket.id %}" class="bg-secondary text-white px-3 py-1 rounded-md hover:bg-gray-800 transition-colors text-xs">
+                            <a href="{% url 'ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}" class="bg-secondary text-white px-3 py-1 rounded-md hover:bg-gray-800 transition-colors text-xs">
                                 Ver
                             </a>
                         </div>
@@ -555,7 +555,7 @@
                                 {% endif %}
                             </td>
                             <td class="px-3 py-3 whitespace-nowrap text-sm font-medium">
-                                <a href="{% url 'ticket_detail' ticket.id %}" class="bg-secondary text-white px-3 py-1 rounded-md hover:bg-gray-800 transition-colors text-xs">
+                                <a href="{% url 'ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}" class="bg-secondary text-white px-3 py-1 rounded-md hover:bg-gray-800 transition-colors text-xs">
                                     Ver
                                 </a>
                                 {% if ticket.status == 'RESOLVIDO' and ticket.created_by == user %}
