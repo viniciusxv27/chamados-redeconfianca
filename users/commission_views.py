@@ -1308,7 +1308,7 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
         'smartphone': safe_float(data.get('HUNTER_SMARTPHONE')),
         'eletronicos': safe_float(data.get('HUNTER_ELETRONICOS')),
         'essenciais': safe_float(data.get('HUNTER_ESSENCIAIS')),
-        'seguros': safe_float(data.get('HUNTER_SEGUROS')),
+        'seguro': safe_float(data.get('HUNTER_SEGUROS')),
         'sva': safe_float(data.get('HUNTER_SVA')),
     }
     # Calcular total do Hunter
@@ -1318,7 +1318,7 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
         processed['hunter']['smartphone'],
         processed['hunter']['eletronicos'],
         processed['hunter']['essenciais'],
-        processed['hunter']['seguros'],
+        processed['hunter']['seguro'],
         processed['hunter']['sva'],
     ])
     
@@ -1399,9 +1399,8 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
                 ad_valor = processed['alto_desempenho'].get(pilar_key, 0)
             
             bonus_valor = processed['bonus'].get(pilar_key, 0)
-            # Hunter usa 'seguros' para seguro
-            hunter_key = 'seguros' if pilar_key == 'seguro' else pilar_key
-            hunter_valor = processed['hunter'].get(hunter_key, 0)
+            # Hunter agora usa 'seguro' consistentemente
+            hunter_valor = processed['hunter'].get(pilar_key, 0)
             
             # Guardar a soma de comissões+bônus+alto+hunter em campo separado
             processed['pilares'][i]['soma'] = com_valor + bonus_valor + ad_valor + hunter_valor
@@ -1597,7 +1596,7 @@ def process_coordenador_commission_data(data):
         'smartphone': safe_float(data.get('HUNTER_SMARTPHONE')),
         'eletronicos': safe_float(data.get('HUNTER_ELETRONICOS')),
         'essenciais': safe_float(data.get('HUNTER_ESSENCIAIS')),
-        'seguros': safe_float(data.get('HUNTER_SEGUROS')),
+        'seguro': safe_float(data.get('HUNTER_SEGUROS')),
         'sva': safe_float(data.get('HUNTER_SVA')),
     }
     # Calcular total do Hunter
@@ -1607,7 +1606,7 @@ def process_coordenador_commission_data(data):
         processed['hunter']['smartphone'],
         processed['hunter']['eletronicos'],
         processed['hunter']['essenciais'],
-        processed['hunter']['seguros'],
+        processed['hunter']['seguro'],
         processed['hunter']['sva'],
     ])
     
@@ -2238,6 +2237,12 @@ def api_vendas_por_pilar(request):
     """
     API para buscar vendas de um pilar específico via AJAX.
     Retorna lista de vendas filtradas por pilar (Pago e Exclusão).
+    
+    Usa EXCEL_BASE_PAGAMENTO_URL, sheets: Planilha1 (Pago) e EXCLUSAO
+    
+    Filtros por papel:
+    - CN: Filtra por coluna VENDEDOR = nome do usuário
+    - Coordenador: Filtra por coluna COORDENACAO = primeiro nome do usuário
     """
     user = request.user
     pilar = request.GET.get('pilar', '').upper()
@@ -2245,12 +2250,19 @@ def api_vendas_por_pilar(request):
     if not pilar:
         return JsonResponse({'error': 'Pilar não especificado'}, status=400)
     
+    # Identificar papel do usuário
     role = get_user_role(user)
-    is_gerente_user = role in ['gerente', 'coordenador']
-    user_full_name = user.get_full_name() or user.first_name
-    user_sector = user.sector.name if hasattr(user, 'sector') and user.sector else None
+    is_coordenador = role == 'coordenador'
     
-    # Mapeamento de pilar
+    # Informações do usuário para busca
+    user_full_name = user.get_full_name() or user.first_name or ""
+    user_first_name = user.first_name.strip().upper() if user.first_name else ""
+    user_last_name = user.last_name.strip().upper() if user.last_name else ""
+    
+    print(f"[api_vendas_por_pilar] Usuário: {user_full_name}, Pilar: {pilar}, Role: {role}")
+    print(f"[api_vendas_por_pilar] first_name: {user_first_name}, last_name: {user_last_name}")
+    
+    # Mapeamento de pilar - inclui variações com e sem acento
     pilar_mapping = {
         'MOVEL': ['MÓVEL', 'MOVEL'],
         'MÓVEL': ['MÓVEL', 'MOVEL'],
@@ -2270,27 +2282,82 @@ def api_vendas_por_pilar(request):
             return ""
         return str(text).strip().upper()
     
-    def normalize_sector(sector_name):
-        if not sector_name:
+    def remove_accents(text):
+        """Remove acentos de uma string para comparação"""
+        import unicodedata
+        if not text:
             return ""
-        normalized = str(sector_name).strip().upper()
-        prefixes = ['LOJA ', 'LOJA_', 'PDV ', 'PDV_']
-        for prefix in prefixes:
-            if normalized.startswith(prefix):
-                normalized = normalized[len(prefix):]
-        return normalized
+        # Normaliza para forma decomposta e remove marcas diacríticas
+        nfkd = unicodedata.normalize('NFKD', text)
+        return ''.join(c for c in nfkd if not unicodedata.combining(c))
+    
+    def pilar_match_check(row_pilar, filtros):
+        """Verifica se o pilar da linha corresponde aos filtros"""
+        row_clean = remove_accents(row_pilar)
+        for filtro in filtros:
+            filtro_clean = remove_accents(filtro)
+            # Comparar versões sem acento
+            if filtro_clean in row_clean or row_clean == filtro_clean:
+                return True
+            # Comparar versões originais (com acento)
+            if filtro in row_pilar or row_pilar == filtro:
+                return True
+        return False
     
     user_name_normalized = normalize_text(user_full_name)
-    user_sector_normalized = normalize_sector(user_sector) if user_sector else ""
     
     vendas_pago = []
     vendas_exclusao = []
     colunas = []
     
+    # Função auxiliar para verificar match de nome (CN - coluna VENDEDOR)
+    def nome_match(row_vendedor):
+        """Verifica se o vendedor da linha corresponde ao usuário CN"""
+        if not row_vendedor:
+            return False
+        vendedor_upper = normalize_text(row_vendedor)
+        
+        # Match exato
+        if vendedor_upper == user_name_normalized:
+            return True
+        
+        # Nome completo contém ou está contido
+        if user_name_normalized in vendedor_upper or vendedor_upper in user_name_normalized:
+            return True
+        
+        # Primeiro nome
+        if user_first_name and user_first_name in vendedor_upper:
+            return True
+        
+        # Primeiro + último nome
+        if user_first_name and user_last_name:
+            if user_first_name in vendedor_upper and user_last_name in vendedor_upper:
+                return True
+        
+        return False
+    
+    # Função auxiliar para verificar match de coordenador (coluna COORDENACAO)
+    def coordenador_match(row_coordenacao):
+        """Verifica se a coordenação da linha corresponde ao coordenador"""
+        if not row_coordenacao:
+            return False
+        coord_upper = normalize_text(row_coordenacao)
+        
+        # Coordenador: filtra pelo primeiro nome
+        if user_first_name and user_first_name in coord_upper:
+            return True
+        
+        # Ou nome completo
+        if user_name_normalized in coord_upper or coord_upper in user_name_normalized:
+            return True
+        
+        return False
+    
     try:
         # Baixar planilha BASE_PAGAMENTO
         excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento_vendas")
         if error:
+            print(f"[api_vendas_por_pilar] Erro download: {error}")
             return JsonResponse({'error': f'Erro ao baixar planilha: {error}'}, status=500)
         
         # ================== SHEET PAGO (Planilha1) ==================
@@ -2298,45 +2365,59 @@ def api_vendas_por_pilar(request):
             excel_file.seek(0)
             df_pago = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
             colunas = list(df_pago.columns)
+            print(f"[api_vendas_por_pilar] Colunas Planilha1: {colunas}")
+            print(f"[api_vendas_por_pilar] Total linhas Planilha1: {len(df_pago)}")
         except Exception as e:
             return JsonResponse({'error': f'Erro ao ler planilha: {str(e)}'}, status=500)
         
-        # Encontrar colunas
-        filial_col = None
+        # Encontrar colunas necessárias
         pilar_col = None
         vendedor_col = None
+        coordenacao_col = None
         
         for col in df_pago.columns:
             col_upper = str(col).strip().upper()
-            if col_upper == 'FILIAL':
-                filial_col = col
-            elif col_upper == 'PILAR':
+            if col_upper == 'PILAR':
                 pilar_col = col
             elif col_upper == 'VENDEDOR':
                 vendedor_col = col
+            elif col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
+                coordenacao_col = col
+        
+        print(f"[api_vendas_por_pilar] pilar_col={pilar_col}, vendedor_col={vendedor_col}, coordenacao_col={coordenacao_col}")
         
         if pilar_col is None:
             return JsonResponse({'error': 'Coluna PILAR não encontrada'}, status=500)
         
+        # Verificar coluna necessária baseada no papel
+        if is_coordenador:
+            if coordenacao_col is None:
+                return JsonResponse({'error': 'Coluna COORDENACAO não encontrada'}, status=500)
+            print(f"[api_vendas_por_pilar] Coordenador filtrando por COORDENACAO")
+        else:
+            if vendedor_col is None:
+                return JsonResponse({'error': 'Coluna VENDEDOR não encontrada'}, status=500)
+            # Debug: mostrar alguns vendedores únicos
+            vendedores_unicos = df_pago[vendedor_col].dropna().unique()[:10]
+            print(f"[api_vendas_por_pilar] CN filtrando por VENDEDOR. Amostra: {list(vendedores_unicos)}")
+        
         # Filtrar vendas PAGO
         for idx, row in df_pago.iterrows():
-            # Verificar pilar
+            # Verificar pilar usando função com suporte a acentos
             row_pilar = normalize_text(row.get(pilar_col, ''))
-            pilar_match = any(filtro in row_pilar or row_pilar == filtro for filtro in pilar_filtros)
-            
-            if not pilar_match:
+            if not pilar_match_check(row_pilar, pilar_filtros):
                 continue
             
-            # Verificar filtro (Filial para gerente, Vendedor para CN)
+            # Filtrar baseado no papel do usuário
             match = False
-            if is_gerente_user and filial_col:
-                row_filial = str(row.get(filial_col, '')).strip().upper()
-                match = (row_filial == user_sector_normalized)
-            elif not is_gerente_user and vendedor_col:
-                row_vendedor = normalize_text(row.get(vendedor_col, ''))
-                match = (row_vendedor == user_name_normalized or 
-                        user_name_normalized in row_vendedor or 
-                        row_vendedor in user_name_normalized)
+            if is_coordenador:
+                # Coordenador: filtra por COORDENACAO
+                row_coord = row.get(coordenacao_col, '')
+                match = coordenador_match(row_coord)
+            else:
+                # CN: filtra por VENDEDOR
+                row_vendedor = row.get(vendedor_col, '')
+                match = nome_match(row_vendedor)
             
             if match:
                 row_data = {}
@@ -2350,41 +2431,53 @@ def api_vendas_por_pilar(request):
                         row_data[str(col)] = str(value)
                 vendas_pago.append(row_data)
         
+        print(f"[api_vendas_por_pilar] Vendas PAGO encontradas: {len(vendas_pago)}")
+        
         # ================== SHEET EXCLUSÃO ==================
         try:
             excel_file.seek(0)
             df_exclusao = pd.read_excel(excel_file, sheet_name='EXCLUSAO', engine='openpyxl')
+            print(f"[api_vendas_por_pilar] Total linhas EXCLUSAO: {len(df_exclusao)}")
             
-            filial_col_exc = None
             pilar_col_exc = None
             vendedor_col_exc = None
+            coordenacao_col_exc = None
             
             for col in df_exclusao.columns:
                 col_upper = str(col).strip().upper()
-                if col_upper == 'FILIAL':
-                    filial_col_exc = col
-                elif col_upper == 'PILAR':
+                if col_upper == 'PILAR':
                     pilar_col_exc = col
                 elif col_upper == 'VENDEDOR':
                     vendedor_col_exc = col
+                elif col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
+                    coordenacao_col_exc = col
             
-            if pilar_col_exc:
+            print(f"[api_vendas_por_pilar] EXCLUSAO pilar_col={pilar_col_exc}, vendedor_col={vendedor_col_exc}, coordenacao_col={coordenacao_col_exc}")
+            
+            # Verificar se temos as colunas necessárias
+            can_process = pilar_col_exc is not None
+            if is_coordenador:
+                can_process = can_process and coordenacao_col_exc is not None
+            else:
+                can_process = can_process and vendedor_col_exc is not None
+            
+            if can_process:
                 for idx, row in df_exclusao.iterrows():
                     row_pilar = normalize_text(row.get(pilar_col_exc, ''))
-                    pilar_match = any(filtro in row_pilar or row_pilar == filtro for filtro in pilar_filtros)
-                    
-                    if not pilar_match:
+                    # Usar função com suporte a acentos
+                    if not pilar_match_check(row_pilar, pilar_filtros):
                         continue
                     
+                    # Filtrar baseado no papel do usuário
                     match = False
-                    if is_gerente_user and filial_col_exc:
-                        row_filial = str(row.get(filial_col_exc, '')).strip().upper()
-                        match = (row_filial == user_sector_normalized)
-                    elif not is_gerente_user and vendedor_col_exc:
-                        row_vendedor = normalize_text(row.get(vendedor_col_exc, ''))
-                        match = (row_vendedor == user_name_normalized or 
-                                user_name_normalized in row_vendedor or 
-                                row_vendedor in user_name_normalized)
+                    if is_coordenador:
+                        # Coordenador: filtra por COORDENACAO
+                        row_coord = row.get(coordenacao_col_exc, '')
+                        match = coordenador_match(row_coord)
+                    else:
+                        # CN: filtra por VENDEDOR
+                        row_vendedor = row.get(vendedor_col_exc, '')
+                        match = nome_match(row_vendedor)
                     
                     if match:
                         row_data = {}
@@ -2398,8 +2491,10 @@ def api_vendas_por_pilar(request):
                                 row_data[str(col)] = str(value)
                         row_data['_tipo'] = 'exclusao'
                         vendas_exclusao.append(row_data)
-        except Exception:
-            pass  # Sheet de exclusão pode não existir
+            
+            print(f"[api_vendas_por_pilar] Vendas EXCLUSAO encontradas: {len(vendas_exclusao)}")
+        except Exception as e:
+            print(f"[api_vendas_por_pilar] Erro ao ler EXCLUSAO: {e}")
         
         return JsonResponse({
             'success': True,
@@ -2408,7 +2503,14 @@ def api_vendas_por_pilar(request):
             'vendas_exclusao': vendas_exclusao,
             'total_pago': len(vendas_pago),
             'total_exclusao': len(vendas_exclusao),
-            'colunas': colunas
+            'colunas': colunas,
+            'debug': {
+                'user_name': user_full_name,
+                'user_first_name': user_first_name,
+                'user_last_name': user_last_name,
+                'role': role,
+                'is_coordenador': is_coordenador,
+            }
         })
         
     except Exception as e:
