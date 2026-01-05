@@ -212,10 +212,10 @@
         </div>
     </div>
 
-    <!-- Tabela Consolidada de Comissionamento -->
+    <!-- Tabela Consolidada de Comissionamento - Parte 1 -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
         <div class="px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar</h2>
+            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar - Comissões</h2>
             <p class="text-sm text-gray-500">Visão consolidada de todas as comissões e bônus</p>
         </div>
         <div class="overflow-x-auto">
@@ -229,10 +229,6 @@
                         <th class="px-3 py-3 text-right">Hunter</th>
                         <th class="px-3 py-3 text-right">Id. Hunter</th>
                         <th class="px-3 py-3 text-right bg-primary/10 text-primary">Total</th>
-                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">B. Pago</th>
-                        <th class="px-3 py-3 text-right bg-red-50 text-red-700">B. Exclusão</th>
-                        <th class="px-3 py-3 text-center bg-green-50 text-green-700">% Pago</th>
-                        <th class="px-3 py-3 text-center bg-red-50 text-red-700">% Exclusão</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -251,8 +247,150 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.0.soma|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Fixa -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="FIXA" data-pilar-nome="Fixa" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🏠</span>
+                                <span class="font-medium text-gray-800">Fixa</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.1.soma|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Smartphone -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SMARTPHONE" data-pilar-nome="Smartphone" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📲</span>
+                                <span class="font-medium text-gray-800">Smartphone</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.2.soma|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Eletrônicos -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="ELETRONICOS" data-pilar-nome="Eletrônicos" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">💻</span>
+                                <span class="font-medium text-gray-800">Eletrônicos</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.3.soma|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Essenciais -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="ESSENCIAIS" data-pilar-nome="Essenciais" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🛒</span>
+                                <span class="font-medium text-gray-800">Essenciais</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.4.soma|floatformat:2 }}</td>
+                    </tr>
+                    <!-- Seguro -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SEGURO" data-pilar-nome="Seguro" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🛡️</span>
+                                <span class="font-medium text-gray-800">Seguro</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguro|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.5.soma|floatformat:2 }}</td>
+                    </tr>
+                    <!-- SVA -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SVA" data-pilar-nome="SVA" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">⭐</span>
+                                <span class="font-medium text-gray-800">SVA</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.6.soma|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-100 font-semibold">
+                        <td class="px-4 py-3 text-gray-800">Total</td>
+                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-indigo-600">-</td>
+                        <td class="px-3 py-3 text-right text-primary bg-primary/10">R$ {{ data.totais.total_pilares|floatformat:2 }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Tabela Consolidada de Comissionamento - Parte 2: Base de Pagamento -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-800">Detalhamento por Pilar - Base de Pagamento</h2>
+            <p class="text-sm text-gray-500">Análise de vendas pagas e em exclusão</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-3 text-left">Pilar</th>
+                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">B. Pago</th>
+                        <th class="px-3 py-3 text-right bg-red-50 text-red-700">B. Exclusão</th>
+                        <th class="px-3 py-3 text-right bg-blue-50 text-blue-700">B. Total</th>
+                        <th class="px-3 py-3 text-center bg-green-50 text-green-700">% Pago</th>
+                        <th class="px-3 py-3 text-center bg-red-50 text-red-700">% Exclusão</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <!-- Móvel -->
+                    <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="MOVEL" data-pilar-nome="Móvel" title="Clique para ver vendas">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📱</span>
+                                <span class="font-medium text-gray-800">Móvel</span>
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.0.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.0.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.0.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.0.pago data.pilares.0.total 100 %}%
@@ -273,14 +411,9 @@
                                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.1.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.1.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.1.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.1.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.1.pago data.pilares.1.total 100 %}%
@@ -301,14 +434,9 @@
                                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.2.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.2.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.2.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.2.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.2.pago data.pilares.2.total 100 %}%
@@ -329,14 +457,9 @@
                                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.3.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.3.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.3.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.3.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.3.pago data.pilares.3.total 100 %}%
@@ -357,14 +480,9 @@
                                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.4.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.4.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.4.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.4.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.4.pago data.pilares.4.total 100 %}%
@@ -385,14 +503,9 @@
                                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguro|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.5.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.5.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.5.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.5.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.5.pago data.pilares.5.total 100 %}%
@@ -413,14 +526,9 @@
                                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </div>
                         </td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.comissoes.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.6.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.6.pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-red-600 bg-red-50/50">R$ {{ data.pilares.6.exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-blue-600 bg-blue-50/50">R$ {{ data.pilares.6.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-50/50">
                             <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                 {% widthratio data.pilares.6.pago data.pilares.6.total 100 %}%
@@ -436,14 +544,9 @@
                 <tfoot>
                     <tr class="bg-gray-100 font-semibold">
                         <td class="px-4 py-3 text-gray-800">Total</td>
-                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-indigo-600">-</td>
-                        <td class="px-3 py-3 text-right text-primary bg-primary/10">R$ {{ data.totais.total_pilares|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right text-green-700 bg-green-100">R$ {{ data.totais.total_pago|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right text-red-700 bg-red-100">R$ {{ data.totais.total_exclusao|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-blue-700 bg-blue-100">R$ {{ data.totais.total_pago|add:data.totais.total_exclusao|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-center bg-green-100">-</td>
                         <td class="px-3 py-3 text-center bg-red-100">-</td>
                     </tr>

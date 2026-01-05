@@ -1460,6 +1460,42 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
                 processed['comissoes']['sva'],
             ],
         },
+        'bonus': {
+            'labels': ['Móvel', 'Fixa', 'Smart', 'Eletro', 'Essen', 'Seguro', 'SVA'],
+            'data': [
+                processed['bonus']['movel'],
+                processed['bonus']['fixa'],
+                processed['bonus']['smartphone'],
+                processed['bonus']['eletronicos'],
+                processed['bonus']['essenciais'],
+                processed['bonus']['seguro'],
+                processed['bonus']['sva'],
+            ],
+        },
+        'alto_desempenho': {
+            'labels': ['Móvel', 'Fixa', 'Smart', 'Eletro', 'Essen', 'Seguro', 'SVA'],
+            'data': [
+                processed['alto_desempenho']['movel'],
+                processed['alto_desempenho']['fixa'],
+                processed['alto_desempenho']['smartphone'],
+                processed['alto_desempenho']['eletronicos_a'] + processed['alto_desempenho']['eletronicos_b'],
+                processed['alto_desempenho']['essenciais_a'] + processed['alto_desempenho']['essenciais_b'],
+                processed['alto_desempenho']['seguro'],
+                processed['alto_desempenho']['sva'],
+            ],
+        },
+        'hunter': {
+            'labels': ['Móvel', 'Fixa', 'Smart', 'Eletro', 'Essen', 'Seguro', 'SVA'],
+            'data': [
+                processed['hunter']['movel'],
+                processed['hunter']['fixa'],
+                processed['hunter']['smartphone'],
+                processed['hunter']['eletronicos'],
+                processed['hunter']['essenciais'],
+                processed['hunter']['seguro'],
+                processed['hunter']['sva'],
+            ],
+        },
         'composicao': {
             'labels': ['Comissão', 'Bônus', 'Alto Desempenho', 'Hunter', 'Aceleradores'],
             'data': [
@@ -2429,7 +2465,7 @@ def api_vendas_por_pilar(request):
                 vendedor_col = col
             elif col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
                 coordenacao_col = col
-            elif col_upper == 'PDV':
+            elif col_upper == 'FILIAL':
                 pdv_col = col
         
         print(f"[api_vendas_por_pilar] pilar_col={pilar_col}, vendedor_col={vendedor_col}, coordenacao_col={coordenacao_col}, pdv_col={pdv_col}")
