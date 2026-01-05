@@ -584,36 +584,34 @@
         </div>
     </div>
     
-    {% if data.descontos.total != 0 %}
-    <!-- Descontos -->
-    <div class="bg-white rounded-2xl shadow-sm border border-red-100 p-6 mb-6">
-        <h2 class="font-semibold text-red-600 mb-4 flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+    <!-- Descontos da Remuneração -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <h2 class="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
             </svg>
             Descontos
         </h2>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="text-center p-4 bg-red-50 rounded-xl">
+            <div class="p-4 {% if data.descontos.advertencia != 0 %}bg-red-50{% else %}bg-gray-50{% endif %} rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">Advertência</p>
-                <p class="text-lg font-bold text-red-600">R$ {{ data.descontos.advertencia|default:0|floatformat:2 }}</p>
+                <p class="text-lg font-bold {% if data.descontos.advertencia != 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.descontos.advertencia|default:0|floatformat:2 }}</p>
             </div>
-            <div class="text-center p-4 bg-red-50 rounded-xl">
-                <p class="text-xs text-gray-500 mb-1">Pag. Excedente</p>
-                <p class="text-lg font-bold text-red-600">R$ {{ data.descontos.excedente|default:0|floatformat:2 }}</p>
+            <div class="p-4 {% if data.descontos.excedente != 0 %}bg-red-50{% else %}bg-gray-50{% endif %} rounded-xl text-center">
+                <p class="text-xs text-gray-500 mb-1">Excedente Mês Ant.</p>
+                <p class="text-lg font-bold {% if data.descontos.excedente != 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.descontos.excedente|default:0|floatformat:2 }}</p>
             </div>
-            <div class="text-center p-4 bg-red-50 rounded-xl">
+            <div class="p-4 {% if data.descontos.price != 0 %}bg-red-50{% else %}bg-gray-50{% endif %} rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">Price</p>
-                <p class="text-lg font-bold text-red-600">R$ {{ data.descontos.price|default:0|floatformat:2 }}</p>
+                <p class="text-lg font-bold {% if data.descontos.price != 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.descontos.price|default:0|floatformat:2 }}</p>
             </div>
-            <div class="text-center p-4 bg-red-100 rounded-xl">
+            <div class="p-4 {% if data.descontos.total != 0 %}bg-red-50{% else %}bg-gray-50{% endif %} rounded-xl text-center">
                 <p class="text-xs text-gray-500 mb-1">Total Descontos</p>
-                <p class="text-lg font-bold text-red-600">R$ {{ data.descontos.total|default:0|floatformat:2 }}</p>
+                <p class="text-lg font-bold {% if data.descontos.total != 0 %}text-red-600{% else %}text-gray-600{% endif %}">R$ {{ data.descontos.total|default:0|floatformat:2 }}</p>
             </div>
         </div>
     </div>
-    {% endif %}
-
+    
 </div>
 
 {% if data %}
