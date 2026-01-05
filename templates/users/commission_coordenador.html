@@ -138,23 +138,30 @@
                     </div>
                 </div>
                 
-                <!-- Evolução -->
-                <div class="flex flex-col items-center gap-1 mb-2 text-xs">
-                    <div class="flex items-center gap-1">
-                        <span class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_3|floatformat:2 }}%
-                        </span>
-                        <span class="text-gray-300">→</span>
-                        <span class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_2|floatformat:2 }}%
-                        </span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <span class="text-gray-300">→</span>
-                        <span class="font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_1|floatformat:2 }}%
-                        </span>
-                    </div>
+                <!-- Evolução em tabela -->
+                <div class="w-full mb-2">
+                    <table class="w-full text-[10px]">
+                        <tbody>
+                            <tr>
+                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_3 }}:</td>
+                                <td class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
+                                    {{ pilar.pct_3|floatformat:2 }}%
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_2 }}:</td>
+                                <td class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
+                                    {{ pilar.pct_2|floatformat:2 }}%
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_1 }}:</td>
+                                <td class="{% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-bold">
+                                    {{ pilar.pct_1|floatformat:2 }}%
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 
                 <!-- Habilitado -->

@@ -851,6 +851,10 @@ def get_month_names():
     """
     Retorna os nomes dos meses M1, M2, M3 baseado no mês atual.
     Também retorna o mês de referência (3 meses atrás).
+    Para os atingimentos por pilar:
+    - pct_1 (último): 3 meses atrás
+    - pct_2 (penúltimo): 4 meses atrás
+    - pct_3 (antepenúltimo): 5 meses atrás
     """
     from datetime import datetime
     from dateutil.relativedelta import relativedelta
@@ -862,18 +866,24 @@ def get_month_names():
     }
     
     hoje = datetime.now()
-    mes_atual = hoje.month
-    ano_atual = hoje.year
     
     # Mês de referência: 3 meses atrás
     data_referencia = hoje - relativedelta(months=3)
     mes_referencia = meses_pt[data_referencia.month]
     ano_referencia = data_referencia.year
     
+    # Meses para os atingimentos (pct_1, pct_2, pct_3)
+    data_pct_1 = hoje - relativedelta(months=3)  # Último: 3 meses atrás
+    data_pct_2 = hoje - relativedelta(months=4)  # Penúltimo: 4 meses atrás
+    data_pct_3 = hoje - relativedelta(months=5)  # Antepenúltimo: 5 meses atrás
+    
+    # Meses antigos para gráficos (mantendo compatibilidade)
     def get_month_back(months_back):
-        m = mes_atual - months_back
-        if m <= 0:
+        m = hoje.month - months_back
+        y = hoje.year
+        while m <= 0:
             m += 12
+            y -= 1
         return m
     
     return {
@@ -882,6 +892,10 @@ def get_month_names():
         'm3': meses_pt[get_month_back(4)],
         'mes_referencia': mes_referencia,
         'ano_referencia': ano_referencia,
+        # Novos: meses para atingimentos
+        'mes_pct_1': meses_pt[data_pct_1.month],
+        'mes_pct_2': meses_pt[data_pct_2.month],
+        'mes_pct_3': meses_pt[data_pct_3.month],
     }
 
 
@@ -2252,6 +2266,7 @@ def api_vendas_por_pilar(request):
     
     Filtros por papel:
     - CN: Filtra por coluna VENDEDOR = nome do usuário
+    - Gerente: Filtra por coluna PDV = nome da loja do usuário
     - Coordenador: Filtra por coluna COORDENACAO = primeiro nome do usuário
     """
     user = request.user
@@ -2263,14 +2278,16 @@ def api_vendas_por_pilar(request):
     # Identificar papel do usuário
     role = get_user_role(user)
     is_coordenador = role == 'coordenador'
+    is_gerente = role == 'gerente'
     
     # Informações do usuário para busca
     user_full_name = user.get_full_name() or user.first_name or ""
     user_first_name = user.first_name.strip().upper() if user.first_name else ""
     user_last_name = user.last_name.strip().upper() if user.last_name else ""
+    user_pdv = user.sector.name if hasattr(user, 'sector') and user.sector else ""
     
     print(f"[api_vendas_por_pilar] Usuário: {user_full_name}, Pilar: {pilar}, Role: {role}")
-    print(f"[api_vendas_por_pilar] first_name: {user_first_name}, last_name: {user_last_name}")
+    print(f"[api_vendas_por_pilar] first_name: {user_first_name}, last_name: {user_last_name}, PDV: {user_pdv}")
     
     # Mapeamento de pilar - inclui variações com e sem acento
     pilar_mapping = {
@@ -2363,6 +2380,24 @@ def api_vendas_por_pilar(request):
         
         return False
     
+    # Função auxiliar para verificar match de PDV (Gerente - coluna PDV)
+    def pdv_match(row_pdv):
+        """Verifica se o PDV da linha corresponde ao PDV do gerente"""
+        if not row_pdv or not user_pdv:
+            return False
+        pdv_upper = normalize_text(row_pdv)
+        pdv_user_upper = normalize_text(user_pdv)
+        
+        # Match exato
+        if pdv_upper == pdv_user_upper:
+            return True
+        
+        # Contém
+        if pdv_user_upper in pdv_upper or pdv_upper in pdv_user_upper:
+            return True
+        
+        return False
+    
     try:
         # Baixar planilha BASE_PAGAMENTO
         excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento_vendas")
@@ -2384,6 +2419,7 @@ def api_vendas_por_pilar(request):
         pilar_col = None
         vendedor_col = None
         coordenacao_col = None
+        pdv_col = None
         
         for col in df_pago.columns:
             col_upper = str(col).strip().upper()
@@ -2393,8 +2429,10 @@ def api_vendas_por_pilar(request):
                 vendedor_col = col
             elif col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
                 coordenacao_col = col
+            elif col_upper == 'PDV':
+                pdv_col = col
         
-        print(f"[api_vendas_por_pilar] pilar_col={pilar_col}, vendedor_col={vendedor_col}, coordenacao_col={coordenacao_col}")
+        print(f"[api_vendas_por_pilar] pilar_col={pilar_col}, vendedor_col={vendedor_col}, coordenacao_col={coordenacao_col}, pdv_col={pdv_col}")
         
         if pilar_col is None:
             return JsonResponse({'error': 'Coluna PILAR não encontrada'}, status=500)
@@ -2404,6 +2442,10 @@ def api_vendas_por_pilar(request):
             if coordenacao_col is None:
                 return JsonResponse({'error': 'Coluna COORDENACAO não encontrada'}, status=500)
             print(f"[api_vendas_por_pilar] Coordenador filtrando por COORDENACAO")
+        elif is_gerente:
+            if pdv_col is None:
+                return JsonResponse({'error': 'Coluna PDV não encontrada'}, status=500)
+            print(f"[api_vendas_por_pilar] Gerente filtrando por PDV: {user_pdv}")
         else:
             if vendedor_col is None:
                 return JsonResponse({'error': 'Coluna VENDEDOR não encontrada'}, status=500)
@@ -2424,6 +2466,10 @@ def api_vendas_por_pilar(request):
                 # Coordenador: filtra por COORDENACAO
                 row_coord = row.get(coordenacao_col, '')
                 match = coordenador_match(row_coord)
+            elif is_gerente:
+                # Gerente: filtra por PDV
+                row_pdv = row.get(pdv_col, '')
+                match = pdv_match(row_pdv)
             else:
                 # CN: filtra por VENDEDOR
                 row_vendedor = row.get(vendedor_col, '')
@@ -2452,6 +2498,7 @@ def api_vendas_por_pilar(request):
             pilar_col_exc = None
             vendedor_col_exc = None
             coordenacao_col_exc = None
+            pdv_col_exc = None
             
             for col in df_exclusao.columns:
                 col_upper = str(col).strip().upper()
@@ -2461,13 +2508,17 @@ def api_vendas_por_pilar(request):
                     vendedor_col_exc = col
                 elif col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
                     coordenacao_col_exc = col
+                elif col_upper == 'PDV':
+                    pdv_col_exc = col
             
-            print(f"[api_vendas_por_pilar] EXCLUSAO pilar_col={pilar_col_exc}, vendedor_col={vendedor_col_exc}, coordenacao_col={coordenacao_col_exc}")
+            print(f"[api_vendas_por_pilar] EXCLUSAO pilar_col={pilar_col_exc}, vendedor_col={vendedor_col_exc}, coordenacao_col={coordenacao_col_exc}, pdv_col={pdv_col_exc}")
             
             # Verificar se temos as colunas necessárias
             can_process = pilar_col_exc is not None
             if is_coordenador:
                 can_process = can_process and coordenacao_col_exc is not None
+            elif is_gerente:
+                can_process = can_process and pdv_col_exc is not None
             else:
                 can_process = can_process and vendedor_col_exc is not None
             
@@ -2484,6 +2535,10 @@ def api_vendas_por_pilar(request):
                         # Coordenador: filtra por COORDENACAO
                         row_coord = row.get(coordenacao_col_exc, '')
                         match = coordenador_match(row_coord)
+                    elif is_gerente:
+                        # Gerente: filtra por PDV
+                        row_pdv = row.get(pdv_col_exc, '')
+                        match = pdv_match(row_pdv)
                     else:
                         # CN: filtra por VENDEDOR
                         row_vendedor = row.get(vendedor_col_exc, '')

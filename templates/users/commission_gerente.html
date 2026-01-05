@@ -154,23 +154,30 @@
                     </div>
                 </div>
                 
-                <!-- Evolução -->
-                <div class="flex flex-col items-center gap-1 mb-2 text-xs">
-                    <div class="flex items-center gap-1">
-                        <span class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_3|floatformat:2 }}%
-                        </span>
-                        <span class="text-gray-300">→</span>
-                        <span class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_2|floatformat:2 }}%
-                        </span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <span class="text-gray-300">→</span>
-                        <span class="font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_1|floatformat:2 }}%
-                        </span>
-                    </div>
+                <!-- Evolução em tabela -->
+                <div class="w-full mb-2">
+                    <table class="w-full text-[10px]">
+                        <tbody>
+                            <tr>
+                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_3 }}:</td>
+                                <td class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
+                                    {{ pilar.pct_3|floatformat:2 }}%
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_2 }}:</td>
+                                <td class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
+                                    {{ pilar.pct_2|floatformat:2 }}%
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_1 }}:</td>
+                                <td class="{% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-bold">
+                                    {{ pilar.pct_1|floatformat:2 }}%
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 
                 <!-- Habilitado -->
@@ -541,9 +548,6 @@
                         <td class="py-3 px-2 text-right font-medium text-gray-700">
                             R$ {{ cn.comissao_total|floatformat:2 }}
                         </td>
-                        <td class="py-3 pl-4 text-right font-semibold text-primary">
-                            R$ {{ cn.remuneracao_final|floatformat:2 }}
-                        </td>
                         <td class="py-3 pl-4">
                             <a href="?user={{ cn.user_id }}" class="text-primary hover:text-primary/80 text-sm font-medium">
                                 Ver detalhes
@@ -658,35 +662,84 @@ document.addEventListener('DOMContentLoaded', function() {
             type: 'bar',
             data: {
                 labels: chartData.comissoes.labels,
-                datasets: [{
-                    data: chartData.comissoes.data,
-                    backgroundColor: [
-                        'rgba(102, 0, 153, 0.8)',
-                        'rgba(155, 48, 255, 0.8)',
-                        'rgba(186, 85, 211, 0.8)',
-                        'rgba(147, 112, 219, 0.8)',
-                        'rgba(138, 43, 226, 0.8)',
-                        'rgba(123, 104, 238, 0.8)',
-                        'rgba(106, 90, 205, 0.8)'
-                    ],
-                    borderRadius: 6
-                }]
+                datasets: [
+                    {
+                        label: 'Comissões',
+                        data: chartData.comissoes.data,
+                        backgroundColor: 'rgba(102, 0, 153, 0.85)',
+                        borderRadius: 4,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'B. Carteira',
+                        data: chartData.bonus.data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.85)',
+                        borderRadius: 4,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'Alto Desempenho',
+                        data: chartData.alto_desempenho.data,
+                        backgroundColor: 'rgba(245, 158, 11, 0.85)',
+                        borderRadius: 4,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'Hunter',
+                        data: chartData.hunter.data,
+                        backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                        borderRadius: 4,
+                        borderSkipped: false
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        display: false
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 15,
+                            font: { size: 11 }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#1f2937',
+                        bodyColor: '#6b7280',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return ' ' + context.dataset.label + ': R$ ' + context.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                            }
+                        }
                     }
                 },
                 scales: {
+                    x: {
+                        stacked: true,
+                        grid: { display: false }
+                    },
                     y: {
+                        stacked: true,
                         beginAtZero: true,
+                        grid: { 
+                            color: 'rgba(0, 0, 0, 0.04)',
+                            drawBorder: false
+                        },
                         ticks: {
                             callback: function(value) {
                                 return 'R$ ' + value.toLocaleString('pt-BR');
-                            }
+                            },
+                            font: { size: 10 },
+                            color: '#9ca3af'
                         }
                     }
                 }
@@ -796,7 +849,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 html += '<div class="text-right flex items-center gap-2">';
                 if (valor > 0) {
                     html += '<span class="font-bold text-green-600 text-sm">R$ ' + valorRefTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
-                    html += '<span class="font-semibold text-gray-800 text-sm">R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
                     html += '<span class="text-gray-500 text-xs">(' + percent.toFixed(1) + '%)</span>';
                 } else {
                     html += '<span class="text-gray-400 text-sm">-</span>';
