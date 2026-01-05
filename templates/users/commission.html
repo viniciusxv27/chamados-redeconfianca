@@ -179,10 +179,10 @@
                     </span>
                 </div>
                 
-                <!-- Habilitado -->
+                <!-- Id. Hunter -->
                 {% if pilar.habilitado %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
-                    ✓ Habilitado
+                    {{ pilar.habilitado }}
                 </span>
                 {% endif %}
             </div>
@@ -205,6 +205,7 @@
                         <th class="px-4 py-3 text-right">Alto Desemp.</th>
                         <th class="px-4 py-3 text-right">Bônus</th>
                         <th class="px-4 py-3 text-right">Hunter</th>
+                        <th class="px-4 py-3 text-right">Id. Hunter</th>
                         <th class="px-4 py-3 text-right bg-gray-100">Total</th>
                     </tr>
                 </thead>
@@ -220,6 +221,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.movel|add:data.alto_desempenho.movel|add:data.bonus.movel|add:data.hunter.movel|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="FIXA" data-pilar-nome="🏠 Fixa">
@@ -233,6 +235,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.fixa|add:data.alto_desempenho.fixa|add:data.bonus.fixa|add:data.hunter.fixa|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="SMARTPHONE" data-pilar-nome="📲 Smartphone">
@@ -246,6 +249,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.smartphone|add:data.alto_desempenho.smartphone|add:data.bonus.smartphone|add:data.hunter.smartphone|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="ELETRONICOS" data-pilar-nome="💻 Eletrônicos">
@@ -259,6 +263,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|add:data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|add:data.bonus.eletronicos|add:data.hunter.eletronicos|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="ESSENCIAIS" data-pilar-nome="⭐ Essenciais">
@@ -272,6 +277,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|add:data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|add:data.bonus.essenciais|add:data.hunter.essenciais|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="SEGURO" data-pilar-nome="🛡️ Seguro">
@@ -285,6 +291,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.seguro|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.seguro|add:data.alto_desempenho.seguro|add:data.bonus.seguro|add:data.hunter.seguro|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="SVA" data-pilar-nome="💎 SVA">
@@ -298,6 +305,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.sva|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.sva|add:data.alto_desempenho.sva|add:data.bonus.sva|add:data.hunter.sva|floatformat:2 }}</td>
                     </tr>
                 </tbody>
@@ -319,6 +327,7 @@
                         <th class="px-4 py-3 text-right">🏆 Alto Desempenho</th>
                         <th class="px-4 py-3 text-right">💰 Bônus Carteira</th>
                         <th class="px-4 py-3 text-right">🎯 Hunter</th>
+                        <th class="px-4 py-3 text-right">Id. Hunter</th>
                         <th class="px-4 py-3 text-right bg-gray-100">📊 Total</th>
                     </tr>
                 </thead>
@@ -329,6 +338,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.movel|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.movel|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.movel|add:data.alto_desempenho.movel|add:data.bonus.movel|add:data.hunter.movel|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
@@ -337,6 +347,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.fixa|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.fixa|add:data.alto_desempenho.fixa|add:data.bonus.fixa|add:data.hunter.fixa|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
@@ -345,6 +356,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.smartphone|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.smartphone|add:data.alto_desempenho.smartphone|add:data.bonus.smartphone|add:data.hunter.smartphone|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
@@ -353,6 +365,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.eletronicos|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.eletronicos_a|add:data.comissoes.eletronicos_b|add:data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|add:data.bonus.eletronicos|add:data.hunter.eletronicos|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
@@ -361,6 +374,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.essenciais|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.essenciais_a|add:data.comissoes.essenciais_b|add:data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|add:data.bonus.essenciais|add:data.hunter.essenciais|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
@@ -369,6 +383,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.seguro|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.seguro|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.seguro|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.seguro|add:data.alto_desempenho.seguro|add:data.bonus.seguro|add:data.hunter.seguro|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-gray-50">
@@ -377,6 +392,7 @@
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.bonus.sva|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right font-medium text-gray-800">R$ {{ data.hunter.sva|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800">{{ data.bonus_hunter.sva|default:"-" }}</td>
                         <td class="px-4 py-3 text-right font-bold text-primary bg-primary/5">R$ {{ data.comissoes.sva|add:data.alto_desempenho.sva|add:data.bonus.sva|add:data.hunter.sva|floatformat:2 }}</td>
                     </tr>
                 </tbody>
@@ -386,8 +402,9 @@
                         <td class="px-4 py-4 text-right text-primary text-lg">R$ {{ data.comissoes.total|floatformat:2 }}</td>
                         <td class="px-4 py-4 text-right text-amber-600 text-lg">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
                         <td class="px-4 py-4 text-right text-blue-600 text-lg">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-4 py-4 text-right text-gray-800 text-lg">R$ {{ data.hunter.total|floatformat:2 }}</td>
                         <td class="px-4 py-4 text-right text-gray-800 text-lg">-</td>
-                        <td class="px-4 py-4 text-right text-primary text-xl bg-primary/10">R$ {{ data.comissoes.total|add:data.alto_desempenho.total|add:data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-4 py-4 text-right text-primary text-xl bg-primary/10">R$ {{ data.comissoes.total|add:data.alto_desempenho.total|add:data.bonus.total|add:data.hunter.total|floatformat:2 }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -454,25 +471,6 @@
         </div>
     </div>
     {% endif %}
-    
-    <!-- Resumo Final -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h2 class="font-semibold text-gray-800 mb-6">Resumo Final - {{ data.totais.cargo_label }}</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="text-center p-6 bg-gradient-to-br from-primary/5 to-orange-50 rounded-xl border border-primary/10">
-                <p class="text-sm text-gray-500 mb-2">Comissão {{ data.totais.cargo_label }}</p>
-                <p class="text-3xl font-bold text-primary">R$ {{ data.totais.comissao_cargo|floatformat:2 }}</p>
-            </div>
-            <div class="text-center p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                <p class="text-sm text-gray-500 mb-2">Premiação {{ data.totais.cargo_label }}</p>
-                <p class="text-3xl font-bold text-blue-600">R$ {{ data.totais.premiacao_cargo|floatformat:2 }}</p>
-            </div>
-            <div class="text-center p-6 bg-gradient-to-br {% if data.totais.iq_cargo >= 0 %}from-green-50 to-emerald-50 rounded-xl border border-green-100{% else %}from-red-50 to-rose-50 rounded-xl border border-red-100{% endif %}">
-                <p class="text-sm text-gray-500 mb-2">IQ {{ data.totais.cargo_label }}</p>
-                <p class="text-3xl font-bold {% if data.totais.iq_cargo >= 0 %}text-green-600{% else %}text-red-600{% endif %}">R$ {{ data.totais.iq_cargo|floatformat:2 }}</p>
-            </div>
-        </div>
-    </div>
     
     {% if vendas %}
     <!-- Lista de Vendas -->
