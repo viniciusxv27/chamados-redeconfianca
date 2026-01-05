@@ -850,8 +850,10 @@ def convert_percentage(value):
 def get_month_names():
     """
     Retorna os nomes dos meses M1, M2, M3 baseado no mês atual.
+    Também retorna o mês de referência (3 meses atrás).
     """
     from datetime import datetime
+    from dateutil.relativedelta import relativedelta
     
     meses_pt = {
         1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -861,6 +863,12 @@ def get_month_names():
     
     hoje = datetime.now()
     mes_atual = hoje.month
+    ano_atual = hoje.year
+    
+    # Mês de referência: 3 meses atrás
+    data_referencia = hoje - relativedelta(months=3)
+    mes_referencia = meses_pt[data_referencia.month]
+    ano_referencia = data_referencia.year
     
     def get_month_back(months_back):
         m = mes_atual - months_back
@@ -872,6 +880,8 @@ def get_month_names():
         'm1': meses_pt[get_month_back(2)],
         'm2': meses_pt[get_month_back(3)],
         'm3': meses_pt[get_month_back(4)],
+        'mes_referencia': mes_referencia,
+        'ano_referencia': ano_referencia,
     }
 
 

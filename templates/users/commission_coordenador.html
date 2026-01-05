@@ -11,6 +11,12 @@
         <div>
             <h1 class="text-2xl font-bold text-gray-800">Comissionamento</h1>
             <p class="text-gray-500 text-sm mt-1">Visão de Coordenação - Todas as lojas</p>
+            <div class="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg">
+                <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span class="text-xs font-medium text-gray-700">Mês de Referência: <span class="text-primary font-semibold">{{ meses.mes_referencia }} {{ meses.ano_referencia }}</span></span>
+            </div>
         </div>
         
         <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-4 md:mt-0">
@@ -121,30 +127,34 @@
                             stroke-width="4" fill="none"
                             stroke-dasharray="176" 
                             stroke-dashoffset="176"
-                            data-value="{{ pilar.pct_1|floatformat:0 }}"
+                            data-value="{{ pilar.pct_1|floatformat:2 }}"
                             stroke-linecap="round">
                         </circle>
                     </svg>
                     <div class="absolute inset-0 flex items-center justify-center">
-                        <span class="text-sm font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_1|floatformat:0 }}%
+                        <span class="text-xs font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ pilar.pct_1|floatformat:2 }}%
                         </span>
                     </div>
                 </div>
                 
                 <!-- Evolução -->
-                <div class="flex items-center justify-center gap-1 mb-2">
-                    <span class="text-xs {% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                        {{ pilar.pct_3|floatformat:0 }}%
-                    </span>
-                    <span class="text-gray-300">→</span>
-                    <span class="text-xs {% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                        {{ pilar.pct_2|floatformat:0 }}%
-                    </span>
-                    <span class="text-gray-300">→</span>
-                    <span class="text-sm font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                        {{ pilar.pct_1|floatformat:0 }}%
-                    </span>
+                <div class="flex flex-col items-center gap-1 mb-2 text-xs">
+                    <div class="flex items-center gap-1">
+                        <span class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ pilar.pct_3|floatformat:2 }}%
+                        </span>
+                        <span class="text-gray-300">→</span>
+                        <span class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ pilar.pct_2|floatformat:2 }}%
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-gray-300">→</span>
+                        <span class="font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ pilar.pct_1|floatformat:2 }}%
+                        </span>
+                    </div>
                 </div>
                 
                 <!-- Habilitado -->
