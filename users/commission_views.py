@@ -2544,7 +2544,7 @@ def api_vendas_por_pilar(request):
                     vendedor_col_exc = col
                 elif col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
                     coordenacao_col_exc = col
-                elif col_upper == 'PDV':
+                elif col_upper == 'FILIAL':
                     pdv_col_exc = col
             
             print(f"[api_vendas_por_pilar] EXCLUSAO pilar_col={pilar_col_exc}, vendedor_col={vendedor_col_exc}, coordenacao_col={coordenacao_col_exc}, pdv_col={pdv_col_exc}")
