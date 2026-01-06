@@ -494,16 +494,13 @@ class NotificationService:
         recipients: List[User] = None
     ) -> Dict[str, Any]:
         """
-        Envia notificação via OneSignal para usuários específicos.
+        Envia notificação via OneSignal para TODOS os subscribers.
         
-        IMPORTANTE: As notificações são enviadas APENAS para os usuários
-        especificados em 'recipients'. Isso permite enviar notificações
-        direcionadas para usuários específicos (ex: responsável de um chamado,
-        criador do chamado, etc.)
+        No plano gratuito do OneSignal, as notificações são enviadas para todos
+        os usuários inscritos (Subscribed Users) ao mesmo tempo.
         
-        Se 'recipients' for None ou vazio, a notificação NÃO será enviada
-        para todos, pois isso geraria spam. Use send_to_all explicitamente
-        se quiser enviar para todos.
+        O parâmetro 'recipients' é mantido para compatibilidade mas não é usado
+        para filtrar destinatários no envio - apenas para logging.
         """
         try:
             from .onesignal_service import onesignal_service
@@ -523,43 +520,23 @@ class NotificationService:
             # Preparar ícone
             icon_url = icon if icon and icon.startswith('http') else f"{base_url}/static/images/logo.png"
             
-            # ENVIO DIRECIONADO: Sempre enviar para usuários específicos
-            if recipients and len(recipients) > 0:
-                # Filtrar apenas usuários ativos
-                active_recipients = [user for user in recipients if user.is_active]
-                
-                if not active_recipients:
-                    logger.info("OneSignal: Nenhum destinatário ativo para enviar notificação")
-                    return {
-                        'success': True,
-                        'message': 'Nenhum destinatário ativo',
-                        'sent_count': 0
-                    }
-                
-                # Usar o novo método send_to_users que envia para external_user_ids
-                result = onesignal_service.send_to_users(
-                    users=active_recipients,
-                    title=title,
-                    message=message,
-                    url=full_url,
-                    icon=icon_url,
-                    data=extra_data
-                )
-                
-                if result.get('success'):
-                    logger.info(f"OneSignal: Notificação enviada para {len(active_recipients)} usuários - {title}")
-                else:
-                    logger.error(f"OneSignal: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
-                
-                return result
+            # PLANO GRATUITO: Enviar para TODOS os subscribers
+            # Usar send_to_all que envia para o segmento 'Subscribed Users'
+            result = onesignal_service.send_to_all(
+                title=title,
+                message=message,
+                url=full_url,
+                icon=icon_url,
+                data=extra_data
+            )
+            
+            if result.get('success'):
+                recipients_count = len(recipients) if recipients else 0
+                logger.info(f"OneSignal: Notificação enviada para todos os subscribers - {title} (destinatários previstos: {recipients_count})")
             else:
-                # Sem destinatários específicos - não enviar para evitar spam
-                logger.warning("OneSignal: Nenhum destinatário especificado, notificação não enviada")
-                return {
-                    'success': False,
-                    'error': 'Nenhum destinatário especificado. Use send_to_all para enviar para todos.',
-                    'sent_count': 0
-                }
+                logger.error(f"OneSignal: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
+            
+            return result
             
         except Exception as e:
             logger.error(f"OneSignal: Erro inesperado - {str(e)}")
@@ -683,12 +660,17 @@ class NotificationService:
     ) -> Dict[str, Any]:
         """Notifica quando alguém é atribuído a um ticket"""
         
+        # Canais de notificação - incluir OneSignal para push para todos
+        channels = [NotificationChannel.IN_APP, NotificationChannel.PUSH, NotificationChannel.EMAIL]
+        if self.onesignal_enabled:
+            channels.append(NotificationChannel.ONESIGNAL)
+        
         return self.send_notification(
             recipients=assigned_user,
-            title=f"Chamado Atribuído: #{ticket.id}",
+            title=f"🎫 Chamado Atribuído: #{ticket.id}",
             message=f"Você foi atribuído ao chamado '{ticket.title}' por {assigned_by.full_name}.",
             notification_type=NotificationType.TICKET_ASSIGNED,
-            channels=[NotificationChannel.IN_APP, NotificationChannel.PUSH, NotificationChannel.EMAIL],
+            channels=channels,
             action_url=f"/tickets/{ticket.id}/",
             priority='ALTA',
             icon='fas fa-user-tag',
@@ -805,7 +787,12 @@ class NotificationService:
         self,
         communication
     ) -> Dict[str, Any]:
-        """Notifica sobre novo comunicado"""
+        """
+        Notifica sobre novo comunicado.
+        
+        Se o comunicado for para todos (send_to_all=True), envia notificação
+        push via OneSignal para todos os subscribers.
+        """
         from users.models import User
         
         # Determinar destinatários
@@ -823,14 +810,21 @@ class NotificationService:
         # Truncar mensagem
         message_preview = communication.message[:150] + '...' if len(communication.message) > 150 else communication.message
         
-        # Incluir email para comunicados fixados
+        # Definir canais de notificação
+        # IMPORTANTE: Comunicados para todos incluem OneSignal para enviar push para todos
         channels = [NotificationChannel.IN_APP, NotificationChannel.PUSH]
+        
+        # Adicionar OneSignal para comunicados (envia para todos os subscribers)
+        if self.onesignal_enabled:
+            channels.append(NotificationChannel.ONESIGNAL)
+        
+        # Incluir email para comunicados fixados ou importantes
         if communication.is_pinned:
             channels.append(NotificationChannel.EMAIL)
         
         return self.send_notification(
             recipients=recipients,
-            title=f"Novo Comunicado: {communication.title}",
+            title=f"📢 Novo Comunicado: {communication.title}",
             message=message_preview,
             notification_type=NotificationType.COMMUNICATION_NEW,
             channels=channels,
@@ -840,7 +834,8 @@ class NotificationService:
             extra_data={
                 'communication_id': communication.id,
                 'is_pinned': communication.is_pinned,
-                'is_popup': communication.is_popup
+                'is_popup': communication.is_popup,
+                'send_to_all': communication.send_to_all
             },
             created_by=communication.sender,
             email_context={
