@@ -1532,14 +1532,30 @@
                                     return OneSignal.User.PushSubscription.optedIn;
                                 };
                                 
-                                // Verificar se usuário não está inscrito e mostrar prompt após 5 segundos
-                                setTimeout(function() {
+                                // Verificar se o navegador já permitiu notificações mas OneSignal não está inscrito
+                                // Isso pode acontecer se o usuário permitiu antes mas o OneSignal não registrou
+                                setTimeout(async function() {
                                     try {
                                         const isSubscribed = OneSignal.User.PushSubscription.optedIn;
-                                        console.log('Push subscription status:', isSubscribed);
+                                        const browserPermission = Notification.permission;
                                         
-                                        if (!isSubscribed) {
+                                        console.log('Push subscription status:', isSubscribed);
+                                        console.log('Browser permission:', browserPermission);
+                                        
+                                        // Se o navegador já permitiu mas OneSignal não está inscrito, fazer opt-in automático
+                                        if (browserPermission === 'granted' && !isSubscribed) {
+                                            console.log('Browser allowed but OneSignal not subscribed, opting in...');
+                                            await OneSignal.User.PushSubscription.optIn();
+                                            const subscription = OneSignal.User.PushSubscription;
+                                            if (subscription && subscription.id) {
+                                                registerPlayerIdInBackend(subscription.id);
+                                            }
+                                            console.log('Auto opt-in completed');
+                                        } else if (!isSubscribed && browserPermission !== 'denied') {
+                                            // Mostrar banner se não está inscrito e não foi bloqueado
                                             showPushBanner();
+                                        } else if (browserPermission === 'denied') {
+                                            console.log('Notifications are blocked in browser settings');
                                         }
                                     } catch(e) {
                                         console.log('Error checking subscription:', e);
@@ -1589,8 +1605,32 @@
                                 };
                                 
                                 // Ativar push a partir do banner
-                                window.activatePushFromBanner = function() {
-                                    OneSignal.Slidedown.promptPush();
+                                window.activatePushFromBanner = async function() {
+                                    try {
+                                        // Tentar usar o prompt nativo do navegador diretamente
+                                        // Isso é mais confiável que o slidedown do OneSignal
+                                        const permission = await Notification.requestPermission();
+                                        console.log('Native notification permission:', permission);
+                                        
+                                        if (permission === 'granted') {
+                                            // Permissão concedida, agora registrar no OneSignal
+                                            await OneSignal.User.PushSubscription.optIn();
+                                            console.log('OneSignal opted in successfully');
+                                            
+                                            // Verificar e registrar
+                                            const subscription = OneSignal.User.PushSubscription;
+                                            if (subscription && subscription.id) {
+                                                registerPlayerIdInBackend(subscription.id);
+                                            }
+                                        } else {
+                                            // Se falhou, tentar o slidedown do OneSignal
+                                            await OneSignal.Slidedown.promptPush();
+                                        }
+                                    } catch(e) {
+                                        console.error('Error activating push:', e);
+                                        // Fallback para slidedown
+                                        OneSignal.Slidedown.promptPush();
+                                    }
                                     dismissPushBanner();
                                 };
                                 
