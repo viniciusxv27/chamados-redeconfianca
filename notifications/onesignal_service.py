@@ -103,7 +103,7 @@ class OneSignalService:
             url: URL para abrir ao clicar
             icon: URL do ícone (opcional)
             image: URL de imagem grande (opcional)
-            segment: Segmento de usuários (ex: 'Subscribed Users', 'Active Users')
+            segment: Segmento de usuários (ex: 'Total Subscriptions', 'Active Subscriptions')
             player_ids: Lista de Player IDs específicos (opcional)
             external_user_ids: Lista de External User IDs do sistema (opcional)
             emails: Lista de emails para envio direcionado (opcional)
@@ -193,9 +193,9 @@ class OneSignalService:
                 
             else:
                 # Enviar para todos os inscritos (padrão)
-                payload['included_segments'] = ['Subscribed Users']
+                payload['included_segments'] = ['Total Subscriptions']
                 targeting_method = 'all_subscribers'
-                logger.info("OneSignal: Targeting all Subscribed Users")
+                logger.info("OneSignal: Targeting all Total Subscriptions")
             
             # Configurar ícones
             base_url = getattr(settings, 'BASE_URL', 'https://chamados.redeconfianca.com.br')
@@ -242,7 +242,7 @@ class OneSignalService:
                     title=title,
                     message=message,
                     url=url,
-                    segment=segment or 'Subscribed Users',
+                    segment=segment or 'Total Subscriptions',
                     sent_to_all=not player_ids and not external_user_ids,
                     success=True,
                     sent_count=recipients,
@@ -325,7 +325,7 @@ class OneSignalService:
         Envia notificação para um segmento específico
         
         Segmentos padrão do OneSignal:
-        - 'Subscribed Users': Todos os usuários inscritos
+        - 'Total Subscriptions': Todos os usuários inscritos
         - 'Active Users': Usuários ativos recentemente
         - 'Inactive Users': Usuários inativos
         """
@@ -471,7 +471,7 @@ class OneSignalService:
             title=title,
             message=message,
             url=url,
-            segment='Subscribed Users',
+            segment='Total Subscriptions',
             **kwargs
         )
     
@@ -640,7 +640,7 @@ class OneSignalService:
         return {
             'success': True,
             'segments': [
-                {'id': 'Subscribed Users', 'name': 'Todos os Inscritos', 'description': 'Todos os usuários que permitiram notificações'},
+                {'id': 'Total Subscriptions', 'name': 'Todos os Inscritos', 'description': 'Todos os usuários que permitiram notificações'},
                 {'id': 'Active Users', 'name': 'Usuários Ativos', 'description': 'Usuários ativos nos últimos 30 dias'},
                 {'id': 'Inactive Users', 'name': 'Usuários Inativos', 'description': 'Usuários inativos há mais de 30 dias'},
             ]
