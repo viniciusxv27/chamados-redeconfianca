@@ -488,12 +488,14 @@ def execute_today_checklists(request):
             for task_exec in execution.task_executions.all():
                 task_key = f'task_{execution.id}_{task_exec.task.id}'
                 notes_key = f'notes_{execution.id}_{task_exec.task.id}'
+                dropdown_key = f'dropdown_{execution.id}_{task_exec.task.id}'
                 images_key = f'evidence_images_{execution.id}_{task_exec.task.id}'
                 videos_key = f'evidence_videos_{execution.id}_{task_exec.task.id}'
                 documents_key = f'evidence_documents_{execution.id}_{task_exec.task.id}'
                 
                 is_completed = request.POST.get(task_key) == 'on'
                 notes = request.POST.get(notes_key, '').strip()
+                dropdown_answer = request.POST.get(dropdown_key, '').strip() or None
                 evidence_images = request.FILES.getlist(images_key)
                 evidence_videos = request.FILES.getlist(videos_key)
                 evidence_documents = request.FILES.getlist(documents_key)
@@ -515,6 +517,7 @@ def execute_today_checklists(request):
                 # Atualizar task execution
                 task_exec.is_completed = is_completed
                 task_exec.notes = notes
+                task_exec.dropdown_answer = dropdown_answer
                 
                 if is_completed and not task_exec.completed_at:
                     task_exec.completed_at = timezone.now()
@@ -729,22 +732,19 @@ def view_execution(request, execution_id):
                 else:
                     task_exec.yes_no_answer = None
                     task_exec.is_completed = False
-            elif task.task_type == 'dropdown':
-                # Menu Suspenso (Sim/Não/Não se Aplica)
-                dropdown_field_name = f'dropdown_{execution.id}_{task.id}'
-                dropdown_value = request.POST.get(dropdown_field_name)
-                
-                if dropdown_value in ['yes', 'no', 'not_applicable']:
-                    task_exec.dropdown_answer = dropdown_value
-                    task_exec.is_completed = True
-                else:
-                    task_exec.dropdown_answer = None
-                    task_exec.is_completed = False
             else:
                 # Tarefa normal - verificar se foi marcada como completa
                 task_field_name = f'task_{execution.id}_{task.id}'
                 is_completed = request.POST.get(task_field_name) == 'on'
                 task_exec.is_completed = is_completed
+            
+            # Processar dropdown (Sim/Não/Não se Aplica) - disponível para todas as tarefas
+            dropdown_field_name = f'dropdown_{execution.id}_{task.id}'
+            dropdown_value = request.POST.get(dropdown_field_name, '').strip()
+            if dropdown_value in ['yes', 'no', 'not_applicable']:
+                task_exec.dropdown_answer = dropdown_value
+            else:
+                task_exec.dropdown_answer = None
             
             # Pegar observações
             notes_field_name = f'notes_{execution.id}_{task.id}'
