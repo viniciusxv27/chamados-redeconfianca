@@ -536,7 +536,8 @@ class NotificationService:
                     data=extra_data
                 )
             else:
-                # OUTRAS NOTIFICAÇÕES: Enviar apenas para usuários específicos por email
+                # OUTRAS NOTIFICAÇÕES: Enviar para usuários específicos usando external_user_id
+                # O external_user_id é o ID do usuário no sistema, definido via OneSignal.login()
                 if not recipients:
                     logger.warning("OneSignal: Nenhum destinatário especificado")
                     return {
@@ -545,24 +546,24 @@ class NotificationService:
                         'sent_count': 0
                     }
                 
-                # Extrair emails dos destinatários
-                emails = [user.email for user in recipients if user.email]
+                # Extrair IDs dos usuários (external_user_ids no OneSignal)
+                external_user_ids = [str(user.id) for user in recipients]
                 
-                if not emails:
-                    logger.warning("OneSignal: Nenhum destinatário com email válido")
+                if not external_user_ids:
+                    logger.warning("OneSignal: Nenhum destinatário válido")
                     return {
                         'success': False,
-                        'error': 'Nenhum destinatário com email válido',
+                        'error': 'Nenhum destinatário válido',
                         'sent_count': 0
                     }
                 
-                logger.info(f"OneSignal: Enviando para {len(emails)} usuários específicos - {title}")
-                result = onesignal_service.send_notification(
+                logger.info(f"OneSignal: Enviando para {len(external_user_ids)} usuários específicos (external_user_ids) - {title}")
+                result = onesignal_service.send_to_external_users(
+                    external_user_ids=external_user_ids,
                     title=title,
                     message=message,
                     url=full_url,
                     icon=icon_url,
-                    emails=emails,
                     data=extra_data
                 )
             
