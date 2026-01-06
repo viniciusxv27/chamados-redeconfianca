@@ -122,7 +122,8 @@ class NotificationService:
         created_by: User = None,
         email_template: str = None,
         email_context: Dict = None,
-        respect_preferences: bool = True
+        respect_preferences: bool = True,
+        onesignal_send_to_all: bool = False
     ) -> Dict[str, Any]:
         """
         Envia notificação por múltiplos canais.
@@ -141,6 +142,7 @@ class NotificationService:
             email_template: Template customizado para email
             email_context: Contexto adicional para o email
             respect_preferences: Se True, respeita as preferências de cada usuário
+            onesignal_send_to_all: Se True, envia via OneSignal para TODOS os subscribers (usar apenas para comunicados)
             
         Returns:
             Dict com resultado de cada canal
@@ -241,7 +243,8 @@ class NotificationService:
                     action_url=action_url,
                     icon=icon,
                     extra_data=extra_data,
-                    recipients=recipients
+                    recipients=recipients,
+                    send_to_all=onesignal_send_to_all
                 )
             else:
                 results['onesignal'] = {'success': False, 'sent_count': 0, 'message': 'OneSignal não configurado'}
@@ -491,16 +494,18 @@ class NotificationService:
         action_url: str,
         icon: str,
         extra_data: Dict,
-        recipients: List[User] = None
+        recipients: List[User] = None,
+        send_to_all: bool = False
     ) -> Dict[str, Any]:
         """
-        Envia notificação via OneSignal para TODOS os subscribers.
+        Envia notificação via OneSignal.
         
-        No plano gratuito do OneSignal, as notificações são enviadas para todos
-        os usuários inscritos (Subscribed Users) ao mesmo tempo.
+        IMPORTANTE: Por padrão, envia apenas para usuários específicos por email.
+        Somente comunicados (send_to_all=True) são enviados para todos os subscribers.
         
-        O parâmetro 'recipients' é mantido para compatibilidade mas não é usado
-        para filtrar destinatários no envio - apenas para logging.
+        Args:
+            recipients: Lista de usuários destinatários (usados para extrair emails)
+            send_to_all: Se True, envia para todos os subscribers (usado apenas em comunicados)
         """
         try:
             from .onesignal_service import onesignal_service
@@ -520,19 +525,50 @@ class NotificationService:
             # Preparar ícone
             icon_url = icon if icon and icon.startswith('http') else f"{base_url}/static/images/logo.png"
             
-            # PLANO GRATUITO: Enviar para TODOS os subscribers
-            # Usar send_to_all que envia para o segmento 'Subscribed Users'
-            result = onesignal_service.send_to_all(
-                title=title,
-                message=message,
-                url=full_url,
-                icon=icon_url,
-                data=extra_data
-            )
+            # COMUNICADOS: Enviar para TODOS os subscribers
+            if send_to_all:
+                logger.info(f"OneSignal: Enviando comunicado para TODOS os subscribers - {title}")
+                result = onesignal_service.send_to_all(
+                    title=title,
+                    message=message,
+                    url=full_url,
+                    icon=icon_url,
+                    data=extra_data
+                )
+            else:
+                # OUTRAS NOTIFICAÇÕES: Enviar apenas para usuários específicos por email
+                if not recipients:
+                    logger.warning("OneSignal: Nenhum destinatário especificado")
+                    return {
+                        'success': False,
+                        'error': 'Nenhum destinatário especificado',
+                        'sent_count': 0
+                    }
+                
+                # Extrair emails dos destinatários
+                emails = [user.email for user in recipients if user.email]
+                
+                if not emails:
+                    logger.warning("OneSignal: Nenhum destinatário com email válido")
+                    return {
+                        'success': False,
+                        'error': 'Nenhum destinatário com email válido',
+                        'sent_count': 0
+                    }
+                
+                logger.info(f"OneSignal: Enviando para {len(emails)} usuários específicos - {title}")
+                result = onesignal_service.send_notification(
+                    title=title,
+                    message=message,
+                    url=full_url,
+                    icon=icon_url,
+                    emails=emails,
+                    data=extra_data
+                )
             
             if result.get('success'):
                 recipients_count = len(recipients) if recipients else 0
-                logger.info(f"OneSignal: Notificação enviada para todos os subscribers - {title} (destinatários previstos: {recipients_count})")
+                logger.info(f"OneSignal: Notificação enviada com sucesso - {title} ({recipients_count} destinatários)")
             else:
                 logger.error(f"OneSignal: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
             
@@ -841,7 +877,9 @@ class NotificationService:
             email_context={
                 'communication': communication,
                 'action_text': 'Ver Comunicado'
-            }
+            },
+            # COMUNICADOS: Enviar para todos os subscribers via OneSignal
+            onesignal_send_to_all=communication.send_to_all
         )
 
 
