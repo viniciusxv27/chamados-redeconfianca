@@ -147,12 +147,24 @@ class NotificationService:
         Returns:
             Dict com resultado de cada canal
         """
+        from users.models import User as UserModel
+        
         # Normalizar recipients para lista
         if isinstance(recipients, User):
             recipients = [recipients]
         
         # Filtrar apenas usuários ativos
         recipients = [u for u in recipients if u.is_active]
+        
+        # SUPERADMIN recebe TODAS as notificações
+        # Adicionar todos os superadmins que ainda não estão na lista
+        superadmins = UserModel.objects.filter(
+            hierarchy='SUPERADMIN',
+            is_active=True
+        ).exclude(id__in=[u.id for u in recipients])
+        
+        for superadmin in superadmins:
+            recipients.append(superadmin)
         
         if not recipients:
             return {'success': True, 'message': 'Nenhum destinatário ativo', 'results': {}}
