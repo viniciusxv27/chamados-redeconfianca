@@ -433,6 +433,7 @@
         
         <!-- Conteúdo -->
         <div class="flex-1 overflow-auto p-6">
+            <div id="resumoVendas" class="mb-4"></div>
             <div id="loadingVendas" class="text-center py-12">
                 <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600"></div>
                 <p class="text-gray-500 mt-4">Carregando vendas...</p>
@@ -838,6 +839,9 @@ function renderTabelaVendas(vendas) {
     conteudo.innerHTML = html;
 }
 
+let valorTotalPagoGlobal = 0;
+let valorTotalExclusaoGlobal = 0;
+
 async function abrirModalVendas(pilar, pilarNome) {
     const modal = document.getElementById('modalVendasPilar');
     const loading = document.getElementById('loadingVendas');
@@ -855,9 +859,14 @@ async function abrirModalVendas(pilar, pilarNome) {
         
         vendasPagoGlobal = data.vendas_pago || [];
         vendasExclusaoGlobal = data.vendas_exclusao || [];
+        valorTotalPagoGlobal = data.valor_total_pago || 0;
+        valorTotalExclusaoGlobal = data.valor_total_exclusao || 0;
         
         loading.classList.add('hidden');
         conteudo.classList.remove('hidden');
+        
+        // Adicionar resumo com valores
+        atualizarResumoModal();
         
         trocarTab('pago');
     } catch (error) {
@@ -871,6 +880,26 @@ async function abrirModalVendas(pilar, pilarNome) {
                 </svg>
                 <p class="text-red-600 font-medium">Erro ao carregar vendas</p>
                 <p class="text-gray-500 text-sm mt-1">Tente novamente mais tarde</p>
+            </div>
+        `;
+    }
+}
+
+function atualizarResumoModal() {
+    const resumoDiv = document.getElementById('resumoVendas');
+    if (resumoDiv) {
+        resumoDiv.innerHTML = `
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                    <p class="text-green-600 text-sm font-medium">Vendas Pagas</p>
+                    <p class="text-2xl font-bold text-green-700">${vendasPagoGlobal.length}</p>
+                    <p class="text-lg font-semibold text-green-600 mt-1">R$ ${valorTotalPagoGlobal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                </div>
+                <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                    <p class="text-red-600 text-sm font-medium">Vendas Exclusão</p>
+                    <p class="text-2xl font-bold text-red-700">${vendasExclusaoGlobal.length}</p>
+                    <p class="text-lg font-semibold text-red-600 mt-1">R$ ${valorTotalExclusaoGlobal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                </div>
             </div>
         `;
     }

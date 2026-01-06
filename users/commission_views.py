@@ -899,6 +899,112 @@ def get_month_names():
     }
 
 
+def fetch_iq_data(user_name):
+    """
+    Busca dados de IQ MÓVEL e IQ FIXA da planilha ÍNDICE DE QUALIDADE.
+    Sheet: ÍNDICE DE QUALIDADE
+    Usa a primeira linha como cabeçalho.
+    Coluna de busca: COLABORADOR
+    Retorna: {'iq_movel': float, 'iq_fixa': float} em percentual (ex: 0.05 = 5%)
+    """
+    cache_key = f"iq_data_{user_name.replace(' ', '_')}"
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        return cached_data
+    
+    iq_result = {'iq_movel': 0, 'iq_fixa': 0}
+    
+    def normalize_text(text):
+        if pd.isna(text):
+            return ""
+        return str(text).strip().upper()
+    
+    user_name_normalized = normalize_text(user_name)
+    
+    try:
+        # Baixar planilha de comissão
+        excel_file, error = download_excel_file(EXCEL_COMISSAO_URL, "comissao_iq")
+        if error:
+            print(f"[fetch_iq_data] Erro ao baixar planilha: {error}")
+            return iq_result
+        
+        # Ler sheet ÍNDICE DE QUALIDADE com primeira linha como cabeçalho
+        try:
+            excel_file.seek(0)
+            df = pd.read_excel(excel_file, sheet_name='ÍNDICE DE QUALIDADE', header=0, engine='openpyxl')
+            print(f"[fetch_iq_data] Colunas: {list(df.columns)}")
+            print(f"[fetch_iq_data] Total linhas: {len(df)}")
+            if len(df) > 0:
+                print(f"[fetch_iq_data] Primeira linha: {df.iloc[0].to_dict()}")
+        except Exception as e:
+            print(f"[fetch_iq_data] Erro ao ler sheet ÍNDICE DE QUALIDADE: {e}")
+            return iq_result
+        
+        # Encontrar colunas necessárias - IQ Móvel (coluna 9) e IQ Fixa (coluna 13)
+        colaborador_col = None
+        iq_movel_col = None
+        iq_fixa_col = None
+        
+        for col in df.columns:
+            col_str = str(col).strip()
+            col_upper = col_str.upper()
+            if 'COLABORADOR' in col_upper or col_upper == 'NOME':
+                colaborador_col = col
+            # Usar IQ Móvel (coluna 9) e IQ Fixa (coluna 13) - são as colunas corretas
+            # Não usar as colunas 2 e 3 que são da loja
+            elif col_str == 'IQ MÓVEL':
+                iq_movel_col = col
+            elif col_str == 'IQ FIXA':
+                iq_fixa_col = col
+        
+        print(f"[fetch_iq_data] colaborador_col={colaborador_col}, iq_movel_col={iq_movel_col}, iq_fixa_col={iq_fixa_col}")
+        
+        if colaborador_col is None:
+            print(f"[fetch_iq_data] Coluna COLABORADOR não encontrada")
+            return iq_result
+        
+        # Buscar usuário
+        for idx, row in df.iterrows():
+            row_name = normalize_text(row.get(colaborador_col, ''))
+            
+            # Match exato ou parcial
+            match = False
+            if row_name == user_name_normalized:
+                match = True
+            elif user_name_normalized in row_name or row_name in user_name_normalized:
+                match = True
+            
+            if match:
+                if iq_movel_col:
+                    val = row.get(iq_movel_col)
+                    if pd.notna(val):
+                        try:
+                            iq_result['iq_movel'] = float(val)
+                        except:
+                            pass
+                
+                if iq_fixa_col:
+                    val = row.get(iq_fixa_col)
+                    if pd.notna(val):
+                        try:
+                            iq_result['iq_fixa'] = float(val)
+                        except:
+                            pass
+                
+                print(f"[fetch_iq_data] Encontrado: {row_name}, IQ Móvel={iq_result['iq_movel']}, IQ Fixa={iq_result['iq_fixa']}")
+                break
+        
+        # Cache por 5 minutos
+        cache.set(cache_key, iq_result, 300)
+        
+        return iq_result
+        
+    except Exception as e:
+        print(f"[fetch_iq_data] Erro geral: {e}")
+        return iq_result
+
+
 def fetch_vendedores_por_filial(user_sector):
     """
     Busca todos os vendedores e suas comissões por pilar da BASE_PAGAMENTO para uma filial.
@@ -1183,13 +1289,16 @@ def fetch_vendedores_por_filial(user_sector):
         return []
 
 
-def process_commission_data(data, is_gerente=False, metas_pilar=None):
+def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=None):
     """
     Processa os dados brutos da planilha e organiza em seções.
     metas_pilar: dict com {pilar_key: {'total': x, 'pago': y, 'exclusao': z}}
+    iq_data: dict com {'iq_movel': float, 'iq_fixa': float} em percentual decimal
     """
     if metas_pilar is None:
         metas_pilar = {}
+    if iq_data is None:
+        iq_data = {'iq_movel': 0, 'iq_fixa': 0}
     
     processed = {
         'info': {
@@ -1206,7 +1315,8 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
         'aceleradores': {},
         'descontos': {},
         'totais': {},
-        'charts': {}
+        'charts': {},
+        'iq': iq_data,  # Adicionar dados de IQ
     }
     
     # Mapeamento de chave para metas_pilar
@@ -1427,15 +1537,35 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None):
             hunter_valor = processed['hunter'].get(pilar_key, 0)
             
             # Guardar a soma de comissões+bônus+alto+hunter em campo separado
-            processed['pilares'][i]['soma'] = com_valor + bonus_valor + ad_valor + hunter_valor
+            soma = com_valor + bonus_valor + ad_valor + hunter_valor
+            processed['pilares'][i]['soma'] = soma
+            
+            # Calcular soma com IQ (IQ negativo = deflator/desconto, IQ positivo = acréscimo)
+            # soma_com_iq = soma + (soma * iq_pct)
+            if pilar_key == 'movel':
+                iq_pct = iq_data.get('iq_movel', 0)
+                ajuste_iq = soma * iq_pct
+                processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
+                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição
+            elif pilar_key == 'fixa':
+                iq_pct = iq_data.get('iq_fixa', 0)
+                ajuste_iq = soma * iq_pct
+                processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
+                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição
+            else:
+                # Outros pilares não têm IQ, soma_com_iq = soma
+                processed['pilares'][i]['soma_com_iq'] = soma
+                processed['pilares'][i]['iq_pct'] = None
     
     # Calcular totais de Pago e Exclusão (soma de todos os pilares)
     total_pago = sum(p['pago'] for p in processed['pilares'])
     total_exclusao = sum(p['exclusao'] for p in processed['pilares'])
     total_soma = sum(p.get('soma', 0) for p in processed['pilares'])
+    total_soma_com_iq = sum(p.get('soma_com_iq', 0) for p in processed['pilares'])
     processed['totais']['total_pago'] = total_pago
     processed['totais']['total_exclusao'] = total_exclusao
     processed['totais']['total_pilares'] = total_soma
+    processed['totais']['total_pilares_com_iq'] = total_soma_com_iq
     
     processed['habilitados'] = {
         'pilares_67': data.get('6/7PILARES'),
@@ -1873,7 +2003,9 @@ def commission_cn_view(request):
     if result.get('success'):
         # Obter metas por pilar - CN busca por nome, Gerente busca por filial
         metas_pilar = fetch_metas_por_pilar(user_full_name, is_gerente, user_sector)
-        processed = process_commission_data(result['data'], is_gerente, metas_pilar)
+        # Buscar dados de IQ
+        iq_data = fetch_iq_data(user_full_name)
+        processed = process_commission_data(result['data'], is_gerente, metas_pilar, iq_data)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
     
@@ -1948,7 +2080,9 @@ def commission_gerente_view(request):
         print(f"[commission_gerente_view] target_name={target_name}, target_is_gerente={target_is_gerente}, target_sector={target_sector}")
         metas_pilar = fetch_metas_por_pilar(target_name, target_is_gerente, target_sector)
         print(f"[commission_gerente_view] metas_pilar retornado: {metas_pilar}")
-        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar)
+        # Buscar dados de IQ
+        iq_data = fetch_iq_data(target_name)
+        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
     
@@ -2094,7 +2228,9 @@ def commission_coordenador_view(request):
         target_name = viewing_user.get_full_name() or viewing_user.first_name
         target_sector = viewing_user.sector.name if hasattr(viewing_user, 'sector') and viewing_user.sector else None
         metas_pilar = fetch_metas_por_pilar(target_name, target_is_gerente, target_sector)
-        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar)
+        # Buscar dados de IQ
+        iq_data = fetch_iq_data(target_name)
+        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
         context['target_is_gerente'] = target_is_gerente
@@ -2145,7 +2281,9 @@ def commission_api(request):
     if result.get('success'):
         # Buscar metas por pilar - Gerente busca por filial, CN busca por nome
         metas_pilar = fetch_metas_por_pilar(user_full_name, target_is_gerente, target_sector)
-        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar)
+        # Buscar dados de IQ
+        iq_data = fetch_iq_data(user_full_name)
+        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
         return JsonResponse({
             'success': True,
             'data': processed,
@@ -2259,7 +2397,9 @@ def export_commission_excel(request):
         if result.get('success'):
             # Buscar metas por pilar - CN busca por nome
             metas_pilar = fetch_metas_por_pilar(user_full_name, False, user_sector)
-            processed = process_commission_data(result['data'], False, metas_pilar)
+            # Buscar dados de IQ
+            iq_data = fetch_iq_data(user_full_name)
+            processed = process_commission_data(result['data'], False, metas_pilar, iq_data)
             
             ws['A1'] = 'Comissionamento - ' + user_full_name
             ws['A1'].font = Font(bold=True, size=14)
@@ -2597,6 +2737,31 @@ def api_vendas_por_pilar(request):
         except Exception as e:
             print(f"[api_vendas_por_pilar] Erro ao ler EXCLUSAO: {e}")
         
+        # Calcular totais de receita
+        receita_col_name = None
+        for col in colunas:
+            if 'RECEITA' in str(col).upper():
+                receita_col_name = col
+                break
+        
+        valor_total_pago = 0
+        valor_total_exclusao = 0
+        
+        if receita_col_name:
+            for venda in vendas_pago:
+                val = venda.get(receita_col_name) or venda.get('Receita') or venda.get('RECEITA') or 0
+                try:
+                    valor_total_pago += float(val) if val else 0
+                except:
+                    pass
+            
+            for venda in vendas_exclusao:
+                val = venda.get(receita_col_name) or venda.get('Receita') or venda.get('RECEITA') or 0
+                try:
+                    valor_total_exclusao += float(val) if val else 0
+                except:
+                    pass
+        
         return JsonResponse({
             'success': True,
             'pilar': pilar,
@@ -2604,6 +2769,8 @@ def api_vendas_por_pilar(request):
             'vendas_exclusao': vendas_exclusao,
             'total_pago': len(vendas_pago),
             'total_exclusao': len(vendas_exclusao),
+            'valor_total_pago': valor_total_pago,
+            'valor_total_exclusao': valor_total_exclusao,
             'colunas': colunas,
             'debug': {
                 'user_name': user_full_name,

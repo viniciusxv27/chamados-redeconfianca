@@ -228,7 +228,9 @@
                         <th class="px-3 py-3 text-right">Alto Desemp.</th>
                         <th class="px-3 py-3 text-right">Hunter</th>
                         <th class="px-3 py-3 text-right">Id. Hunter</th>
+                        <th class="px-3 py-3 text-right bg-cyan-50 text-cyan-700">IQ</th>
                         <th class="px-3 py-3 text-right bg-primary/10 text-primary">Total</th>
+                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">Total c/ IQ</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -246,7 +248,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-cyan-600 bg-cyan-50/50">{{ data.pilares.0.iq_pct|floatformat:1 }}%</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.0.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.0.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Fixa -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="FIXA" data-pilar-nome="Fixa" title="Clique para ver vendas">
@@ -262,7 +266,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-cyan-600 bg-cyan-50/50">{{ data.pilares.1.iq_pct|floatformat:1 }}%</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.1.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.1.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Smartphone -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SMARTPHONE" data-pilar-nome="Smartphone" title="Clique para ver vendas">
@@ -278,7 +284,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.smartphone|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.2.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.2.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Eletrônicos -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="ELETRONICOS" data-pilar-nome="Eletrônicos" title="Clique para ver vendas">
@@ -294,7 +302,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.eletronicos_a|add:data.alto_desempenho.eletronicos_b|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.3.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.3.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Essenciais -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="ESSENCIAIS" data-pilar-nome="Essenciais" title="Clique para ver vendas">
@@ -310,7 +320,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.essenciais_a|add:data.alto_desempenho.essenciais_b|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.4.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.4.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Seguro -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SEGURO" data-pilar-nome="Seguro" title="Clique para ver vendas">
@@ -326,7 +338,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.seguro|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguro|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.5.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.5.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- SVA -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="SVA" data-pilar-nome="SVA" title="Clique para ver vendas">
@@ -342,7 +356,9 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.sva|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
                         <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.6.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.6.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                 </tbody>
                 <tfoot>
@@ -353,7 +369,9 @@
                         <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right text-indigo-600">-</td>
+                        <td class="px-3 py-3 text-right text-cyan-600 bg-cyan-50/50">-</td>
                         <td class="px-3 py-3 text-right text-primary bg-primary/10">R$ {{ data.totais.total_pilares|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-green-600 bg-green-100/50">R$ {{ data.totais.total_pilares_com_iq|floatformat:2 }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -1066,10 +1084,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 html += '<div class="bg-green-50 border border-green-200 rounded-xl p-4 text-center">';
                 html += '<p class="text-green-600 text-sm font-medium">Vendas Pagas</p>';
                 html += '<p class="text-2xl font-bold text-green-700">' + data.total_pago + '</p>';
+                html += '<p class="text-lg font-semibold text-green-600 mt-1">R$ ' + (data.valor_total_pago || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</p>';
                 html += '</div>';
                 html += '<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">';
                 html += '<p class="text-red-600 text-sm font-medium">Vendas Exclusão</p>';
                 html += '<p class="text-2xl font-bold text-red-700">' + data.total_exclusao + '</p>';
+                html += '<p class="text-lg font-semibold text-red-600 mt-1">R$ ' + (data.valor_total_exclusao || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</p>';
                 html += '</div>';
                 html += '</div>';
                 
