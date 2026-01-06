@@ -30,10 +30,11 @@ class OneSignalService:
     def __init__(self):
         self.app_id = getattr(settings, 'ONESIGNAL_APP_ID', '')
         self.rest_api_key = getattr(settings, 'ONESIGNAL_REST_API_KEY', '')
-        self.enabled = bool(self.app_id and self.rest_api_key)
+        # TEMPORARIAMENTE DESABILITADO - remover False para reativar
+        self.enabled = False  # bool(self.app_id and self.rest_api_key)
         
         if not self.enabled:
-            logger.warning("OneSignal não configurado. Defina ONESIGNAL_APP_ID e ONESIGNAL_REST_API_KEY no settings.py")
+            logger.warning("OneSignal DESABILITADO temporariamente")
     
     def _get_headers(self) -> Dict[str, str]:
         """Retorna headers para requisições à API do OneSignal"""
