@@ -237,12 +237,12 @@
                             <div class="flex flex-wrap gap-2 mb-3">
                                 <label class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg cursor-pointer hover:bg-purple-700 transition-colors">
                                     <i class="fas fa-camera"></i> Imagens
-                                    <input type="file" accept="image/*" multiple class="hidden evidence-upload-input" 
+                                    <input type="file" accept="image/*" capture="environment" multiple class="hidden evidence-upload-input" 
                                            data-task-exec-id="{{ task_exec.id }}" data-type="images">
                                 </label>
                                 <label class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg cursor-pointer hover:bg-indigo-700 transition-colors">
                                     <i class="fas fa-video"></i> Vídeos
-                                    <input type="file" accept="video/*" multiple class="hidden evidence-upload-input" 
+                                    <input type="file" accept="video/*" capture="environment" multiple class="hidden evidence-upload-input" 
                                            data-task-exec-id="{{ task_exec.id }}" data-type="videos">
                                 </label>
                                 <label class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg cursor-pointer hover:bg-green-700 transition-colors">
