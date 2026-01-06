@@ -975,6 +975,145 @@ def api_onesignal_config(request):
 
 @login_required
 @require_POST
+def api_onesignal_register_player(request):
+    """
+    API para registrar/atualizar o player_id do OneSignal vinculado ao usuário logado.
+    Chamado pelo frontend quando o usuário se inscreve nas notificações push.
+    
+    Os dados registrados são:
+    - player_id: ID único do dispositivo no OneSignal
+    - external_user_id: ID do usuário no sistema (para notificações direcionadas)
+    - email: Email do usuário (para identificação e notificações por email)
+    - phone: Telefone do usuário (para SMS, se configurado)
+    """
+    from .models import OneSignalPlayer
+    
+    try:
+        data = json.loads(request.body)
+        player_id = data.get('player_id', '').strip()
+        device_type = data.get('device_type', 'web')
+        browser = data.get('browser', '')
+        
+        if not player_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'player_id é obrigatório'
+            }, status=400)
+        
+        # Preparar dados do usuário
+        user = request.user
+        external_user_id = str(user.id)
+        user_email = user.email or ''
+        user_phone = user.phone or ''
+        
+        # Formatar telefone no padrão E.164 se disponível
+        if user_phone:
+            phone_digits = ''.join(filter(str.isdigit, user_phone))
+            if len(phone_digits) >= 10:
+                user_phone = f"+55{phone_digits}" if not phone_digits.startswith('55') else f"+{phone_digits}"
+            else:
+                user_phone = ''
+        
+        # Verificar se já existe um registro com este player_id
+        existing_player = OneSignalPlayer.objects.filter(player_id=player_id).first()
+        
+        if existing_player:
+            # Atualizar registro existente
+            if existing_player.user != user:
+                # Player_id mudou de dono - atualizar para o novo usuário
+                existing_player.user = user
+            existing_player.external_user_id = external_user_id
+            existing_player.email = user_email
+            existing_player.phone = user_phone
+            existing_player.device_type = device_type
+            existing_player.browser = browser
+            existing_player.is_active = True
+            existing_player.extra_data = {
+                'registered_at': timezone.now().isoformat(),
+                'user_name': user.get_full_name(),
+                'hierarchy': user.hierarchy,
+                'sector': user.sector.name if user.sector else None
+            }
+            existing_player.save()
+            
+            logger.info(f"OneSignal player updated: {player_id} for user {user.id} ({user.email})")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Player atualizado com sucesso',
+                'player_id': player_id,
+                'external_user_id': external_user_id,
+                'updated': True
+            })
+        else:
+            # Verificar se o usuário já tem um registro pendente
+            pending_player = OneSignalPlayer.objects.filter(
+                user=user,
+                player_id__startswith='pending_'
+            ).first()
+            
+            if pending_player:
+                # Atualizar o registro pendente com o player_id real
+                pending_player.player_id = player_id
+                pending_player.external_user_id = external_user_id
+                pending_player.email = user_email
+                pending_player.phone = user_phone
+                pending_player.device_type = device_type
+                pending_player.browser = browser
+                pending_player.is_active = True
+                pending_player.extra_data = {
+                    'registered_at': timezone.now().isoformat(),
+                    'user_name': user.get_full_name(),
+                    'hierarchy': user.hierarchy,
+                    'sector': user.sector.name if user.sector else None
+                }
+                pending_player.save()
+                
+                logger.info(f"OneSignal pending player activated: {player_id} for user {user.id} ({user.email})")
+            else:
+                # Criar novo registro
+                OneSignalPlayer.objects.create(
+                    user=user,
+                    player_id=player_id,
+                    external_user_id=external_user_id,
+                    email=user_email,
+                    phone=user_phone,
+                    device_type=device_type,
+                    browser=browser,
+                    is_active=True,
+                    extra_data={
+                        'registered_at': timezone.now().isoformat(),
+                        'user_name': user.get_full_name(),
+                        'hierarchy': user.hierarchy,
+                        'sector': user.sector.name if user.sector else None
+                    }
+                )
+                
+                logger.info(f"OneSignal player created: {player_id} for user {user.id} ({user.email})")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Player registrado com sucesso',
+                'player_id': player_id,
+                'external_user_id': external_user_id,
+                'created': True
+            })
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'JSON inválido'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error registering OneSignal player: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
 def onesignal_sync_users(request):
     """Sincroniza usuários ativos com OneSignal (cria registros pendentes)"""
     if request.user.hierarchy != 'SUPERADMIN':

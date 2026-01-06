@@ -165,6 +165,9 @@ class NotificationService:
         # Definir canais padrão
         if channels is None:
             channels = [NotificationChannel.IN_APP, NotificationChannel.PUSH]
+            # Adicionar OneSignal como canal padrão para notificações push direcionadas
+            if self.onesignal_enabled:
+                channels.append(NotificationChannel.ONESIGNAL)
             # Adicionar email apenas para notificações importantes
             if priority in ['ALTA', 'URGENTE']:
                 channels.append(NotificationChannel.EMAIL)
@@ -490,7 +493,18 @@ class NotificationService:
         extra_data: Dict,
         recipients: List[User] = None
     ) -> Dict[str, Any]:
-        """Envia notificação via OneSignal para assinantes web/mobile"""
+        """
+        Envia notificação via OneSignal para usuários específicos.
+        
+        IMPORTANTE: As notificações são enviadas APENAS para os usuários
+        especificados em 'recipients'. Isso permite enviar notificações
+        direcionadas para usuários específicos (ex: responsável de um chamado,
+        criador do chamado, etc.)
+        
+        Se 'recipients' for None ou vazio, a notificação NÃO será enviada
+        para todos, pois isso geraria spam. Use send_to_all explicitamente
+        se quiser enviar para todos.
+        """
         try:
             from .onesignal_service import onesignal_service
             
@@ -509,33 +523,43 @@ class NotificationService:
             # Preparar ícone
             icon_url = icon if icon and icon.startswith('http') else f"{base_url}/static/images/logo.png"
             
-            # Se há destinatários específicos, enviar para external_user_ids
+            # ENVIO DIRECIONADO: Sempre enviar para usuários específicos
             if recipients and len(recipients) > 0:
-                external_user_ids = [str(user.id) for user in recipients]
-                result = onesignal_service.send_to_external_users(
+                # Filtrar apenas usuários ativos
+                active_recipients = [user for user in recipients if user.is_active]
+                
+                if not active_recipients:
+                    logger.info("OneSignal: Nenhum destinatário ativo para enviar notificação")
+                    return {
+                        'success': True,
+                        'message': 'Nenhum destinatário ativo',
+                        'sent_count': 0
+                    }
+                
+                # Usar o novo método send_to_users que envia para external_user_ids
+                result = onesignal_service.send_to_users(
+                    users=active_recipients,
                     title=title,
                     message=message,
-                    external_user_ids=external_user_ids,
                     url=full_url,
                     icon=icon_url,
                     data=extra_data
                 )
+                
+                if result.get('success'):
+                    logger.info(f"OneSignal: Notificação enviada para {len(active_recipients)} usuários - {title}")
+                else:
+                    logger.error(f"OneSignal: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
+                
+                return result
             else:
-                # Enviar para todos os assinantes
-                result = onesignal_service.send_to_all(
-                    title=title,
-                    message=message,
-                    url=full_url,
-                    icon=icon_url,
-                    data=extra_data
-                )
-            
-            if result.get('success'):
-                logger.info(f"OneSignal: Notificação enviada - {title}")
-            else:
-                logger.error(f"OneSignal: Erro ao enviar - {result.get('error', 'Erro desconhecido')}")
-            
-            return result
+                # Sem destinatários específicos - não enviar para evitar spam
+                logger.warning("OneSignal: Nenhum destinatário especificado, notificação não enviada")
+                return {
+                    'success': False,
+                    'error': 'Nenhum destinatário especificado. Use send_to_all para enviar para todos.',
+                    'sent_count': 0
+                }
             
         except Exception as e:
             logger.error(f"OneSignal: Erro inesperado - {str(e)}")

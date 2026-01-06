@@ -84,13 +84,15 @@ class OneSignalService:
         segment: str = None,
         player_ids: List[str] = None,
         external_user_ids: List[str] = None,
+        emails: List[str] = None,
         data: Dict = None,
         buttons: List[Dict] = None,
         ttl: int = 86400,
         priority: int = 10,
         chrome_web_icon: str = None,
         chrome_web_badge: str = None,
-        sent_by=None
+        sent_by=None,
+        target_channel: str = 'push'
     ) -> Dict[str, Any]:
         """
         Envia notificação push via OneSignal
@@ -103,7 +105,8 @@ class OneSignalService:
             image: URL de imagem grande (opcional)
             segment: Segmento de usuários (ex: 'Subscribed Users', 'Active Users')
             player_ids: Lista de Player IDs específicos (opcional)
-            external_user_ids: Lista de External User IDs (opcional)
+            external_user_ids: Lista de External User IDs do sistema (opcional)
+            emails: Lista de emails para envio direcionado (opcional)
             data: Dados extras para a notificação (opcional)
             buttons: Lista de botões de ação (opcional)
             ttl: Time to live em segundos (padrão: 24h)
@@ -111,6 +114,7 @@ class OneSignalService:
             chrome_web_icon: Ícone específico para Chrome
             chrome_web_badge: Badge para Chrome
             sent_by: Usuário que enviou a notificação
+            target_channel: Canal alvo ('push', 'email', ou None para ambos)
             
         Returns:
             Dict com resultado do envio
@@ -142,8 +146,56 @@ class OneSignalService:
                 'isSafari': True,
             }
             
-            # Sempre enviar para todos os inscritos (Subscribed Users)
-            payload['included_segments'] = ['Subscribed Users']
+            # Definir canal alvo
+            if target_channel:
+                payload['target_channel'] = target_channel
+            
+            # =====================================================
+            # LÓGICA DE TARGETING - Ordem de prioridade:
+            # 1. external_user_ids (IDs do sistema) - mais específico
+            # 2. emails - envio por email
+            # 3. player_ids - IDs do OneSignal
+            # 4. segment - grupo de usuários
+            # 5. Todos os inscritos - padrão
+            # =====================================================
+            
+            targeting_method = 'segment'  # Padrão
+            
+            if external_user_ids and len(external_user_ids) > 0:
+                # Usar include_aliases para enviar para external_user_ids específicos
+                # Esta é a forma correta na API v16 do OneSignal
+                payload['include_aliases'] = {
+                    'external_id': [str(uid) for uid in external_user_ids]
+                }
+                payload['target_channel'] = 'push'
+                targeting_method = 'external_user_ids'
+                logger.info(f"OneSignal: Targeting {len(external_user_ids)} external_user_ids")
+                
+            elif emails and len(emails) > 0:
+                # Enviar para emails específicos
+                payload['include_aliases'] = {
+                    'email': emails
+                }
+                targeting_method = 'emails'
+                logger.info(f"OneSignal: Targeting {len(emails)} emails")
+                
+            elif player_ids and len(player_ids) > 0:
+                # Enviar para player_ids específicos
+                payload['include_player_ids'] = player_ids
+                targeting_method = 'player_ids'
+                logger.info(f"OneSignal: Targeting {len(player_ids)} player_ids")
+                
+            elif segment:
+                # Enviar para um segmento específico
+                payload['included_segments'] = [segment]
+                targeting_method = 'segment'
+                logger.info(f"OneSignal: Targeting segment '{segment}'")
+                
+            else:
+                # Enviar para todos os inscritos (padrão)
+                payload['included_segments'] = ['Subscribed Users']
+                targeting_method = 'all_subscribers'
+                logger.info("OneSignal: Targeting all Subscribed Users")
             
             # Configurar ícones
             base_url = getattr(settings, 'BASE_URL', 'https://chamados.redeconfianca.com.br')
@@ -313,13 +365,95 @@ class OneSignalService:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Envia notificação para External User IDs (IDs do seu sistema)
+        Envia notificação para External User IDs (IDs do seu sistema).
+        Os external_user_ids devem corresponder aos IDs configurados via OneSignal.login()
+        no frontend.
         """
+        if not external_user_ids:
+            return {
+                'success': False,
+                'error': 'Nenhum external_user_id fornecido',
+                'sent_count': 0
+            }
+        
         return self.send_notification(
             title=title,
             message=message,
             url=url,
             external_user_ids=external_user_ids,
+            **kwargs
+        )
+    
+    def send_to_emails(
+        self,
+        emails: List[str],
+        title: str,
+        message: str,
+        url: str = '/',
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Envia notificação para emails específicos.
+        Os emails devem corresponder aos configurados via OneSignal.User.addEmail()
+        no frontend.
+        """
+        if not emails:
+            return {
+                'success': False,
+                'error': 'Nenhum email fornecido',
+                'sent_count': 0
+            }
+        
+        return self.send_notification(
+            title=title,
+            message=message,
+            url=url,
+            emails=emails,
+            **kwargs
+        )
+    
+    def send_to_users(
+        self,
+        users: List,
+        title: str,
+        message: str,
+        url: str = '/',
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Envia notificação para uma lista de usuários do Django.
+        Usa o ID do usuário como external_user_id.
+        
+        Args:
+            users: Lista de objetos User do Django
+            title: Título da notificação
+            message: Corpo da mensagem
+            url: URL de destino
+        """
+        if not users:
+            return {
+                'success': False,
+                'error': 'Nenhum usuário fornecido',
+                'sent_count': 0
+            }
+        
+        # Extrair IDs dos usuários
+        external_user_ids = [str(user.id) for user in users if user.is_active]
+        
+        if not external_user_ids:
+            return {
+                'success': False,
+                'error': 'Nenhum usuário ativo fornecido',
+                'sent_count': 0
+            }
+        
+        logger.info(f"OneSignal: Sending notification to {len(external_user_ids)} users: {external_user_ids}")
+        
+        return self.send_to_external_users(
+            external_user_ids=external_user_ids,
+            title=title,
+            message=message,
+            url=url,
             **kwargs
         )
     

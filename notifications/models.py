@@ -376,7 +376,10 @@ class NotificationPreference(models.Model):
 class OneSignalPlayer(models.Model):
     """
     Modelo para vincular Player IDs do OneSignal a usuários do sistema.
-    Permite enviar notificações para usuários específicos.
+    Permite enviar notificações para usuários específicos através de:
+    - external_user_id (ID do usuário no sistema)
+    - email (endereço de email do usuário)
+    - phone (número de telefone do usuário)
     """
     
     user = models.ForeignKey(
@@ -390,7 +393,27 @@ class OneSignalPlayer(models.Model):
     player_id = models.CharField(
         max_length=255,
         unique=True,
-        verbose_name="Player ID OneSignal"
+        verbose_name="Player ID OneSignal",
+        help_text="ID único do dispositivo no OneSignal"
+    )
+    
+    # Informações de identificação para notificações direcionadas
+    external_user_id = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="External User ID",
+        help_text="ID do usuário no sistema (usado via OneSignal.login())"
+    )
+    email = models.EmailField(
+        blank=True,
+        verbose_name="Email",
+        help_text="Email registrado no OneSignal para notificações"
+    )
+    phone = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="Telefone",
+        help_text="Telefone registrado no OneSignal (formato E.164)"
     )
     
     # Informações do dispositivo
@@ -427,6 +450,16 @@ class OneSignalPlayer(models.Model):
         if self.user:
             return f"{self.user.get_full_name()} - {self.player_id[:20]}..."
         return f"Anônimo - {self.player_id[:20]}..."
+    
+    def save(self, *args, **kwargs):
+        # Sincronizar external_user_id, email e telefone com o usuário
+        if self.user:
+            self.external_user_id = str(self.user.id)
+            if not self.email and self.user.email:
+                self.email = self.user.email
+            if not self.phone and self.user.phone:
+                self.phone = self.user.phone
+        super().save(*args, **kwargs)
 
 
 class OneSignalNotificationLog(models.Model):

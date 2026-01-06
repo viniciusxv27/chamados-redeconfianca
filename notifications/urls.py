@@ -40,6 +40,7 @@ urlpatterns = [
     path('onesignal/sync-users/', views.onesignal_sync_users, name='onesignal_sync_users'),
     path('onesignal/debug/', views.onesignal_debug, name='onesignal_debug'),
     path('api/onesignal/config/', views.api_onesignal_config, name='api_onesignal_config'),
+    path('api/onesignal/register-player/', views.api_onesignal_register_player, name='api_onesignal_register_player'),
     
     # Legacy Truepush Routes (redirect to OneSignal)
     path('truepush/', views.truepush_dashboard, name='truepush_dashboard'),

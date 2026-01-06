@@ -1435,6 +1435,87 @@
                                 });
                                 console.log('OneSignal initialized successfully');
                                 
+                                // =====================================================
+                                // VINCULAÇÃO DO USUÁRIO LOGADO COM ONESIGNAL
+                                // Registrar external_user_id, email e telefone para
+                                // permitir notificações direcionadas a usuários específicos
+                                // =====================================================
+                                {% if user.is_authenticated %}
+                                try {
+                                    // Definir External User ID (ID único do usuário no sistema)
+                                    await OneSignal.login("{{ user.id }}");
+                                    console.log('OneSignal: External User ID set to {{ user.id }}');
+                                    
+                                    // Definir Email do usuário para notificações por email e identificação
+                                    {% if user.email %}
+                                    await OneSignal.User.addEmail("{{ user.email }}");
+                                    console.log('OneSignal: Email set to {{ user.email }}');
+                                    {% endif %}
+                                    
+                                    // Definir Telefone do usuário (se disponível)
+                                    {% if user.phone %}
+                                    // Formato E.164: +55 para Brasil + número sem espaços
+                                    const phoneNumber = "{{ user.phone }}".replace(/\D/g, '');
+                                    if (phoneNumber.length >= 10) {
+                                        const formattedPhone = phoneNumber.startsWith('55') ? '+' + phoneNumber : '+55' + phoneNumber;
+                                        await OneSignal.User.addSms(formattedPhone);
+                                        console.log('OneSignal: Phone set to', formattedPhone);
+                                    }
+                                    {% endif %}
+                                    
+                                    // Adicionar tags para segmentação
+                                    await OneSignal.User.addTags({
+                                        'user_id': '{{ user.id }}',
+                                        'user_email': '{{ user.email }}',
+                                        'user_name': '{{ user.first_name }} {{ user.last_name }}',
+                                        'hierarchy': '{{ user.hierarchy }}',
+                                        {% if user.sector %}'sector_id': '{{ user.sector.id }}',{% endif %}
+                                        {% if user.sector %}'sector_name': '{{ user.sector.name }}',{% endif %}
+                                    });
+                                    console.log('OneSignal: User tags set');
+                                    
+                                    // Registrar player_id no backend quando inscrito
+                                    const subscription = OneSignal.User.PushSubscription;
+                                    if (subscription && subscription.id) {
+                                        registerPlayerIdInBackend(subscription.id);
+                                    }
+                                    
+                                    // Escutar mudanças na inscrição para registrar no backend
+                                    OneSignal.User.PushSubscription.addEventListener('change', function(event) {
+                                        console.log('OneSignal subscription changed:', event);
+                                        if (event.current && event.current.id) {
+                                            registerPlayerIdInBackend(event.current.id);
+                                        }
+                                    });
+                                    
+                                } catch(e) {
+                                    console.error('OneSignal: Error setting user data:', e);
+                                }
+                                {% endif %}
+                                
+                                // Função para registrar player_id no backend
+                                async function registerPlayerIdInBackend(playerId) {
+                                    if (!playerId) return;
+                                    try {
+                                        const response = await fetch('/notifications/api/onesignal/register-player/', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-CSRFToken': '{{ csrf_token }}'
+                                            },
+                                            body: JSON.stringify({
+                                                player_id: playerId,
+                                                device_type: 'web',
+                                                browser: navigator.userAgent
+                                            })
+                                        });
+                                        const result = await response.json();
+                                        console.log('OneSignal: Player registered in backend:', result);
+                                    } catch(e) {
+                                        console.error('OneSignal: Error registering player:', e);
+                                    }
+                                }
+                                
                                 // Expor função global para solicitar permissão
                                 window.requestPushPermission = function() {
                                     OneSignal.Slidedown.promptPush()
