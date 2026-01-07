@@ -59,7 +59,6 @@ INSTALLED_APPS = [
     'checklists',  # Sistema de checklists
     'benefits',  # Clube de Benefícios
     'knowledge_trails',  # Trilhas de Conhecimento
-    'betting',  # Confiança BET - Sistema de Apostas
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

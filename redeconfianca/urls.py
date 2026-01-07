@@ -109,7 +109,6 @@ urlpatterns = [
     path('checklists/', include('checklists.urls')),  # Sistema de checklists
     path('benefits/', include('benefits.urls')),  # Clube de Benefícios
     path('trilhas/', include('knowledge_trails.urls')),  # Trilhas de Conhecimento
-    path('bet/', include('betting.urls')),  # Confiança BET - Sistema de Apostas
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training

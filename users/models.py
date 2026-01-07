@@ -18,7 +18,7 @@ def upload_sector_team_logo(instance, filename):
     from django.utils import timezone
     ext = filename.split('.')[-1]
     new_filename = f"sector_{instance.id or 'new'}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
-    return os.path.join('betting', 'team_logos', new_filename)
+    return os.path.join('sectors', 'team_logos', new_filename)
 
 
 class Sector(models.Model):
