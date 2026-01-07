@@ -196,10 +196,34 @@
                     </table>
                 </div>
                 
-                <!-- Id. Hunter -->
-                {% if pilar.habilitado %}
+                <!-- Hunter ID -->
+                {% if pilar.nome == 'Móvel' and data.bonus_hunter.movel %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
-                    {{ pilar.habilitado }}
+                    {{ data.bonus_hunter.movel|default:"-" }}
+                </span>
+                {% elif pilar.nome == 'Fixa' and data.bonus_hunter.fixa %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                    {{ data.bonus_hunter.fixa|default:"-" }}
+                </span>
+                {% elif pilar.nome == 'Smartphone' and data.bonus_hunter.smartphone %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                    {{ data.bonus_hunter.smartphone|default:"-" }}
+                </span>
+                {% elif pilar.nome == 'Eletrônicos' and data.bonus_hunter.eletronicos %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                    {{ data.bonus_hunter.eletronicos|default:"-" }}
+                </span>
+                {% elif pilar.nome == 'Essenciais' and data.bonus_hunter.essenciais %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                    {{ data.bonus_hunter.essenciais|default:"-" }}
+                </span>
+                {% elif pilar.nome == 'Seguro' and data.bonus_hunter.seguro %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                    {{ data.bonus_hunter.seguro|default:"-" }}
+                </span>
+                {% elif pilar.nome == 'SVA' and data.bonus_hunter.sva %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                    {{ data.bonus_hunter.sva|default:"-" }}
                 </span>
                 {% endif %}
             </div>

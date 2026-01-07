@@ -30,13 +30,15 @@ from openpyxl.utils import get_column_letter
 # ============================================================================
 
 # Planilha de Comissionamento
-EXCEL_COMISSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQDiTJg7g9b_R6wn6uXndz3UAXzjm8r7m27co8LHPJ6vyFQ"
+EXCEL_COMISSAO_URL = "https://onedrive.live.com/:x:/g/personal/871EE1819C7E2FAA/IQALTIcHLJT7QKs8WYSVKhXUAQL9rlAGNdHXBmRbGvz5rAc?resid=871EE1819C7E2FAA!s07874c0b942c40fbab3c5984952a15d4&ithint=file%2Cxlsx&e=o3L8zR&migratedtospo=true&redeem=aHR0cHM6Ly8xZHJ2Lm1zL3gvYy84NzFlZTE4MTljN2UyZmFhL0lRQUxUSWNITEpUN1FLczhXWVNWS2hYVUFRTDlybEFHTmRIWEJtUmJHdno1ckFjP2U9bzNMOHpS"
 
 # Planilha de Vendas e Metas
 EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URSLAQ5r634qBo9-GicO2D8ZfmY"
 
 # Planilha BASE_PAGAMENTO (Pago e Exclusão por pilar)
-EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBezFFjFizLR4rR-OJxo4pxAQfwwbhlrdiqaS5UjY75wyo"
+EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBHZkNccF89Tb0x1dXfoLhiAT8Q5C_fzHlIyUnc2L2FJVs?e=vAO4OX"
+
+EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQDcrf36IbM3RK0W87NmWMZLAW9AC5B7xV2vudAMuhXyOZ4?e=HO6Z1O"
 
 # Nome das sheets na planilha de comissionamento
 SHEET_GERENTE = "REMUNERAÇÃO GERENTE"
@@ -507,13 +509,13 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     print(f"[fetch_metas_por_pilar] user_sector_normalized={user_sector_normalized}")
     
     try:
-        # Baixar planilha BASE_PAGAMENTO
+        # Baixar planilha BASE_PAGAMENTO (apenas para dados de pagamento)
         excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
         if error:
             print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_PAGAMENTO: {error}")
             return metas
         
-        # Ler a sheet "Planilha1"
+        # Ler a sheet "Planilha1" da BASE_PAGAMENTO
         try:
             excel_file.seek(0)
             df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
@@ -602,31 +604,42 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                             pass
         
         # =====================================================
-        # PROCESSAR SHEET DE EXCLUSÃO
+        # PROCESSAR PLANILHA DE EXCLUSÃO (EXCEL_BASE_EXCLUSAO_URL)
         # =====================================================
         try:
-            excel_file.seek(0)
-            df_exclusao = pd.read_excel(excel_file, sheet_name='EXCLUSAO', engine='openpyxl')
-            print(f"[fetch_metas_por_pilar] Colunas da sheet EXCLUSÃO: {list(df_exclusao.columns)}")
-            print(f"[fetch_metas_por_pilar] Total de linhas EXCLUSÃO: {len(df_exclusao)}")
+            excel_file_exclusao, error_exclusao = download_excel_file(EXCEL_BASE_EXCLUSAO_URL, "base_exclusao")
+            if error_exclusao:
+                print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_EXCLUSAO: {error_exclusao}")
+                # Continuar sem dados de exclusão
+                df_exclusao = None
+            else:
+                excel_file_exclusao.seek(0)
+                df_exclusao = pd.read_excel(excel_file_exclusao, sheet_name='Planilha1', engine='openpyxl')
+                print(f"[fetch_metas_por_pilar] Colunas da BASE_EXCLUSAO: {list(df_exclusao.columns)}")
+                print(f"[fetch_metas_por_pilar] Total de linhas EXCLUSÃO: {len(df_exclusao)}")
             
-            # Encontrar colunas na sheet de exclusão
-            filial_col_exc = None
-            receita_col_exc = None
-            pilar_col_exc = None
+            if df_exclusao is not None:
+                # Encontrar colunas na planilha de exclusão
+                filial_col_exc = None
+                receita_col_exc = None
+                pilar_col_exc = None
+                
+                for col in df_exclusao.columns:
+                    col_upper = str(col).strip().upper()
+                    if col_upper == 'FILIAL':
+                        filial_col_exc = col
+                    elif col_upper == 'RECEITA':
+                        receita_col_exc = col
+                    elif col_upper == 'PILAR':
+                        pilar_col_exc = col
+                
+                print(f"[fetch_metas_por_pilar] EXCLUSÃO - filial_col={filial_col_exc}, receita_col={receita_col_exc}, pilar_col={pilar_col_exc}")
+            else:
+                filial_col_exc = None
+                receita_col_exc = None
+                pilar_col_exc = None
             
-            for col in df_exclusao.columns:
-                col_upper = str(col).strip().upper()
-                if col_upper == 'FILIAL':
-                    filial_col_exc = col
-                elif col_upper == 'RECEITA':
-                    receita_col_exc = col
-                elif col_upper == 'PILAR':
-                    pilar_col_exc = col
-            
-            print(f"[fetch_metas_por_pilar] EXCLUSÃO - filial_col={filial_col_exc}, receita_col={receita_col_exc}, pilar_col={pilar_col_exc}")
-            
-            if filial_col_exc and receita_col_exc and pilar_col_exc:
+            if filial_col_exc and receita_col_exc and pilar_col_exc and df_exclusao is not None:
                 # Debug: mostrar soma por pilar para SERRA SEDE na sheet de exclusão
                 df_exc_serra = df_exclusao[df_exclusao[filial_col_exc].astype(str).str.strip().str.upper() == user_sector_normalized]
                 print(f"[DEBUG EXCLUSÃO] Linhas com Filial '{user_sector_normalized}': {len(df_exc_serra)}")
@@ -637,12 +650,30 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                     count = len(df_pilar)
                     print(f"[DEBUG EXCLUSÃO {user_sector_normalized}] Pilar={pilar_nome}, Qtd={count}, Soma Receita={soma}")
                 
+                # Encontrar coluna vendedor para filtro de CN
+                vendedor_col_exc = None
+                for col in df_exclusao.columns:
+                    col_upper = str(col).strip().upper()
+                    if col_upper == 'VENDEDOR':
+                        vendedor_col_exc = col
+                        break
+                
                 # Processar cada linha da sheet de exclusão
                 for idx, row in df_exclusao.iterrows():
-                    row_filial = str(row.get(filial_col_exc, '')).strip().upper()
+                    # Verificar filtro (Filial para gerente, Vendedor para CN)
+                    match = False
                     
-                    # Comparação EXATA
-                    if row_filial == user_sector_normalized:
+                    if is_gerente and filial_col_exc:
+                        row_filial = str(row.get(filial_col_exc, '')).strip().upper()
+                        # Comparação EXATA
+                        match = (row_filial == user_sector_normalized)
+                    elif not is_gerente and vendedor_col_exc:
+                        row_vendedor = normalize_text(row.get(vendedor_col_exc, ''))
+                        match = (row_vendedor == user_name_normalized or 
+                                user_name_normalized in row_vendedor or 
+                                row_vendedor in user_name_normalized)
+                    
+                    if match:
                         pilar_val = normalize_text(row.get(pilar_col_exc, ''))
                         
                         # Mapear para chave do pilar
@@ -661,10 +692,10 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                                 except (ValueError, TypeError):
                                     pass
             else:
-                print(f"[fetch_metas_por_pilar] AVISO: Colunas obrigatórias não encontradas na sheet EXCLUSÃO")
+                print(f"[fetch_metas_por_pilar] AVISO: Colunas obrigatórias não encontradas na planilha EXCLUSÃO ou planilha não disponível")
                 
         except Exception as e:
-            print(f"[fetch_metas_por_pilar] Erro ao ler sheet EXCLUSÃO: {e}")
+            print(f"[fetch_metas_por_pilar] Erro ao processar planilha EXCLUSÃO: {e}")
         
         # Calcular totais
         total_geral_pago = 0
@@ -850,11 +881,11 @@ def convert_percentage(value):
 def get_month_names():
     """
     Retorna os nomes dos meses M1, M2, M3 baseado no mês atual.
-    Também retorna o mês de referência (3 meses atrás).
+    Também retorna o mês de referência (2 meses atrás).
     Para os atingimentos por pilar:
-    - pct_1 (último): 3 meses atrás
-    - pct_2 (penúltimo): 4 meses atrás
-    - pct_3 (antepenúltimo): 5 meses atrás
+    - pct_1 (último): 2 meses atrás
+    - pct_2 (penúltimo): 3 meses atrás
+    - pct_3 (antepenúltimo): 4 meses atrás
     """
     from datetime import datetime
     from dateutil.relativedelta import relativedelta
@@ -867,15 +898,15 @@ def get_month_names():
     
     hoje = datetime.now()
     
-    # Mês de referência: 3 meses atrás
-    data_referencia = hoje - relativedelta(months=3)
+    # Mês de referência: 2 meses atrás
+    data_referencia = hoje - relativedelta(months=2)
     mes_referencia = meses_pt[data_referencia.month]
     ano_referencia = data_referencia.year
     
     # Meses para os atingimentos (pct_1, pct_2, pct_3)
-    data_pct_1 = hoje - relativedelta(months=3)  # Último: 3 meses atrás
-    data_pct_2 = hoje - relativedelta(months=4)  # Penúltimo: 4 meses atrás
-    data_pct_3 = hoje - relativedelta(months=5)  # Antepenúltimo: 5 meses atrás
+    data_pct_1 = hoje - relativedelta(months=2)  # Último: 2 meses atrás
+    data_pct_2 = hoje - relativedelta(months=3)  # Penúltimo: 3 meses atrás
+    data_pct_3 = hoje - relativedelta(months=4)  # Antepenúltimo: 4 meses atrás
     
     # Meses antigos para gráficos (mantendo compatibilidade)
     def get_month_back(months_back):
@@ -951,12 +982,17 @@ def fetch_iq_data(user_name):
             col_upper = col_str.upper()
             if 'COLABORADOR' in col_upper or col_upper == 'NOME':
                 colaborador_col = col
+            # Buscar colunas IQ de forma flexível (pode ter espaços, acentos diferentes, etc)
             # Usar IQ Móvel (coluna 9) e IQ Fixa (coluna 13) - são as colunas corretas
             # Não usar as colunas 2 e 3 que são da loja
-            elif col_str == 'IQ MÓVEL':
-                iq_movel_col = col
-            elif col_str == 'IQ FIXA':
-                iq_fixa_col = col
+            elif 'IQ' in col_upper and ('MOVEL' in col_upper or 'MÓVEL' in col_upper):
+                # Verificar se não é da loja (evitar colunas 2 e 3)
+                if not iq_movel_col or ('LOJA' not in col_upper and 'PDV' not in col_upper):
+                    iq_movel_col = col
+            elif 'IQ' in col_upper and 'FIXA' in col_upper:
+                # Verificar se não é da loja (evitar colunas 2 e 3)
+                if not iq_fixa_col or ('LOJA' not in col_upper and 'PDV' not in col_upper):
+                    iq_fixa_col = col
         
         print(f"[fetch_iq_data] colaborador_col={colaborador_col}, iq_movel_col={iq_movel_col}, iq_fixa_col={iq_fixa_col}")
         
@@ -1323,10 +1359,10 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     pilar_to_meta_key = {
         'MOVEL': 'movel',
         'FIXA': 'fixa',
-        'SMART': 'smartphone',
+        'SMARTP': 'smartphone',
         'ELETRO': 'eletronicos',
         'ESSEN': 'essenciais',
-        'SEG': 'seguro',
+        'SEGURO': 'seguro',
         'SVA': 'sva',
     }
     
@@ -1345,9 +1381,35 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         key = pilar['key']
         cart_key = f'ATING_CART_{key}' if is_gerente else f'ATING_{key}_PDV'
         
-        pct_3_raw = safe_float(data.get(f'%ATING_{key}_3'))
-        pct_2_raw = safe_float(data.get(f'%ATING_{key}_2'))
-        pct_1_raw = safe_float(data.get(f'%ATING_{key}_1'))
+        # Buscar atingimentos - tentar várias variações de nomes de colunas
+        # Pode ser: %ATING_MOVEL_3, %ATING_MOVEL 3, ATING_MOVEL_3, etc.
+        pct_3_raw = (
+            safe_float(data.get(f'%ATING_{key}_3')) or
+            safe_float(data.get(f'%ATING_{key} 3')) or
+            safe_float(data.get(f'ATING_{key}_3')) or
+            safe_float(data.get(f'%ATING {key}_3')) or
+            safe_float(data.get(f'% ATING_{key}_3'))
+        )
+        pct_2_raw = (
+            safe_float(data.get(f'%ATING_{key}_2')) or
+            safe_float(data.get(f'%ATING_{key} 2')) or
+            safe_float(data.get(f'ATING_{key}_2')) or
+            safe_float(data.get(f'%ATING {key}_2')) or
+            safe_float(data.get(f'% ATING_{key}_2'))
+        )
+        pct_1_raw = (
+            safe_float(data.get(f'%ATING_{key}_1')) or
+            safe_float(data.get(f'%ATING_{key} 1')) or
+            safe_float(data.get(f'ATING_{key}_1')) or
+            safe_float(data.get(f'%ATING {key}_1')) or
+            safe_float(data.get(f'% ATING_{key}_1')) or
+            safe_float(data.get(f'%ATING_{key}'))  # Sem sufixo numérico
+        )
+        
+        # DEBUG: Mostrar valores encontrados
+        print(f"[DEBUG Ating] {key}: pct_1={pct_1_raw}, pct_2={pct_2_raw}, pct_3={pct_3_raw} (is_gerente={is_gerente})")
+        if pct_1_raw == 0 and pct_2_raw == 0 and pct_3_raw == 0:
+            print(f"[DEBUG Ating ZERO] Todas as tentativas de busca para {key} retornaram 0")
         
         # Buscar metas (Total, Pago, Exclusão) deste pilar
         meta_key = pilar_to_meta_key.get(key, key.lower())
@@ -1435,14 +1497,14 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     alto_desempenho_valores['total'] = total_alto_desempenho
     processed['alto_desempenho'] = alto_desempenho_valores
     
-    # Hunter
+    # Hunter - valores monetários das colunas HUNTER_
     processed['hunter'] = {
-        'movel': safe_float(data.get('HUNTER_MOVEL')),
+        'movel': safe_float(data.get('HUNTER_MOVEL') or data.get('HUNTER_MÓVEL')),
         'fixa': safe_float(data.get('HUNTER_FIXA')),
         'smartphone': safe_float(data.get('HUNTER_SMARTPHONE')),
-        'eletronicos': safe_float(data.get('HUNTER_ELETRONICOS')),
+        'eletronicos': safe_float(data.get('HUNTER_ELETRONICOS') or data.get('HUNTER_ELETRÔNICOS')),
         'essenciais': safe_float(data.get('HUNTER_ESSENCIAIS')),
-        'seguro': safe_float(data.get('HUNTER_SEGUROS')),
+        'seguro': safe_float(data.get('HUNTER_SEGUROS') or data.get('HUNTER_SEGURO')),
         'sva': safe_float(data.get('HUNTER_SVA')),
     }
     # Calcular total do Hunter
@@ -1456,17 +1518,26 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         processed['hunter']['sva'],
     ])
     
-    # Bônus Hunter (H_MÓVEL, H_FIXA, etc.)
+    # Habilitação Hunter (H_MÓVEL, H_FIXA, etc.) - indica se hunter está ativo
+    # Estes são valores da planilha que indicam habilitação
     bonus_hunter_valores = {
-        'movel': data.get('H_MÓVEL'),
+        'movel': data.get('H_MÓVEL') or data.get('H_MOVEL'),
         'fixa': data.get('H_FIXA'),
         'smartphone': data.get('H_SMARTPHONE'),
-        'eletronicos': data.get('H_ELETRONICOS'),
+        'eletronicos': data.get('H_ELETRONICOS') or data.get('H_ELETRÔNICOS'),
         'essenciais': data.get('H_ESSENCIAIS'),
         'seguro': data.get('H_SEGURO'),
         'sva': data.get('H_SVA'),
     }
-    bonus_hunter_valores['total'] = 0
+    # Se H_ tem valor numérico, somar; senão é apenas flag
+    total_h = 0
+    for key, val in bonus_hunter_valores.items():
+        try:
+            if val and isinstance(val, (int, float)):
+                total_h += float(val)
+        except:
+            pass
+    bonus_hunter_valores['total'] = total_h
     processed['bonus_hunter'] = bonus_hunter_valores
     
     # Aceleradores e IQ
@@ -1490,32 +1561,95 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     
     # Totais
     if is_gerente:
+        # Buscar REMUNERAÇÃO FINAL TOTAL de forma flexível
+        remun_final_total = 0
+        for key_name in data.keys():
+            key_upper = str(key_name).upper()
+            if 'REMUNERA' in key_upper and 'FINAL' in key_upper and 'TOTAL' in key_upper:
+                remun_final_total = safe_float(data.get(key_name))
+                if remun_final_total > 0:
+                    print(f"[DEBUG] Remuneração Final Total encontrada em: '{key_name}' = {remun_final_total}")
+                    break
+        
+        # Se não encontrou, tentar as variações fixas
+        if remun_final_total == 0:
+            remun_final_total = (
+                safe_float(data.get('REMUNERAÇÃO FINAL TOTAL')) or
+                safe_float(data.get('REMUNERACAO FINAL TOTAL')) or
+                safe_float(data.get('REMUNERAÇÃO_FINAL_TOTAL')) or
+                safe_float(data.get('REMUNERACAO_FINAL_TOTAL'))
+            )
+        
         processed['totais'] = {
-            'comissao_cargo': safe_float(data.get('COMISSÃO_GERENTE')),
-            'premiacao_cargo': safe_float(data.get('PREMIAÇÃO_GERENTE')),
-            'iq_cargo': safe_float(data.get('IQ_GERENTE')),
-            'remuneracao_cargo': safe_float(data.get('REMUNERAÇÃO FINAL GERENTE')),
-            'total_comissao_premiacao': safe_float(data.get('TOTAL COMISSÃO + PREMIAÇÃO')),
-            'remuneracao_final': safe_float(data.get('REMUNERAÇÃO FINAL TOTAL')),
-            'tfp_movel': safe_float(data.get('TFP MÓVEL')),
+            'comissao_cargo': safe_float(data.get('COMISSÃO_GERENTE') or data.get('COMISSÃO GERENTE')),
+            'premiacao_cargo': safe_float(data.get('PREMIAÇÃO_GERENTE') or data.get('PREMIAÇÃO GERENTE')),
+            'iq_cargo': safe_float(data.get('IQ_GERENTE') or data.get('IQ GERENTE')),
+            'remuneracao_cargo': (
+                safe_float(data.get('REMUNERAÇÃO FINAL GERENTE')) or
+                safe_float(data.get('REMUNERAÇÃO_FINAL_GERENTE')) or
+                safe_float(data.get('REMUNERACAO FINAL GERENTE'))
+            ),
+            'total_comissao_premiacao': (
+                safe_float(data.get('TOTAL COMISSÃO + PREMIAÇÃO')) or
+                safe_float(data.get('TOTAL COMISSAO + PREMIACAO'))
+            ),
+            'remuneracao_final': remun_final_total,
+            'tfp_movel': safe_float(data.get('TFP MÓVEL') or data.get('TFP MOVEL')),
             'tfp_fixa': safe_float(data.get('TFP FIXA')),
         }
         processed['totais']['cargo_label'] = 'Gerente'
     else:
+        # DEBUG: Mostrar todas as colunas disponíveis para CN
+        print(f"[DEBUG CN] Colunas disponíveis: {list(data.keys())}")
+        
         processed['totais'] = {
-            'comissao_cargo': safe_float(data.get('COMISSÃO_CN')),
-            'premiacao_cargo': safe_float(data.get('PREMIAÇÃO_CN')),
-            'iq_cargo': safe_float(data.get('CN_PLENO')),
-            'remuneracao_cargo': safe_float(data.get('REMUNERAÇÃO_FINAL')),
-            'total_comissao_premiacao': safe_float(data.get('TOTAL COMISSÃO + PREMIAÇÃO')),
-            'remuneracao_final': safe_float(data.get('REMUNERAÇÃO_FINAL_TOTAL')),
-            'tfp_movel': safe_float(data.get('TFP MÓVEL')),
-            'tfp_fixa': safe_float(data.get('TFP FIXA')),
-            'cn_pleno': safe_float(data.get('CN PLENO')),
-            'cn_lider': safe_float(data.get('CN LÍDER')),
-            'campanha': safe_float(data.get('CAMPANHA')),
+            'comissao_cargo': safe_float(data.get('COMISSÃO_CN') or data.get('COMISSÃO CN')),
+            'premiacao_cargo': safe_float(data.get('PREMIAÇÃO_CN') or data.get('PREMIAÇÃO CN')),
+            'iq_cargo': safe_float(data.get('CN_PLENO') or data.get('CN PLENO')),
+            'remuneracao_cargo': (
+                safe_float(data.get('REMUNERAÇÃO_FINAL')) or
+                safe_float(data.get('REMUNERAÇÃO FINAL')) or
+                safe_float(data.get('REMUNERACAO_FINAL')) or
+                safe_float(data.get('REMUNERACAO FINAL'))
+            ),
+            'total_comissao_premiacao': (
+                safe_float(data.get('TOTAL COMISSÃO + PREMIAÇÃO')) or
+                safe_float(data.get('TOTAL COMISSAO + PREMIACAO'))
+            ),
         }
+        
+        # Buscar REMUNERAÇÃO FINAL de forma flexível para CN
+        remun_final_cn = 0
+        for key_name in data.keys():
+            key_upper = str(key_name).upper()
+            if 'REMUNERA' in key_upper and 'FINAL' in key_upper:
+                remun_final_cn = safe_float(data.get(key_name))
+                if remun_final_cn > 0:
+                    print(f"[DEBUG CN] Remuneração Final encontrada em: '{key_name}' = {remun_final_cn}")
+                    break
+        
+        # Se não encontrou, tentar as variações fixas
+        if remun_final_cn == 0:
+            remun_final_cn = (
+                safe_float(data.get('REMUNERAÇÃO_FINAL_TOTAL')) or
+                safe_float(data.get('REMUNERAÇÃO FINAL TOTAL')) or
+                safe_float(data.get('REMUNERACAO_FINAL_TOTAL')) or
+                safe_float(data.get('REMUNERACAO FINAL TOTAL')) or
+                safe_float(data.get('REMUNERAÇÃO FINAL')) or
+                safe_float(data.get('REMUNERACAO FINAL'))
+            )
+        
+        processed['totais']['remuneracao_final'] = remun_final_cn
+        processed['totais'].update({
+            'tfp_movel': safe_float(data.get('TFP MÓVEL') or data.get('TFP MOVEL')),
+            'tfp_fixa': safe_float(data.get('TFP FIXA')),
+            'cn_pleno': safe_float(data.get('CN PLENO') or data.get('CN_PLENO')),
+            'cn_lider': safe_float(data.get('CN LÍDER') or data.get('CN LIDER') or data.get('CN_LIDER')),
+            'campanha': safe_float(data.get('CAMPANHA')),
+        })
         processed['totais']['cargo_label'] = 'CN'
+        
+        print(f"[DEBUG CN] Remuneração Final Total: {processed['totais']['remuneracao_final']}")
     
     # Calcular soma (comissões + bônus + alto desempenho + hunter) para cada pilar
     pilar_keys = ['movel', 'fixa', 'smartphone', 'eletronicos', 'essenciais', 'seguro', 'sva']
@@ -1547,15 +1681,21 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
                 ajuste_iq = soma * iq_pct
                 processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
                 processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição
+                processed['pilares'][i]['iq_valor'] = iq_data.get('iq_movel', 0)  # Valor bruto do IQ
+                processed['pilares'][i]['ajuste_iq'] = ajuste_iq  # Valor do ajuste aplicado
             elif pilar_key == 'fixa':
                 iq_pct = iq_data.get('iq_fixa', 0)
                 ajuste_iq = soma * iq_pct
                 processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
                 processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição
+                processed['pilares'][i]['iq_valor'] = iq_data.get('iq_fixa', 0)  # Valor bruto do IQ
+                processed['pilares'][i]['ajuste_iq'] = ajuste_iq  # Valor do ajuste aplicado
             else:
                 # Outros pilares não têm IQ, soma_com_iq = soma
                 processed['pilares'][i]['soma_com_iq'] = soma
                 processed['pilares'][i]['iq_pct'] = None
+                processed['pilares'][i]['iq_valor'] = None
+                processed['pilares'][i]['ajuste_iq'] = 0
     
     # Calcular totais de Pago e Exclusão (soma de todos os pilares)
     total_pago = sum(p['pago'] for p in processed['pilares'])
@@ -2005,7 +2145,11 @@ def commission_cn_view(request):
         metas_pilar = fetch_metas_por_pilar(user_full_name, is_gerente, user_sector)
         # Buscar dados de IQ
         iq_data = fetch_iq_data(user_full_name)
+        print(f"[commission_dashboard] IQ Data: {iq_data}")
+        print(f"[commission_dashboard] Metas Pilar: {metas_pilar}")
         processed = process_commission_data(result['data'], is_gerente, metas_pilar, iq_data)
+        print(f"[commission_dashboard] Remuneração Final: {processed['totais'].get('remuneracao_final')}")
+        print(f"[commission_dashboard] Pilares[0] pct_1: {processed['pilares'][0].get('pct_1') if processed['pilares'] else 'N/A'}")
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
     
