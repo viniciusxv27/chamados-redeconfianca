@@ -2123,8 +2123,8 @@ def commission_view(request):
     """
     user = request.user
     
-    # Bloqueio de acesso: apenas setores 19 e 29
-    SETORES_PERMITIDOS = [19, 29]
+    # Bloqueio de acesso: apenas setores 24 e 29
+    SETORES_PERMITIDOS = [24, 29]
     user_sector_id = user.sector.id if hasattr(user, 'sector') and user.sector else None
     
     if user_sector_id not in SETORES_PERMITIDOS:
