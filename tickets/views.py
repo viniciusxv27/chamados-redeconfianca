@@ -670,6 +670,7 @@ def update_priority_view(request, ticket_id):
             return redirect('ticket_detail', ticket_id=ticket.id)
         
         old_priority = ticket.get_priority_display()
+        old_priority_value = ticket.priority
         ticket.priority = new_priority
         ticket.save()
         
@@ -680,6 +681,52 @@ def update_priority_view(request, ticket_id):
             comment=f'Prioridade alterada de {old_priority} para {ticket.get_priority_display()}',
             comment_type='PRIORITY_CHANGE'
         )
+        
+        # Notificar usuários envolvidos sobre a mudança de prioridade
+        try:
+            from notifications.services import notification_service, NotificationType, NotificationChannel
+            
+            # Coletar usuários envolvidos (criador + atribuídos)
+            involved_users = set()
+            if ticket.created_by and ticket.created_by != user:
+                involved_users.add(ticket.created_by)
+            if ticket.assigned_to and ticket.assigned_to != user:
+                involved_users.add(ticket.assigned_to)
+            for aux_user in ticket.get_all_assigned_users():
+                if aux_user != user:
+                    involved_users.add(aux_user)
+            
+            if involved_users:
+                # Definir ícone baseado na nova prioridade
+                priority_icons = {
+                    'BAIXA': '🟢',
+                    'MEDIA': '🟡', 
+                    'ALTA': '🟠',
+                    'CRITICA': '🔴'
+                }
+                icon = priority_icons.get(new_priority, '📋')
+                
+                notification_service.send_notification(
+                    recipients=list(involved_users),
+                    title=f'{icon} Prioridade Alterada - Chamado #{ticket.id}',
+                    message=f'{user.get_full_name() or user.username} alterou a prioridade de "{old_priority}" para "{ticket.get_priority_display()}"',
+                    notification_type=NotificationType.TICKET_STATUS_CHANGED,
+                    channels=[NotificationChannel.IN_APP, NotificationChannel.PUSH, NotificationChannel.ONESIGNAL],
+                    action_url=f'/tickets/{ticket.id}/',
+                    priority='ALTA' if new_priority in ['ALTA', 'CRITICA'] else 'NORMAL',
+                    icon='fas fa-exclamation-triangle',
+                    extra_data={
+                        'ticket_id': ticket.id,
+                        'old_priority': old_priority_value,
+                        'new_priority': new_priority,
+                        'changed_by': user.id
+                    },
+                    created_by=user
+                )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro ao enviar notificação de mudança de prioridade: {e}')
         
         messages.success(request, f'Prioridade alterada para {ticket.get_priority_display()}.')
         log_action(

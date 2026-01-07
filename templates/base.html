@@ -1375,16 +1375,21 @@
                             // Inicializar OneSignal após carregar o script
                             window.OneSignalDeferred = window.OneSignalDeferred || [];
                             OneSignalDeferred.push(async function(OneSignal) {
+                                // Verificar se já está inscrito para esconder o botão
+                                const browserPermission = Notification.permission;
+                                const shouldShowButton = browserPermission !== 'granted';
+                                
                                 await OneSignal.init({
                                     appId: config.app_id,
                                     safari_web_id: config.safari_web_id || null,
                                     allowLocalhostAsSecureOrigin: true,
                                     autoResubscribe: true,
                                     notifyButton: {
-                                        enable: true,
-                                        size: 'large',
-                                        position: 'bottom-right',
+                                        enable: shouldShowButton, // Esconder quando já inscrito
+                                        size: 'medium',
+                                        position: 'bottom-left', // Mover para esquerda para não atrapalhar
                                         showCredit: false,
+                                        prenotify: true,
                                         text: {
                                             'tip.state.unsubscribed': 'Ativar notificações',
                                             'tip.state.subscribed': 'Notificações ativas',
