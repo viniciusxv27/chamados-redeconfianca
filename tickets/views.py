@@ -1425,7 +1425,7 @@ def ticket_create_fixed_view(request):
         specific_user_id = request.POST.get('specific_user', '').strip() or None
         requires_approval = request.POST.get('requires_approval') == 'on'
         approval_user_id = request.POST.get('approval_user', '').strip() or None
-        assigned_user_id = request.POST.get('copy', '').strip() or None
+        copy_user_id = request.POST.get('copy', '').strip() or None
         
         # Validar que a descrição não está vazia
         if not description or description.strip() == '':
@@ -1483,7 +1483,7 @@ def ticket_create_fixed_view(request):
             created_by=request.user,
             requires_approval=requires_approval or (category.requires_approval if category else False),
             approval_user_id=approval_user_id if approval_user_id else None,
-            assigned_to_id=specific_user_id if specific_user_id else (assigned_user_id if assigned_user_id else None),
+            assigned_to_id=specific_user_id if specific_user_id else None,
             solution_time_hours=int(request.POST.get('solution_time_hours', 24)),
             priority=request.POST.get('priority', 'MEDIA'),
             store_location=store_location,
@@ -1503,6 +1503,19 @@ def ticket_create_fixed_view(request):
                 content_type=attachment.content_type,
                 uploaded_by=request.user
             )
+        
+        # Criar atribuição em cópia se um usuário foi selecionado
+        if copy_user_id:
+            try:
+                copy_user = User.objects.get(id=copy_user_id)
+                TicketAssignment.objects.create(
+                    ticket=ticket,
+                    user=copy_user,
+                    assigned_by=request.user,
+                    is_active=True
+                )
+            except User.DoesNotExist:
+                pass
         
         # Criar log inicial
         TicketLog.objects.create(

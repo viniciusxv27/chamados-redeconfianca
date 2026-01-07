@@ -207,16 +207,29 @@
             
             <div>
                 <label for="copy" class="block text-sm font-medium text-gray-700 mb-2">Em cópia</label>
-                <select 
-                    name="copy" 
-                    id="copy"
+                <input 
+                    type="text" 
+                    name="copy_search" 
+                    id="copy_search"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                >
-                    <option value="">Selecione usuários para cópia</option>
+                    placeholder="Digite para buscar um usuário..."
+                    autocomplete="off"
+                    list="users-list"
+                />
+                <input type="hidden" name="copy" id="copy" value="">
+                <datalist id="users-list">
                     {% for user in users %}
-                        <option value="{{ user.id }}">{{ user.get_full_name }} ({{ user.sector.name }}) - {{ user.email }}</option>
+                        <option value="{{ user.get_full_name }} ({{ user.sector.name }})" data-id="{{ user.id }}">{{ user.email }}</option>
                     {% endfor %}
-                </select>
+                </datalist>
+                <div id="copy-selected" class="mt-2 hidden">
+                    <div class="inline-flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                        <span id="copy-selected-name"></span>
+                        <button type="button" onclick="clearCopySelection()" class="ml-2 text-blue-600 hover:text-blue-800">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
             
             <div>
@@ -862,6 +875,65 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             e.target.value = value;
+        });
+    }
+});
+
+// Autocomplete para campo "Em cópia"
+function clearCopySelection() {
+    document.getElementById('copy_search').value = '';
+    document.getElementById('copy').value = '';
+    document.getElementById('copy-selected').classList.add('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const copySearchInput = document.getElementById('copy_search');
+    const copyHiddenInput = document.getElementById('copy');
+    const copySelectedDiv = document.getElementById('copy-selected');
+    const copySelectedName = document.getElementById('copy-selected-name');
+    const datalist = document.getElementById('users-list');
+    
+    if (copySearchInput) {
+        copySearchInput.addEventListener('input', function(e) {
+            const selectedValue = e.target.value;
+            
+            // Procurar se há uma opção correspondente no datalist
+            const options = datalist.querySelectorAll('option');
+            let found = false;
+            
+            for (let option of options) {
+                if (option.value === selectedValue) {
+                    // Encontrou - atribuir o ID do usuário
+                    const userId = option.getAttribute('data-id');
+                    copyHiddenInput.value = userId;
+                    copySelectedName.textContent = selectedValue;
+                    copySelectedDiv.classList.remove('hidden');
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found && selectedValue === '') {
+                // Campo vazio - limpar seleção
+                copyHiddenInput.value = '';
+                copySelectedDiv.classList.add('hidden');
+            }
+        });
+        
+        // Quando o usuário seleciona uma opção do datalist
+        copySearchInput.addEventListener('change', function(e) {
+            const selectedValue = e.target.value;
+            const options = datalist.querySelectorAll('option');
+            
+            for (let option of options) {
+                if (option.value === selectedValue) {
+                    const userId = option.getAttribute('data-id');
+                    copyHiddenInput.value = userId;
+                    copySelectedName.textContent = selectedValue;
+                    copySelectedDiv.classList.remove('hidden');
+                    break;
+                }
+            }
         });
     }
 });
