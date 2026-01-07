@@ -223,7 +223,13 @@ def tickets_list_view(request):
     if atribuidos_filter:
         filter_params['atribuidos'] = atribuidos_filter
     
-    # Filtros avançados para SUPERADMIN
+    # Filtros de data disponíveis para TODOS os usuários
+    if date_from_filter:
+        filter_params['date_from'] = date_from_filter
+    if date_to_filter:
+        filter_params['date_to'] = date_to_filter
+    
+    # Filtros avançados apenas para SUPERADMIN
     if user.hierarchy == 'SUPERADMIN':
         if created_by_filter:
             filter_params['created_by'] = created_by_filter
@@ -231,10 +237,6 @@ def tickets_list_view(request):
             filter_params['created_by_sector'] = created_by_sector_filter
         if assigned_to_filter:
             filter_params['assigned_to'] = assigned_to_filter
-        if date_from_filter:
-            filter_params['date_from'] = date_from_filter
-        if date_to_filter:
-            filter_params['date_to'] = date_to_filter
         if user_hierarchy_filter:
             filter_params['user_hierarchy'] = user_hierarchy_filter
         if has_attachments_filter:
@@ -257,18 +259,29 @@ def tickets_list_view(request):
     # Remover duplicatas
     user_sectors = list(set(user_sectors))
     
+    # Filtro por data - disponível para TODOS os usuários
+    if date_from_filter:
+        from django.utils.dateparse import parse_date
+        date_from = parse_date(date_from_filter)
+        if date_from:
+            tickets = tickets.filter(created_at__date__gte=date_from)
+    
+    if date_to_filter:
+        from django.utils.dateparse import parse_date
+        date_to = parse_date(date_to_filter)
+        if date_to:
+            tickets = tickets.filter(created_at__date__lte=date_to)
+    
     # Aplicar filtros avançados apenas para SUPERADMIN
     if user.hierarchy == 'SUPERADMIN':
         # Filtro por usuário que criou
         if created_by_filter:
             tickets = tickets.filter(created_by_id=created_by_filter)
         
-        # Filtro por setor do solicitante
+        # Filtro por setor do solicitante (setor principal do usuário que criou o ticket)
         if created_by_sector_filter:
-            tickets = tickets.filter(
-                models.Q(created_by__sector_id=created_by_sector_filter) |
-                models.Q(created_by__sectors__id=created_by_sector_filter)
-            ).distinct()
+            # Filtrar apenas pelo setor principal do criador do ticket
+            tickets = tickets.filter(created_by__sector_id=created_by_sector_filter)
         
         # Filtro por responsável
         if assigned_to_filter:
@@ -276,19 +289,6 @@ def tickets_list_view(request):
                 tickets = tickets.filter(assigned_to__isnull=True)
             else:
                 tickets = tickets.filter(assigned_to_id=assigned_to_filter)
-        
-        # Filtro por data
-        if date_from_filter:
-            from django.utils.dateparse import parse_date
-            date_from = parse_date(date_from_filter)
-            if date_from:
-                tickets = tickets.filter(created_at__date__gte=date_from)
-        
-        if date_to_filter:
-            from django.utils.dateparse import parse_date
-            date_to = parse_date(date_to_filter)
-            if date_to:
-                tickets = tickets.filter(created_at__date__lte=date_to)
         
         # Filtro por hierarquia do usuário
         if user_hierarchy_filter:
@@ -433,6 +433,8 @@ def tickets_list_view(request):
         # Parâmetros de filtro para preservar na paginação
         'filter_query_string': filter_query_string,
         'filter_params': filter_params,
+        # Data atual para verificar tickets atrasados no template
+        'now': timezone.now(),
     }
     return render(request, 'tickets/list.html', context)
 

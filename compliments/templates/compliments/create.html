@@ -40,7 +40,7 @@
             <div class="p-6 sm:p-8">
                 <form method="post" id="complimentForm" class="space-y-6">
                     {% csrf_token %}
-                    <!-- Input hidden para target_id principal -->
+                    <!-- Input hidden para target_id principal - ÚNICO campo target_id -->
                     <input type="hidden" name="target_id" id="mainTargetId" value="">
                     
                     <!-- Tipo de Destinatário -->
@@ -89,8 +89,8 @@
                                  class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden">
                             </div>
                         </div>
-                        <!-- Hidden input for selected user -->
-                        <input type="hidden" name="target_id" id="selectedUserId">
+                        <!-- Hidden input for selected user - usado apenas internamente, valor é copiado para mainTargetId -->
+                        <input type="hidden" id="selectedUserId">
                         <!-- Selected user display -->
                         <div id="selectedUserDisplay" class="hidden">
                             <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 flex items-center justify-between">
