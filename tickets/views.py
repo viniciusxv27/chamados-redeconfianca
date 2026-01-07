@@ -308,7 +308,6 @@ def tickets_list_view(request):
         
         # Filtro por prazo (em atraso)
         if overdue_filter:
-            from django.utils import timezone
             now = timezone.now()
             if overdue_filter == 'yes':
                 # Tickets em atraso (não resolvidos e com data de vencimento passada)
@@ -2161,7 +2160,6 @@ def tickets_export_view(request):
             tickets = tickets.filter(comments__isnull=True)
         
         if overdue_filter:
-            from django.utils import timezone
             now = timezone.now()
             if overdue_filter == 'yes':
                 tickets = tickets.filter(

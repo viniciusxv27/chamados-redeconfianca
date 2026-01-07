@@ -38,10 +38,11 @@
             
             <!-- Form Body -->
             <div class="p-6 sm:p-8">
-                <form method="post" id="complimentForm" class="space-y-6">
+                <form method="post" id="complimentForm" class="space-y-6" novalidate>
                     {% csrf_token %}
-                    <!-- Input hidden para target_id principal - ÚNICO campo target_id -->
-                    <input type="hidden" name="target_id" id="mainTargetId" value="">
+                    <!-- Campos separados para user_id e sector_id -->
+                    <input type="hidden" name="user_id" id="userIdField" value="">
+                    <input type="hidden" name="sector_id" id="sectorIdField" value="">
                     
                     <!-- Tipo de Destinatário -->
                     <div class="space-y-3">
@@ -52,7 +53,7 @@
                         <div class="grid grid-cols-2 gap-4">
                             <label class="relative">
                                 <input type="radio" name="target_type" value="user" id="targetUser" 
-                                       class="sr-only peer" checked>
+                                       class="sr-only peer" checked onchange="toggleTargetType()">
                                 <div class="flex items-center justify-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl cursor-pointer transition-all duration-300 peer-checked:from-blue-500 peer-checked:to-indigo-600 peer-checked:text-white peer-checked:border-blue-500 hover:shadow-md">
                                     <i class="fas fa-user text-2xl mr-3"></i>
                                     <span class="font-medium">Usuário</span>
@@ -60,7 +61,7 @@
                             </label>
                             <label class="relative">
                                 <input type="radio" name="target_type" value="sector" id="targetSector" 
-                                       class="sr-only peer">
+                                       class="sr-only peer" onchange="toggleTargetType()">
                                 <div class="flex items-center justify-center p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl cursor-pointer transition-all duration-300 peer-checked:from-green-500 peer-checked:to-emerald-600 peer-checked:text-white peer-checked:border-green-500 hover:shadow-md">
                                     <i class="fas fa-building text-2xl mr-3"></i>
                                     <span class="font-medium">Setor</span>
@@ -89,7 +90,7 @@
                                  class="absolute z-50 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden">
                             </div>
                         </div>
-                        <!-- Hidden input for selected user - usado apenas internamente, valor é copiado para mainTargetId -->
+                        <!-- Hidden input for selected user ID interno -->
                         <input type="hidden" id="selectedUserId">
                         <!-- Selected user display -->
                         <div id="selectedUserDisplay" class="hidden">
@@ -116,6 +117,7 @@
                             Selecionar Setor
                         </label>
                         <select id="sectorSelect" 
+                                onchange="document.getElementById('sectorIdField').value = this.value; validateForm(); console.log('Setor selecionado:', this.value);"
                                 class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-300 text-gray-700">
                             <option value="">Escolha um setor...</option>
                             {% for sector in sectors %}
@@ -216,27 +218,21 @@ function toggleTargetType() {
     const userSelection = document.getElementById('userSelection');
     const sectorSelection = document.getElementById('sectorSelection');
     
+    console.log('toggleTargetType - userSelected:', userSelected);
+    
     if (userSelected) {
         userSelection.classList.remove('hidden');
         sectorSelection.classList.add('hidden');
         document.getElementById('sectorSelect').value = '';
-        
-        // Atualizar target_id para user
-        const userId = document.getElementById('selectedUserId').value;
-        if (userId) {
-            document.getElementById('mainTargetId').value = userId;
-        }
+        document.getElementById('sectorIdField').value = '';
+        console.log('Modo USU\u00c1RIO - limpou sectorIdField');
     } else {
         userSelection.classList.add('hidden');
         sectorSelection.classList.remove('hidden');
         clearUserSelection();
-        
-        // Atualizar target_id para sector
-        const sectorId = document.getElementById('sectorSelect').value;
-        if (sectorId) {
-            document.getElementById('mainTargetId').value = sectorId;
-        }
+        console.log('Modo SETOR - limpou userIdField');
     }
+    validateForm();
 }
 
 // Sistema de estrelas animadas
@@ -379,12 +375,12 @@ function showUserResults(users) {
 
 function selectUser(id, name, sector) {
     document.getElementById('selectedUserId').value = id;
+    document.getElementById('userIdField').value = id;
     document.getElementById('userSearch').value = '';
     document.getElementById('selectedUserName').textContent = `${name} - ${sector}`;
     document.getElementById('selectedUserDisplay').classList.remove('hidden');
     
-    // Atualizar target_id principal
-    document.getElementById('mainTargetId').value = id;
+    console.log('Usuário selecionado - userIdField:', id);
     
     hideDropdown();
     validateForm();
@@ -392,9 +388,10 @@ function selectUser(id, name, sector) {
 
 function clearUserSelection() {
     document.getElementById('selectedUserId').value = '';
+    document.getElementById('userIdField').value = '';
     document.getElementById('selectedUserDisplay').classList.add('hidden');
     document.getElementById('userSearch').value = '';
-    document.getElementById('mainTargetId').value = '';
+    console.log('clearUserSelection - limpou userIdField');
     validateForm();
 }
 
@@ -402,20 +399,20 @@ function hideDropdown() {
     document.getElementById('userDropdown').classList.add('hidden');
 }
 
-// Validação de setor
-document.getElementById('sectorSelect').addEventListener('change', function() {
-    document.getElementById('mainTargetId').value = this.value;
-    validateForm();
-});
-
 // Validação do formulário
 function validateForm() {
     const targetType = document.querySelector('input[name="target_type"]:checked')?.value;
-    const targetId = document.getElementById('mainTargetId').value;
     const rating = document.getElementById('ratingInput').value;
     const comment = document.getElementById('comment').value.trim();
     
-    console.log('Validation:', {targetType, targetId, rating, comment}); // Debug
+    let targetId = '';
+    if (targetType === 'user') {
+        targetId = document.getElementById('userIdField').value;
+    } else if (targetType === 'sector') {
+        targetId = document.getElementById('sectorIdField').value;
+    }
+    
+    console.log('Validation:', {targetType, targetId, rating, commentLength: comment.length});
     
     const isValid = targetType && targetId && rating && comment;
     const submitBtn = document.getElementById('submitBtn');
@@ -446,6 +443,51 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleTargetType();
     validateForm();
     initializeStars();
+    
+    // Submit handler simplificado - apenas valida
+    const form = document.getElementById('complimentForm');
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const targetType = document.querySelector('input[name="target_type"]:checked')?.value;
+        const rating = document.getElementById('ratingInput').value;
+        const comment = document.getElementById('comment').value.trim();
+        
+        let targetId = '';
+        if (targetType === 'user') {
+            targetId = document.getElementById('userIdField').value;
+        } else if (targetType === 'sector') {
+            targetId = document.getElementById('sectorIdField').value;
+        }
+        
+        // DEBUG: Mostrar TODOS os campos do form
+        const formData = new FormData(form);
+        console.log('=== TODOS OS CAMPOS DO FORM ===');
+        for (let [key, value] of formData.entries()) {
+            console.log(`${key}: ${value}`);
+        }
+        console.log('================================');
+        
+        console.log('Submit - Final values:', {
+            targetType,
+            userIdField: document.getElementById('userIdField').value,
+            sectorIdField: document.getElementById('sectorIdField').value,
+            targetId,
+            rating,
+            commentLength: comment.length
+        });
+        
+        // Se validação falhar, prevenir submit
+        if (!targetType || !targetId || !rating || !comment) {
+            alert('Por favor, preencha todos os campos obrigatórios.');
+            console.log('Validação falhou!');
+            return false;
+        }
+        
+        console.log('Formulário válido, enviando...');
+        form.submit();
+        return true;
+    });
 });
 
 // Função para inicializar as estrelas

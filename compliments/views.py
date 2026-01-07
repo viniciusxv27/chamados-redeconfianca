@@ -61,11 +61,15 @@ def create_compliment(request):
     """Criar novo elogio"""
     if request.method == 'POST':
         from_user = request.user
-        target_type = request.POST.get('target_type')  # 'user' ou 'sector'
-        target_id = request.POST.get('target_id')
-        rating = request.POST.get('rating')
-        comment = request.POST.get('comment')
         
+        target_type = request.POST.get('target_type', '').strip()
+        rating = request.POST.get('rating', '').strip()
+        comment = request.POST.get('comment', '').strip()
+        
+        # Pegar target_id - pode vir como lista, pegar o primeiro não vazio
+        target_id_list = request.POST.getlist('target_id')
+        target_id = next((tid.strip() for tid in target_id_list if tid.strip()), '')
+                
         # Validações
         if not all([target_type, target_id, rating, comment]):
             messages.error(request, 'Todos os campos são obrigatórios.')
