@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Comissionamento{% endblock %}
+{% block title %}Remuneração Variável{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-6 max-w-7xl">
@@ -9,7 +9,7 @@
     <!-- Header Minimalista -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
-            <h1 class="text-2xl font-bold text-gray-800">Comissionamento</h1>
+            <h1 class="text-2xl font-bold text-gray-800">Remuneração Variável</h1>
             <p class="text-gray-500 text-sm mt-1">Acompanhe suas metas e resultados</p>
             <div class="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg">
                 <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +108,7 @@
             <p class="text-lg font-semibold text-gray-800 truncate">{{ data.info.coordenador|default:"N/A" }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
-            <p class="text-gray-500 text-xs font-medium mb-1">Total Comissões</p>
+            <p class="text-gray-500 text-xs font-medium mb-1">Total Remuneração Variável</p>
             <p class="text-lg font-semibold text-green-600">R$ {{ data.comissoes.total|floatformat:2 }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
@@ -119,9 +119,9 @@
     
     <!-- Grid de Gráficos -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Gráfico de Barras - Comissões -->
+        <!-- Gráfico de Barras - Remuneração Variável -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 class="text-lg font-semibold text-gray-800 mb-1">Comissões por Pilar</h2>
+            <h2 class="text-lg font-semibold text-gray-800 mb-1">Remuneração Variável por Pilar</h2>
             <p class="text-sm text-gray-500 mb-6">Valores em R$</p>
             <div class="h-64">
                 <canvas id="chartComissoes"></canvas>
@@ -242,7 +242,7 @@
                 <thead>
                     <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <th class="px-4 py-3 text-left">Pilar</th>
-                        <th class="px-4 py-3 text-right">Comissão</th>
+                        <th class="px-4 py-3 text-right">Remuneração Variável</th>
                         <th class="px-4 py-3 text-right">Alto Desemp.</th>
                         <th class="px-4 py-3 text-right">Bônus</th>
                         <th class="px-4 py-3 text-right">Hunter</th>
@@ -623,7 +623,7 @@ function initCharts() {
         });
     }
     
-    // Gráfico de Barras - Comissões
+    // Gráfico de Barras - Remuneração Variável
     const ctxComissoes = document.getElementById('chartComissoes');
     if (ctxComissoes && chartsData.comissoes) {
         new Chart(ctxComissoes, {

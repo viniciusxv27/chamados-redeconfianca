@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Comissionamento - Coordenador{% endblock %}
+{% block title %}Remuneração Variável - Coordenador{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-6 max-w-7xl">
@@ -9,7 +9,7 @@
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
-            <h1 class="text-2xl font-bold text-gray-800">Comissionamento</h1>
+            <h1 class="text-2xl font-bold text-gray-800">Remuneração Variável</h1>
             <p class="text-gray-500 text-sm mt-1">Visão de Coordenação - Todas as lojas</p>
             <div class="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg">
                 <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,7 +78,7 @@
             </div>
             <div class="grid grid-cols-2 gap-4 text-center">
                 <div class="bg-white/10 rounded-xl p-4">
-                    <p class="text-white/70 text-xs mb-1">Comissão</p>
+                    <p class="text-white/70 text-xs mb-1">Remuneração Variável</p>
                     <p class="text-xl font-bold">R$ {{ data.totais.comissao_cargo|floatformat:2 }}</p>
                 </div>
                 <div class="bg-white/10 rounded-xl p-4">
@@ -92,7 +92,7 @@
     <!-- Grid de Métricas do Coordenador -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="bg-white rounded-xl p-4 border border-gray-100">
-            <p class="text-gray-500 text-xs font-medium mb-1">Comissão Pilares</p>
+            <p class="text-gray-500 text-xs font-medium mb-1">Remuneração Variável por Pilares</p>
             <p class="text-lg font-semibold text-green-600">R$ {{ data.totais.remuneracao_pilares|floatformat:2 }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
@@ -177,12 +177,12 @@
     
     <!-- Grid de Gráficos do Coordenador -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Gráfico de Barras - Comissões -->
+        <!-- Gráfico de Barras - Remuneração Variável -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 class="text-lg font-semibold text-gray-800 mb-1">Comissões por Pilar</h2>
+            <h2 class="text-lg font-semibold text-gray-800 mb-1">Remuneração Variável por Pilar</h2>
             <p class="text-sm text-gray-500 mb-6">Valores em R$</p>
             <div class="h-64">
-                <canvas id="chartComissoesCoord"></canvas>
+                <canvas id="chartRemunCoord"></canvas>
             </div>
         </div>
         
@@ -207,7 +207,7 @@
                 <thead>
                     <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <th class="px-4 py-3 text-left">Pilar</th>
-                        <th class="px-3 py-3 text-right">Comissões</th>
+                        <th class="px-3 py-3 text-right">Remuneração Variável</th>
                         <th class="px-3 py-3 text-right">Hunter</th>
                         <th class="px-3 py-3 text-right">Total</th>
                         <th class="px-3 py-3 text-right">Pago</th>
@@ -352,7 +352,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
                 <h2 class="text-lg font-semibold text-gray-800">
-                    Representatividade de Comissões
+                    Representatividade de Remuneração Variável
                     <span class="ml-2 text-green-600 text-base font-bold" id="totalGeralLojas">
                         R$ {{ data.totais.remuneracao_pilares|floatformat:2 }}
                     </span>
@@ -580,7 +580,7 @@
             <p class="text-lg font-semibold text-gray-800 truncate">{{ data.info.coordenador|default:"N/A" }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
-            <p class="text-gray-500 text-xs font-medium mb-1">Total Comissões</p>
+            <p class="text-gray-500 text-xs font-medium mb-1">Total Remuneração Variável</p>
             <p class="text-lg font-semibold text-green-600">R$ {{ data.comissoes.total|floatformat:2 }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
@@ -635,9 +635,9 @@
     
     <!-- Gráficos -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Gráfico de Barras - Comissões -->
+        <!-- Gráfico de Barras - Remuneração Variável -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 class="text-lg font-semibold text-gray-800 mb-1">Comissões por Pilar</h2>
+            <h2 class="text-lg font-semibold text-gray-800 mb-1">Remuneração Variável por Pilar</h2>
             <p class="text-sm text-gray-500 mb-6">Valores em R$</p>
             <div class="h-64">
                 <canvas id="chartComissoes"></canvas>
@@ -656,10 +656,10 @@
     
     <!-- Tabelas de Detalhamento -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Comissões -->
+        <!-- Remuneração Variável -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100">
-                <h2 class="font-semibold text-gray-800">Detalhamento de Comissões</h2>
+                <h2 class="font-semibold text-gray-800">Detalhamento de Remuneração Variável</h2>
             </div>
             <div class="divide-y divide-gray-50">
                 <div class="flex justify-between items-center px-6 py-3 hover:bg-gray-50">
@@ -904,7 +904,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // GRÁFICOS DO COORDENADOR (quando é própria view)
     // ===========================================
     
-    // Gráfico de Comissões do Coordenador
+    // Gráfico de Remuneração Variável do Coordenador
     const ctxComissoesCoord = document.getElementById('chartComissoesCoord');
     if (ctxComissoesCoord && chartData.comissoes) {
         new Chart(ctxComissoesCoord, {
@@ -1090,7 +1090,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // GRÁFICOS DO USUÁRIO SELECIONADO (gerente/CN)
     // ===========================================
     
-    // Gráfico de Comissões
+    // Gráfico de Remuneração Variável
     const ctxComissoes = document.getElementById('chartComissoes');
     if (ctxComissoes && chartData.comissoes) {
         new Chart(ctxComissoes, {
