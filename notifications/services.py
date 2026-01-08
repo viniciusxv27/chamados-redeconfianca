@@ -108,6 +108,49 @@ class NotificationService:
         
         return filtered
     
+    def _filter_by_special_rules(
+        self, 
+        recipients: List[User], 
+        notification_type: str,
+        ticket=None,
+        **kwargs
+    ) -> List[User]:
+        """
+        Aplica regras especiais de filtro por usuário.
+        
+        Regras implementadas:
+        - Usuário ID 3: Notificações de chamados apenas do setor "Compras"
+        """
+        filtered = []
+        
+        for user in recipients:
+            # Regra especial para usuário ID 3
+            if user.id == 3:
+                # Se for notificação de chamado, verificar se é do setor "Compras"
+                if notification_type in [
+                    NotificationType.TICKET_CREATED,
+                    NotificationType.TICKET_ASSIGNED,
+                    NotificationType.TICKET_STATUS_CHANGED,
+                    NotificationType.TICKET_COMMENT,
+                    NotificationType.TICKET_RESOLVED
+                ]:
+                    # Só adiciona se o ticket for do setor Compras
+                    if ticket and ticket.sector and ticket.sector.name.lower() == 'compras':
+                        filtered.append(user)
+                        logger.info(f"Usuário ID 3: Notificação de chamado do setor Compras permitida")
+                    else:
+                        sector_name = ticket.sector.name if ticket and ticket.sector else 'N/A'
+                        logger.info(f"Usuário ID 3: Notificação de chamado do setor '{sector_name}' bloqueada (apenas Compras)")
+                        continue
+                else:
+                    # Comunicados e outras notificações passam normalmente
+                    filtered.append(user)
+            else:
+                # Outros usuários passam normalmente
+                filtered.append(user)
+        
+        return filtered
+    
     def send_notification(
         self,
         recipients: Union[User, List[User]],
@@ -681,6 +724,16 @@ class NotificationService:
         if not recipients:
             return {'success': True, 'message': 'Nenhum destinatário'}
         
+        # Aplicar regras especiais de filtro (ex: usuário ID 3 só recebe notificações do setor Compras)
+        recipients = self._filter_by_special_rules(
+            list(recipients),
+            NotificationType.TICKET_CREATED,
+            ticket=ticket
+        )
+        
+        if not recipients:
+            return {'success': True, 'message': 'Nenhum destinatário após filtro de regras especiais'}
+        
         return self.send_notification(
             recipients=list(recipients),
             title=f"Novo Chamado #{ticket.id}",
@@ -714,8 +767,18 @@ class NotificationService:
         if self.onesignal_enabled:
             channels.append(NotificationChannel.ONESIGNAL)
         
+        # Aplicar regras especiais de filtro
+        recipients_filtered = self._filter_by_special_rules(
+            [assigned_user],
+            NotificationType.TICKET_ASSIGNED,
+            ticket=ticket
+        )
+        
+        if not recipients_filtered:
+            return {'success': True, 'message': 'Destinatário filtrado por regras especiais'}
+        
         return self.send_notification(
-            recipients=assigned_user,
+            recipients=recipients_filtered[0],
             title=f"🎫 Chamado Atribuído: #{ticket.id}",
             message=f"Você foi atribuído ao chamado '{ticket.title}' por {assigned_by.full_name}.",
             notification_type=NotificationType.TICKET_ASSIGNED,
@@ -761,6 +824,16 @@ class NotificationService:
         
         if not recipients:
             return {'success': True, 'message': 'Nenhum destinatário'}
+        
+        # Aplicar regras especiais de filtro
+        recipients = self._filter_by_special_rules(
+            list(recipients),
+            NotificationType.TICKET_STATUS_CHANGED,
+            ticket=ticket
+        )
+        
+        if not recipients:
+            return {'success': True, 'message': 'Nenhum destinatário após filtro de regras especiais'}
         
         status_display = dict(ticket.STATUS_CHOICES).get(new_status, new_status)
         priority = 'ALTA' if new_status in ['RESOLVIDO', 'FECHADO'] else 'NORMAL'
@@ -813,6 +886,16 @@ class NotificationService:
         
         if not recipients:
             return {'success': True, 'message': 'Nenhum destinatário'}
+        
+        # Aplicar regras especiais de filtro
+        recipients = self._filter_by_special_rules(
+            list(recipients),
+            NotificationType.TICKET_COMMENT,
+            ticket=ticket
+        )
+        
+        if not recipients:
+            return {'success': True, 'message': 'Nenhum destinatário após filtro de regras especiais'}
         
         # Truncar comentário para preview
         comment_preview = comment.comment[:100] + '...' if len(comment.comment) > 100 else comment.comment
