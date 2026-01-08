@@ -254,7 +254,6 @@
                         <th class="px-3 py-3 text-right">Id. Hunter</th>
                         <th class="px-3 py-3 text-right bg-cyan-50 text-cyan-700">IQ</th>
                         <th class="px-3 py-3 text-right bg-primary/10 text-primary">Total</th>
-                        <th class="px-3 py-3 text-right bg-green-50 text-green-700">Total c/ IQ</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -272,8 +271,7 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.movel|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-cyan-600 bg-cyan-50/50">{{ data.pilares.0.iq_pct|floatformat:1 }}%</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.0.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-cyan-600 bg-cyan-50/50">{{ data.pilares.0.iq_pct|add:100|floatformat:1 }}%</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.0.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Fixa -->
@@ -290,8 +288,7 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.alto_desempenho.fixa|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
-                        <td class="px-3 py-3 text-right font-medium text-cyan-600 bg-cyan-50/50">{{ data.pilares.1.iq_pct|floatformat:1 }}%</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.1.soma|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right font-medium text-cyan-600 bg-cyan-50/50">{{ data.pilares.1.iq_pct|add:100|floatformat:1 }}%</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.1.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Smartphone -->
@@ -309,7 +306,6 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.smartphone|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.smartphone|default:"-" }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.2.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.2.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Eletrônicos -->
@@ -327,7 +323,6 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.eletronicos|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.eletronicos|default:"-" }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.3.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.3.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Essenciais -->
@@ -345,7 +340,6 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.essenciais|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.essenciais|default:"-" }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.4.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.4.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- Seguro -->
@@ -363,7 +357,6 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.seguro|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.seguro|default:"-" }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.5.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.5.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <!-- SVA -->
@@ -381,7 +374,6 @@
                         <td class="px-3 py-3 text-right font-medium text-gray-700">R$ {{ data.hunter.sva|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-700">{{ data.bonus_hunter.sva|default:"-" }}</td>
                         <td class="px-3 py-3 text-right font-medium text-gray-400 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right font-semibold text-primary bg-primary/5">R$ {{ data.pilares.6.soma|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right font-semibold text-green-600 bg-green-50/50">R$ {{ data.pilares.6.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                 </tbody>
@@ -394,7 +386,6 @@
                         <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right text-indigo-600">-</td>
                         <td class="px-3 py-3 text-right text-cyan-600 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right text-primary bg-primary/10">R$ {{ data.totais.total_pilares|floatformat:2 }}</td>
                         <td class="px-3 py-3 text-right text-green-600 bg-green-100/50">R$ {{ data.totais.total_pilares_com_iq|floatformat:2 }}</td>
                     </tr>
                 </tfoot>
@@ -604,9 +595,6 @@
             <div>
                 <h2 class="text-lg font-semibold text-gray-800">
                     Representatividade de Remuneração Variável
-                    <span class="ml-2 text-green-600 text-base font-bold">
-                        R$ {{ data.totais.total_pilares|floatformat:2 }}
-                    </span>
                 </h2>
                 <p class="text-sm text-gray-500">Participação de cada vendedor no pilar selecionado</p>
             </div>
@@ -1004,7 +992,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             html += '<div class="flex items-center justify-between py-3 px-3 bg-primary/10 rounded-lg mt-4 border-t-2 border-primary">';
             html += '<span class="font-semibold text-gray-800">Total ' + (pilarIndex === 'total' ? 'Geral' : pilarNomes[parseInt(pilarIndex)]) + '</span>';
-            html += '<span class="font-bold text-primary text-lg">R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
+            html += '<span class="font-bold text-primary text-lg">R$ ' + {{ data.totais.total_pilares|floatformat:2 }} + '</span>';
             html += '</div>';
             
             listaDiv.innerHTML = html;
