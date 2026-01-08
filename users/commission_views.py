@@ -1073,13 +1073,13 @@ def fetch_vendedores_por_filial(user_sector):
         if user_sector_normalized.startswith(prefix):
             user_sector_normalized = user_sector_normalized[len(prefix):]
     
-    # Mapeamento de pilares
+    # Mapeamento de pilares - ordem importa, mais específico primeiro
     pilar_mapping = {
-        'MÓVEL': 'movel', 'MOVEL': 'movel',
-        'FIXA': 'fixa',
-        'SMARTPHONE': 'smartphone', 'SMART': 'smartphone',
-        'ELETRONICOS': 'eletronicos', 'ELETRÔNICOS': 'eletronicos', 'ELETRO': 'eletronicos',
-        'ESSENCIAIS': 'essenciais', 'ESSEN': 'essenciais',
+        'MÓVEL': 'movel', 'MOVEL': 'movel', 'MOV': 'movel',
+        'FIXA': 'fixa', 'FIX': 'fixa',
+        'SMARTPHONE': 'smartphone', 'SMART': 'smartphone', 'SMARTP': 'smartphone',
+        'ELETRONICOS': 'eletronicos', 'ELETRÔNICOS': 'eletronicos', 'ELETRO': 'eletronicos', 'ELETRÔNICO': 'eletronicos',
+        'ESSENCIAIS': 'essenciais', 'ESSEN': 'essenciais', 'ESSENCIAL': 'essenciais',
         'SEGURO': 'seguro', 'SEGUROS': 'seguro', 'SEG': 'seguro',
         'SVA': 'sva',
     }
@@ -1093,13 +1093,13 @@ def fetch_vendedores_por_filial(user_sector):
     
     # Mapeamento de colunas %ATING_ da planilha REMUNERAÇÃO CN
     ating_cols_map = {
-        'movel': ['%ATING_MOVEL', '%ATING_MÓVEL', 'ATING_MOVEL', '%MOVEL'],
-        'fixa': ['%ATING_FIXA', 'ATING_FIXA', '%FIXA'],
-        'smartphone': ['%ATING_SMART', 'ATING_SMART', '%SMART', '%ATING_SMARTPHONE'],
-        'eletronicos': ['%ATING_ELETRO', 'ATING_ELETRO', '%ELETRO', '%ATING_ELETRONICOS'],
-        'essenciais': ['%ATING_ESSEN', 'ATING_ESSEN', '%ESSEN', '%ATING_ESSENCIAIS'],
-        'seguro': ['%ATING_SEG', 'ATING_SEG', '%SEG', '%ATING_SEGURO'],
-        'sva': ['%ATING_SVA', 'ATING_SVA', '%SVA'],
+        'movel': ['%ATING_MOVEL_1', '%ATING_MÓVEL', 'ATING_MOVEL', '%MOVEL'],
+        'fixa': ['%ATING_FIXA_1', 'ATING_FIXA', '%FIXA'],
+        'smartphone': ['%ATING_SMART_1', 'ATING_SMART', '%SMART', '%ATING_SMARTPHONE'],
+        'eletronicos': ['%ATING_ELETRO_1', 'ATING_ELETRO', '%ELETRO', '%ATING_ELETRONICOS'],
+        'essenciais': ['%ATING_ESSEN_1', 'ATING_ESSEN', '%ESSEN', '%ATING_ESSENCIAIS'],
+        'seguro': ['%ATING_SEG_1', 'ATING_SEG', '%SEG', '%ATING_SEGURO'],
+        'sva': ['%ATING_SVA_1', 'ATING_SVA', '%SVA'],
     }
     
     try:
@@ -1142,17 +1142,31 @@ def fetch_vendedores_por_filial(user_sector):
                             rem_final_col = col
                             break
                 
-                # Mapear colunas de atingimento
+                # Mapear colunas de atingimento - PRIORIZAR sempre colunas com _1
                 ating_cols = {}
                 for pilar_key, possible_cols in ating_cols_map.items():
+                    # Primeira tentativa: buscar apenas colunas com _1
                     for col in df_rem.columns:
                         col_upper = str(col).upper().replace(' ', '_')
-                        for possible in possible_cols:
-                            if possible.upper() in col_upper or col_upper == possible.upper():
-                                ating_cols[pilar_key] = col
-                                break
+                        # Priorizar colunas que terminam com _1
+                        if '_1' in col_upper:
+                            for possible in possible_cols:
+                                if '_1' in possible.upper() and (possible.upper() in col_upper or col_upper == possible.upper()):
+                                    ating_cols[pilar_key] = col
+                                    break
                         if pilar_key in ating_cols:
                             break
+                    
+                    # Segunda tentativa: se não encontrou com _1, buscar outras variações
+                    if pilar_key not in ating_cols:
+                        for col in df_rem.columns:
+                            col_upper = str(col).upper().replace(' ', '_')
+                            for possible in possible_cols:
+                                if possible.upper() in col_upper or col_upper == possible.upper():
+                                    ating_cols[pilar_key] = col
+                                    break
+                            if pilar_key in ating_cols:
+                                break
                 
                 # Filtrar por filial se possível
                 if pdv_col_rem:
@@ -1240,10 +1254,20 @@ def fetch_vendedores_por_filial(user_sector):
             # Identificar pilar
             pilar_val = str(row[pilar_col]).strip().upper() if pd.notna(row[pilar_col]) else ''
             pilar_key = None
-            for key, value in pilar_mapping.items():
-                if key in pilar_val or pilar_val == key:
-                    pilar_key = value
-                    break
+            
+            # Tentarmatch mais preciso primeiro
+            if pilar_val in pilar_mapping:
+                pilar_key = pilar_mapping[pilar_val]
+            else:
+                # Tentativa mais flexível - buscar parte do texto
+                for key, value in pilar_mapping.items():
+                    if key in pilar_val:
+                        pilar_key = value
+                        break
+            
+            # Debug quando não encontrar pilar
+            if not pilar_key:
+                print(f"[DEBUG] Pilar não mapeado: '{pilar_val}' para vendedor {vendedor_nome}")
             
             # Somar receita
             if pilar_key:
@@ -1352,6 +1376,13 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     if iq_data is None:
         iq_data = {'iq_movel': 0, 'iq_fixa': 0}
     
+    # DEBUG: Mostrar todas as colunas disponíveis
+    print(f"[DEBUG process_commission_data] Colunas disponíveis: {list(data.keys())[:30]}")  # Primeiras 30 colunas
+    
+    # DEBUG: Buscar colunas que contenham 'COM_' e 'SMARTPHONE' ou 'ELETRO'
+    colunas_com = [col for col in data.keys() if 'COM_' in str(col).upper()]
+    print(f"[DEBUG process_commission_data] Colunas COM_: {colunas_com}")
+    
     processed = {
         'info': {
             'nome': data.get('NOME', ''),
@@ -1375,10 +1406,10 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     pilar_to_meta_key = {
         'MOVEL': 'movel',
         'FIXA': 'fixa',
-        'SMARTP': 'smartphone',
+        'SMART': 'smartphone',
         'ELETRO': 'eletronicos',
         'ESSEN': 'essenciais',
-        'SEGURO': 'seguro',
+        'SEG': 'seguro',
         'SVA': 'sva',
     }
     
@@ -1452,18 +1483,22 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         
         processed['pilares'].append(pilar_data)
     
-    # Comissões por pilar
+    # Comissões por pilar - tentar múltiplas variações de nomes
     comissoes_valores = {
-        'movel': safe_float(data.get('COM_MÓVEL')),
+        'movel': safe_float(data.get('COM_MÓVEL') or data.get('COM_MOVEL')),
         'fixa': safe_float(data.get('COM_FIXA')),
-        'smartphone': safe_float(data.get('COM_SMARTPHONE')),
-        'eletronicos_a': safe_float(data.get('COM_ELETRONICOS - A')),
-        'eletronicos_b': safe_float(data.get('COM_ELETRONICOS - B')),
-        'essenciais_a': safe_float(data.get('COM_ESSENCIAIS - A')),
-        'essenciais_b': safe_float(data.get('COM_ESSENCIAIS - B')),
-        'seguro': safe_float(data.get('COM_SEGURO')),
+        'smartphone': safe_float(data.get('COM_SMARTPHONE') or data.get('COM_SMART')),
+        'eletronicos_a': safe_float(data.get('COM_ELETRONICOS - A') or data.get('COM_ELETRÔNICOS - A') or data.get('COM_ELETRO - A') or data.get('COM_ELETRONICOS-A') or data.get('COM_ELETRONICOS A')),
+        'eletronicos_b': safe_float(data.get('COM_ELETRONICOS - B') or data.get('COM_ELETRÔNICOS - B') or data.get('COM_ELETRO - B') or data.get('COM_ELETRONICOS-B') or data.get('COM_ELETRONICOS B')),
+        'essenciais_a': safe_float(data.get('COM_ESSENCIAIS - A') or data.get('COM_ESSEN - A') or data.get('COM_ESSENCIAIS-A') or data.get('COM_ESSENCIAIS A')),
+        'essenciais_b': safe_float(data.get('COM_ESSENCIAIS - B') or data.get('COM_ESSEN - B') or data.get('COM_ESSENCIAIS-B') or data.get('COM_ESSENCIAIS B')),
+        'seguro': safe_float(data.get('COM_SEGURO') or data.get('COM_SEG')),
         'sva': safe_float(data.get('COM_SVA')),
     }
+    
+    # DEBUG: Mostrar valores de comissões encontrados
+    print(f"[DEBUG Comissões] smartphone={comissoes_valores['smartphone']}, eletronicos_a={comissoes_valores['eletronicos_a']}, eletronicos_b={comissoes_valores['eletronicos_b']}")
+    
     total_comissoes = safe_float(data.get('Total Comissão'))
     if total_comissoes == 0:
         total_comissoes = sum(comissoes_valores.values())
@@ -1823,10 +1858,103 @@ def process_simple_commission_data(data, is_gerente=False):
     
     for pilar in pilares_config:
         key = pilar['key']
-        pct_1_raw = safe_float(data.get(f'%ATING_{key}_1'))
         
-        # Buscar comissão do pilar
-        comissao = safe_float(data.get(pilar['com_key'])) or safe_float(data.get(f"COM_{pilar['nome'].upper()}"))
+        # Buscar percentual de atingimento com fallbacks para variações
+        if pilar['nome'] == 'Eletrônicos':
+            pct_1_raw = safe_float(
+                data.get('%ATING_ELETRO_1') or
+                data.get('%ATING_ELETRONICOS_1') or
+                data.get('%ATING_ELETRÔNICOS_1') or
+                data.get('ATING_ELETRO_1') or
+                data.get('%ATING ELETRO_1') or
+                data.get('%ATING_ELETRO 1')
+            )
+        elif pilar['nome'] == 'Smartphone':
+            pct_1_raw = safe_float(
+                data.get('%ATING_SMART_1') or
+                data.get('%ATING_SMARTPHONE_1') or
+                data.get('ATING_SMART_1')
+            )
+        elif pilar['nome'] == 'Móvel':
+            pct_1_raw = safe_float(
+                data.get('%ATING_MOVEL_1') or
+                data.get('%ATING_MÓVEL_1') or
+                data.get('ATING_MOVEL_1')
+            )
+        elif pilar['nome'] == 'Essenciais':
+            pct_1_raw = safe_float(
+                data.get('%ATING_ESSEN_1') or
+                data.get('%ATING_ESSENCIAIS_1') or
+                data.get('ATING_ESSEN_1')
+            )
+        elif pilar['nome'] == 'Seguro':
+            pct_1_raw = safe_float(
+                data.get('%ATING_SEG_1') or
+                data.get('%ATING_SEGURO_1') or
+                data.get('ATING_SEG_1')
+            )
+        else:
+            # Fallback padrão
+            pct_1_raw = safe_float(data.get(f'%ATING_{key}_1'))
+        
+        # Buscar comissão do pilar com fallbacks para variações de nomes
+        if pilar['nome'] == 'Eletrônicos':
+            # Tentar múltiplas variações para Eletrônicos
+            comissao = safe_float(
+                data.get('COM_ELETRONICOS - A') or 
+                data.get('COM_ELETRÔNICOS - A') or 
+                data.get('COM_ELETRO - A') or 
+                data.get('COM_ELETRONICOS-A') or 
+                data.get('COM_ELETRONICOS A') or
+                data.get('COM_ELETRONICOS - B') or 
+                data.get('COM_ELETRÔNICOS - B') or 
+                data.get('COM_ELETRO - B') or 
+                data.get('COM_ELETRONICOS-B') or 
+                data.get('COM_ELETRONICOS B') or
+                data.get('COM_ELETRONICOS') or
+                data.get('COM_ELETRÔNICOS') or
+                data.get('COM_ELETRO')
+            )
+            # Se encontrou A ou B, somar ambos
+            eletro_a = safe_float(
+                data.get('COM_ELETRONICOS - A') or 
+                data.get('COM_ELETRÔNICOS - A') or 
+                data.get('COM_ELETRO - A') or 
+                data.get('COM_ELETRONICOS-A') or 
+                data.get('COM_ELETRONICOS A')
+            )
+            eletro_b = safe_float(
+                data.get('COM_ELETRONICOS - B') or 
+                data.get('COM_ELETRÔNICOS - B') or 
+                data.get('COM_ELETRO - B') or 
+                data.get('COM_ELETRONICOS-B') or 
+                data.get('COM_ELETRONICOS B')
+            )
+            comissao = eletro_a + eletro_b if (eletro_a > 0 or eletro_b > 0) else comissao
+        elif pilar['nome'] == 'Smartphone':
+            comissao = safe_float(data.get('COM_SMARTPHONE') or data.get('COM_SMART'))
+        elif pilar['nome'] == 'Móvel':
+            comissao = safe_float(data.get('COM_MÓVEL') or data.get('COM_MOVEL'))
+        elif pilar['nome'] == 'Essenciais':
+            # Tentar múltiplas variações para Essenciais
+            essen_a = safe_float(
+                data.get('COM_ESSENCIAIS - A') or 
+                data.get('COM_ESSEN - A') or 
+                data.get('COM_ESSENCIAIS-A') or 
+                data.get('COM_ESSENCIAIS A')
+            )
+            essen_b = safe_float(
+                data.get('COM_ESSENCIAIS - B') or 
+                data.get('COM_ESSEN - B') or 
+                data.get('COM_ESSENCIAIS-B') or 
+                data.get('COM_ESSENCIAIS B')
+            )
+            comissao = essen_a + essen_b
+        elif pilar['nome'] == 'Seguro':
+            comissao = safe_float(data.get('COM_SEGURO') or data.get('COM_SEG'))
+        else:
+            # Fallback padrão para outros pilares
+            comissao = safe_float(data.get(pilar['com_key'])) or safe_float(data.get(f"COM_{pilar['nome'].upper()}"))
         
         pilares.append({
             'nome': pilar['nome'],
