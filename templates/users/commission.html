@@ -816,6 +816,9 @@ function renderTabelaVendas(vendas) {
         return;
     }
     
+    const isExclusao = tabAtual === 'exclusao';
+    const corReceita = isExclusao ? 'text-red-600' : 'text-green-600';
+    
     let html = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">';
     html += '<th class="px-4 py-3 text-left">Data</th>';
     html += '<th class="px-4 py-3 text-left">Vendedor</th>';
@@ -824,6 +827,9 @@ function renderTabelaVendas(vendas) {
     html += '<th class="px-4 py-3 text-left">Plano/Produto</th>';
     html += '<th class="px-4 py-3 text-left">Nº Acesso</th>';
     html += '<th class="px-4 py-3 text-right">Receita</th>';
+    if (isExclusao) {
+        html += '<th class="px-4 py-3 text-left">Observação</th>';
+    }
     html += '</tr></thead><tbody class="divide-y divide-gray-100">';
     
     vendas.forEach(v => {
@@ -847,6 +853,7 @@ function renderTabelaVendas(vendas) {
         const planoProduto = v['Plano/Produto'] || v['PLANO/PRODUTO'] || '-';
         const numeroAcesso = v['NUMERO ACESSO'] || v['Numero Acesso'] || '-';
         const receita = v['Receita'] || v.RECEITA || 0;
+        const observacao = v['OBSERVAÇÃO'] || v['Observação'] || v['OBSERVACAO'] || v['observacao'] || '-';
         
         html += '<tr class="hover:bg-purple-50 transition-colors">';
         html += `<td class="px-4 py-3 text-gray-600">${dataFormatada}</td>`;
@@ -855,7 +862,10 @@ function renderTabelaVendas(vendas) {
         html += `<td class="px-4 py-3 text-gray-600">${cpfCnpj}</td>`;
         html += `<td class="px-4 py-3 text-gray-600">${planoProduto}</td>`;
         html += `<td class="px-4 py-3 text-gray-600">${numeroAcesso}</td>`;
-        html += `<td class="px-4 py-3 text-right font-semibold ${tabAtual === 'exclusao' ? 'text-red-600' : 'text-green-600'}">R$ ${Number(receita).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+        html += `<td class="px-4 py-3 text-right font-semibold ${corReceita}">R$ ${Number(receita).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+        if (isExclusao) {
+            html += `<td class="px-4 py-3 text-gray-600">${observacao}</td>`;
+        }
         html += '</tr>';
     });
     

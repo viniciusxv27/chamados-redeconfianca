@@ -1063,18 +1063,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    function abrirModalVendas(pilar, pilarNome) {
+    // Variáveis globais para vendas
+    window.vendasPagoGlobal = [];
+    window.vendasExclusaoGlobal = [];
+    window.tabAtual = 'pago';
+    window.valorTotalPagoGlobal = 0;
+    window.valorTotalExclusaoGlobal = 0;
+    
+    window.abrirModalVendas = function(pilar, pilarNome) {
         var modal = document.getElementById('modalVendasPilar');
         var titulo = document.getElementById('modalVendasTitulo');
-        var conteudo = document.getElementById('modalVendasConteudo');
-        var loading = document.getElementById('modalVendasLoading');
-        var btnExportar = document.getElementById('btnExportarVendas');
+        var loading = document.getElementById('loadingVendas');
+        var conteudo = document.getElementById('conteudoVendas');
         
         // Mostrar modal com loading
         titulo.textContent = 'Vendas - ' + pilarNome;
-        conteudo.innerHTML = '';
         loading.classList.remove('hidden');
-        btnExportar.classList.add('hidden');
+        conteudo.classList.add('hidden');
         modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
         
@@ -1083,143 +1088,132 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(function(response) { return response.json(); })
             .then(function(data) {
                 loading.classList.add('hidden');
+                conteudo.classList.remove('hidden');
                 
                 if (data.error) {
                     conteudo.innerHTML = '<div class="text-center py-8 text-red-500"><svg class="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg><p>' + data.error + '</p></div>';
                     return;
                 }
                 
-                var html = '';
+                // Armazenar vendas
+                window.vendasPagoGlobal = data.vendas_pago || [];
+                window.vendasExclusaoGlobal = data.vendas_exclusao || [];
+                window.valorTotalPagoGlobal = data.valor_total_pago || 0;
+                window.valorTotalExclusaoGlobal = data.valor_total_exclusao || 0;
                 
-                // Resumo
-                html += '<div class="grid grid-cols-2 gap-4 mb-6">';
-                html += '<div class="bg-green-50 border border-green-200 rounded-xl p-4 text-center">';
-                html += '<p class="text-green-600 text-sm font-medium">Vendas Pagas</p>';
-                html += '<p class="text-2xl font-bold text-green-700">' + data.total_pago + '</p>';
-                html += '<p class="text-lg font-semibold text-green-600 mt-1">R$ ' + (data.valor_total_pago || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</p>';
-                html += '</div>';
-                html += '<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">';
-                html += '<p class="text-red-600 text-sm font-medium">Vendas Exclusão</p>';
-                html += '<p class="text-2xl font-bold text-red-700">' + data.total_exclusao + '</p>';
-                html += '<p class="text-lg font-semibold text-red-600 mt-1">R$ ' + (data.valor_total_exclusao || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</p>';
-                html += '</div>';
-                html += '</div>';
+                // Atualizar resumo
+                atualizarResumoModal();
                 
-                // Armazenar vendas separadamente para exportar
-                vendasPagoGlobal = data.vendas_pago || [];
-                vendasExclusaoGlobal = data.vendas_exclusao || [];
-                
-                // Tabs
-                html += '<div class="border-b border-gray-200 mb-4">';
-                html += '<nav class="flex gap-4" id="vendasTabs">';
-                html += '<button type="button" class="tab-btn active px-4 py-2 text-sm font-medium text-primary border-b-2 border-primary" data-tab="pago">Pagas (' + data.total_pago + ')</button>';
-                html += '<button type="button" class="tab-btn px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700" data-tab="exclusao">Exclusão (' + data.total_exclusao + ')</button>';
-                html += '</nav>';
-                html += '</div>';
-                
-                // Tabela Pago
-                html += '<div id="tabPago" class="tab-content">';
-                if (data.vendas_pago.length > 0) {
-                    html += renderTabelaVendas(data.vendas_pago, 'pago');
-                } else {
-                    html += '<div class="text-center py-8 text-gray-500"><svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><p>Nenhuma venda paga encontrada</p></div>';
-                }
-                html += '</div>';
-                
-                // Tabela Exclusão
-                html += '<div id="tabExclusao" class="tab-content hidden">';
-                if (data.vendas_exclusao.length > 0) {
-                    html += renderTabelaVendas(data.vendas_exclusao, 'exclusao');
-                } else {
-                    html += '<div class="text-center py-8 text-gray-500"><svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><p>Nenhuma venda em exclusão encontrada</p></div>';
-                }
-                html += '</div>';
-                
-                conteudo.innerHTML = html;
-                btnExportar.classList.remove('hidden');
-                btnExportar.setAttribute('data-pilar', pilarNome);
-                
-                // Adicionar eventos das tabs
-                document.querySelectorAll('.tab-btn').forEach(function(btn) {
-                    btn.addEventListener('click', function() {
-                        document.querySelectorAll('.tab-btn').forEach(function(b) {
-                            b.classList.remove('active', 'text-primary', 'border-b-2', 'border-primary');
-                            b.classList.add('text-gray-500');
-                        });
-                        this.classList.add('active', 'text-primary', 'border-b-2', 'border-primary');
-                        this.classList.remove('text-gray-500');
-                        
-                        var tab = this.dataset.tab;
-                        document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.add('hidden'); });
-                        document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.remove('hidden');
-                    });
-                });
+                // Exibir aba pago por padrão
+                trocarTab('pago');
             })
             .catch(function(error) {
                 loading.classList.add('hidden');
+                conteudo.classList.remove('hidden');
                 conteudo.innerHTML = '<div class="text-center py-8 text-red-500"><p>Erro ao carregar vendas</p></div>';
             });
     }
     
-    function renderTabelaVendas(vendas, tipo) {
-        if (!vendas || vendas.length === 0) return '';
+    window.atualizarResumoModal = function() {
+        var resumoDiv = document.getElementById('resumoVendas');
+        if (resumoDiv) {
+            resumoDiv.innerHTML = '<div class="grid grid-cols-2 gap-4 mb-4">' +
+                '<div class="bg-green-50 border border-green-200 rounded-xl p-4 text-center">' +
+                '<p class="text-green-600 text-sm font-medium">Vendas Pagas</p>' +
+                '<p class="text-2xl font-bold text-green-700">' + window.vendasPagoGlobal.length + '</p>' +
+                '<p class="text-lg font-semibold text-green-600 mt-1">R$ ' + window.valorTotalPagoGlobal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</p>' +
+                '</div>' +
+                '<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">' +
+                '<p class="text-red-600 text-sm font-medium">Vendas Exclusão</p>' +
+                '<p class="text-2xl font-bold text-red-700">' + window.vendasExclusaoGlobal.length + '</p>' +
+                '<p class="text-lg font-semibold text-red-600 mt-1">R$ ' + window.valorTotalExclusaoGlobal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</p>' +
+                '</div></div>';
+        }
+    }
+    
+    window.trocarTab = function(tab) {
+        window.tabAtual = tab;
+        var tabPago = document.getElementById('tabPago');
+        var tabExclusao = document.getElementById('tabExclusao');
         
-        // Colunas principais para exibir
-        var colunasExibir = ['Nº da Venda', 'Data', 'Vendedor', 'Nome Cliente', 'CPF/CNPJ', 'Plano/Produto', 'NUMERO ACESSO', 'Receita', 'PILAR'];
-        var colunas = [];
+        if (tab === 'pago') {
+            tabPago.classList.add('border-purple-600', 'text-purple-600');
+            tabPago.classList.remove('border-transparent', 'text-gray-500');
+            tabExclusao.classList.remove('border-purple-600', 'text-purple-600');
+            tabExclusao.classList.add('border-transparent', 'text-gray-500');
+            renderTabelaVendas(window.vendasPagoGlobal);
+        } else {
+            tabExclusao.classList.add('border-purple-600', 'text-purple-600');
+            tabExclusao.classList.remove('border-transparent', 'text-gray-500');
+            tabPago.classList.remove('border-purple-600', 'text-purple-600');
+            tabPago.classList.add('border-transparent', 'text-gray-500');
+            renderTabelaVendas(window.vendasExclusaoGlobal);
+        }
+    }
+    
+    window.renderTabelaVendas = function(vendas) {
+        var conteudo = document.getElementById('conteudoVendas');
         
-        // Pegar todas as colunas da primeira venda
-        var todasColunas = Object.keys(vendas[0]).filter(function(c) { return !c.startsWith('_'); });
+        if (!vendas || vendas.length === 0) {
+            conteudo.innerHTML = '<div class="text-center py-12"><svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg><p class="text-gray-500 font-medium">Nenhuma venda encontrada</p><p class="text-gray-400 text-sm mt-1">Não há vendas nesta categoria para este pilar</p></div>';
+            return;
+        }
         
-        // Usar colunas principais que existem ou todas se não encontrar
-        colunasExibir.forEach(function(col) {
-            var found = todasColunas.find(function(c) { return c.toUpperCase() === col.toUpperCase(); });
-            if (found) colunas.push(found);
-        });
+        var isExclusao = window.tabAtual === 'exclusao';
+        var corReceita = isExclusao ? 'text-red-600' : 'text-green-600';
         
-        if (colunas.length < 3) colunas = todasColunas.slice(0, 8);
+        var html = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">';
+        html += '<th class="px-4 py-3 text-left">Data</th>';
+        html += '<th class="px-4 py-3 text-left">Vendedor</th>';
+        html += '<th class="px-4 py-3 text-left">Cliente</th>';
+        html += '<th class="px-4 py-3 text-left">CPF/CNPJ</th>';
+        html += '<th class="px-4 py-3 text-left">Plano/Produto</th>';
+        html += '<th class="px-4 py-3 text-left">Nº Acesso</th>';
+        html += '<th class="px-4 py-3 text-right">Receita</th>';
+        if (isExclusao) {
+            html += '<th class="px-4 py-3 text-left">Observação</th>';
+        }
+        html += '</tr></thead><tbody class="divide-y divide-gray-100">';
         
-        var html = '<div class="overflow-x-auto rounded-xl border border-gray-200">';
-        html += '<table class="w-full text-sm">';
-        html += '<thead><tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">';
-        colunas.forEach(function(col) {
-            html += '<th class="px-4 py-3 text-left whitespace-nowrap">' + col + '</th>';
-        });
-        html += '</tr></thead>';
-        html += '<tbody class="divide-y divide-gray-100">';
-        
-        vendas.forEach(function(venda, idx) {
-            var rowClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
-            if (tipo === 'exclusao') rowClass += ' text-red-700';
-            html += '<tr class="' + rowClass + ' hover:bg-gray-100 transition-colors">';
-            colunas.forEach(function(col) {
-                var valor = venda[col];
-                if (valor === null || valor === undefined) valor = '-';
-                // Formatar Receita
-                if (col.toUpperCase() === 'RECEITA' && typeof valor === 'number') {
-                    valor = 'R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                }
-                // Formatar Data (remover horário)
-                if (col.toUpperCase() === 'DATA' && valor && valor !== '-') {
-                    var dataStr = String(valor);
-                    if (dataStr.includes(' ')) {
-                        valor = dataStr.split(' ')[0];
-                    } else if (dataStr.includes('T')) {
-                        valor = dataStr.split('T')[0];
+        vendas.forEach(function(v) {
+            // Formatar data DD/MM/YYYY
+            var dataFormatada = v['Data'] || v.DATA || '-';
+            if (dataFormatada && dataFormatada !== '-') {
+                var partes = String(dataFormatada).split(/[T ]/);
+                if (partes.length > 0) {
+                    var data = partes[0];
+                    var dataParts = data.split('-');
+                    if (dataParts.length === 3) {
+                        dataFormatada = dataParts[2] + '/' + dataParts[1] + '/' + dataParts[0];
                     }
-                    // Converter de YYYY-MM-DD para DD/MM/YYYY se necessário
-                    if (valor.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                        var partes = valor.split('-');
-                        valor = partes[2] + '/' + partes[1] + '/' + partes[0];
-                    }
                 }
-                html += '<td class="px-4 py-3 whitespace-nowrap">' + valor + '</td>';
-            });
+            }
+            
+            // Pegar valores com fallback para diferentes nomes de colunas
+            var vendedor = v['Vendedor'] || v.VENDEDOR || '-';
+            var cliente = v['Nome Cliente'] || v.CLIENTE || '-';
+            var cpfCnpj = v['CPF/CNPJ'] || '-';
+            var planoProduto = v['Plano/Produto'] || v['PLANO/PRODUTO'] || '-';
+            var numeroAcesso = v['NUMERO ACESSO'] || v['Numero Acesso'] || '-';
+            var receita = v['Receita'] || v.RECEITA || 0;
+            var observacao = v['OBSERVAÇÃO'] || v['Observação'] || v['OBSERVACAO'] || v['observacao'] || '-';
+            
+            html += '<tr class="hover:bg-purple-50 transition-colors">';
+            html += '<td class="px-4 py-3 text-gray-600">' + dataFormatada + '</td>';
+            html += '<td class="px-4 py-3 font-medium text-gray-800">' + vendedor + '</td>';
+            html += '<td class="px-4 py-3 text-gray-600">' + cliente + '</td>';
+            html += '<td class="px-4 py-3 text-gray-600">' + cpfCnpj + '</td>';
+            html += '<td class="px-4 py-3 text-gray-600">' + planoProduto + '</td>';
+            html += '<td class="px-4 py-3 text-gray-600">' + numeroAcesso + '</td>';
+            html += '<td class="px-4 py-3 text-right font-semibold ' + corReceita + '">R$ ' + Number(receita).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+            if (isExclusao) {
+                html += '<td class="px-4 py-3 text-gray-600">' + observacao + '</td>';
+            }
             html += '</tr>';
         });
         
         html += '</tbody></table></div>';
-        return html;
+        conteudo.innerHTML = html;
     }
     
     // Fechar modal ao clicar fora
@@ -1242,14 +1236,11 @@ function fecharModalVendas() {
     }
 }
 
-var vendasPagoGlobal = [];
-var vendasExclusaoGlobal = [];
-
 function exportarVendasExcel() {
     var pilar = document.getElementById('btnExportarVendas')?.getAttribute('data-pilar') || 'Pilar';
     
-    if ((!vendasPagoGlobal || vendasPagoGlobal.length === 0) && 
-        (!vendasExclusaoGlobal || vendasExclusaoGlobal.length === 0)) {
+    if ((!window.vendasPagoGlobal || window.vendasPagoGlobal.length === 0) && 
+        (!window.vendasExclusaoGlobal || window.vendasExclusaoGlobal.length === 0)) {
         alert('Sem vendas para exportar');
         return;
     }
@@ -1295,8 +1286,8 @@ function criarExcelComSheets(pilar) {
     }
     
     // Sheet Pago
-    if (vendasPagoGlobal && vendasPagoGlobal.length > 0) {
-        var wsPago = XLSX.utils.json_to_sheet(formatarVendas(vendasPagoGlobal));
+    if (window.vendasPagoGlobal && window.vendasPagoGlobal.length > 0) {
+        var wsPago = XLSX.utils.json_to_sheet(formatarVendas(window.vendasPagoGlobal));
         XLSX.utils.book_append_sheet(wb, wsPago, 'Pago');
     } else {
         var wsPagoVazio = XLSX.utils.aoa_to_sheet([['Sem vendas pagas']]);
@@ -1304,8 +1295,8 @@ function criarExcelComSheets(pilar) {
     }
     
     // Sheet Exclusão
-    if (vendasExclusaoGlobal && vendasExclusaoGlobal.length > 0) {
-        var wsExclusao = XLSX.utils.json_to_sheet(formatarVendas(vendasExclusaoGlobal));
+    if (window.vendasExclusaoGlobal && window.vendasExclusaoGlobal.length > 0) {
+        var wsExclusao = XLSX.utils.json_to_sheet(formatarVendas(window.vendasExclusaoGlobal));
         XLSX.utils.book_append_sheet(wb, wsExclusao, 'Exclusao');
     } else {
         var wsExclusaoVazio = XLSX.utils.aoa_to_sheet([['Sem vendas em exclusão']]);
@@ -1319,42 +1310,52 @@ function criarExcelComSheets(pilar) {
 </script>
 
 <!-- Modal de Vendas por Pilar -->
-<div id="modalVendasPilar" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-modal="true">
-    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-        <!-- Overlay -->
-        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"></div>
+<div id="modalVendasPilar" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-center justify-center p-4" onclick="if(event.target === this) fecharModalVendas()">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+        <!-- Header com gradiente roxo -->
+        <div class="bg-gradient-to-r from-purple-600 to-purple-800 rounded-t-2xl p-6 flex items-center justify-between text-white">
+            <div>
+                <h3 class="text-xl font-bold" id="modalVendasTitulo">Vendas do Pilar</h3>
+                <p class="text-purple-100 text-sm mt-1">Detalhamento de vendas</p>
+            </div>
+            <button onclick="fecharModalVendas()" class="w-10 h-10 rounded-full hover:bg-white/20 transition-colors flex items-center justify-center">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
         
-        <!-- Modal Content -->
-        <div class="relative inline-block w-full max-w-5xl my-8 text-left align-middle transition-all transform bg-white rounded-2xl shadow-2xl">
-            <!-- Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-primary to-purple-700 rounded-t-2xl">
-                <h3 id="modalVendasTitulo" class="text-xl font-bold text-white">Vendas do Pilar</h3>
-                <div class="flex items-center gap-3">
-                    <button id="btnExportarVendas" onclick="exportarVendasExcel()" class="hidden inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Exportar Excel
-                    </button>
-                    <button onclick="fecharModalVendas()" class="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
+        <!-- Tabs -->
+        <div class="border-b border-gray-200 px-6">
+            <div class="flex gap-4">
+                <button id="tabPago" onclick="trocarTab('pago')" class="py-3 px-4 font-medium text-sm border-b-2 border-purple-600 text-purple-600 transition-colors">
+                    ✓ Pago
+                </button>
+                <button id="tabExclusao" onclick="trocarTab('exclusao')" class="py-3 px-4 font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors">
+                    ✗ Exclusão
+                </button>
             </div>
-            
-            <!-- Body -->
-            <div class="px-6 py-6 max-h-[70vh] overflow-y-auto">
-                <!-- Loading -->
-                <div id="modalVendasLoading" class="flex flex-col items-center justify-center py-12">
-                    <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                    <p class="mt-4 text-gray-500">Carregando vendas...</p>
-                </div>
-                
-                <!-- Conteúdo -->
-                <div id="modalVendasConteudo"></div>
+        </div>
+        
+        <!-- Conteúdo -->
+        <div class="flex-1 overflow-auto p-6">
+            <div id="resumoVendas" class="mb-4"></div>
+            <div id="loadingVendas" class="text-center py-12">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600"></div>
+                <p class="text-gray-500 mt-4">Carregando vendas...</p>
             </div>
+            <div id="conteudoVendas" class="hidden"></div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="border-t border-gray-200 p-4 bg-gray-50 rounded-b-2xl flex justify-between items-center">
+            <p class="text-sm text-gray-500">Use a aba acima para alternar entre Pago e Exclusão</p>
+            <button onclick="exportarVendasExcel()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Exportar Excel
+            </button>
         </div>
     </div>
 </div>
