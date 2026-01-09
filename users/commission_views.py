@@ -38,7 +38,7 @@ EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URS
 # Planilha BASE_PAGAMENTO (Pago e Exclusão por pilar)
 EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBHZkNccF89Tb0x1dXfoLhiAT8Q5C_fzHlIyUnc2L2FJVs?e=vAO4OX"
 
-EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQCS_2k6m5L7SqNcGjMz6hZvAa5m5LiG04qKdlO_Nxgw6TE?e=YmvlQb"
+EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
 
 # Nome das sheets na planilha de comissionamento
 SHEET_GERENTE = "REMUNERAÇÃO GERENTE"
