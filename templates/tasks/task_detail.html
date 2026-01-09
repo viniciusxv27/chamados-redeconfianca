@@ -411,14 +411,40 @@
                         <!-- Quick actions -->
                         <div class="flex items-center justify-between mt-4">
                             <div class="flex items-center space-x-4 text-sm text-gray-500">
-                                <button type="button" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100" title="Anexar arquivo">
+                                <label for="chat-attachment" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100 cursor-pointer" title="Anexar arquivo">
                                     <i class="fas fa-paperclip"></i>
                                     <span class="hidden sm:inline">Anexar</span>
-                                </button>
-                                <button type="button" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100" title="Emoji">
+                                </label>
+                                <input type="file" 
+                                       id="chat-attachment" 
+                                       class="hidden"
+                                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                                       onchange="uploadAttachment(event)">
+                                <button type="button" id="emoji-btn" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100 relative" title="Emoji">
                                     <i class="fas fa-smile"></i>
                                     <span class="hidden sm:inline">Emoji</span>
                                 </button>
+                                <!-- Emoji Picker -->
+                                <div id="emoji-picker" class="hidden absolute bottom-16 left-0 bg-white border rounded-lg shadow-xl p-3 z-50">
+                                    <div class="grid grid-cols-8 gap-1 text-xl">
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="👍">👍</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="👎">👎</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="❤️">❤️</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="😊">😊</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="😂">😂</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="🎉">🎉</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="🔥">🔥</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="✅">✅</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="⚠️">⚠️</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="❌">❌</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="🤔">🤔</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="👀">👀</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="🙏">🙏</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="💯">💯</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="📎">📎</button>
+                                        <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="📝">📝</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="text-xs text-gray-400">
                                 <kbd class="px-1.5 py-0.5 bg-gray-100 rounded text-xs">Enter</kbd> para enviar
@@ -452,7 +478,40 @@ document.addEventListener('DOMContentLoaded', function() {
     setupFormSubmission();
     startPollingMessages();
     scrollToBottom();
+    setupEmojiPicker();
 });
+
+function setupEmojiPicker() {
+    const emojiBtn = document.getElementById('emoji-btn');
+    const emojiPicker = document.getElementById('emoji-picker');
+    
+    if (emojiBtn && emojiPicker) {
+        // Toggle emoji picker
+        emojiBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            emojiPicker.classList.toggle('hidden');
+        });
+        
+        // Fechar ao clicar fora
+        document.addEventListener('click', function(e) {
+            if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
+                emojiPicker.classList.add('hidden');
+            }
+        });
+        
+        // Inserir emoji no input
+        document.querySelectorAll('.emoji-option').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const emoji = this.getAttribute('data-emoji');
+                messageInput.value += emoji;
+                messageInput.focus();
+                updateCharCounter();
+                updateSendButton();
+                emojiPicker.classList.add('hidden');
+            });
+        });
+    }
+}
 
 function initializeChat() {
     // Count existing messages
@@ -807,9 +866,17 @@ async function uploadAttachment(event) {
     // Validar tamanho
     const maxSize = 50 * 1024 * 1024; // 50MB
     if (file.size > maxSize) {
-        alert('Arquivo muito grande. Máximo 50MB.');
+        showNotification('Arquivo muito grande. Máximo 50MB.', 'error');
         event.target.value = '';
         return;
+    }
+    
+    // Mostrar indicador de carregamento
+    const attachBtn = document.querySelector('label[for="chat-attachment"]');
+    const originalHTML = attachBtn ? attachBtn.innerHTML : '';
+    if (attachBtn) {
+        attachBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span class="hidden sm:inline">Enviando...</span>';
+        attachBtn.style.pointerEvents = 'none';
     }
     
     const formData = new FormData();
@@ -834,11 +901,19 @@ async function uploadAttachment(event) {
             // Mostrar notificação de sucesso
             showNotification('Anexo adicionado com sucesso!', 'success');
         } else {
-            alert('Erro ao enviar anexo: ' + (data.error || 'Erro desconhecido'));
+            showNotification('Erro ao enviar anexo: ' + (data.error || 'Erro desconhecido'), 'error');
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao enviar anexo. Tente novamente.');
+        showNotification('Erro ao enviar anexo. Tente novamente.', 'error');
+    } finally {
+        // Restaurar botão
+        const attachBtn = document.querySelector('label[for="chat-attachment"]');
+        if (attachBtn) {
+            attachBtn.innerHTML = '<i class="fas fa-paperclip"></i> <span class="hidden sm:inline">Anexar</span>';
+            attachBtn.style.pointerEvents = 'auto';
+        }
+        event.target.value = '';
     }
 }
 
