@@ -882,6 +882,57 @@ def safe_float(value, default=0):
         return default
 
 
+def normalize_col_name(col_name):
+    """
+    Normaliza nome de coluna removendo acentos e convertendo para uppercase.
+    Usado para comparação flexível de nomes de colunas.
+    """
+    import unicodedata
+    if col_name is None:
+        return ""
+    s = str(col_name).upper().strip()
+    # Remove acentos
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    return s
+
+
+def find_column_value(data, search_patterns):
+    """
+    Busca um valor nas colunas do data usando padrões flexíveis.
+    Retorna o primeiro valor encontrado (não zero/none).
+    
+    search_patterns: lista de padrões para buscar (ex: ['%ATING_MOVEL_1', 'ATING_MOVEL_1'])
+    """
+    # Primeiro, tentar busca exata
+    for pattern in search_patterns:
+        val = data.get(pattern)
+        if val is not None and safe_float(val) != 0:
+            return safe_float(val)
+    
+    # Depois, busca normalizada (sem acentos, case-insensitive)
+    for pattern in search_patterns:
+        pattern_norm = normalize_col_name(pattern)
+        for col in data.keys():
+            col_norm = normalize_col_name(col)
+            if col_norm == pattern_norm:
+                val = data.get(col)
+                if val is not None and safe_float(val) != 0:
+                    return safe_float(val)
+    
+    # Por último, busca parcial
+    for pattern in search_patterns:
+        pattern_norm = normalize_col_name(pattern)
+        for col in data.keys():
+            col_norm = normalize_col_name(col)
+            if pattern_norm in col_norm or col_norm in pattern_norm:
+                val = data.get(col)
+                if val is not None and safe_float(val) != 0:
+                    return safe_float(val)
+    
+    return 0
+
+
 def convert_percentage(value):
     """
     Converte valor decimal para percentual se necessário.
@@ -1428,30 +1479,36 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         key = pilar['key']
         cart_key = f'ATING_CART_{key}' if is_gerente else f'ATING_{key}_PDV'
         
-        # Buscar atingimentos - tentar várias variações de nomes de colunas
-        # Pode ser: %ATING_MOVEL_3, %ATING_MOVEL 3, ATING_MOVEL_3, etc.
-        pct_3_raw = (
-            safe_float(data.get(f'%ATING_{key}_3')) or
-            safe_float(data.get(f'%ATING_{key} 3')) or
-            safe_float(data.get(f'ATING_{key}_3')) or
-            safe_float(data.get(f'%ATING {key}_3')) or
-            safe_float(data.get(f'% ATING_{key}_3'))
-        )
-        pct_2_raw = (
-            safe_float(data.get(f'%ATING_{key}_2')) or
-            safe_float(data.get(f'%ATING_{key} 2')) or
-            safe_float(data.get(f'ATING_{key}_2')) or
-            safe_float(data.get(f'%ATING {key}_2')) or
-            safe_float(data.get(f'% ATING_{key}_2'))
-        )
-        pct_1_raw = (
-            safe_float(data.get(f'%ATING_{key}_1')) or
-            safe_float(data.get(f'%ATING_{key} 1')) or
-            safe_float(data.get(f'ATING_{key}_1')) or
-            safe_float(data.get(f'%ATING {key}_1')) or
-            safe_float(data.get(f'% ATING_{key}_1')) or
-            safe_float(data.get(f'%ATING_{key}'))  # Sem sufixo numérico
-        )
+        # DEBUG: Mostrar colunas disponíveis relacionadas a ATING
+        ating_cols_debug = [col for col in data.keys() if 'ATING' in str(col).upper() or '%' in str(col)]
+        if not hasattr(process_commission_data, '_debug_ating_shown'):
+            print(f"[DEBUG ATING COLS] Colunas com ATING ou %: {ating_cols_debug}")
+            process_commission_data._debug_ating_shown = True
+        
+        # Padrões para buscar pct_3 (antepenúltimo mês)
+        patterns_3 = [
+            f'%ATING_{key}_3', f'%ATING_{key} 3', f'ATING_{key}_3',
+            f'%ATING {key}_3', f'% ATING_{key}_3', f'%ATING_{key}_M3',
+            f'ATING_{key}_M3', f'%{key}_3', f'%{key} 3'
+        ]
+        # Padrões para buscar pct_2 (penúltimo mês)
+        patterns_2 = [
+            f'%ATING_{key}_2', f'%ATING_{key} 2', f'ATING_{key}_2',
+            f'%ATING {key}_2', f'% ATING_{key}_2', f'%ATING_{key}_M2',
+            f'ATING_{key}_M2', f'%{key}_2', f'%{key} 2'
+        ]
+        # Padrões para buscar pct_1 (último mês / atual)
+        patterns_1 = [
+            f'%ATING_{key}_1', f'%ATING_{key} 1', f'ATING_{key}_1',
+            f'%ATING {key}_1', f'% ATING_{key}_1', f'%ATING_{key}',
+            f'%ATING_{key}_M1', f'ATING_{key}_M1', f'%{key}_1',
+            f'%{key} 1', f'%{key}'
+        ]
+        
+        # Usar função flexível para buscar valores
+        pct_3_raw = find_column_value(data, patterns_3)
+        pct_2_raw = find_column_value(data, patterns_2)
+        pct_1_raw = find_column_value(data, patterns_1)
         
         # DEBUG: Mostrar valores encontrados
         print(f"[DEBUG Ating] {key}: pct_1={pct_1_raw}, pct_2={pct_2_raw}, pct_3={pct_3_raw} (is_gerente={is_gerente})")

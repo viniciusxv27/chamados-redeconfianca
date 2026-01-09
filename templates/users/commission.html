@@ -350,6 +350,31 @@
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.comissoes.sva|add:data.alto_desempenho.sva|add:data.bonus.sva|add:data.hunter.sva|floatformat:2 }}</td>
                     </tr>
                 </tbody>
+                <tfoot>
+                    <tr class="bg-gray-50">
+                        <td class="px-4 py-3 text-gray-800 font-medium">Subtotal Pilares</td>
+                        <td class="px-4 py-3 text-right text-green-600 font-medium">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-amber-600 font-medium">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-blue-600 font-medium">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-purple-600 font-medium">R$ {{ data.hunter.total|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right text-gray-600 font-medium">-</td>
+                        <td class="px-4 py-3 text-right font-bold text-purple-700 bg-purple-100">R$ {{ data.comissoes.total|add:data.alto_desempenho.total|add:data.bonus.total|add:data.hunter.total|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="bg-purple-50 border-t-2 border-purple-200">
+                        <td class="px-4 py-3" colspan="6">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🚀</span>
+                                <span class="font-semibold text-purple-800">Acelerador 6/7 Pilares</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-right font-bold text-purple-700 bg-purple-100">R$ {{ data.aceleradores.seis_pilares|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
+                        <td class="px-4 py-3 text-gray-800">TOTAL GERAL</td>
+                        <td class="px-4 py-3 text-right text-primary" colspan="5"></td>
+                        <td class="px-4 py-3 text-right text-green-700 bg-green-100 text-lg">R$ {{ data.aceleradores.total_aceleradores|floatformat:2 }}</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
