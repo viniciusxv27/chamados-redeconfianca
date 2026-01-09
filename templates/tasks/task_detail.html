@@ -297,8 +297,7 @@
                             <input type="file" 
                                    id="new-attachment" 
                                    class="hidden"
-                                   accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-                                   onchange="uploadAttachment(event)">
+                                   accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv">
                         </label>
                     </div>
                 </div>
@@ -418,8 +417,7 @@
                                 <input type="file" 
                                        id="chat-attachment" 
                                        class="hidden"
-                                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-                                       onchange="uploadAttachment(event)">
+                                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv">
                                 <button type="button" id="emoji-btn" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100" title="Emoji">
                                     <i class="fas fa-smile"></i>
                                     <span class="hidden sm:inline">Emoji</span>
@@ -479,30 +477,61 @@ document.addEventListener('DOMContentLoaded', function() {
     startPollingMessages();
     scrollToBottom();
     setupEmojiPicker();
+    setupAttachmentHandlers();
 });
+
+// Setup dos handlers de anexo
+function setupAttachmentHandlers() {
+    const newAttachment = document.getElementById('new-attachment');
+    const chatAttachment = document.getElementById('chat-attachment');
+    
+    if (newAttachment) {
+        newAttachment.addEventListener('change', function(e) {
+            uploadAttachment(e);
+        });
+    }
+    
+    if (chatAttachment) {
+        chatAttachment.addEventListener('change', function(e) {
+            uploadAttachment(e);
+        });
+    }
+    
+    console.log('Attachment handlers configurados:', {
+        newAttachment: !!newAttachment,
+        chatAttachment: !!chatAttachment
+    });
+}
 
 function setupEmojiPicker() {
     const emojiBtn = document.getElementById('emoji-btn');
     const emojiPicker = document.getElementById('emoji-picker');
     
+    console.log('setupEmojiPicker:', {emojiBtn: !!emojiBtn, emojiPicker: !!emojiPicker});
+    
     if (emojiBtn && emojiPicker) {
         // Toggle emoji picker
         emojiBtn.addEventListener('click', function(e) {
+            e.preventDefault();
             e.stopPropagation();
+            console.log('Emoji btn clicked');
             emojiPicker.classList.toggle('hidden');
         });
         
         // Fechar ao clicar fora
         document.addEventListener('click', function(e) {
-            if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
+            if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
                 emojiPicker.classList.add('hidden');
             }
         });
         
         // Inserir emoji no input
         document.querySelectorAll('.emoji-option').forEach(btn => {
-            btn.addEventListener('click', function() {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
                 const emoji = this.getAttribute('data-emoji');
+                console.log('Emoji selecionado:', emoji);
                 messageInput.value += emoji;
                 messageInput.focus();
                 updateCharCounter();
@@ -510,6 +539,10 @@ function setupEmojiPicker() {
                 emojiPicker.classList.add('hidden');
             });
         });
+        
+        console.log('Emoji picker configurado com sucesso');
+    } else {
+        console.error('Elementos do emoji picker não encontrados');
     }
 }
 
@@ -860,8 +893,14 @@ setInterval(() => {
 
 // Upload de anexo
 async function uploadAttachment(event) {
+    console.log('uploadAttachment chamado', event);
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+        console.log('Nenhum arquivo selecionado');
+        return;
+    }
+    
+    console.log('Arquivo selecionado:', file.name, file.size);
     
     // Validar tamanho
     const maxSize = 50 * 1024 * 1024; // 50MB
