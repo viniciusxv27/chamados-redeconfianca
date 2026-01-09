@@ -359,9 +359,14 @@
             <div class="flex justify-end">
                 <button 
                     type="submit" 
-                    class="bg-secondary text-white px-8 py-3 rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                    id="submit-button"
+                    class="bg-secondary text-white px-8 py-3 rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    Abrir Chamado
+                    <span id="submit-button-text">Abrir Chamado</span>
+                    <span id="submit-button-loading" class="hidden">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>
+                        Criando chamado...
+                    </span>
                 </button>
             </div>
         </form>
@@ -784,6 +789,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Interceptar submissão do formulário para upload de arquivos
     form.addEventListener('submit', async function(e) {
+        const submitButton = document.getElementById('submit-button');
+        const submitButtonText = document.getElementById('submit-button-text');
+        const submitButtonLoading = document.getElementById('submit-button-loading');
+        
         // Validar que o campo descrição não está vazio
         const descriptionContent = descriptionEditor.textContent.trim();
         if (!descriptionContent || descriptionContent === '') {
@@ -792,6 +801,11 @@ document.addEventListener('DOMContentLoaded', function() {
             descriptionEditor.focus();
             return false;
         }
+        
+        // Travar o botão e mostrar loading
+        submitButton.disabled = true;
+        submitButtonText.classList.add('hidden');
+        submitButtonLoading.classList.remove('hidden');
         
         if (selectedFiles.length > 0 && !isUploading) {
             e.preventDefault();
@@ -809,6 +823,9 @@ async function submitFormWithFiles(form) {
     const progressContainer = document.getElementById('upload-progress');
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
+    const submitButton = document.getElementById('submit-button');
+    const submitButtonText = document.getElementById('submit-button-text');
+    const submitButtonLoading = document.getElementById('submit-button-loading');
     
     progressContainer.classList.remove('hidden');
     
@@ -852,6 +869,11 @@ async function submitFormWithFiles(form) {
         showMessage('Erro ao enviar arquivos. Tente novamente.', 'error');
         progressContainer.classList.add('hidden');
         isUploading = false;
+        
+        // Reativar o botão em caso de erro
+        submitButton.disabled = false;
+        submitButtonText.classList.remove('hidden');
+        submitButtonLoading.classList.add('hidden');
     }
 }
 
