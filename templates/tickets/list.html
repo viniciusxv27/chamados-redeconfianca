@@ -516,6 +516,11 @@
                                 Ver
                             </a>
                             {% if user.hierarchy == 'SUPERADMIN' %}
+                            <a href="{% url 'ticket_edit' ticket.id %}?next={{ request.get_full_path|urlencode }}" 
+                               class="bg-blue-600 text-white px-2 py-1 rounded-md hover:bg-blue-700 transition-colors text-xs"
+                               title="Editar chamado">
+                                <i class="fas fa-edit"></i>
+                            </a>
                             <button type="button" 
                                     onclick="confirmDeleteTicket({{ ticket.id }}, '{{ ticket.title|escapejs }}')"
                                     class="bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700 transition-colors text-xs"
@@ -668,6 +673,11 @@
                                         Ver
                                     </a>
                                     {% if user.hierarchy == 'SUPERADMIN' %}
+                                    <a href="{% url 'ticket_edit' ticket.id %}?next={{ request.get_full_path|urlencode }}" 
+                                       class="bg-blue-600 text-white px-2 py-1 rounded-md hover:bg-blue-700 transition-colors text-xs"
+                                       title="Editar chamado">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
                                     <button type="button" 
                                             onclick="confirmDeleteTicket({{ ticket.id }}, '{{ ticket.title|escapejs }}')"
                                             class="bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700 transition-colors text-xs"

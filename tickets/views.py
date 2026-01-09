@@ -610,6 +610,124 @@ def tickets_bulk_delete_view(request):
 
 
 @login_required
+def ticket_edit_view(request, ticket_id):
+    """View para edição completa de tickets - apenas SUPERADMIN"""
+    user = request.user
+    
+    # Verificar se é SUPERADMIN
+    if user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Você não tem permissão para editar chamados.')
+        return redirect('tickets_list')
+    
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    if request.method == 'POST':
+        # Capturar valores antigos para log
+        old_values = {
+            'title': ticket.title,
+            'description': ticket.description,
+            'sector': ticket.sector.name,
+            'category': ticket.category.name if ticket.category else None,
+            'status': ticket.status,
+            'priority': ticket.priority,
+            'assigned_to': ticket.assigned_to.get_full_name() if ticket.assigned_to else None,
+            'store_location': ticket.store_location,
+        }
+        
+        # Atualizar campos
+        ticket.title = request.POST.get('title', ticket.title)
+        ticket.description = request.POST.get('description', ticket.description)
+        
+        sector_id = request.POST.get('sector')
+        if sector_id:
+            ticket.sector = get_object_or_404(Sector, id=sector_id)
+        
+        category_id = request.POST.get('category', '').strip()
+        if category_id:
+            ticket.category = get_object_or_404(Category, id=category_id)
+        else:
+            ticket.category = None
+        
+        ticket.status = request.POST.get('status', ticket.status)
+        ticket.priority = request.POST.get('priority', ticket.priority)
+        
+        assigned_to_id = request.POST.get('assigned_to', '').strip()
+        if assigned_to_id:
+            ticket.assigned_to = get_object_or_404(User, id=assigned_to_id)
+        else:
+            ticket.assigned_to = None
+        
+        ticket.store_location = request.POST.get('store_location', '').strip() or None
+        ticket.responsible_person = request.POST.get('responsible_person', '').strip() or None
+        ticket.phone = request.POST.get('phone', '').strip() or None
+        ticket.solution = request.POST.get('solution', '').strip() or ''
+        
+        # Atualizar datas de status se necessário
+        if ticket.status in ['RESOLVIDO', 'FECHADO'] and not ticket.resolved_at:
+            ticket.resolved_at = timezone.now()
+        if ticket.status == 'FECHADO' and not ticket.closed_at:
+            ticket.closed_at = timezone.now()
+        
+        ticket.save()
+        
+        # Criar log de alteração
+        changes = []
+        new_values = {
+            'title': ticket.title,
+            'description': ticket.description,
+            'sector': ticket.sector.name,
+            'category': ticket.category.name if ticket.category else None,
+            'status': ticket.status,
+            'priority': ticket.priority,
+            'assigned_to': ticket.assigned_to.get_full_name() if ticket.assigned_to else None,
+            'store_location': ticket.store_location,
+        }
+        
+        for key, old_val in old_values.items():
+            new_val = new_values.get(key)
+            if old_val != new_val:
+                changes.append(f"{key}: {old_val} → {new_val}")
+        
+        if changes:
+            TicketLog.objects.create(
+                ticket=ticket,
+                user=user,
+                old_status=old_values['status'],
+                new_status=ticket.status,
+                observation=f"Chamado editado por SUPERADMIN. Alterações: {'; '.join(changes)}"
+            )
+            
+            log_action(
+                user, 
+                'TICKET_EDIT', 
+                f'Chamado #{ticket.id} editado: {"; ".join(changes)}',
+                request
+            )
+        
+        messages.success(request, f'Chamado #{ticket.id} atualizado com sucesso!')
+        
+        next_url = request.POST.get('next') or request.GET.get('next')
+        if next_url:
+            return redirect(next_url)
+        return redirect('ticket_detail', ticket_id=ticket.id)
+    
+    # GET - Carregar formulário de edição
+    sectors = Sector.objects.all().order_by('name')
+    categories = Category.objects.all().order_by('sector__name', 'name')
+    users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    
+    context = {
+        'ticket': ticket,
+        'sectors': sectors,
+        'categories': categories,
+        'users': users,
+        'status_choices': Ticket.STATUS_CHOICES,
+        'priority_choices': Ticket.PRIORITY_CHOICES,
+    }
+    return render(request, 'tickets/edit.html', context)
+
+
+@login_required
 def ticket_detail_view(request, ticket_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     user = request.user
