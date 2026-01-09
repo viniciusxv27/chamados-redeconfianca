@@ -33,6 +33,7 @@ def extract_ticket_data():
         'created_at': None,
         'assigned_to_name': None,
         'created_by_name': None,
+        'full_message': None,  # Mensagem completa da notificação
         'notifications': []
     })
     
@@ -79,6 +80,9 @@ def extract_ticket_data():
                     data['title'] = lines[0].strip()
                 if not data['created_at']:
                     data['created_at'] = n.created_at
+                # Guardar a mensagem completa como descrição
+                if not data['full_message'] and n.message:
+                    data['full_message'] = n.message
             
             # Extrair setor e prioridade da mensagem
             if n.message:
@@ -96,6 +100,9 @@ def extract_ticket_data():
                 data['title'] = n.title.replace('Novo Chamado: ', '').strip()
             if not data['created_at']:
                 data['created_at'] = n.created_at
+            # Guardar a mensagem completa como descrição
+            if not data['full_message'] and n.message:
+                data['full_message'] = n.message
         
         # PADRÃO 3: '🎫 Novo Chamado de Teste #XXX'
         elif n.title and 'Novo Chamado de Teste' in n.title:
@@ -107,6 +114,9 @@ def extract_ticket_data():
                         data['title'] = lines[0].strip()
             if not data['created_at']:
                 data['created_at'] = n.created_at
+            # Guardar a mensagem completa como descrição
+            if not data['full_message'] and n.message:
+                data['full_message'] = n.message
         
         # PADRÃO 4: '🎫 Chamado Atribuído: #XXX'
         # Mensagem: "Você foi atribuído ao chamado 'TITULO' por USUARIO."
@@ -150,8 +160,10 @@ def analyze_data(tickets_data):
     with_sector = sum(1 for d in tickets_data.values() if d['sector_name'])
     with_priority = sum(1 for d in tickets_data.values() if d['priority'])
     with_created_at = sum(1 for d in tickets_data.values() if d['created_at'])
+    with_description = sum(1 for d in tickets_data.values() if d['full_message'])
     
     print(f'Com título: {with_title}')
+    print(f'Com descrição (mensagem): {with_description}')
     print(f'Com setor: {with_sector}')
     print(f'Com prioridade: {with_priority}')
     print(f'Com data de criação: {with_created_at}')
@@ -179,6 +191,7 @@ def analyze_data(tickets_data):
         d = tickets_data[tid]
         print(f'ID: {tid}')
         print(f'  Título: {d["title"]}')
+        print(f'  Descrição: {d["full_message"][:100] if d["full_message"] else "N/A"}...' if d["full_message"] and len(d["full_message"]) > 100 else f'  Descrição: {d["full_message"]}')
         print(f'  Setor: {d["sector_name"]}')
         print(f'  Prioridade: {d["priority"]}')
         print(f'  Status: {d["status"]}')
@@ -307,7 +320,8 @@ def recover_tickets(tickets_data, dry_run=True):
         try:
             sector = find_sector(data['sector_name']) or default_sector
             title = data['title'][:200] if data['title'] else 'Sem título'
-            description = title
+            # Usar a mensagem completa da notificação como descrição, ou o título se não tiver
+            description = data['full_message'] if data['full_message'] else title
             status = map_status(data['status'])
             priority = map_priority(data['priority'])
             created_at = data['created_at'] or timezone.now()

@@ -372,20 +372,52 @@
                     </a>
                 </div>
                 
-                {% if search or status or origem or categoria or setor or prioridade %}
-                <div class="text-sm text-gray-600">
-                    Mostrando {{ tickets|length }} chamado{{ tickets|length|pluralize:",s" }}
-                    {% if search %} com "{{ search }}"{% endif %}
-                    {% if status %} - Status: {{ status }}{% endif %}
-                    {% if origem == 'meus' %} - Apenas seus chamados{% elif origem == 'setor' %} - Chamados do setor{% endif %}
-                    {% if categoria %} - Categoria: {{ categoria_name }}{% endif %}
-                    {% if setor %} - Setor: {{ setor_name }}{% endif %}
-                    {% if prioridade %} - Prioridade: {{ prioridade }}{% endif %}
+                <div class="flex items-center space-x-4">
+                    <!-- Seletor de itens por página -->
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm text-gray-600">Por página:</label>
+                        <select name="per_page" onchange="this.form.submit()" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+                            <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                            <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                            <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                        </select>
+                    </div>
+                    
+                    {% if search or status or origem or categoria or setor or prioridade %}
+                    <div class="text-sm text-gray-600">
+                        {{ paginator.count }} chamado{{ paginator.count|pluralize:",s" }}
+                        {% if search %} com "{{ search }}"{% endif %}
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
         </form>
     </div>
+    
+    {% if user.hierarchy == 'SUPERADMIN' %}
+    <!-- Barra de ações em lote -->
+    <div id="bulkActionsBar" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="text-red-700 font-medium">
+                    <i class="fas fa-check-square mr-2"></i>
+                    <span id="selectedCount">0</span> chamado(s) selecionado(s)
+                </span>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button type="button" onclick="clearSelection()" class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                    <i class="fas fa-times mr-1"></i>
+                    Limpar Seleção
+                </button>
+                <button type="button" onclick="confirmBulkDelete()" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                    <i class="fas fa-trash mr-1"></i>
+                    Excluir Selecionados
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Tabs Navigation -->
     <div class="mb-6">
@@ -403,11 +435,22 @@
     <div class="bg-white rounded-lg shadow-sm overflow-hidden">
         <!-- Mobile Cards View -->
         <div class="block sm:hidden">
+            {% if user.hierarchy == 'SUPERADMIN' %}
+            <div class="p-3 bg-gray-50 border-b flex items-center">
+                <input type="checkbox" id="selectAllTicketsMobile" 
+                       class="rounded text-primary focus:ring-primary cursor-pointer mr-2">
+                <label for="selectAllTicketsMobile" class="text-sm text-gray-600">Selecionar todos</label>
+            </div>
+            {% endif %}
             <div class="divide-y divide-gray-200">
                 {% for ticket in tickets %}
                 <div class="p-4 hover:bg-gray-50">
                     <div class="flex items-start justify-between mb-2">
                         <div class="flex items-center space-x-2">
+                            {% if user.hierarchy == 'SUPERADMIN' %}
+                            <input type="checkbox" class="ticket-checkbox-mobile rounded text-primary focus:ring-primary cursor-pointer"
+                                   value="{{ ticket.id }}" data-title="{{ ticket.title|escapejs }}">
+                            {% endif %}
                             <span class="font-mono text-xs text-gray-500">#{{ ticket.id|stringformat:"04d" }}</span>
                             {% if ticket.due_date and ticket.due_date < now and ticket.status not in 'RESOLVIDO,FECHADO' %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
@@ -486,6 +529,13 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50 sticky top-0">
                         <tr>
+                            {% if user.hierarchy == 'SUPERADMIN' %}
+                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
+                                <input type="checkbox" id="selectAllTickets" 
+                                       class="rounded text-primary focus:ring-primary cursor-pointer"
+                                       title="Selecionar todos desta página">
+                            </th>
+                            {% endif %}
                             <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                                 Status
                             </th>
@@ -520,7 +570,13 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for ticket in tickets %}
-                        <tr class="hover:bg-gray-50 ticket-row" data-created-by="{{ ticket.created_by.id }}" data-current-user="{{ user.id }}">
+                        <tr class="hover:bg-gray-50 ticket-row" data-created-by="{{ ticket.created_by.id }}" data-current-user="{{ user.id }}" data-ticket-id="{{ ticket.id }}">
+                            {% if user.hierarchy == 'SUPERADMIN' %}
+                            <td class="px-3 py-3 whitespace-nowrap">
+                                <input type="checkbox" class="ticket-checkbox rounded text-primary focus:ring-primary cursor-pointer"
+                                       value="{{ ticket.id }}" data-title="{{ ticket.title|escapejs }}">
+                            </td>
+                            {% endif %}
                             <td class="px-3 py-3 whitespace-nowrap">
                                 {% if ticket.due_date and ticket.due_date < now and ticket.status not in 'RESOLVIDO,FECHADO' %}
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
@@ -620,7 +676,7 @@
                         </tr>
                         {% empty %}
                         <tr id="no-tickets-row">
-                            <td colspan="10" class="px-6 py-4 text-center text-gray-500">
+                            <td colspan="{% if user.hierarchy == 'SUPERADMIN' %}11{% else %}10{% endif %}" class="px-6 py-4 text-center text-gray-500">
                                 Nenhum chamado encontrado.
                             </td>
                         </tr>
@@ -1149,6 +1205,213 @@ document.getElementById('exportExcelBtn')?.addEventListener('click', function() 
 });
 
 {% if user.hierarchy == 'SUPERADMIN' %}
+// Gerenciamento de seleção múltipla
+let selectedTickets = new Set();
+
+function updateBulkActionsBar() {
+    const bulkBar = document.getElementById('bulkActionsBar');
+    const countSpan = document.getElementById('selectedCount');
+    
+    if (selectedTickets.size > 0) {
+        bulkBar.classList.remove('hidden');
+        countSpan.textContent = selectedTickets.size;
+    } else {
+        bulkBar.classList.add('hidden');
+    }
+}
+
+function clearSelection() {
+    selectedTickets.clear();
+    document.querySelectorAll('.ticket-checkbox, .ticket-checkbox-mobile').forEach(cb => {
+        cb.checked = false;
+    });
+    document.querySelectorAll('#selectAllTickets, #selectAllTicketsMobile').forEach(cb => {
+        cb.checked = false;
+    });
+    updateBulkActionsBar();
+}
+
+function confirmBulkDelete() {
+    if (selectedTickets.size === 0) return;
+    
+    const ticketIds = Array.from(selectedTickets);
+    
+    // Criar modal de confirmação
+    const modal = document.createElement('div');
+    modal.id = 'bulkDeleteModal';
+    modal.className = 'fixed inset-0 z-50 overflow-y-auto';
+    modal.innerHTML = `
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+                <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                <div class="sm:flex sm:items-start">
+                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900">
+                            Excluir ${selectedTickets.size} Chamado(s)
+                        </h3>
+                        <div class="mt-2">
+                            <p class="text-sm text-gray-500">
+                                Tem certeza que deseja excluir <strong>${selectedTickets.size} chamado(s)</strong>?
+                            </p>
+                            <p class="text-sm text-red-600 mt-2">
+                                <i class="fas fa-warning mr-1"></i>
+                                Esta ação é irreversível e excluirá todos os comentários, anexos e logs associados.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <button type="button" onclick="executeBulkDelete()" id="confirmBulkDeleteBtn"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        <i class="fas fa-trash mr-2"></i>
+                        Excluir ${selectedTickets.size} Chamado(s)
+                    </button>
+                    <button type="button" onclick="closeBulkDeleteModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:w-auto sm:text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.querySelector('.fixed.inset-0').addEventListener('click', closeBulkDeleteModal);
+}
+
+function closeBulkDeleteModal() {
+    const modal = document.getElementById('bulkDeleteModal');
+    if (modal) modal.remove();
+}
+
+async function executeBulkDelete() {
+    const btn = document.getElementById('confirmBulkDeleteBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Excluindo...';
+    
+    try {
+        const response = await fetch('{% url "tickets_bulk_delete" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                ticket_ids: Array.from(selectedTickets)
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            closeBulkDeleteModal();
+            // Recarregar página para atualizar lista
+            window.location.reload();
+        } else {
+            alert('Erro: ' + data.error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash mr-2"></i>Excluir';
+        }
+    } catch (error) {
+        alert('Erro ao excluir chamados: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash mr-2"></i>Excluir';
+    }
+}
+
+// Inicializar checkboxes
+document.addEventListener('DOMContentLoaded', function() {
+    // Checkbox "Selecionar todos" desktop
+    const selectAllDesktop = document.getElementById('selectAllTickets');
+    if (selectAllDesktop) {
+        selectAllDesktop.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.ticket-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = this.checked;
+                if (this.checked) {
+                    selectedTickets.add(parseInt(cb.value));
+                } else {
+                    selectedTickets.delete(parseInt(cb.value));
+                }
+            });
+            // Sincronizar com mobile
+            const selectAllMobile = document.getElementById('selectAllTicketsMobile');
+            if (selectAllMobile) selectAllMobile.checked = this.checked;
+            document.querySelectorAll('.ticket-checkbox-mobile').forEach(cb => {
+                cb.checked = this.checked;
+            });
+            updateBulkActionsBar();
+        });
+    }
+    
+    // Checkbox "Selecionar todos" mobile
+    const selectAllMobile = document.getElementById('selectAllTicketsMobile');
+    if (selectAllMobile) {
+        selectAllMobile.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.ticket-checkbox-mobile');
+            checkboxes.forEach(cb => {
+                cb.checked = this.checked;
+                if (this.checked) {
+                    selectedTickets.add(parseInt(cb.value));
+                } else {
+                    selectedTickets.delete(parseInt(cb.value));
+                }
+            });
+            // Sincronizar com desktop
+            if (selectAllDesktop) selectAllDesktop.checked = this.checked;
+            document.querySelectorAll('.ticket-checkbox').forEach(cb => {
+                cb.checked = this.checked;
+            });
+            updateBulkActionsBar();
+        });
+    }
+    
+    // Checkboxes individuais desktop
+    document.querySelectorAll('.ticket-checkbox').forEach(cb => {
+        cb.addEventListener('change', function() {
+            if (this.checked) {
+                selectedTickets.add(parseInt(this.value));
+            } else {
+                selectedTickets.delete(parseInt(this.value));
+            }
+            // Sincronizar com mobile
+            const mobileCheckbox = document.querySelector(`.ticket-checkbox-mobile[value="${this.value}"]`);
+            if (mobileCheckbox) mobileCheckbox.checked = this.checked;
+            updateBulkActionsBar();
+            
+            // Atualizar "selecionar todos"
+            const allChecked = document.querySelectorAll('.ticket-checkbox:checked').length === document.querySelectorAll('.ticket-checkbox').length;
+            if (selectAllDesktop) selectAllDesktop.checked = allChecked;
+            if (selectAllMobile) selectAllMobile.checked = allChecked;
+        });
+    });
+    
+    // Checkboxes individuais mobile
+    document.querySelectorAll('.ticket-checkbox-mobile').forEach(cb => {
+        cb.addEventListener('change', function() {
+            if (this.checked) {
+                selectedTickets.add(parseInt(this.value));
+            } else {
+                selectedTickets.delete(parseInt(this.value));
+            }
+            // Sincronizar com desktop
+            const desktopCheckbox = document.querySelector(`.ticket-checkbox[value="${this.value}"]`);
+            if (desktopCheckbox) desktopCheckbox.checked = this.checked;
+            updateBulkActionsBar();
+            
+            // Atualizar "selecionar todos"
+            const allChecked = document.querySelectorAll('.ticket-checkbox-mobile:checked').length === document.querySelectorAll('.ticket-checkbox-mobile').length;
+            if (selectAllDesktop) selectAllDesktop.checked = allChecked;
+            if (selectAllMobile) selectAllMobile.checked = allChecked;
+        });
+    });
+});
+
 // Função para confirmar exclusão de ticket
 function confirmDeleteTicket(ticketId, ticketTitle) {
     // Criar modal de confirmação

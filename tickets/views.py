@@ -189,8 +189,16 @@ def tickets_list_view(request):
     # Aplicar ordenação por data de atualização (mais recente primeiro)
     tickets = tickets.order_by('-updated_at')
     
-    # Configurar paginação
-    paginator = Paginator(tickets, 10)  # 10 tickets por página
+    # Configurar paginação - permite escolher quantidade por página
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = int(per_page)
+        if per_page not in [25, 50, 100, 200]:
+            per_page = 25
+    except (ValueError, TypeError):
+        per_page = 25
+    
+    paginator = Paginator(tickets, per_page)
     page = request.GET.get('page')
     
     try:
@@ -204,6 +212,8 @@ def tickets_list_view(request):
     
     # Preservar parâmetros de filtro para a paginação
     filter_params = {}
+    if per_page != 25:
+        filter_params['per_page'] = per_page
     if search:
         filter_params['search'] = search
     if status_filter:
@@ -413,6 +423,7 @@ def tickets_list_view(request):
         'carteira_groups': carteira_groups,
         'paginator': paginator,
         'page_obj': tickets_page,
+        'per_page': per_page,
         # Filtros avançados para SUPERADMIN
         'created_by': created_by_filter,
         'created_by_sector': created_by_sector_filter,
@@ -532,6 +543,57 @@ def ticket_delete_view(request, ticket_id):
     
     # Para GET, redireciona para a lista (exclusão deve ser via POST)
     return redirect('tickets_list')
+
+
+@login_required
+def tickets_bulk_delete_view(request):
+    """View para exclusão em lote de tickets - apenas SUPERADMIN"""
+    user = request.user
+    
+    # Verificar se é SUPERADMIN
+    if user.hierarchy != 'SUPERADMIN':
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    if request.method == 'POST':
+        import json
+        try:
+            data = json.loads(request.body)
+            ticket_ids = data.get('ticket_ids', [])
+            
+            if not ticket_ids:
+                return JsonResponse({'success': False, 'error': 'Nenhum ticket selecionado'}, status=400)
+            
+            # Buscar tickets
+            tickets = Ticket.objects.filter(id__in=ticket_ids)
+            count = tickets.count()
+            
+            if count == 0:
+                return JsonResponse({'success': False, 'error': 'Nenhum ticket encontrado'}, status=404)
+            
+            # Registrar log
+            ticket_ids_str = ', '.join([f'#{t.id}' for t in tickets])
+            log_action(
+                user, 
+                'TICKET_BULK_DELETE', 
+                f'{count} chamados excluídos em lote: {ticket_ids_str}',
+                request
+            )
+            
+            # Excluir tickets
+            tickets.delete()
+            
+            return JsonResponse({
+                'success': True, 
+                'message': f'{count} chamado(s) excluído(s) com sucesso!',
+                'deleted_count': count
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Dados inválidos'}, status=400)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+    
+    return JsonResponse({'success': False, 'error': 'Método não permitido'}, status=405)
 
 
 @login_required
