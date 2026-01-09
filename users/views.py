@@ -4082,16 +4082,7 @@ def send_task_message(request, task_id):
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
-    # Verificar permissão - qualquer pessoa envolvida pode enviar mensagem
-    can_send = (
-        task.created_by == request.user or  # Criador da tarefa
-        (task.assigned_to and task.assigned_to == request.user) or  # Responsável pela tarefa
-        task.can_be_managed_by(request.user)  # Gerentes/supervisores
-    )
-    
-    if not can_send:
-        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
-    
+    # Permitir qualquer usuário logado enviar mensagem
     message_text = request.POST.get('message', '').strip()
     if not message_text:
         return JsonResponse({'success': False, 'error': 'Mensagem não pode estar vazia'})
@@ -4128,16 +4119,7 @@ def add_task_attachment(request, task_id):
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
-    # Verificar permissão - qualquer pessoa envolvida pode adicionar anexo
-    can_add = (
-        task.created_by == request.user or  # Criador da tarefa
-        (task.assigned_to and task.assigned_to == request.user) or  # Responsável pela tarefa
-        task.can_be_managed_by(request.user)  # Gerentes/supervisores
-    )
-    
-    if not can_add:
-        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
-    
+    # Permitir qualquer usuário logado adicionar anexo
     # Verificar se há arquivo
     if 'file' not in request.FILES:
         return JsonResponse({'success': False, 'error': 'Nenhum arquivo enviado'})
