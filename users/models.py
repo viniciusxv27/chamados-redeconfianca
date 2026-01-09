@@ -4,6 +4,68 @@ from django.conf import settings
 from decimal import Decimal
 from core.utils import upload_user_profile_photo
 
+
+class SystemConfig(models.Model):
+    """
+    Modelo para armazenar configurações do sistema.
+    Usa Singleton pattern - sempre haverá apenas uma instância.
+    """
+    # URLs das Planilhas de Comissionamento
+    excel_comissao_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha de Comissionamento",
+        help_text="URL de compartilhamento do OneDrive para a planilha de comissões",
+        default="https://1drv.ms/x/c/871ee1819c7e2faa/IQDp2ONpM_88ToSopGzjlPVdASX6rIFB3_ENXnJcGN3e7Go?e=Q3fDRz"
+    )
+    excel_vendas_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha de Vendas e Metas",
+        help_text="URL de compartilhamento do OneDrive para vendas e metas",
+        default="https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URSLAQ5r634qBo9-GicO2D8ZfmY"
+    )
+    excel_base_pagamento_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha BASE_PAGAMENTO",
+        help_text="URL de compartilhamento do OneDrive para base de pagamento",
+        default="https://1drv.ms/x/c/871ee1819c7e2faa/IQBHZkNccF89Tb0x1dXfoLhiAT8Q5C_fzHlIyUnc2L2FJVs?e=vAO4OX"
+    )
+    excel_base_exclusao_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha BASE_EXCLUSAO",
+        help_text="URL de compartilhamento do OneDrive para base de exclusão",
+        default="https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
+    )
+    
+    # Metadados
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
+    updated_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='config_updates',
+        verbose_name="Atualizado por"
+    )
+    
+    class Meta:
+        verbose_name = "Configuração do Sistema"
+        verbose_name_plural = "Configurações do Sistema"
+    
+    def __str__(self):
+        return "Configurações do Sistema"
+    
+    def save(self, *args, **kwargs):
+        # Garantir que só existe uma instância (Singleton)
+        self.pk = 1
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_config(cls):
+        """Retorna a instância de configuração (cria se não existir)"""
+        config, created = cls.objects.get_or_create(pk=1)
+        return config
+
+
 def get_media_storage():
     """Return media storage backend"""
     if getattr(settings, 'USE_S3', False):

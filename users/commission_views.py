@@ -19,26 +19,51 @@ from django.db.models import Q
 import json
 import pandas as pd
 from io import BytesIO
-from users.models import User, Sector
+from users.models import User, Sector, SystemConfig
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 
 # ============================================================================
-# CONFIGURAÇÕES DAS PLANILHAS
+# CONFIGURAÇÕES DAS PLANILHAS (valores padrão - podem ser alterados no banco)
 # ============================================================================
 
-# Planilha de Comissionamento
-EXCEL_COMISSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQDp2ONpM_88ToSopGzjlPVdASX6rIFB3_ENXnJcGN3e7Go?e=Q3fDRz"
+# Valores padrão (usados se não houver configuração no banco)
+DEFAULT_EXCEL_COMISSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQDp2ONpM_88ToSopGzjlPVdASX6rIFB3_ENXnJcGN3e7Go?e=Q3fDRz"
+DEFAULT_EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URSLAQ5r634qBo9-GicO2D8ZfmY"
+DEFAULT_EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBHZkNccF89Tb0x1dXfoLhiAT8Q5C_fzHlIyUnc2L2FJVs?e=vAO4OX"
+DEFAULT_EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
 
-# Planilha de Vendas e Metas
-EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URSLAQ5r634qBo9-GicO2D8ZfmY"
 
-# Planilha BASE_PAGAMENTO (Pago e Exclusão por pilar)
-EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBHZkNccF89Tb0x1dXfoLhiAT8Q5C_fzHlIyUnc2L2FJVs?e=vAO4OX"
+def get_excel_urls():
+    """
+    Obtém as URLs das planilhas Excel do banco de dados.
+    Retorna valores padrão se não houver configuração.
+    """
+    try:
+        config = SystemConfig.get_config()
+        return {
+            'comissao': config.excel_comissao_url or DEFAULT_EXCEL_COMISSAO_URL,
+            'vendas': config.excel_vendas_url or DEFAULT_EXCEL_VENDAS_URL,
+            'base_pagamento': config.excel_base_pagamento_url or DEFAULT_EXCEL_BASE_PAGAMENTO_URL,
+            'base_exclusao': config.excel_base_exclusao_url or DEFAULT_EXCEL_BASE_EXCLUSAO_URL,
+        }
+    except Exception:
+        # Se der erro ao acessar banco, usar valores padrão
+        return {
+            'comissao': DEFAULT_EXCEL_COMISSAO_URL,
+            'vendas': DEFAULT_EXCEL_VENDAS_URL,
+            'base_pagamento': DEFAULT_EXCEL_BASE_PAGAMENTO_URL,
+            'base_exclusao': DEFAULT_EXCEL_BASE_EXCLUSAO_URL,
+        }
 
-EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
+
+# Manter variáveis globais para compatibilidade (serão substituídas gradualmente)
+EXCEL_COMISSAO_URL = DEFAULT_EXCEL_COMISSAO_URL
+EXCEL_VENDAS_URL = DEFAULT_EXCEL_VENDAS_URL
+EXCEL_BASE_PAGAMENTO_URL = DEFAULT_EXCEL_BASE_PAGAMENTO_URL
+EXCEL_BASE_EXCLUSAO_URL = DEFAULT_EXCEL_BASE_EXCLUSAO_URL
 
 # Nome das sheets na planilha de comissionamento
 SHEET_GERENTE = "REMUNERAÇÃO GERENTE"
@@ -272,7 +297,8 @@ def fetch_excel_data(sheet_name, user_name, excel_url=None):
     Retorna os dados do usuário específico
     """
     if excel_url is None:
-        excel_url = EXCEL_COMISSAO_URL
+        urls = get_excel_urls()
+        excel_url = urls['comissao']
         
     cache_key = f"commission_data_{sheet_name}_{user_name.replace(' ', '_')}"
     cached_data = cache.get(cache_key)
@@ -351,7 +377,8 @@ def fetch_all_users_from_sheet(sheet_name, excel_url=None):
     Retorna lista com dados de todos os usuários
     """
     if excel_url is None:
-        excel_url = EXCEL_COMISSAO_URL
+        urls = get_excel_urls()
+        excel_url = urls['comissao']
         
     cache_key = f"commission_all_users_{sheet_name}"
     cached_data = cache.get(cache_key)
@@ -508,9 +535,12 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     print(f"[fetch_metas_por_pilar] user_name={user_name}, is_gerente={is_gerente}, user_sector={user_sector}")
     print(f"[fetch_metas_por_pilar] user_sector_normalized={user_sector_normalized}")
     
+    # Obter URLs dinâmicas
+    urls = get_excel_urls()
+    
     try:
         # Baixar planilha BASE_PAGAMENTO (apenas para dados de pagamento)
-        excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
+        excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento")
         if error:
             print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_PAGAMENTO: {error}")
             return metas
@@ -604,10 +634,10 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                             pass
         
         # =====================================================
-        # PROCESSAR PLANILHA DE EXCLUSÃO (EXCEL_BASE_EXCLUSAO_URL)
+        # PROCESSAR PLANILHA DE EXCLUSÃO
         # =====================================================
         try:
-            excel_file_exclusao, error_exclusao = download_excel_file(EXCEL_BASE_EXCLUSAO_URL, "base_exclusao")
+            excel_file_exclusao, error_exclusao = download_excel_file(urls['base_exclusao'], "base_exclusao")
             if error_exclusao:
                 print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_EXCLUSAO: {error_exclusao}")
                 # Continuar sem dados de exclusão
@@ -1020,9 +1050,12 @@ def fetch_iq_data(user_name):
     
     user_name_normalized = normalize_text(user_name)
     
+    # Obter URLs dinâmicas
+    urls = get_excel_urls()
+    
     try:
         # Baixar planilha de comissão
-        excel_file, error = download_excel_file(EXCEL_COMISSAO_URL, "comissao_iq")
+        excel_file, error = download_excel_file(urls['comissao'], "comissao_iq")
         if error:
             print(f"[fetch_iq_data] Erro ao baixar planilha: {error}")
             return iq_result
@@ -1153,9 +1186,12 @@ def fetch_vendedores_por_filial(user_sector):
         'sva': ['%ATING_SVA_1', 'ATING_SVA', '%SVA'],
     }
     
+    # Obter URLs dinâmicas
+    urls = get_excel_urls()
+    
     try:
         # 1. Buscar dados da planilha REMUNERAÇÃO CN (percentuais de atingimento)
-        excel_file_rem, error = download_excel_file(EXCEL_COMISSAO_URL, "remuneracao_cn")
+        excel_file_rem, error = download_excel_file(urls['comissao'], "remuneracao_cn")
         ating_por_vendedor = {}  # {vendedor_nome_upper: {pilar: pct}}
         remuneracao_por_vendedor = {}  # {vendedor_nome_upper: remuneracao_final}
         
@@ -1262,7 +1298,7 @@ def fetch_vendedores_por_filial(user_sector):
                 pass  # Silently handle errors reading REMUNERAÇÃO CN
         
         # 2. Buscar dados de comissão da BASE_PAGAMENTO
-        excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento")
+        excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento")
         if error:
             return []
         
@@ -2249,8 +2285,11 @@ def fetch_lojas_por_coordenador(coordenador_nome):
     if cached_data:
         return cached_data
     
+    # Obter URLs dinâmicas
+    urls = get_excel_urls()
+    
     try:
-        excel_file, error = download_excel_file(EXCEL_COMISSAO_URL, "lojas_coord")
+        excel_file, error = download_excel_file(urls['comissao'], "lojas_coord")
         if error:
             return []
         
@@ -2696,7 +2735,18 @@ def commission_refresh(request):
     cache.delete("vendas_file_content")
     cache.delete("vendas_all_file_content")
     
-    messages.success(request, 'Dados atualizados com sucesso!')
+    # Limpa também caches de pilares e IQ
+    cache.delete("metas_por_pilar")
+    cache.delete("iq_data")
+    cache.delete("vendedores_por_filial")
+    cache.delete("lojas_por_coordenador")
+    
+    messages.success(request, 'Cache de dados de comissionamento limpo com sucesso!')
+    
+    # Redireciona de volta para a página de origem, se especificada
+    referer = request.META.get('HTTP_REFERER', '')
+    if 'system-config' in referer:
+        return redirect('system_config')
     return redirect('commission')
 
 
@@ -2954,9 +3004,12 @@ def api_vendas_por_pilar(request):
         
         return False
     
+    # Obter URLs dinâmicas
+    urls = get_excel_urls()
+    
     try:
         # Baixar planilha BASE_PAGAMENTO
-        excel_file, error = download_excel_file(EXCEL_BASE_PAGAMENTO_URL, "base_pagamento_vendas")
+        excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento_vendas")
         if error:
             print(f"[api_vendas_por_pilar] Erro download: {error}")
             return JsonResponse({'error': f'Erro ao baixar planilha: {error}'}, status=500)
@@ -3045,9 +3098,9 @@ def api_vendas_por_pilar(request):
         
         print(f"[api_vendas_por_pilar] Vendas PAGO encontradas: {len(vendas_pago)}")
         
-        # ================== SHEET EXCLUSÃO (de EXCEL_BASE_EXCLUSAO_URL) ==================
+        # ================== SHEET EXCLUSÃO ==================
         try:
-            excel_file_exclusao, error_exclusao = download_excel_file(EXCEL_BASE_EXCLUSAO_URL, "base_exclusao")
+            excel_file_exclusao, error_exclusao = download_excel_file(urls['base_exclusao'], "base_exclusao")
             if error_exclusao:
                 print(f"[api_vendas_por_pilar] Erro ao baixar EXCLUSAO: {error_exclusao}")
                 df_exclusao = None

@@ -48,6 +48,7 @@ urlpatterns = [
     path('manage/categories/<int:category_id>/delete/', views.delete_category_view, name='delete_category'),
     path('manage/webhooks/', views.manage_webhooks_view, name='manage_webhooks'),
     path('manage/webhooks/create/', views.create_webhook_view, name='create_webhook'),
+    path('manage/system-config/', views.system_config_view, name='system_config'),
     path('manage/tutorials/', views.manage_tutorials_view, name='manage_tutorials'),
     path('manage/tutorials/create/', views.create_tutorial_view, name='create_tutorial'),
     path('manage/training-categories/', views.manage_training_categories_view, name='manage_training_categories'),

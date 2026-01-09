@@ -1386,6 +1386,47 @@ def manage_webhooks_view(request):
 
 
 @login_required
+def system_config_view(request):
+    """Gerenciar configurações do sistema (links das planilhas Excel)"""
+    from users.models import SystemConfig
+    
+    # Apenas superadmin pode acessar
+    if request.user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Apenas Superadmin pode acessar as configurações do sistema.')
+        return redirect('dashboard')
+    
+    config = SystemConfig.get_config()
+    
+    if request.method == 'POST':
+        # Atualizar configurações
+        config.excel_comissao_url = request.POST.get('excel_comissao_url', '').strip()
+        config.excel_vendas_url = request.POST.get('excel_vendas_url', '').strip()
+        config.excel_base_pagamento_url = request.POST.get('excel_base_pagamento_url', '').strip()
+        config.excel_base_exclusao_url = request.POST.get('excel_base_exclusao_url', '').strip()
+        config.updated_by = request.user
+        config.save()
+        
+        # Limpar cache das planilhas para forçar reload
+        from django.core.cache import cache
+        cache.delete_many([
+            'comissao_REMUNERAÇÃO CN_file_content',
+            'comissao_REMUNERAÇÃO GERENTE_file_content', 
+            'base_pagamento_file_content',
+            'base_exclusao_file_content',
+            'vendas_file_content',
+        ])
+        
+        messages.success(request, 'Configurações atualizadas com sucesso! O cache foi limpo.')
+        return redirect('system_config')
+    
+    context = {
+        'config': config,
+        'user': request.user,
+    }
+    return render(request, 'admin/system_config.html', context)
+
+
+@login_required
 def create_webhook_view(request):
     """Criar novo webhook"""
     if not request.user.can_manage_users():

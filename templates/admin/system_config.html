@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configurações do Sistema{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center gap-3 mb-2">
+                <a href="{% url 'admin_panel' %}" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <h1 class="text-2xl font-bold text-gray-900">
+                    <i class="fas fa-cog text-purple-600 mr-2"></i>
+                    Configurações do Sistema
+                </h1>
+            </div>
+            <p class="text-gray-600">Gerencie os links das planilhas Excel de comissionamento</p>
+        </div>
+
+        <!-- Alertas -->
+        {% if messages %}
+        <div class="mb-6">
+            {% for message in messages %}
+            <div class="{% if message.tags == 'success' %}bg-green-50 border-green-500 text-green-800{% elif message.tags == 'error' %}bg-red-50 border-red-500 text-red-800{% else %}bg-blue-50 border-blue-500 text-blue-800{% endif %} border-l-4 p-4 rounded-r-lg shadow-sm flex items-center gap-3">
+                <i class="fas {% if message.tags == 'success' %}fa-check-circle{% elif message.tags == 'error' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %}"></i>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Info Box -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mb-6">
+            <div class="flex items-start gap-3">
+                <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                <div>
+                    <h3 class="font-semibold text-blue-800">Como obter o link de compartilhamento</h3>
+                    <ol class="text-sm text-blue-700 mt-2 space-y-1 list-decimal list-inside">
+                        <li>Abra a planilha no OneDrive/SharePoint</li>
+                        <li>Clique em <strong>Compartilhar</strong></li>
+                        <li>Selecione <strong>"Qualquer pessoa com o link"</strong></li>
+                        <li>Copie o link gerado</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form -->
+        <form method="post" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {% csrf_token %}
+            
+            <div class="p-6 space-y-6">
+                <!-- Planilha de Comissionamento -->
+                <div>
+                    <label for="excel_comissao_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-file-excel text-green-600"></i>
+                        Planilha de Comissionamento
+                    </label>
+                    <input type="url" 
+                           name="excel_comissao_url" 
+                           id="excel_comissao_url"
+                           value="{{ config.excel_comissao_url }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                           placeholder="https://1drv.ms/x/...">
+                    <p class="text-xs text-gray-500 mt-1">
+                        Contém as sheets: REMUNERAÇÃO CN, REMUNERAÇÃO GERENTE, REMUNERAÇÃO COO e SNP, ÍNDICE DE QUALIDADE
+                    </p>
+                </div>
+
+                <!-- Planilha de Vendas e Metas -->
+                <div>
+                    <label for="excel_vendas_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-file-excel text-green-600"></i>
+                        Planilha de Vendas e Metas
+                    </label>
+                    <input type="url" 
+                           name="excel_vendas_url" 
+                           id="excel_vendas_url"
+                           value="{{ config.excel_vendas_url }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                           placeholder="https://1drv.ms/x/...">
+                    <p class="text-xs text-gray-500 mt-1">
+                        Contém os dados de vendas dos colaboradores
+                    </p>
+                </div>
+
+                <!-- Planilha BASE_PAGAMENTO -->
+                <div>
+                    <label for="excel_base_pagamento_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-file-excel text-green-600"></i>
+                        Planilha BASE_PAGAMENTO
+                    </label>
+                    <input type="url" 
+                           name="excel_base_pagamento_url" 
+                           id="excel_base_pagamento_url"
+                           value="{{ config.excel_base_pagamento_url }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                           placeholder="https://1drv.ms/x/...">
+                    <p class="text-xs text-gray-500 mt-1">
+                        Dados de pagamento por pilar (Filial, Vendedor, Receita, PILAR)
+                    </p>
+                </div>
+
+                <!-- Planilha BASE_EXCLUSAO -->
+                <div>
+                    <label for="excel_base_exclusao_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-file-excel text-green-600"></i>
+                        Planilha BASE_EXCLUSAO
+                    </label>
+                    <input type="url" 
+                           name="excel_base_exclusao_url" 
+                           id="excel_base_exclusao_url"
+                           value="{{ config.excel_base_exclusao_url }}"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                           placeholder="https://1drv.ms/x/...">
+                    <p class="text-xs text-gray-500 mt-1">
+                        Dados de exclusão por pilar
+                    </p>
+                </div>
+            </div>
+
+            <!-- Metadados -->
+            {% if config.updated_at %}
+            <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
+                <p class="text-xs text-gray-500">
+                    <i class="fas fa-clock mr-1"></i>
+                    Última atualização: {{ config.updated_at|date:"d/m/Y H:i" }}
+                    {% if config.updated_by %}
+                    por <strong>{{ config.updated_by.get_full_name }}</strong>
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+
+            <!-- Botões -->
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                <a href="{% url 'admin_panel' %}" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+                <div class="flex items-center gap-3">
+                    <a href="{% url 'commission_refresh' %}" 
+                       class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>
+                        Limpar Cache
+                    </a>
+                    <button type="submit" 
+                            class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                        <i class="fas fa-save mr-2"></i>
+                        Salvar Configurações
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Card de Links Atuais -->
+        <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-link text-purple-600 mr-2"></i>
+                    Links Ativos
+                </h2>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex items-start gap-3">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 flex-shrink-0">
+                        <i class="fas fa-check text-xs"></i>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-gray-700">Comissionamento</p>
+                        <p class="text-xs text-gray-500 truncate">{{ config.excel_comissao_url|default:"-" }}</p>
+                    </div>
+                    <a href="{{ config.excel_comissao_url }}" target="_blank" class="text-purple-600 hover:text-purple-800 text-sm">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                
+                <div class="flex items-start gap-3">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 flex-shrink-0">
+                        <i class="fas fa-check text-xs"></i>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-gray-700">Vendas e Metas</p>
+                        <p class="text-xs text-gray-500 truncate">{{ config.excel_vendas_url|default:"-" }}</p>
+                    </div>
+                    <a href="{{ config.excel_vendas_url }}" target="_blank" class="text-purple-600 hover:text-purple-800 text-sm">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                
+                <div class="flex items-start gap-3">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 flex-shrink-0">
+                        <i class="fas fa-check text-xs"></i>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-gray-700">Base Pagamento</p>
+                        <p class="text-xs text-gray-500 truncate">{{ config.excel_base_pagamento_url|default:"-" }}</p>
+                    </div>
+                    <a href="{{ config.excel_base_pagamento_url }}" target="_blank" class="text-purple-600 hover:text-purple-800 text-sm">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                
+                <div class="flex items-start gap-3">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 flex-shrink-0">
+                        <i class="fas fa-check text-xs"></i>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-gray-700">Base Exclusão</p>
+                        <p class="text-xs text-gray-500 truncate">{{ config.excel_base_exclusao_url|default:"-" }}</p>
+                    </div>
+                    <a href="{{ config.excel_base_exclusao_url }}" target="_blank" class="text-purple-600 hover:text-purple-800 text-sm">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
