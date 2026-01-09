@@ -4082,11 +4082,15 @@ def send_task_message(request, task_id):
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
-    # Verificar permissão
-    if not (task.can_be_managed_by(request.user) or 
-            task.assigned_to == request.user or 
-            task.created_by == request.user):
-        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    # Verificar permissão - qualquer pessoa envolvida pode enviar mensagem
+    can_send = (
+        task.created_by == request.user or  # Criador da tarefa
+        (task.assigned_to and task.assigned_to == request.user) or  # Responsável pela tarefa
+        task.can_be_managed_by(request.user)  # Gerentes/supervisores
+    )
+    
+    if not can_send:
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
     
     message_text = request.POST.get('message', '').strip()
     if not message_text:
@@ -4124,11 +4128,15 @@ def add_task_attachment(request, task_id):
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
-    # Verificar permissão
-    if not (task.can_be_managed_by(request.user) or 
-            task.assigned_to == request.user or 
-            task.created_by == request.user):
-        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    # Verificar permissão - qualquer pessoa envolvida pode adicionar anexo
+    can_add = (
+        task.created_by == request.user or  # Criador da tarefa
+        (task.assigned_to and task.assigned_to == request.user) or  # Responsável pela tarefa
+        task.can_be_managed_by(request.user)  # Gerentes/supervisores
+    )
+    
+    if not can_add:
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
     
     # Verificar se há arquivo
     if 'file' not in request.FILES:

@@ -410,7 +410,7 @@
                         
                         <!-- Quick actions -->
                         <div class="flex items-center justify-between mt-4">
-                            <div class="flex items-center space-x-4 text-sm text-gray-500">
+                            <div class="flex items-center space-x-4 text-sm text-gray-500 relative">
                                 <label for="chat-attachment" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100 cursor-pointer" title="Anexar arquivo">
                                     <i class="fas fa-paperclip"></i>
                                     <span class="hidden sm:inline">Anexar</span>
@@ -420,12 +420,12 @@
                                        class="hidden"
                                        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
                                        onchange="uploadAttachment(event)">
-                                <button type="button" id="emoji-btn" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100 relative" title="Emoji">
+                                <button type="button" id="emoji-btn" class="flex items-center gap-2 hover:text-gray-700 transition-colors p-1 rounded hover:bg-gray-100" title="Emoji">
                                     <i class="fas fa-smile"></i>
                                     <span class="hidden sm:inline">Emoji</span>
                                 </button>
                                 <!-- Emoji Picker -->
-                                <div id="emoji-picker" class="hidden absolute bottom-16 left-0 bg-white border rounded-lg shadow-xl p-3 z-50">
+                                <div id="emoji-picker" class="hidden absolute bottom-full left-0 mb-2 bg-white border rounded-lg shadow-xl p-3 z-50">
                                     <div class="grid grid-cols-8 gap-1 text-xl">
                                         <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="👍">👍</button>
                                         <button type="button" class="emoji-option hover:bg-gray-100 rounded p-1" data-emoji="👎">👎</button>
