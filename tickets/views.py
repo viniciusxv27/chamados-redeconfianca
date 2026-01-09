@@ -496,6 +496,45 @@ def tickets_history_view(request):
 
 
 @login_required
+def ticket_delete_view(request, ticket_id):
+    """View para exclusão de tickets - apenas SUPERADMIN"""
+    user = request.user
+    
+    # Verificar se é SUPERADMIN
+    if user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Você não tem permissão para excluir chamados.')
+        return redirect('tickets_list')
+    
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    
+    if request.method == 'POST':
+        ticket_id_str = f"#{ticket.id}"
+        ticket_title = ticket.title
+        
+        # Registrar log antes de excluir
+        log_action(
+            user, 
+            'TICKET_DELETE', 
+            f'Chamado excluído: {ticket_id_str} - {ticket_title}',
+            request
+        )
+        
+        # Excluir o ticket (isso também excluirá registros relacionados via CASCADE)
+        ticket.delete()
+        
+        messages.success(request, f'Chamado {ticket_id_str} - "{ticket_title}" excluído com sucesso!')
+        
+        # Retornar para a página anterior se especificado, senão para a lista
+        next_url = request.POST.get('next') or request.GET.get('next')
+        if next_url:
+            return redirect(next_url)
+        return redirect('tickets_list')
+    
+    # Para GET, redireciona para a lista (exclusão deve ser via POST)
+    return redirect('tickets_list')
+
+
+@login_required
 def ticket_detail_view(request, ticket_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     user = request.user

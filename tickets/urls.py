@@ -8,6 +8,7 @@ urlpatterns = [
     path('history/', views.tickets_history_view, name='tickets_history'),
     path('create/', views.ticket_create_fixed_view, name='ticket_create'),
     path('<int:ticket_id>/', views.ticket_detail_view, name='ticket_detail'),
+    path('<int:ticket_id>/delete/', views.ticket_delete_view, name='ticket_delete'),
     path('<int:ticket_id>/assume/', views.assume_ticket_view, name='assume_ticket'),
     path('<int:ticket_id>/comment/', views.add_comment_view, name='add_comment'),
     path('<int:ticket_id>/update-status/', views.update_ticket_status_view, name='update_ticket_status'),
