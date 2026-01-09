@@ -4013,13 +4013,6 @@ def task_detail_view(request, task_id):
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
-    # Verificar permissão
-    if not (task.can_be_managed_by(request.user) or 
-            task.assigned_to == request.user or 
-            task.created_by == request.user):
-        messages.error(request, 'Você não tem permissão para ver esta tarefa.')
-        return redirect('manage_tasks')
-    
     # Mensagens da tarefa
     task_messages = task.messages.select_related('user').order_by('created_at')
     
@@ -4045,12 +4038,6 @@ def task_messages_api(request, task_id):
     from core.models import TaskActivity, TaskMessage
     
     task = get_object_or_404(TaskActivity, id=task_id)
-    
-    # Verificar permissão
-    if not (task.can_be_managed_by(request.user) or 
-            task.assigned_to == request.user or 
-            task.created_by == request.user):
-        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
     
     messages = task.messages.select_related('user').order_by('created_at')
     
