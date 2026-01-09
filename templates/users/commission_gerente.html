@@ -256,6 +256,7 @@
                         <th class="px-3 py-3 text-right bg-primary/10 text-primary">Total</th>
                     </tr>
                 </thead>
+                <!-- Linha de Acelerador 6 Pilares logo após o cabeçalho será adicionada no tfoot -->
                 <tbody class="divide-y divide-gray-100">
                     <!-- Móvel -->
                     <tr class="hover:bg-primary/5 transition-colors cursor-pointer pilar-row" data-pilar="MOVEL" data-pilar-nome="Móvel" title="Clique para ver vendas">
@@ -378,15 +379,29 @@
                     </tr>
                 </tbody>
                 <tfoot>
-                    <tr class="bg-gray-100 font-semibold">
-                        <td class="px-4 py-3 text-gray-800">Total</td>
-                        <td class="px-3 py-3 text-right text-primary">R$ {{ data.comissoes.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-blue-600">R$ {{ data.bonus.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-amber-600">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-purple-600">R$ {{ data.hunter.total|floatformat:2 }}</td>
-                        <td class="px-3 py-3 text-right text-indigo-600">-</td>
-                        <td class="px-3 py-3 text-right text-cyan-600 bg-cyan-50/50">-</td>
-                        <td class="px-3 py-3 text-right text-green-600 bg-green-100/50">R$ {{ data.totais.total_pilares_com_iq|floatformat:2 }}</td>
+                    <tr class="bg-gray-50">
+                        <td class="px-4 py-3 text-gray-800 font-medium">Subtotal Pilares</td>
+                        <td class="px-3 py-3 text-right text-primary font-medium">R$ {{ data.comissoes.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-blue-600 font-medium">R$ {{ data.bonus.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-amber-600 font-medium">R$ {{ data.alto_desempenho.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-purple-600 font-medium">R$ {{ data.hunter.total|floatformat:2 }}</td>
+                        <td class="px-3 py-3 text-right text-indigo-600 font-medium">-</td>
+                        <td class="px-3 py-3 text-right text-cyan-600 bg-cyan-50/50 font-medium">-</td>
+                        <td class="px-3 py-3 text-right text-green-600 bg-green-50/50 font-medium">R$ {{ data.totais.total_pilares_com_iq|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="bg-purple-50 border-t-2 border-purple-200">
+                        <td class="px-4 py-3" colspan="7">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🚀</span>
+                                <span class="font-semibold text-purple-800">Acelerador 6/7 Pilares</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-right font-bold text-purple-700 bg-purple-100/50">R$ {{ data.aceleradores.seis_pilares|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
+                        <td class="px-4 py-3 text-gray-800">TOTAL GERAL</td>
+                        <td class="px-3 py-3 text-right text-primary" colspan="6"></td>
+                        <td class="px-3 py-3 text-right text-green-700 bg-green-100 text-lg">R$ {{ data.aceleradores.total_aceleradores|floatformat:2 }}</td>
                     </tr>
                 </tfoot>
             </table>

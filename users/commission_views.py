@@ -30,7 +30,7 @@ from openpyxl.utils import get_column_letter
 # ============================================================================
 
 # Planilha de Comissionamento
-EXCEL_COMISSAO_URL = "https://onedrive.live.com/:x:/g/personal/871EE1819C7E2FAA/IQALTIcHLJT7QKs8WYSVKhXUAQL9rlAGNdHXBmRbGvz5rAc?resid=871EE1819C7E2FAA!s07874c0b942c40fbab3c5984952a15d4&ithint=file%2Cxlsx&e=o3L8zR&migratedtospo=true&redeem=aHR0cHM6Ly8xZHJ2Lm1zL3gvYy84NzFlZTE4MTljN2UyZmFhL0lRQUxUSWNITEpUN1FLczhXWVNWS2hYVUFRTDlybEFHTmRIWEJtUmJHdno1ckFjP2U9bzNMOHpS"
+EXCEL_COMISSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQDp2ONpM_88ToSopGzjlPVdASX6rIFB3_ENXnJcGN3e7Go?e=Q3fDRz"
 
 # Planilha de Vendas e Metas
 EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG0UlK7URSLAQ5r634qBo9-GicO2D8ZfmY"
