@@ -1824,20 +1824,23 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
                 iq_pct = iq_data.get('iq_movel', 0)
                 ajuste_iq = soma * iq_pct
                 processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
-                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição
+                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição (ex: -5 para -5%)
+                processed['pilares'][i]['iq_multiplicador'] = 100 + (iq_pct * 100)  # Multiplicador (ex: 95 para -5%)
                 processed['pilares'][i]['iq_valor'] = iq_data.get('iq_movel', 0)  # Valor bruto do IQ
                 processed['pilares'][i]['ajuste_iq'] = ajuste_iq  # Valor do ajuste aplicado
             elif pilar_key == 'fixa':
                 iq_pct = iq_data.get('iq_fixa', 0)
                 ajuste_iq = soma * iq_pct
                 processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
-                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição
+                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição (ex: -5 para -5%)
+                processed['pilares'][i]['iq_multiplicador'] = 100 + (iq_pct * 100)  # Multiplicador (ex: 95 para -5%)
                 processed['pilares'][i]['iq_valor'] = iq_data.get('iq_fixa', 0)  # Valor bruto do IQ
                 processed['pilares'][i]['ajuste_iq'] = ajuste_iq  # Valor do ajuste aplicado
             else:
                 # Outros pilares não têm IQ, soma_com_iq = soma
                 processed['pilares'][i]['soma_com_iq'] = soma
                 processed['pilares'][i]['iq_pct'] = None
+                processed['pilares'][i]['iq_multiplicador'] = None
                 processed['pilares'][i]['iq_valor'] = None
                 processed['pilares'][i]['ajuste_iq'] = 0
     
