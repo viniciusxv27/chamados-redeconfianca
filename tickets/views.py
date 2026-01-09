@@ -45,6 +45,7 @@ def tickets_list_view(request):
     has_attachments_filter = request.GET.get('has_attachments', '')
     has_comments_filter = request.GET.get('has_comments', '')
     overdue_filter = request.GET.get('overdue', '')
+    duplicates_filter = request.GET.get('duplicates', '')
     
     # Filtro base: TODOS os usuários sempre veem seus próprios chamados
     base_filter = models.Q(created_by=user)
@@ -255,6 +256,8 @@ def tickets_list_view(request):
             filter_params['has_comments'] = has_comments_filter
         if overdue_filter:
             filter_params['overdue'] = overdue_filter
+        if duplicates_filter:
+            filter_params['duplicates'] = duplicates_filter
     
     # Converter parâmetros para query string
     # doseq=True permite múltiplos valores para o mesmo parâmetro (ex: status=ABERTO&status=EM_ANDAMENTO)
@@ -331,6 +334,15 @@ def tickets_list_view(request):
                     models.Q(due_date__gte=now) | 
                     models.Q(status__in=['RESOLVIDO', 'FECHADO'])
                 )
+        
+        # Filtro por títulos duplicados
+        if duplicates_filter == 'yes':
+            # Encontrar títulos que aparecem mais de uma vez
+            from django.db.models import Count
+            duplicate_titles = Ticket.objects.values('title').annotate(
+                title_count=Count('id')
+            ).filter(title_count__gt=1).values_list('title', flat=True)
+            tickets = tickets.filter(title__in=list(duplicate_titles))
 
     # Verificar se é solicitação de exportação (apenas para SUPERADMIN)
     export_format = request.GET.get('export', '')
@@ -434,6 +446,7 @@ def tickets_list_view(request):
         'has_attachments': has_attachments_filter,
         'has_comments': has_comments_filter,
         'overdue': overdue_filter,
+        'duplicates': duplicates_filter,
         'created_by_name': created_by_name,
         'assigned_to_name': assigned_to_name,
         # Dados completos para SUPERADMIN
