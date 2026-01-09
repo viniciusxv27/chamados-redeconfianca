@@ -1914,7 +1914,7 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
             ],
         },
         'composicao': {
-            'labels': ['Comissão', 'Bônus', 'Alto Desempenho', 'Hunter', 'Aceleradores'],
+            'labels': ['Comissão', 'P. Coletiva', 'P. Individual', 'Hunter', 'Aceleradores'],
             'data': [
                 processed['comissoes']['total'],
                 processed['bonus']['total'],

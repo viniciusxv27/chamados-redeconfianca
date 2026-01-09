@@ -94,7 +94,7 @@
     <div class="bg-gradient-to-br from-primary to-orange-500 rounded-2xl p-6 md:p-8 text-white mb-6 shadow-lg shadow-primary/20">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-                <p class="text-white/80 text-sm font-medium mb-1">Remuneração Final Total</p>
+                <p class="text-white/80 text-sm font-medium mb-1">RV Total</p>
                 <p class="text-4xl md:text-5xl font-bold">
                     R$ {{ data.totais.remuneracao_final|floatformat:2 }}
                 </p>
@@ -116,7 +116,7 @@
             <p class="text-lg font-semibold text-gray-800 truncate">{{ data.info.coordenador|default:"N/A" }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
-            <p class="text-gray-500 text-xs font-medium mb-1">Total Remuneração Variável</p>
+            <p class="text-gray-500 text-xs font-medium mb-1">Total Comissão</p>
             <p class="text-lg font-semibold text-green-600">R$ {{ data.comissoes.total|floatformat:2 }}</p>
         </div>
         <div class="bg-white rounded-xl p-4 border border-gray-100">
@@ -247,13 +247,13 @@
                 <thead>
                     <tr class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <th class="px-4 py-3 text-left">Pilar</th>
-                        <th class="px-3 py-3 text-right">Remuneração Variável</th>
-                        <th class="px-3 py-3 text-right">B. Carteira</th>
-                        <th class="px-3 py-3 text-right">Alto Desemp.</th>
+                        <th class="px-3 py-3 text-right">Comissão</th>
+                        <th class="px-3 py-3 text-right">P. Coletiva</th>
+                        <th class="px-3 py-3 text-right">P. Individual</th>
                         <th class="px-3 py-3 text-right">Hunter</th>
                         <th class="px-3 py-3 text-right">Id. Hunter</th>
                         <th class="px-3 py-3 text-right bg-cyan-50 text-cyan-700">IQ</th>
-                        <th class="px-3 py-3 text-right bg-primary/10 text-primary">Total</th>
+                        <th class="px-3 py-3 text-right bg-gray-100">Total</th>
                     </tr>
                 </thead>
                 <!-- Linha de Acelerador 6 Pilares logo após o cabeçalho será adicionada no tfoot -->
@@ -609,7 +609,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
                 <h2 class="text-lg font-semibold text-gray-800">
-                    Representatividade de Remuneração Variável
+                    Representatividade de RV
                 </h2>
                 <p class="text-sm text-gray-500">Participação de cada vendedor no pilar selecionado</p>
             </div>
@@ -812,21 +812,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 labels: chartData.comissoes.labels,
                 datasets: [
                     {
-                        label: 'Remuneração Variável',
+                        label: 'Comissão',
                         data: chartData.comissoes.data,
                         backgroundColor: 'rgba(102, 0, 153, 0.85)',
                         borderRadius: 4,
                         borderSkipped: false
                     },
                     {
-                        label: 'B. Carteira',
+                        label: 'P. Coletiva',
                         data: chartData.bonus.data,
                         backgroundColor: 'rgba(59, 130, 246, 0.85)',
                         borderRadius: 4,
                         borderSkipped: false
                     },
                     {
-                        label: 'Alto Desempenho',
+                        label: 'P. Individual',
                         data: chartData.alto_desempenho.data,
                         backgroundColor: 'rgba(245, 158, 11, 0.85)',
                         borderRadius: 4,
