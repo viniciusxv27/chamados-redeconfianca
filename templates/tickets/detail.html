@@ -79,6 +79,41 @@
 #imageModal .close-modal:focus {
     color: #bbb;
 }
+
+/* Estilos para select multiple de atribuição de usuários */
+select[multiple] {
+    scrollbar-width: thin;
+    scrollbar-color: #9ca3af #f3f4f6;
+}
+
+select[multiple]::-webkit-scrollbar {
+    width: 8px;
+}
+
+select[multiple]::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 4px;
+}
+
+select[multiple]::-webkit-scrollbar-thumb {
+    background-color: #9ca3af;
+    border-radius: 4px;
+}
+
+select[multiple] option {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+}
+
+select[multiple] option:checked {
+    background: linear-gradient(0deg, #8b5cf6 0%, #8b5cf6 100%);
+    color: white;
+}
+
+select[multiple] option:hover {
+    background-color: #f3f4f6;
+}
 </style>
 
 <div class="max-w-6xl mx-auto">
@@ -565,15 +600,18 @@
                     
                     <!-- User Assignment Field (hidden by default) -->
                     <div id="assignUserField" class="hidden">
-                        <label for="assigned_to" class="block text-sm font-medium text-gray-700 mb-2">Atribuir para:</label>
-                        <select name="assigned_to" id="assigned_to" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
-                            <option value="">Selecione um usuário...</option>
+                        <label for="assigned_to" class="block text-sm font-medium text-gray-700 mb-2">
+                            Atribuir para:
+                            <span class="text-xs text-gray-500 ml-1">(Segure Ctrl/Cmd para selecionar múltiplos)</span>
+                        </label>
+                        <select name="assigned_to" id="assigned_to" multiple size="6" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                             {% if sector_users %}
                                 {% for sector_user in sector_users %}
-                                    <option value="{{ sector_user.id }}">{{ sector_user.full_name }} ({{ sector_user.sector.name }}) - {{ sector_user.email }}</option>
+                                    <option value="{{ sector_user.id }}">{{ sector_user.full_name }} ({{ sector_user.sector.name }})</option>
                                 {% endfor %}
                             {% endif %}
                         </select>
+                        <p class="text-xs text-gray-500 mt-1">Usuários selecionados: <span id="inlineSelectedCount">0</span></p>
                     </div>
                     
                     <div>
@@ -818,9 +856,9 @@
 
 <!-- Modal para Atribuir Usuário -->
 <div id="assignModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
         <div class="mt-3">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Atribuir Usuário</h3>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Atribuir Usuários</h3>
             <form method="post" action="{% url 'add_comment' ticket.id %}">
                 {% csrf_token %}
                 <input type="hidden" name="comment_type" value="ASSIGNMENT">
@@ -828,16 +866,16 @@
                 <div class="mb-4">
                     <label for="assign_to_user" class="block text-sm font-medium text-gray-700 mb-2">
                         Atribuir para: <span class="text-red-500">*</span>
+                        <span class="text-xs text-gray-500 ml-1">(Segure Ctrl/Cmd para selecionar múltiplos)</span>
                     </label>
-                    <select name="assigned_to" id="assign_to_user" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="">Selecione um usuário...</option>
-                        <!-- Debug: Total de usuários: {{ sector_users|length }} -->
+                    <select name="assigned_to" id="assign_to_user" required multiple size="8" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                         {% if sector_users %}
                             {% for sector_user in sector_users %}
-                                <option value="{{ sector_user.id }}">{{ sector_user.full_name }} ({{ sector_user.sector.name }}) - {{ sector_user.email }}</option>
+                                <option value="{{ sector_user.id }}">{{ sector_user.full_name }} ({{ sector_user.sector.name }})</option>
                             {% endfor %}
                         {% endif %}
                     </select>
+                    <p class="text-xs text-gray-500 mt-1">Usuários selecionados: <span id="selectedCount">0</span></p>
                 </div>
                 
                 <div class="mb-4">
@@ -859,7 +897,7 @@
                         Cancelar
                     </button>
                     <button type="submit" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors">
-                        <i class="fas fa-user-plus mr-1"></i>Atribuir
+                        <i class="fas fa-users mr-1"></i>Atribuir Usuários
                     </button>
                 </div>
             </form>
@@ -868,6 +906,37 @@
 </div>
 
 <script>
+// Atualiza contador de usuários selecionados no modal
+function updateSelectedCount() {
+    const select = document.getElementById('assign_to_user');
+    const counter = document.getElementById('selectedCount');
+    if (select && counter) {
+        counter.textContent = select.selectedOptions.length;
+    }
+}
+
+// Atualiza contador de usuários selecionados no formulário inline
+function updateInlineSelectedCount() {
+    const select = document.getElementById('assigned_to');
+    const counter = document.getElementById('inlineSelectedCount');
+    if (select && counter) {
+        counter.textContent = select.selectedOptions.length;
+    }
+}
+
+// Inicializa os event listeners para os selects multiple
+document.addEventListener('DOMContentLoaded', function() {
+    const modalSelect = document.getElementById('assign_to_user');
+    const inlineSelect = document.getElementById('assigned_to');
+    
+    if (modalSelect) {
+        modalSelect.addEventListener('change', updateSelectedCount);
+    }
+    if (inlineSelect) {
+        inlineSelect.addEventListener('change', updateInlineSelectedCount);
+    }
+});
+
 function toggleAssignField() {
     const commentType = document.getElementById('comment_type').value;
     const assignField = document.getElementById('assignUserField');

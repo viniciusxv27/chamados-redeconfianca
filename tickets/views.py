@@ -980,7 +980,8 @@ def add_comment_view(request, ticket_id):
         ticket = get_object_or_404(Ticket, id=ticket_id)
         comment_text = request.POST.get('comment')
         comment_type = request.POST.get('comment_type', 'COMMENT')
-        assigned_user_id = request.POST.get('assigned_to')
+        # Suporte para múltiplos usuários (select multiple)
+        assigned_user_ids = request.POST.getlist('assigned_to')
         
         # Verificar permissão para comentar
         can_comment = (
@@ -998,7 +999,7 @@ def add_comment_view(request, ticket_id):
             messages.error(request, 'Comentário é obrigatório.')
             return redirect('ticket_detail', ticket_id=ticket.id)
         
-        # Criar comentário
+        # Criar comentário principal
         comment = TicketComment.objects.create(
             ticket=ticket,
             user=request.user,
@@ -1006,15 +1007,34 @@ def add_comment_view(request, ticket_id):
             comment_type=comment_type
         )
         
-        # Se é uma atribuição, adicionar usuário
-        if comment_type == 'ASSIGNMENT' and assigned_user_id:
+        # Se é uma atribuição, adicionar usuários (suporte para múltiplos)
+        if comment_type == 'ASSIGNMENT' and assigned_user_ids:
             from users.models import User
-            assigned_user = get_object_or_404(User, id=assigned_user_id)
-            assignment = ticket.assign_additional_user(assigned_user, request.user, comment_text)
-            comment.assigned_to = assigned_user
-            comment.save()
+            assigned_users = User.objects.filter(id__in=assigned_user_ids)
+            assigned_names = []
+            
+            for assigned_user in assigned_users:
+                ticket.assign_additional_user(assigned_user, request.user, comment_text)
+                assigned_names.append(assigned_user.full_name)
+            
+            # Atualizar o comentário principal com a lista de usuários atribuídos
+            if len(assigned_names) > 1:
+                comment.comment = f"{comment_text}\n\nUsuários atribuídos: {', '.join(assigned_names)}"
+                comment.save()
+            elif len(assigned_names) == 1:
+                # Para manter compatibilidade, atribui ao primeiro usuário se for apenas um
+                comment.assigned_to = assigned_users.first()
+                comment.save()
         
-        messages.success(request, 'Comentário adicionado com sucesso!')
+        if comment_type == 'ASSIGNMENT' and assigned_user_ids:
+            count = len(assigned_user_ids)
+            if count > 1:
+                messages.success(request, f'{count} usuários atribuídos com sucesso!')
+            else:
+                messages.success(request, 'Usuário atribuído com sucesso!')
+        else:
+            messages.success(request, 'Comentário adicionado com sucesso!')
+        
         log_action(
             request.user, 
             'TICKET_COMMENT', 
