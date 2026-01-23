@@ -4777,3 +4777,57 @@ def debug_webhooks_view(request):
     }
     
     return render(request, 'admin/debug_webhooks.html', context)
+
+
+@login_required
+def my_cs_statement_view(request):
+    """Extrato de Confianças C$ do usuário logado"""
+    from django.core.paginator import Paginator
+    from prizes.models import CSTransaction
+    
+    user = request.user
+    
+    # Buscar transações do usuário (todas, independente do status, para mostrar histórico completo)
+    transactions = CSTransaction.objects.filter(user=user).order_by('-created_at')
+    
+    # Filtros opcionais
+    transaction_type = request.GET.get('type', '')
+    status_filter = request.GET.get('status', '')
+    
+    if transaction_type:
+        transactions = transactions.filter(transaction_type=transaction_type)
+    
+    if status_filter:
+        transactions = transactions.filter(status=status_filter)
+    
+    # Paginação
+    paginator = Paginator(transactions, 20)  # 20 transações por página
+    page_number = request.GET.get('page')
+    transactions_page = paginator.get_page(page_number)
+    
+    # Calcular totais (apenas transações aprovadas)
+    approved_transactions = CSTransaction.objects.filter(user=user, status='APPROVED')
+    
+    total_credits = approved_transactions.filter(
+        transaction_type__in=['CREDIT', 'ADJUSTMENT', 'REFUND']
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    
+    total_debits = approved_transactions.filter(
+        transaction_type__in=['DEBIT', 'REDEMPTION']
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    
+    # Transações pendentes
+    pending_count = CSTransaction.objects.filter(user=user, status='PENDING').count()
+    
+    context = {
+        'transactions': transactions_page,
+        'total_credits': total_credits,
+        'total_debits': total_debits,
+        'current_balance': user.balance_cs,
+        'pending_count': pending_count,
+        'transaction_type': transaction_type,
+        'status_filter': status_filter,
+        'user': user,
+    }
+    
+    return render(request, 'users/my_cs_statement.html', context)

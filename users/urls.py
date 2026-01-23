@@ -14,6 +14,7 @@ urlpatterns = [
     path('profile/update/', views.update_profile_view, name='update_profile'),
     path('settings/', views.settings_view, name='settings'),
     path('settings/update/', views.update_settings_view, name='update_settings'),
+    path('my-cs/', views.my_cs_statement_view, name='my_cs_statement'),
     path('help/', views.help_view, name='help_tutorials'),
     path('help/tutorial/<int:tutorial_id>/', views.tutorial_detail_view, name='tutorial_detail'),
     path('change-password/', views.change_password_view, name='change_password'),

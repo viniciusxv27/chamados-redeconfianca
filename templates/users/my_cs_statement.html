@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+
+{% block title %}Meu Extrato C${% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-coins text-primary mr-3"></i>
+                        Meu Extrato C$
+                    </h1>
+                    <p class="text-gray-600 mt-1">Acompanhe suas transações de Confianças C$</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <a href="{% url 'marketplace' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                        <i class="fas fa-store mr-2"></i>
+                        Ir para Mercadinho
+                    </a>
+                    <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 px-6">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
+                    <i class="fas fa-wallet text-green-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Saldo Atual</p>
+                    <p class="text-2xl font-bold text-gray-900">C$ {{ current_balance|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                    <i class="fas fa-arrow-up text-blue-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Total Recebido</p>
+                    <p class="text-2xl font-bold text-green-600">+ C$ {{ total_credits|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mr-4">
+                    <i class="fas fa-arrow-down text-red-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Total Utilizado</p>
+                    <p class="text-2xl font-bold text-red-600">- C$ {{ total_debits|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mr-4">
+                    <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Pendentes</p>
+                    <p class="text-2xl font-bold text-yellow-600">{{ pending_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6 mx-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="type" class="block text-sm font-medium text-gray-700 mb-2">Tipo de Transação</label>
+                <select id="type" name="type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Todos os tipos</option>
+                    <option value="CREDIT" {% if transaction_type == 'CREDIT' %}selected{% endif %}>Crédito</option>
+                    <option value="DEBIT" {% if transaction_type == 'DEBIT' %}selected{% endif %}>Débito</option>
+                    <option value="REDEMPTION" {% if transaction_type == 'REDEMPTION' %}selected{% endif %}>Resgate</option>
+                    <option value="REFUND" {% if transaction_type == 'REFUND' %}selected{% endif %}>Reembolso</option>
+                    <option value="ADJUSTMENT" {% if transaction_type == 'ADJUSTMENT' %}selected{% endif %}>Ajuste</option>
+                </select>
+            </div>
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select id="status" name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Todos os status</option>
+                    <option value="APPROVED" {% if status_filter == 'APPROVED' %}selected{% endif %}>Aprovado</option>
+                    <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>Pendente</option>
+                    <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>Rejeitado</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors mr-2">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+                <a href="{% url 'my_cs_statement' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-times mr-2"></i>Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden mx-6">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">
+                Histórico de Transações
+                <span class="text-sm font-normal text-gray-500">({{ transactions.paginator.count }} transações)</span>
+            </h3>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for transaction in transactions %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">{{ transaction.created_at|date:"d/m/Y" }}</div>
+                            <div class="text-xs text-gray-500">{{ transaction.created_at|time:"H:i" }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if transaction.transaction_type == 'CREDIT' %}
+                                <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-plus mr-1"></i>Crédito
+                                </span>
+                            {% elif transaction.transaction_type == 'DEBIT' %}
+                                <span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-minus mr-1"></i>Débito
+                                </span>
+                            {% elif transaction.transaction_type == 'REDEMPTION' %}
+                                <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-gift mr-1"></i>Resgate
+                                </span>
+                            {% elif transaction.transaction_type == 'REFUND' %}
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-undo mr-1"></i>Reembolso
+                                </span>
+                            {% elif transaction.transaction_type == 'ADJUSTMENT' %}
+                                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-sliders-h mr-1"></i>Ajuste
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900">{{ transaction.description }}</div>
+                            {% if transaction.created_by and transaction.created_by != user %}
+                                <div class="text-xs text-gray-500">Por: {{ transaction.created_by.full_name }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if transaction.transaction_type in 'CREDIT,ADJUSTMENT,REFUND' %}
+                                <span class="text-lg font-semibold text-green-600">+ C$ {{ transaction.amount|floatformat:2 }}</span>
+                            {% else %}
+                                <span class="text-lg font-semibold text-red-600">- C$ {{ transaction.amount|floatformat:2 }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if transaction.status == 'APPROVED' %}
+                                <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-check mr-1"></i>Aprovado
+                                </span>
+                            {% elif transaction.status == 'PENDING' %}
+                                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
+                                    <i class="fas fa-clock mr-1"></i>Pendente
+                                </span>
+                            {% elif transaction.status == 'REJECTED' %}
+                                <span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium" title="{{ transaction.rejection_reason }}">
+                                    <i class="fas fa-times mr-1"></i>Rejeitado
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center">
+                            <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-receipt text-gray-400 text-3xl"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-900 mb-2">Nenhuma transação encontrada</h3>
+                            <p class="text-gray-600">Você ainda não possui transações de C$</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if transactions.has_other_pages %}
+        <div class="px-6 py-4 border-t border-gray-200">
+            <div class="flex items-center justify-between">
+                <div class="text-sm text-gray-700">
+                    Mostrando {{ transactions.start_index }} a {{ transactions.end_index }} de {{ transactions.paginator.count }} transações
+                </div>
+                
+                <nav class="flex items-center space-x-1">
+                    {% if transactions.has_previous %}
+                        <a href="?page=1{% if transaction_type %}&type={{ transaction_type }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                        <a href="?page={{ transactions.previous_page_number }}{% if transaction_type %}&type={{ transaction_type }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    {% endif %}
+                    
+                    <span class="px-3 py-2 text-sm text-gray-700">
+                        Página {{ transactions.number }} de {{ transactions.paginator.num_pages }}
+                    </span>
+                    
+                    {% if transactions.has_next %}
+                        <a href="?page={{ transactions.next_page_number }}{% if transaction_type %}&type={{ transaction_type }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                        <a href="?page={{ transactions.paginator.num_pages }}{% if transaction_type %}&type={{ transaction_type }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+                           class="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Informational Section -->
+    <div class="mt-6 px-6 pb-6">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-6">
+            <div class="flex items-start">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <i class="fas fa-info-circle text-blue-600"></i>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold text-blue-900 mb-2">Sobre as Confianças C$</h4>
+                    <ul class="text-sm text-blue-800 space-y-1">
+                        <li><i class="fas fa-check mr-2"></i>As Confianças C$ são pontos que você ganha por participar ativamente do sistema.</li>
+                        <li><i class="fas fa-check mr-2"></i>Podem ser utilizadas para trocar por prêmios no <a href="{% url 'marketplace' %}" class="underline font-medium">Mercadinho</a>.</li>
+                        <li><i class="fas fa-check mr-2"></i>Transações pendentes são aquelas aguardando aprovação da administração.</li>
+                        <li><i class="fas fa-check mr-2"></i>Transações rejeitadas não afetam seu saldo.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
