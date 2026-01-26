@@ -1,4 +1,5 @@
 import re
+import html
 from django import template
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
@@ -73,12 +74,16 @@ def sanitize_html(value):
 def strip_html(value):
     """
     Remove completamente todas as tags HTML, deixando apenas o texto.
+    Também trata entidades HTML escapadas (&lt;, &gt;, &nbsp;, etc).
     Útil para casos onde nenhuma formatação HTML é desejada.
     """
     if not value:
         return ''
     
     value = str(value)
+    
+    # Primeiro, decodifica entidades HTML escapadas (&lt; → <, &gt; → >, &nbsp; → espaço)
+    value = html.unescape(value)
     
     # Substitui <br> e </p> por quebras de linha antes de remover as tags
     value = re.sub(r'<br\s*/?>', '\n', value, flags=re.IGNORECASE)
@@ -88,10 +93,18 @@ def strip_html(value):
     # Remove todas as tags HTML
     value = re.sub(r'<[^>]+>', '', value)
     
-    # Remove múltiplas quebras de linha consecutivas
+    # Remove múltiplas quebras de linha consecutivas (mais de 2)
     value = re.sub(r'\n{3,}', '\n\n', value)
     
-    # Escapa caracteres especiais HTML
+    # Remove espaços em branco excessivos em cada linha
+    lines = value.split('\n')
+    lines = [re.sub(r' {2,}', ' ', line).strip() for line in lines]
+    value = '\n'.join(lines)
+    
+    # Remove linhas completamente vazias no início e fim
+    value = value.strip()
+    
+    # Escapa caracteres especiais HTML para segurança
     value = escape(value)
     
     # Converte quebras de linha para <br>
