@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load ticket_filters %}
 
 {% block title %}Chamado #{{ ticket.id }} - Rede Confiança{% endblock %}
 
@@ -212,7 +213,7 @@ select[multiple] option:hover {
                     </div>
                     
                     <div class="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
-                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed ticket-description">{{ ticket.description|safe }}</div>
+                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed ticket-description">{{ ticket.description|strip_html }}</div>
                     </div>
                     
                     <!-- Attachments Section -->
