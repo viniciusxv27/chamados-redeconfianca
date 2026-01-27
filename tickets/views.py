@@ -289,8 +289,11 @@ def tickets_list_view(request):
     
     # Filtro por setor do solicitante - disponível para TODOS os usuários
     if created_by_sector_filter:
-        # Filtrar apenas pelo setor principal do criador do ticket
-        tickets = tickets.filter(created_by__sector_id=created_by_sector_filter)
+        # Filtrar por usuários que participam do setor (setor principal OU setores ManyToMany)
+        tickets = tickets.filter(
+            models.Q(created_by__sector_id=created_by_sector_filter) |  # Setor principal
+            models.Q(created_by__sectors__id=created_by_sector_filter)  # Setores ManyToMany
+        ).distinct()
     
     # Aplicar filtros avançados apenas para SUPERADMIN
     if user.hierarchy == 'SUPERADMIN':
