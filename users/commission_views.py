@@ -1820,21 +1820,24 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
             
             # Calcular soma com IQ (IQ negativo = deflator/desconto, IQ positivo = acréscimo)
             # soma_com_iq = soma + (soma * iq_pct)
+            # IQ vem como percentual (ex: -8 para -8%), então dividimos por 100 para usar em cálculos
             if pilar_key == 'movel':
-                iq_pct = iq_data.get('iq_movel', 0)
+                iq_valor = iq_data.get('iq_movel', 0)  # Valor bruto (ex: -8 para -8%)
+                iq_pct = iq_valor / 100 if iq_valor else 0  # Convertido para decimal (ex: -0.08)
                 ajuste_iq = soma * iq_pct
                 processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
-                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição (ex: -5 para -5%)
-                processed['pilares'][i]['iq_multiplicador'] = 100 + (iq_pct * 100)  # Multiplicador (ex: 95 para -5%)
-                processed['pilares'][i]['iq_valor'] = iq_data.get('iq_movel', 0)  # Valor bruto do IQ
+                processed['pilares'][i]['iq_pct'] = iq_valor  # Percentual para exibição (ex: -8 para -8%)
+                processed['pilares'][i]['iq_multiplicador'] = 100 + iq_valor  # Multiplicador (ex: 92 para -8%)
+                processed['pilares'][i]['iq_valor'] = iq_valor  # Valor bruto do IQ
                 processed['pilares'][i]['ajuste_iq'] = ajuste_iq  # Valor do ajuste aplicado
             elif pilar_key == 'fixa':
-                iq_pct = iq_data.get('iq_fixa', 0)
+                iq_valor = iq_data.get('iq_fixa', 0)  # Valor bruto (ex: -9 para -9%)
+                iq_pct = iq_valor / 100 if iq_valor else 0  # Convertido para decimal (ex: -0.09)
                 ajuste_iq = soma * iq_pct
                 processed['pilares'][i]['soma_com_iq'] = soma + ajuste_iq
-                processed['pilares'][i]['iq_pct'] = iq_pct * 100  # Percentual para exibição (ex: -5 para -5%)
-                processed['pilares'][i]['iq_multiplicador'] = 100 + (iq_pct * 100)  # Multiplicador (ex: 95 para -5%)
-                processed['pilares'][i]['iq_valor'] = iq_data.get('iq_fixa', 0)  # Valor bruto do IQ
+                processed['pilares'][i]['iq_pct'] = iq_valor  # Percentual para exibição (ex: -9 para -9%)
+                processed['pilares'][i]['iq_multiplicador'] = 100 + iq_valor  # Multiplicador (ex: 91 para -9%)
+                processed['pilares'][i]['iq_valor'] = iq_valor  # Valor bruto do IQ
                 processed['pilares'][i]['ajuste_iq'] = ajuste_iq  # Valor do ajuste aplicado
             else:
                 # Outros pilares não têm IQ, soma_com_iq = soma
