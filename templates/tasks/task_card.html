@@ -267,6 +267,41 @@
                         `;
                         document.body.appendChild(modal);
 
+                        // Função auxiliar para calcular tempo relativo
+                        function getTimeAgo(dateString) {
+                            const now = new Date();
+                            const date = new Date(dateString);
+                            const diffInSeconds = Math.floor((now - date) / 1000);
+                            
+                            if (diffInSeconds < 60) return 'Agora';
+                            if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+                            if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+                            if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
+                            
+                            return date.toLocaleDateString('pt-BR', { 
+                                day: '2-digit', 
+                                month: '2-digit',
+                                year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+                            });
+                        }
+
+                        // Função auxiliar para exibir toast
+                        function showToast(message, type = 'info') {
+                            const toast = document.createElement('div');
+                            toast.className = `fixed top-4 right-4 z-[9999] px-4 py-2 rounded-lg text-white text-sm shadow-lg transform transition-all duration-300 ${
+                                type === 'error' ? 'bg-red-500' : 
+                                type === 'success' ? 'bg-green-500' : 
+                                'bg-blue-500'
+                            }`;
+                            toast.textContent = message;
+                            document.body.appendChild(toast);
+                            
+                            setTimeout(() => {
+                                toast.style.opacity = '0';
+                                setTimeout(() => toast.remove(), 300);
+                            }, 3000);
+                        }
+
                         // Setup character counter and textarea auto-resize
                         const messageInput = document.getElementById('taskMessageInput');
                         const charCount = document.getElementById('charCount');
@@ -287,7 +322,7 @@
                         });
 
                         // Load chat messages
-                        fetch(`/projects/task/${activityId}/chat/`)
+                        fetch(`/users/tasks/${activityId}/messages/`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
@@ -377,7 +412,7 @@
                             formData.append('message', message);
                             formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
-                            fetch(`/projects/task/${activityId}/chat/send/`, {
+                            fetch(`/users/tasks/${activityId}/send-message/`, {
                                 method: 'POST',
                                 body: formData
                             })
