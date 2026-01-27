@@ -617,7 +617,7 @@ class TaskActivity(models.Model):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM', verbose_name="Prioridade")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', verbose_name="Status")
     
-    due_date = models.DateTimeField(verbose_name="Prazo")
+    due_date = models.DateTimeField(null=True, blank=True, verbose_name="Prazo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluído em")
@@ -652,6 +652,8 @@ class TaskActivity(models.Model):
     def is_overdue(self):
         """Verifica se a atividade está em atraso"""
         if self.status == 'DONE':
+            return False
+        if self.due_date is None:
             return False
         return timezone.now() > self.due_date
     

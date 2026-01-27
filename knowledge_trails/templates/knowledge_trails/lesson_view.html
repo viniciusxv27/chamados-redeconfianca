@@ -177,11 +177,25 @@ video::-webkit-media-controls-panel {
                 <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6">
                     <div class="video-container">
                         {% if lesson.video_url|is_youtube %}
-                            <iframe src="{{ lesson.video_url|youtube_embed_url }}" 
-                                    frameborder="0" 
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                                    allowfullscreen
-                                    loading="lazy"></iframe>
+                            {% with embed_url=lesson.video_url|youtube_embed_url %}
+                                {% if embed_url %}
+                                <iframe src="{{ embed_url }}" 
+                                        frameborder="0" 
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                        allowfullscreen
+                                        loading="lazy"
+                                        referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                                {% else %}
+                                <div class="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center video-error">
+                                    <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-3"></i>
+                                    <p class="text-red-700 font-medium">URL do vídeo do YouTube inválida ou não reconhecida.</p>
+                                    <p class="text-sm text-gray-600 mt-2">URL original: {{ lesson.video_url }}</p>
+                                    <a href="{{ lesson.video_url }}" target="_blank" class="inline-flex items-center mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                                        <i class="fab fa-youtube mr-2"></i> Assistir no YouTube
+                                    </a>
+                                </div>
+                                {% endif %}
+                            {% endwith %}
                         {% elif lesson.video_url|is_vimeo %}
                             <iframe src="{{ lesson.video_url|vimeo_embed_url }}" 
                                     frameborder="0" 
@@ -409,8 +423,28 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (video) {
         let loadTimeout = null;
-        const videoUrl = video.querySelector('source')?.src;
+        let retryCount = 0;
+        const maxRetries = 2;
+        const videoSource = video.querySelector('source');
+        const videoUrl = videoSource?.src;
         console.log('Iniciando carregamento do vídeo:', videoUrl);
+        
+        // Função para tentar recarregar o vídeo
+        function retryVideoLoad() {
+            if (retryCount < maxRetries) {
+                retryCount++;
+                console.log(`Tentativa ${retryCount} de recarregar o vídeo...`);
+                
+                // Adicionar timestamp para evitar cache
+                const separator = videoUrl.includes('?') ? '&' : '?';
+                const newUrl = `${videoUrl}${separator}t=${Date.now()}`;
+                
+                if (videoSource) {
+                    videoSource.src = newUrl;
+                    video.load();
+                }
+            }
+        }
         
         // Timeout para mostrar fallback se o vídeo demorar muito
         loadTimeout = setTimeout(function() {
@@ -418,7 +452,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (videoFallback) {
                 videoFallback.classList.remove('hidden');
             }
-        }, 10000); // 10 segundos
+            // Tentar recarregar automaticamente
+            retryVideoLoad();
+        }, 15000); // 15 segundos
         
         // Mostrar loading quando o vídeo está carregando
         video.addEventListener('loadstart', function() {
@@ -438,6 +474,7 @@ document.addEventListener('DOMContentLoaded', function() {
         video.addEventListener('loadedmetadata', function() {
             console.log('Vídeo: loadedmetadata - duração:', video.duration);
             clearTimeout(loadTimeout);
+            retryCount = maxRetries; // Parar retries
         });
         
         // Esconder loading quando o vídeo está pronto
@@ -445,6 +482,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Vídeo: canplay');
             clearTimeout(loadTimeout);
             if (videoLoading) videoLoading.style.display = 'none';
+            retryCount = maxRetries; // Parar retries
         });
         
         video.addEventListener('canplaythrough', function() {
@@ -463,12 +501,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Tratamento de erros
         video.addEventListener('error', function(e) {
             console.error('Erro no vídeo:', video.error);
+            
+            // Tentar recarregar antes de mostrar erro
+            if (retryCount < maxRetries) {
+                retryVideoLoad();
+                return;
+            }
+            
             clearTimeout(loadTimeout);
             if (videoLoading) videoLoading.style.display = 'none';
             
             let errorMessage = 'Erro ao carregar o vídeo. ';
+            let errorCode = '';
             
             if (video.error) {
+                errorCode = ` (Código: ${video.error.code})`;
                 switch (video.error.code) {
                     case video.error.MEDIA_ERR_ABORTED:
                         errorMessage += 'Carregamento interrompido.';
@@ -491,14 +538,17 @@ document.addEventListener('DOMContentLoaded', function() {
             errorDiv.className = 'bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center';
             errorDiv.innerHTML = `
                 <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-3"></i>
-                <p class="text-red-700 font-medium">${errorMessage}</p>
+                <p class="text-red-700 font-medium">${errorMessage}${errorCode}</p>
                 <p class="text-sm text-red-600 mt-2">URL: ${videoUrl}</p>
-                <div class="mt-4">
+                <div class="mt-4 flex flex-wrap justify-center gap-3">
+                    <button onclick="location.reload()" class="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i> Recarregar Página
+                    </button>
                     <a href="${videoUrl}" target="_blank" download class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                        <i class="fas fa-download mr-2"></i> Tentar Baixar o Vídeo
+                        <i class="fas fa-download mr-2"></i> Baixar Vídeo
                     </a>
                 </div>
-                <p class="text-xs text-gray-500 mt-4">Tente recarregar a página ou entre em contato com o suporte.</p>
+                <p class="text-xs text-gray-500 mt-4">Se o problema persistir, entre em contato com o suporte.</p>
             `;
             
             if (videoContainer) {

@@ -6,6 +6,14 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import os
 
 
+def get_lesson_media_storage():
+    """Return media storage backend for knowledge trails lessons."""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
+
 def upload_trail_icon(instance, filename):
     """Define o caminho de upload para ícones de trilha"""
     ext = filename.split('.')[-1]
@@ -267,6 +275,7 @@ class Lesson(models.Model):
     )
     video_file = models.FileField(
         upload_to=upload_lesson_media,
+        storage=get_lesson_media_storage(),
         blank=True,
         null=True,
         verbose_name='Arquivo de Vídeo',
@@ -274,6 +283,7 @@ class Lesson(models.Model):
     )
     document_file = models.FileField(
         upload_to=upload_lesson_media,
+        storage=get_lesson_media_storage(),
         blank=True,
         null=True,
         verbose_name='Arquivo de Documento',
@@ -281,6 +291,7 @@ class Lesson(models.Model):
     )
     media_file = models.FileField(
         upload_to=upload_lesson_media,
+        storage=get_lesson_media_storage(),
         blank=True,
         null=True,
         verbose_name='Arquivo de Mídia',
