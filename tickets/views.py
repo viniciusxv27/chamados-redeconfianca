@@ -179,6 +179,29 @@ def tickets_list_view(request):
         except Exception as e:
             print(f"DEBUG: Erro no filtro carteira: {str(e)}")
     
+    # Filtro por setor do solicitante - disponível para TODOS os usuários
+    # IMPORTANTE: Este filtro deve ser aplicado ANTES da paginação
+    if created_by_sector_filter:
+        # Filtrar por usuários que participam do setor (setor principal OU setores ManyToMany)
+        tickets = tickets.filter(
+            models.Q(created_by__sector_id=created_by_sector_filter) |  # Setor principal
+            models.Q(created_by__sectors__id=created_by_sector_filter)  # Setores ManyToMany
+        ).distinct()
+    
+    # Filtro por data - disponível para TODOS os usuários
+    # IMPORTANTE: Estes filtros devem ser aplicados ANTES da paginação
+    if date_from_filter:
+        from django.utils.dateparse import parse_date
+        date_from = parse_date(date_from_filter)
+        if date_from:
+            tickets = tickets.filter(created_at__date__gte=date_from)
+    
+    if date_to_filter:
+        from django.utils.dateparse import parse_date
+        date_to = parse_date(date_to_filter)
+        if date_to:
+            tickets = tickets.filter(created_at__date__lte=date_to)
+    
     # Filtro por pesquisa
     if search:
         tickets = tickets.filter(
@@ -186,6 +209,60 @@ def tickets_list_view(request):
             models.Q(description__icontains=search) |
             models.Q(id__icontains=search)
         )
+    
+    # Aplicar filtros avançados apenas para SUPERADMIN (antes da paginação)
+    if user.hierarchy == 'SUPERADMIN':
+        # Filtro por usuário que criou
+        if created_by_filter:
+            tickets = tickets.filter(created_by_id=created_by_filter)
+        
+        # Filtro por responsável
+        if assigned_to_filter:
+            if assigned_to_filter == 'unassigned':
+                tickets = tickets.filter(assigned_to__isnull=True)
+            else:
+                tickets = tickets.filter(assigned_to_id=assigned_to_filter)
+        
+        # Filtro por hierarquia do usuário
+        if user_hierarchy_filter:
+            tickets = tickets.filter(created_by__hierarchy=user_hierarchy_filter)
+        
+        # Filtro por anexos
+        if has_attachments_filter == 'yes':
+            tickets = tickets.filter(attachments__isnull=False).distinct()
+        elif has_attachments_filter == 'no':
+            tickets = tickets.filter(attachments__isnull=True)
+        
+        # Filtro por comentários
+        if has_comments_filter == 'yes':
+            tickets = tickets.filter(comments__isnull=False).distinct()
+        elif has_comments_filter == 'no':
+            tickets = tickets.filter(comments__isnull=True)
+        
+        # Filtro por prazo (em atraso)
+        if overdue_filter:
+            now = timezone.now()
+            if overdue_filter == 'yes':
+                # Tickets em atraso (não resolvidos e com data de vencimento passada)
+                tickets = tickets.filter(
+                    models.Q(due_date__lt=now) & 
+                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                )
+            elif overdue_filter == 'no':
+                # Tickets no prazo
+                tickets = tickets.filter(
+                    models.Q(due_date__gte=now) | 
+                    models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                )
+        
+        # Filtro por títulos duplicados
+        if duplicates_filter == 'yes':
+            # Encontrar títulos que aparecem mais de uma vez
+            from django.db.models import Count
+            duplicate_titles = Ticket.objects.values('title').annotate(
+                title_count=Count('id')
+            ).filter(title_count__gt=1).values_list('title', flat=True)
+            tickets = tickets.filter(title__in=list(duplicate_titles))
     
     # Aplicar ordenação por data de atualização (mais recente primeiro)
     tickets = tickets.order_by('-updated_at')
@@ -273,81 +350,6 @@ def tickets_list_view(request):
     
     # Remover duplicatas
     user_sectors = list(set(user_sectors))
-    
-    # Filtro por data - disponível para TODOS os usuários
-    if date_from_filter:
-        from django.utils.dateparse import parse_date
-        date_from = parse_date(date_from_filter)
-        if date_from:
-            tickets = tickets.filter(created_at__date__gte=date_from)
-    
-    if date_to_filter:
-        from django.utils.dateparse import parse_date
-        date_to = parse_date(date_to_filter)
-        if date_to:
-            tickets = tickets.filter(created_at__date__lte=date_to)
-    
-    # Filtro por setor do solicitante - disponível para TODOS os usuários
-    if created_by_sector_filter:
-        # Filtrar por usuários que participam do setor (setor principal OU setores ManyToMany)
-        tickets = tickets.filter(
-            models.Q(created_by__sector_id=created_by_sector_filter) |  # Setor principal
-            models.Q(created_by__sectors__id=created_by_sector_filter)  # Setores ManyToMany
-        ).distinct()
-    
-    # Aplicar filtros avançados apenas para SUPERADMIN
-    if user.hierarchy == 'SUPERADMIN':
-        # Filtro por usuário que criou
-        if created_by_filter:
-            tickets = tickets.filter(created_by_id=created_by_filter)
-        
-        # Filtro por responsável
-        if assigned_to_filter:
-            if assigned_to_filter == 'unassigned':
-                tickets = tickets.filter(assigned_to__isnull=True)
-            else:
-                tickets = tickets.filter(assigned_to_id=assigned_to_filter)
-        
-        # Filtro por hierarquia do usuário
-        if user_hierarchy_filter:
-            tickets = tickets.filter(created_by__hierarchy=user_hierarchy_filter)
-        
-        # Filtro por anexos
-        if has_attachments_filter == 'yes':
-            tickets = tickets.filter(attachments__isnull=False).distinct()
-        elif has_attachments_filter == 'no':
-            tickets = tickets.filter(attachments__isnull=True)
-        
-        # Filtro por comentários
-        if has_comments_filter == 'yes':
-            tickets = tickets.filter(comments__isnull=False).distinct()
-        elif has_comments_filter == 'no':
-            tickets = tickets.filter(comments__isnull=True)
-        
-        # Filtro por prazo (em atraso)
-        if overdue_filter:
-            now = timezone.now()
-            if overdue_filter == 'yes':
-                # Tickets em atraso (não resolvidos e com data de vencimento passada)
-                tickets = tickets.filter(
-                    models.Q(due_date__lt=now) & 
-                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO'])
-                )
-            elif overdue_filter == 'no':
-                # Tickets no prazo
-                tickets = tickets.filter(
-                    models.Q(due_date__gte=now) | 
-                    models.Q(status__in=['RESOLVIDO', 'FECHADO'])
-                )
-        
-        # Filtro por títulos duplicados
-        if duplicates_filter == 'yes':
-            # Encontrar títulos que aparecem mais de uma vez
-            from django.db.models import Count
-            duplicate_titles = Ticket.objects.values('title').annotate(
-                title_count=Count('id')
-            ).filter(title_count__gt=1).values_list('title', flat=True)
-            tickets = tickets.filter(title__in=list(duplicate_titles))
 
     # Verificar se é solicitação de exportação (apenas para SUPERADMIN)
     export_format = request.GET.get('export', '')
