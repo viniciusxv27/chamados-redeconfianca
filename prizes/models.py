@@ -253,6 +253,17 @@ class CSTransaction(models.Model):
     rejection_reason = models.TextField(blank=True, verbose_name="Motivo da Rejeição")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data")
     
+    # Data de validade das confianças
+    expiration_date = models.DateField(
+        null=True, 
+        blank=True, 
+        verbose_name="Data de Validade",
+        help_text="Data em que as confianças irão expirar. Deixe em branco para não expirar."
+    )
+    expiration_notified_7_days = models.BooleanField(default=False, verbose_name="Notificado 7 dias antes")
+    expiration_notified_3_days = models.BooleanField(default=False, verbose_name="Notificado 3 dias antes")
+    expiration_notified_1_day = models.BooleanField(default=False, verbose_name="Notificado 1 dia antes")
+    
     class Meta:
         verbose_name = "Transação C$"
         verbose_name_plural = "Transações C$"
@@ -260,3 +271,20 @@ class CSTransaction(models.Model):
     
     def __str__(self):
         return f"{self.user.full_name} - {self.transaction_type} - C$ {self.amount}"
+    
+    @property
+    def is_expired(self):
+        """Verifica se a transação expirou"""
+        if not self.expiration_date:
+            return False
+        from django.utils import timezone
+        return timezone.now().date() > self.expiration_date
+    
+    @property
+    def days_until_expiration(self):
+        """Retorna o número de dias até a expiração"""
+        if not self.expiration_date:
+            return None
+        from django.utils import timezone
+        delta = self.expiration_date - timezone.now().date()
+        return delta.days

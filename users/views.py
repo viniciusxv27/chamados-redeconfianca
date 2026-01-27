@@ -718,6 +718,7 @@ def add_cs_view(request, user_id):
     if request.method == 'POST':
         amount = request.POST.get('amount')
         description = request.POST.get('description', '')
+        expiration_date = request.POST.get('expiration_date', '')
         
         try:
             amount = float(amount)
@@ -729,6 +730,15 @@ def add_cs_view(request, user_id):
             # Para créditos manuais, não adicionar diretamente ao saldo
             # A transação fica pendente até aprovação
             
+            # Processar data de validade
+            exp_date = None
+            if expiration_date:
+                from datetime import datetime
+                try:
+                    exp_date = datetime.strptime(expiration_date, '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+            
             # Registrar transação como pendente de aprovação
             from prizes.models import CSTransaction
             transaction = CSTransaction.objects.create(
@@ -737,13 +747,14 @@ def add_cs_view(request, user_id):
                 transaction_type='CREDIT',
                 description=description or f'Adição manual de C$',
                 status='PENDING',  # Transação fica pendente
-                created_by=request.user
+                created_by=request.user,
+                expiration_date=exp_date
             )
             
             log_action(
                 request.user, 
                 'CS_ADD_REQUEST', 
-                f'Solicitado C$ {amount} para {target_user.full_name} (Aguardando aprovação)',
+                f'Solicitado C$ {amount} para {target_user.full_name} (Aguardando aprovação)' + (f' - Validade: {exp_date}' if exp_date else ''),
                 request
             )
             
@@ -4050,7 +4061,7 @@ def manage_tasks_view(request):
 @login_required
 def task_detail_view(request, task_id):
     """Visualizar detalhes da tarefa com chat"""
-    from core.models import TaskActivity, TaskMessage, TaskAttachment
+    from core.models import TaskActivity, TaskMessage, TaskAttachment, TaskSubtask
     
     task = get_object_or_404(TaskActivity, id=task_id)
     
@@ -4060,6 +4071,14 @@ def task_detail_view(request, task_id):
     # Anexos da tarefa
     task_attachments = task.attachments.select_related('uploaded_by').order_by('-uploaded_at')
     
+    # Subtarefas
+    subtasks = task.subtasks.select_related('completed_by', 'created_by').order_by('order', 'created_at')
+    
+    # Calcular progresso das subtarefas
+    total_subtasks = subtasks.count()
+    completed_subtasks = subtasks.filter(is_completed=True).count()
+    subtask_progress = round((completed_subtasks / total_subtasks * 100)) if total_subtasks > 0 else 0
+    
     # Marcar mensagens como lidas para o usuário atual
     task_messages.filter(is_read=False).exclude(user=request.user).update(is_read=True)
     
@@ -4067,6 +4086,10 @@ def task_detail_view(request, task_id):
         'task': task,
         'messages': task_messages,
         'attachments': task_attachments,
+        'subtasks': subtasks,
+        'subtask_progress': subtask_progress,
+        'total_subtasks': total_subtasks,
+        'completed_subtasks': completed_subtasks,
         'can_manage': task.can_be_managed_by(request.user),
     }
     
@@ -4212,6 +4235,150 @@ def delete_task_attachment(request, attachment_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': f'Erro ao deletar arquivo: {str(e)}'})
 
+
+# ===== SUBTAREFAS API =====
+@login_required
+def get_task_subtasks(request, task_id):
+    """API para buscar subtarefas de uma tarefa"""
+    from core.models import TaskActivity, TaskSubtask
+    
+    task = get_object_or_404(TaskActivity, id=task_id)
+    
+    subtasks = task.subtasks.select_related('completed_by', 'created_by').order_by('order', 'created_at')
+    
+    subtasks_data = []
+    for subtask in subtasks:
+        subtasks_data.append({
+            'id': subtask.id,
+            'title': subtask.title,
+            'is_completed': subtask.is_completed,
+            'completed_at': subtask.completed_at.strftime('%d/%m/%Y %H:%M') if subtask.completed_at else None,
+            'completed_by': subtask.completed_by.get_full_name() if subtask.completed_by else None,
+            'created_by': subtask.created_by.get_full_name(),
+            'created_at': subtask.created_at.strftime('%d/%m/%Y %H:%M'),
+        })
+    
+    # Calcular progresso
+    total = len(subtasks_data)
+    completed = sum(1 for s in subtasks_data if s['is_completed'])
+    progress = round((completed / total * 100)) if total > 0 else 0
+    
+    return JsonResponse({
+        'success': True,
+        'subtasks': subtasks_data,
+        'progress': progress,
+        'total': total,
+        'completed': completed
+    })
+
+
+@login_required
+@require_POST
+def add_task_subtask(request, task_id):
+    """Adicionar subtarefa a uma tarefa"""
+    from core.models import TaskActivity, TaskSubtask
+    
+    task = get_object_or_404(TaskActivity, id=task_id)
+    
+    # Verificar permissão (criador, responsável ou gerenciador)
+    if not (request.user == task.created_by or 
+            request.user == task.assigned_to or 
+            task.can_be_managed_by(request.user)):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    title = request.POST.get('title', '').strip()
+    if not title:
+        return JsonResponse({'success': False, 'error': 'Título da subtarefa é obrigatório'})
+    
+    # Obter próxima ordem
+    max_order = task.subtasks.aggregate(max_order=models.Max('order'))['max_order'] or 0
+    
+    subtask = TaskSubtask.objects.create(
+        task=task,
+        title=title,
+        order=max_order + 1,
+        created_by=request.user
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'subtask': {
+            'id': subtask.id,
+            'title': subtask.title,
+            'is_completed': subtask.is_completed,
+            'created_by': request.user.get_full_name(),
+            'created_at': subtask.created_at.strftime('%d/%m/%Y %H:%M'),
+        }
+    })
+
+
+@login_required
+@require_POST
+def toggle_task_subtask(request, subtask_id):
+    """Alternar status de conclusão de uma subtarefa"""
+    from core.models import TaskSubtask
+    
+    subtask = get_object_or_404(TaskSubtask, id=subtask_id)
+    task = subtask.task
+    
+    # Verificar permissão (criador, responsável ou gerenciador)
+    if not (request.user == task.created_by or 
+            request.user == task.assigned_to or 
+            task.can_be_managed_by(request.user)):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    if subtask.is_completed:
+        subtask.mark_incomplete()
+    else:
+        subtask.mark_completed(request.user)
+    
+    # Calcular novo progresso
+    total = task.subtasks.count()
+    completed = task.subtasks.filter(is_completed=True).count()
+    progress = round((completed / total * 100)) if total > 0 else 0
+    
+    return JsonResponse({
+        'success': True,
+        'subtask': {
+            'id': subtask.id,
+            'is_completed': subtask.is_completed,
+            'completed_at': subtask.completed_at.strftime('%d/%m/%Y %H:%M') if subtask.completed_at else None,
+            'completed_by': subtask.completed_by.get_full_name() if subtask.completed_by else None,
+        },
+        'progress': progress,
+        'total': total,
+        'completed': completed
+    })
+
+
+@login_required
+@require_POST
+def delete_task_subtask(request, subtask_id):
+    """Deletar uma subtarefa"""
+    from core.models import TaskSubtask
+    
+    subtask = get_object_or_404(TaskSubtask, id=subtask_id)
+    task = subtask.task
+    
+    # Verificar permissão (criador da subtarefa, criador da tarefa ou gerenciador)
+    if not (request.user == subtask.created_by or 
+            request.user == task.created_by or 
+            task.can_be_managed_by(request.user)):
+        return JsonResponse({'success': False, 'error': 'Sem permissão'}, status=403)
+    
+    subtask.delete()
+    
+    # Calcular novo progresso
+    total = task.subtasks.count()
+    completed = task.subtasks.filter(is_completed=True).count()
+    progress = round((completed / total * 100)) if total > 0 else 0
+    
+    return JsonResponse({
+        'success': True,
+        'progress': progress,
+        'total': total,
+        'completed': completed
+    })
 
 
 @login_required

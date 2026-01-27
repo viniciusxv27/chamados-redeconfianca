@@ -103,6 +103,12 @@ urlpatterns = [
     path('tasks/<int:task_id>/add-attachment/', views.add_task_attachment, name='add_task_attachment'),
     path('tasks/attachment/<int:attachment_id>/delete/', views.delete_task_attachment, name='delete_task_attachment'),
     
+    # Subtarefas
+    path('tasks/<int:task_id>/subtasks/', views.get_task_subtasks, name='get_task_subtasks'),
+    path('tasks/<int:task_id>/subtasks/add/', views.add_task_subtask, name='add_task_subtask'),
+    path('tasks/subtasks/<int:subtask_id>/toggle/', views.toggle_task_subtask, name='toggle_task_subtask'),
+    path('tasks/subtasks/<int:subtask_id>/delete/', views.delete_task_subtask, name='delete_task_subtask'),
+    
     # API Endpoints
     path('api/daily-automation/', views.daily_automation_api, name='daily_automation_api'),
     

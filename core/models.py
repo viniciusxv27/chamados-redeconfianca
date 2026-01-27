@@ -815,6 +815,59 @@ class TaskAttachment(models.Model):
         return f"{size:.2f} TB"
 
 
+class TaskSubtask(models.Model):
+    """Subtarefas/checklist items para tarefas"""
+    
+    task = models.ForeignKey(
+        TaskActivity,
+        on_delete=models.CASCADE,
+        related_name='subtasks',
+        verbose_name="Tarefa Principal"
+    )
+    title = models.CharField(max_length=255, verbose_name="Descrição da Subtarefa")
+    is_completed = models.BooleanField(default=False, verbose_name="Concluída")
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Concluída em")
+    completed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='completed_subtasks',
+        verbose_name="Concluída por"
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name="Ordem")
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_subtasks',
+        verbose_name="Criada por"
+    )
+    
+    class Meta:
+        verbose_name = "Subtarefa"
+        verbose_name_plural = "Subtarefas"
+        ordering = ['order', 'created_at']
+    
+    def __str__(self):
+        status = "✓" if self.is_completed else "○"
+        return f"{status} {self.title}"
+    
+    def mark_completed(self, user):
+        """Marca a subtarefa como concluída"""
+        self.is_completed = True
+        self.completed_at = timezone.now()
+        self.completed_by = user
+        self.save()
+    
+    def mark_incomplete(self):
+        """Desmarca a subtarefa como concluída"""
+        self.is_completed = False
+        self.completed_at = None
+        self.completed_by = None
+        self.save()
+
+
 class TaskCategory(models.Model):
     """Categorias para organização das tarefas em Kanban"""
     

@@ -210,6 +210,82 @@
             </div>
             {% endif %}
             
+            <!-- Subtarefas/Checklist -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-tasks mr-2 text-purple-500"></i>
+                        Subtarefas
+                        <span class="text-sm font-normal text-gray-500 ml-2" id="subtask-count">({{ completed_subtasks }}/{{ total_subtasks }})</span>
+                    </h3>
+                </div>
+                
+                <!-- Barra de Progresso -->
+                {% if total_subtasks > 0 %}
+                <div class="mb-4">
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="text-gray-600">Progresso</span>
+                        <span class="font-medium text-purple-600" id="subtask-progress-text">{{ subtask_progress }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="subtask-progress-bar" 
+                             class="bg-purple-600 h-2.5 rounded-full transition-all duration-300"
+                             style="width: {{ subtask_progress }}%"></div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Lista de Subtarefas -->
+                <div id="subtasks-list" class="space-y-2 mb-4">
+                    {% for subtask in subtasks %}
+                    <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group subtask-item" data-id="{{ subtask.id }}">
+                        <button onclick="toggleSubtask({{ subtask.id }})"
+                                class="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
+                                       {% if subtask.is_completed %}bg-purple-500 border-purple-500 text-white{% else %}border-gray-300 hover:border-purple-400{% endif %}">
+                            {% if subtask.is_completed %}
+                            <i class="fas fa-check text-xs"></i>
+                            {% endif %}
+                        </button>
+                        <div class="flex-1 min-w-0">
+                            <span class="{% if subtask.is_completed %}line-through text-gray-400{% else %}text-gray-700{% endif %}">
+                                {{ subtask.title }}
+                            </span>
+                            {% if subtask.completed_by %}
+                            <p class="text-xs text-gray-400 mt-0.5">
+                                Concluída por {{ subtask.completed_by.get_full_name }} em {{ subtask.completed_at|date:"d/m H:i" }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        <button onclick="deleteSubtask({{ subtask.id }})"
+                                class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all p-1"
+                                title="Excluir subtarefa">
+                            <i class="fas fa-trash-alt text-sm"></i>
+                        </button>
+                    </div>
+                    {% empty %}
+                    <div id="no-subtasks-message" class="text-center py-4 text-gray-500">
+                        <i class="fas fa-list-check text-2xl mb-2 block text-gray-300"></i>
+                        <p class="text-sm">Nenhuma subtarefa adicionada</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Adicionar Nova Subtarefa -->
+                <form id="add-subtask-form" class="flex gap-2">
+                    {% csrf_token %}
+                    <input type="text" 
+                           id="new-subtask-input"
+                           name="title"
+                           placeholder="Adicionar nova subtarefa..."
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                           maxlength="255">
+                    <button type="submit" 
+                            class="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors text-sm">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </form>
+            </div>
+            
             <!-- Anexos -->
             <div class="bg-white rounded-lg shadow-sm border p-6">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -1138,6 +1214,216 @@ function showNotification(message, type = 'info') {
     setTimeout(() => {
         notification.remove();
     }, 3000);
+}
+
+// ===== SUBTAREFAS =====
+// Inicializar formulário de subtarefas
+document.addEventListener('DOMContentLoaded', function() {
+    const addSubtaskForm = document.getElementById('add-subtask-form');
+    if (addSubtaskForm) {
+        addSubtaskForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const input = document.getElementById('new-subtask-input');
+            const title = input.value.trim();
+            
+            if (!title) {
+                showNotification('Digite o título da subtarefa', 'error');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('title', title);
+                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                
+                const response = await fetch(`/users/tasks/${taskId}/subtasks/add/`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Remover mensagem de "nenhuma subtarefa"
+                    const noSubtasksMsg = document.getElementById('no-subtasks-message');
+                    if (noSubtasksMsg) {
+                        noSubtasksMsg.remove();
+                    }
+                    
+                    // Adicionar nova subtarefa à lista
+                    const subtasksList = document.getElementById('subtasks-list');
+                    const newSubtaskHtml = `
+                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group subtask-item" data-id="${data.subtask.id}">
+                            <button onclick="toggleSubtask(${data.subtask.id})"
+                                    class="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors border-gray-300 hover:border-purple-400">
+                            </button>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-gray-700">${data.subtask.title}</span>
+                            </div>
+                            <button onclick="deleteSubtask(${data.subtask.id})"
+                                    class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all p-1"
+                                    title="Excluir subtarefa">
+                                <i class="fas fa-trash-alt text-sm"></i>
+                            </button>
+                        </div>
+                    `;
+                    subtasksList.insertAdjacentHTML('beforeend', newSubtaskHtml);
+                    
+                    // Limpar input
+                    input.value = '';
+                    
+                    // Atualizar contador e barra de progresso
+                    updateSubtaskProgress();
+                    
+                    showNotification('Subtarefa adicionada!', 'success');
+                } else {
+                    showNotification('Erro: ' + (data.error || 'Erro desconhecido'), 'error');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                showNotification('Erro ao adicionar subtarefa', 'error');
+            }
+        });
+    }
+});
+
+async function toggleSubtask(subtaskId) {
+    try {
+        const response = await fetch(`/users/tasks/subtasks/${subtaskId}/toggle/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const subtaskItem = document.querySelector(`.subtask-item[data-id="${subtaskId}"]`);
+            if (subtaskItem) {
+                const checkbox = subtaskItem.querySelector('button:first-child');
+                const titleSpan = subtaskItem.querySelector('.flex-1 span');
+                const infoDiv = subtaskItem.querySelector('.flex-1');
+                
+                if (data.subtask.is_completed) {
+                    // Marcar como concluída
+                    checkbox.classList.add('bg-purple-500', 'border-purple-500', 'text-white');
+                    checkbox.classList.remove('border-gray-300');
+                    checkbox.innerHTML = '<i class="fas fa-check text-xs"></i>';
+                    titleSpan.classList.add('line-through', 'text-gray-400');
+                    titleSpan.classList.remove('text-gray-700');
+                    
+                    // Adicionar info de conclusão
+                    let completedInfo = infoDiv.querySelector('.text-xs.text-gray-400');
+                    if (!completedInfo) {
+                        completedInfo = document.createElement('p');
+                        completedInfo.className = 'text-xs text-gray-400 mt-0.5';
+                        infoDiv.appendChild(completedInfo);
+                    }
+                    completedInfo.textContent = `Concluída por ${data.subtask.completed_by} em ${data.subtask.completed_at}`;
+                } else {
+                    // Desmarcar
+                    checkbox.classList.remove('bg-purple-500', 'border-purple-500', 'text-white');
+                    checkbox.classList.add('border-gray-300');
+                    checkbox.innerHTML = '';
+                    titleSpan.classList.remove('line-through', 'text-gray-400');
+                    titleSpan.classList.add('text-gray-700');
+                    
+                    // Remover info de conclusão
+                    const completedInfo = infoDiv.querySelector('.text-xs.text-gray-400');
+                    if (completedInfo) {
+                        completedInfo.remove();
+                    }
+                }
+                
+                // Atualizar progresso
+                updateSubtaskProgressFromData(data.progress, data.completed, data.total);
+            }
+        } else {
+            showNotification('Erro: ' + (data.error || 'Erro desconhecido'), 'error');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showNotification('Erro ao atualizar subtarefa', 'error');
+    }
+}
+
+async function deleteSubtask(subtaskId) {
+    if (!confirm('Tem certeza que deseja excluir esta subtarefa?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/users/tasks/subtasks/${subtaskId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Remover da lista
+            const subtaskItem = document.querySelector(`.subtask-item[data-id="${subtaskId}"]`);
+            if (subtaskItem) {
+                subtaskItem.remove();
+            }
+            
+            // Verificar se há mais subtarefas
+            const subtasksList = document.getElementById('subtasks-list');
+            if (subtasksList && subtasksList.querySelectorAll('.subtask-item').length === 0) {
+                subtasksList.innerHTML = `
+                    <div id="no-subtasks-message" class="text-center py-4 text-gray-500">
+                        <i class="fas fa-list-check text-2xl mb-2 block text-gray-300"></i>
+                        <p class="text-sm">Nenhuma subtarefa adicionada</p>
+                    </div>
+                `;
+            }
+            
+            // Atualizar progresso
+            updateSubtaskProgressFromData(data.progress, data.completed, data.total);
+            
+            showNotification('Subtarefa excluída!', 'success');
+        } else {
+            showNotification('Erro: ' + (data.error || 'Erro desconhecido'), 'error');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showNotification('Erro ao excluir subtarefa', 'error');
+    }
+}
+
+function updateSubtaskProgress() {
+    const subtaskItems = document.querySelectorAll('.subtask-item');
+    const total = subtaskItems.length;
+    const completed = document.querySelectorAll('.subtask-item .bg-purple-500').length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    updateSubtaskProgressFromData(progress, completed, total);
+}
+
+function updateSubtaskProgressFromData(progress, completed, total) {
+    // Atualizar contador
+    const countSpan = document.getElementById('subtask-count');
+    if (countSpan) {
+        countSpan.textContent = `(${completed}/${total})`;
+    }
+    
+    // Atualizar barra de progresso
+    const progressBar = document.getElementById('subtask-progress-bar');
+    if (progressBar) {
+        progressBar.style.width = `${progress}%`;
+    }
+    
+    // Atualizar texto de progresso
+    const progressText = document.getElementById('subtask-progress-text');
+    if (progressText) {
+        progressText.textContent = `${progress}%`;
+    }
 }
 </script>
 {% endblock %}

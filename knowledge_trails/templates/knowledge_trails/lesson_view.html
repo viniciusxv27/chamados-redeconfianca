@@ -197,25 +197,38 @@ video::-webkit-media-controls-panel {
                     </div>
                 </div>
                 {% elif lesson.video_file %}
-                <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 relative">
+                <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 relative" id="videoContainer">
+                    <!-- Informação de debug oculta -->
+                    <div id="videoDebugInfo" class="hidden bg-yellow-100 p-4 text-xs text-gray-700">
+                        <strong>Debug:</strong> URL do vídeo: {{ lesson.video_file.url }}
+                    </div>
+                    
                     <video id="lessonVideo" 
                            class="w-full" 
                            controls 
-                           preload="metadata"
+                           preload="auto"
                            playsinline
+                           crossorigin="anonymous"
                            style="display: block; max-height: 70vh;">
                         <source src="{{ lesson.video_file.url }}" type="{{ lesson.video_file.name|video_type }}">
-                        {% if lesson.video_file.name|video_type == 'video/mp4' %}
-                        <source src="{{ lesson.video_file.url }}" type="video/webm">
-                        {% endif %}
                         Seu navegador não suporta a reprodução de vídeos HTML5.
                     </video>
-                    <div id="videoLoading" style="display: none;" class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-10">
+                    <div id="videoLoading" class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-10">
                         <div class="text-center text-white">
                             <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
                             <p class="text-lg font-medium">Carregando vídeo...</p>
                             <p class="text-sm text-gray-300 mt-2">Isso pode levar alguns segundos</p>
                         </div>
+                    </div>
+                    
+                    <!-- Botão de fallback para download -->
+                    <div id="videoFallback" class="hidden absolute bottom-4 right-4 z-20">
+                        <a href="{{ lesson.video_file.url }}" 
+                           target="_blank"
+                           download
+                           class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 text-sm">
+                            <i class="fas fa-download"></i> Baixar Vídeo
+                        </a>
                     </div>
                 </div>
                 {% else %}
@@ -391,28 +404,66 @@ document.addEventListener('DOMContentLoaded', function() {
     // Gerenciamento do vídeo
     const video = document.getElementById('lessonVideo');
     const videoLoading = document.getElementById('videoLoading');
+    const videoFallback = document.getElementById('videoFallback');
+    const videoContainer = document.getElementById('videoContainer');
     
     if (video) {
+        let loadTimeout = null;
+        const videoUrl = video.querySelector('source')?.src;
+        console.log('Iniciando carregamento do vídeo:', videoUrl);
+        
+        // Timeout para mostrar fallback se o vídeo demorar muito
+        loadTimeout = setTimeout(function() {
+            console.log('Timeout de carregamento do vídeo atingido');
+            if (videoFallback) {
+                videoFallback.classList.remove('hidden');
+            }
+        }, 10000); // 10 segundos
+        
         // Mostrar loading quando o vídeo está carregando
         video.addEventListener('loadstart', function() {
+            console.log('Vídeo: loadstart');
             if (videoLoading) videoLoading.style.display = 'flex';
         });
         
         video.addEventListener('waiting', function() {
+            console.log('Vídeo: waiting');
             if (videoLoading) videoLoading.style.display = 'flex';
+        });
+        
+        video.addEventListener('progress', function() {
+            console.log('Vídeo: progress - buffered');
+        });
+        
+        video.addEventListener('loadedmetadata', function() {
+            console.log('Vídeo: loadedmetadata - duração:', video.duration);
+            clearTimeout(loadTimeout);
         });
         
         // Esconder loading quando o vídeo está pronto
         video.addEventListener('canplay', function() {
+            console.log('Vídeo: canplay');
+            clearTimeout(loadTimeout);
+            if (videoLoading) videoLoading.style.display = 'none';
+        });
+        
+        video.addEventListener('canplaythrough', function() {
+            console.log('Vídeo: canplaythrough');
+            clearTimeout(loadTimeout);
             if (videoLoading) videoLoading.style.display = 'none';
         });
         
         video.addEventListener('playing', function() {
+            console.log('Vídeo: playing');
+            clearTimeout(loadTimeout);
             if (videoLoading) videoLoading.style.display = 'none';
+            if (videoFallback) videoFallback.classList.add('hidden');
         });
         
         // Tratamento de erros
         video.addEventListener('error', function(e) {
+            console.error('Erro no vídeo:', video.error);
+            clearTimeout(loadTimeout);
             if (videoLoading) videoLoading.style.display = 'none';
             
             let errorMessage = 'Erro ao carregar o vídeo. ';
@@ -441,17 +492,34 @@ document.addEventListener('DOMContentLoaded', function() {
             errorDiv.innerHTML = `
                 <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-3"></i>
                 <p class="text-red-700 font-medium">${errorMessage}</p>
-                <p class="text-sm text-red-600 mt-2">Tente recarregar a página ou entre em contato com o suporte.</p>
+                <p class="text-sm text-red-600 mt-2">URL: ${videoUrl}</p>
+                <div class="mt-4">
+                    <a href="${videoUrl}" target="_blank" download class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                        <i class="fas fa-download mr-2"></i> Tentar Baixar o Vídeo
+                    </a>
+                </div>
+                <p class="text-xs text-gray-500 mt-4">Tente recarregar a página ou entre em contato com o suporte.</p>
             `;
             
-            video.parentElement.replaceChild(errorDiv, video);
-            console.error('Erro no vídeo:', video.error);
+            if (videoContainer) {
+                videoContainer.innerHTML = '';
+                videoContainer.appendChild(errorDiv);
+            }
         });
         
-        // Log para debug
-        console.log('URL do vídeo:', video.querySelector('source')?.src);
+        // Verificar se a fonte está acessível via fetch
+        fetch(videoUrl, { method: 'HEAD' })
+            .then(response => {
+                console.log('Verificação da URL do vídeo:', response.status, response.statusText);
+                if (!response.ok) {
+                    console.error('URL do vídeo retornou erro:', response.status);
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao verificar URL do vídeo:', error);
+            });
         
-        // Forçar carregamento de metadados
+        // Forçar carregamento
         video.load();
     }
 });
