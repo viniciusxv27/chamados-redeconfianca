@@ -179,14 +179,11 @@ def tickets_list_view(request):
         except Exception as e:
             print(f"DEBUG: Erro no filtro carteira: {str(e)}")
     
-    # Filtro por setor do solicitante - disponível para TODOS os usuários
+    # Filtro por setor do solicitante - disponível apenas para SUPERVISOR e acima
     # IMPORTANTE: Este filtro deve ser aplicado ANTES da paginação
-    if created_by_sector_filter:
-        # Filtrar por usuários que participam do setor (setor principal OU setores ManyToMany)
-        tickets = tickets.filter(
-            models.Q(created_by__sector_id=created_by_sector_filter) |  # Setor principal
-            models.Q(created_by__sectors__id=created_by_sector_filter)  # Setores ManyToMany
-        ).distinct()
+    if created_by_sector_filter and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
+        # Filtrar apenas pelo setor PRINCIPAL do usuário que criou o chamado
+        tickets = tickets.filter(created_by__sector_id=created_by_sector_filter)
     
     # Filtro por data - disponível para TODOS os usuários
     # IMPORTANTE: Estes filtros devem ser aplicados ANTES da paginação
@@ -317,8 +314,8 @@ def tickets_list_view(request):
     if date_to_filter:
         filter_params['date_to'] = date_to_filter
     
-    # Filtro por setor solicitante - disponível para TODOS os usuários
-    if created_by_sector_filter:
+    # Filtro por setor solicitante - disponível apenas para SUPERVISOR e acima
+    if created_by_sector_filter and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
         filter_params['created_by_sector'] = created_by_sector_filter
     
     # Filtros avançados apenas para SUPERADMIN
@@ -361,8 +358,11 @@ def tickets_list_view(request):
 
     # Obter categorias e setores baseado na hierarquia do usuário
     try:
-        # Todos os setores para filtro de setor solicitante (disponível para todos)
-        all_sectors_for_filter = Sector.objects.all().order_by('name')
+        # Todos os setores para filtro de setor solicitante (disponível para SUPERVISOR e acima)
+        if user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
+            all_sectors_for_filter = Sector.objects.all().order_by('name')
+        else:
+            all_sectors_for_filter = []
         
         if user.hierarchy == 'SUPERADMIN':
             # SUPERADMIN pode ver todas as categorias e setores
@@ -412,8 +412,8 @@ def tickets_list_view(request):
         except Sector.DoesNotExist:
             pass
     
-    # Nome do setor solicitante - disponível para todos os usuários
-    if created_by_sector_filter:
+    # Nome do setor solicitante - disponível apenas para SUPERVISOR e acima
+    if created_by_sector_filter and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
         try:
             created_by_sector_obj = Sector.objects.get(id=created_by_sector_filter)
             created_by_sector_name = created_by_sector_obj.name
@@ -456,8 +456,8 @@ def tickets_list_view(request):
         'paginator': paginator,
         'page_obj': tickets_page,
         'per_page': per_page,
-        # Filtro por setor solicitante - disponível para TODOS
-        'created_by_sector': created_by_sector_filter,
+        # Filtro por setor solicitante - disponível para SUPERVISOR e acima
+        'created_by_sector': created_by_sector_filter if user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN'] else '',
         'created_by_sector_name': created_by_sector_name,
         'all_sectors_for_filter': all_sectors_for_filter,
         # Filtros avançados para SUPERADMIN
