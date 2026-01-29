@@ -507,8 +507,11 @@ def edit_user_view(request, user_id):
     if request.method == 'POST':
         email = request.POST.get('email')
         username = request.POST.get('username')
-        first_name = request.POST.get('first_name')
-        last_name = request.POST.get('last_name')
+        full_name = request.POST.get('full_name', '').strip()
+        # Separar nome completo: primeira palavra = first_name, restante = last_name
+        name_parts = full_name.split()
+        first_name = name_parts[0] if name_parts else ''
+        last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
         sector_id = request.POST.get('sector')
         sectors_ids = request.POST.getlist('sectors')  # Múltiplos setores
         hierarchy = request.POST.get('hierarchy')
