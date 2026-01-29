@@ -251,7 +251,7 @@ def export_users_excel(request):
     
     # Definir cabeçalhos
     headers = [
-        'Username', 'Email', 'Primeiro Nome', 'Último Nome', 'Telefone', 
+        'Username', 'Email', 'Nome Completo', 'Telefone', 
         'Setor ID', 'Setor Nome', 'Hierarquia', 'Saldo C$', 'Ativo', 
         'Data Criação', 'Último Login'
     ]
@@ -274,16 +274,15 @@ def export_users_excel(request):
     for row, user in enumerate(users, 2):
         ws.cell(row=row, column=1, value=user.username)
         ws.cell(row=row, column=2, value=user.email)
-        ws.cell(row=row, column=3, value=user.first_name)
-        ws.cell(row=row, column=4, value=user.last_name)
-        ws.cell(row=row, column=5, value=user.phone or "")
-        ws.cell(row=row, column=6, value=user.sector.id if user.sector else "")
-        ws.cell(row=row, column=7, value=user.sector.name if user.sector else "")
-        ws.cell(row=row, column=8, value=user.hierarchy)
-        ws.cell(row=row, column=9, value=float(user.balance_cs))
-        ws.cell(row=row, column=10, value="Sim" if user.is_active else "Não")
-        ws.cell(row=row, column=11, value=user.date_joined.strftime("%Y-%m-%d %H:%M:%S"))
-        ws.cell(row=row, column=12, value=user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else "")
+        ws.cell(row=row, column=3, value=f"{user.first_name} {user.last_name}".strip())
+        ws.cell(row=row, column=4, value=user.phone or "")
+        ws.cell(row=row, column=5, value=user.sector.id if user.sector else "")
+        ws.cell(row=row, column=6, value=user.sector.name if user.sector else "")
+        ws.cell(row=row, column=7, value=user.hierarchy)
+        ws.cell(row=row, column=8, value=float(user.balance_cs))
+        ws.cell(row=row, column=9, value="Sim" if user.is_active else "Não")
+        ws.cell(row=row, column=10, value=user.date_joined.strftime("%Y-%m-%d %H:%M:%S"))
+        ws.cell(row=row, column=11, value=user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else "")
     
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
@@ -345,7 +344,12 @@ def import_users_excel(request):
             # Processar cada linha (pular cabeçalho)
             for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
                 try:
-                    username, email, first_name, last_name, phone, sector_id, sector_name, hierarchy, balance_cs, is_active, date_created, last_login = row
+                    username, email, full_name, phone, sector_id, sector_name, hierarchy, balance_cs, is_active, date_created, last_login = row
+                    
+                    # Separar nome completo: primeira palavra = first_name, restante = last_name
+                    name_parts = (full_name or '').strip().split()
+                    first_name = name_parts[0] if name_parts else ''
+                    last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
                     
                     if not email:  # Email é obrigatório
                         continue
