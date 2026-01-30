@@ -253,7 +253,9 @@ def export_users_excel(request):
     headers = [
         'Username', 'Email', 'Nome Completo', 'Telefone', 
         'Setor ID', 'Setor Nome', 'Hierarquia', 'Saldo C$', 'Ativo', 
-        'Data Criação', 'Último Login'
+        'Data Criação', 'Último Login',
+        'CPF', 'PIS', 'Cargo', 'Data Nascimento', 'Data Admissão',
+        'Login/Código', 'PDV', 'Bairro', 'Cidade'
     ]
     
     # Estilizar cabeçalhos
@@ -283,6 +285,16 @@ def export_users_excel(request):
         ws.cell(row=row, column=9, value="Sim" if user.is_active else "Não")
         ws.cell(row=row, column=10, value=user.date_joined.strftime("%Y-%m-%d %H:%M:%S"))
         ws.cell(row=row, column=11, value=user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else "")
+        # Novos campos de RH
+        ws.cell(row=row, column=12, value=user.cpf or "")
+        ws.cell(row=row, column=13, value=user.pis or "")
+        ws.cell(row=row, column=14, value=user.job_title or "")
+        ws.cell(row=row, column=15, value=user.birth_date.strftime("%d/%m/%Y") if user.birth_date else "")
+        ws.cell(row=row, column=16, value=user.admission_date.strftime("%d/%m/%Y") if user.admission_date else "")
+        ws.cell(row=row, column=17, value=user.login_code or "")
+        ws.cell(row=row, column=18, value=user.pdv or "")
+        ws.cell(row=row, column=19, value=user.neighborhood or "")
+        ws.cell(row=row, column=20, value=user.city or "")
     
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
@@ -432,6 +444,181 @@ def import_users_excel(request):
 
 
 @login_required
+def import_colaboradores_csv(request):
+    """Importar dados de colaboradores de CSV usando nome como chave"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('manage_users')
+    
+    if request.method == 'POST':
+        if 'csv_file' not in request.FILES:
+            messages.error(request, 'Nenhum arquivo foi enviado.')
+            return redirect('manage_users')
+        
+        csv_file = request.FILES['csv_file']
+        
+        try:
+            import csv
+            import io
+            from datetime import datetime
+            
+            # Ler o arquivo CSV
+            decoded_file = csv_file.read().decode('utf-8-sig')
+            reader = csv.DictReader(io.StringIO(decoded_file), delimiter=';')
+            
+            updated_count = 0
+            not_found_count = 0
+            error_count = 0
+            errors = []
+            not_found_names = []
+            
+            for row_num, row in enumerate(reader, 2):
+                try:
+                    # Pegar o nome do colaborador (chave)
+                    colaborador_nome = row.get('Colaborador', '').strip()
+                    
+                    if not colaborador_nome:
+                        continue
+                    
+                    # Separar nome: primeira palavra = first_name, restante = last_name
+                    name_parts = colaborador_nome.split()
+                    first_name = name_parts[0] if name_parts else ''
+                    last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                    
+                    # Buscar usuário pelo nome completo (first_name + last_name)
+                    user = User.objects.filter(
+                        first_name__iexact=first_name,
+                        last_name__iexact=last_name
+                    ).first()
+                    
+                    if not user:
+                        not_found_count += 1
+                        not_found_names.append(colaborador_nome)
+                        continue
+                    
+                    # Atualizar campos opcionais (apenas se tiver valor válido)
+                    updated = False
+                    
+                    # Cargo
+                    cargo = row.get('Cargo', '').strip()
+                    if cargo and cargo != '#N/D':
+                        user.job_title = cargo
+                        updated = True
+                    
+                    # Data de Nascimento
+                    birth_date_str = row.get('Data de Nascimento', '').strip()
+                    if birth_date_str and birth_date_str != '#N/D':
+                        try:
+                            birth_date = datetime.strptime(birth_date_str, '%d/%m/%Y').date()
+                            user.birth_date = birth_date
+                            updated = True
+                        except:
+                            pass
+                    
+                    # CPF
+                    cpf = row.get('CPF', '').strip()
+                    if cpf and cpf != '#N/D':
+                        user.cpf = cpf
+                        updated = True
+                    
+                    # PIS
+                    pis = row.get('PIS', '').strip()
+                    if pis and pis != '#N/D':
+                        user.pis = pis
+                        updated = True
+                    
+                    # Admissão
+                    admission_str = row.get('Admissão', '').strip()
+                    if admission_str and admission_str != '#N/D':
+                        try:
+                            admission_date = datetime.strptime(admission_str, '%d/%m/%Y').date()
+                            user.admission_date = admission_date
+                            updated = True
+                        except:
+                            pass
+                    
+                    # Login/Código (não altera username, salva em campo separado)
+                    login = row.get('Login', '').strip()
+                    if login and login != '#N/D':
+                        user.login_code = login
+                        updated = True
+                    
+                    # PDV
+                    pdv = row.get('PDV', '').strip()
+                    if pdv and pdv != '#N/D':
+                        user.pdv = pdv
+                        updated = True
+                    
+                    # Bairro
+                    bairro = row.get('Bairro', '').strip()
+                    if bairro and bairro != '#N/D':
+                        user.neighborhood = bairro
+                        updated = True
+                    
+                    # Cidade
+                    cidade = row.get('Cidade', '').strip()
+                    if cidade and cidade != '#N/D' and cidade != '0':
+                        user.city = cidade
+                        updated = True
+                    
+                    # Confianças - atualizar balance_cs se for um número válido
+                    confiancas = row.get('Confianças', '').strip()
+                    if confiancas and confiancas != '#N/D':
+                        try:
+                            # Tratar número com vírgula como decimal
+                            confiancas = confiancas.replace(',', '.')
+                            balance = Decimal(confiancas)
+                            user.balance_cs = balance
+                            updated = True
+                        except:
+                            pass
+                    
+                    if updated:
+                        user.save()
+                        updated_count += 1
+                    
+                except Exception as e:
+                    error_count += 1
+                    errors.append(f'Linha {row_num}: {str(e)}')
+                    continue
+            
+            # Mensagem de resultado
+            if updated_count > 0:
+                message = f'Importação concluída! {updated_count} usuários atualizados.'
+                if not_found_count > 0:
+                    message += f' {not_found_count} colaboradores não encontrados.'
+                if error_count > 0:
+                    message += f' {error_count} erros encontrados.'
+                messages.success(request, message)
+            else:
+                messages.warning(request, f'Nenhum usuário foi atualizado. {not_found_count} colaboradores não encontrados.')
+            
+            # Mostrar alguns nomes não encontrados
+            if not_found_names:
+                names_preview = ', '.join(not_found_names[:5])
+                if len(not_found_names) > 5:
+                    names_preview += f' e mais {len(not_found_names) - 5}...'
+                messages.warning(request, f'Colaboradores não encontrados: {names_preview}')
+            
+            if errors:
+                for error in errors[:5]:
+                    messages.error(request, error)
+            
+            # Log da ação
+            log_action(
+                request.user,
+                'USER_IMPORT_COLABORADORES',
+                f'Importação de colaboradores: {updated_count} atualizados, {not_found_count} não encontrados, {error_count} erros',
+                request
+            )
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao processar arquivo: {str(e)}')
+    
+    return redirect('manage_users')
+
+
+@login_required
 def create_user_view(request):
     """Criar novo usuário"""
     if not request.user.can_manage_users():
@@ -525,6 +712,17 @@ def edit_user_view(request, user_id):
         uniform_size_pants = request.POST.get('uniform_size_pants')
         is_active = request.POST.get('is_active') == 'on'
         
+        # Novos campos de RH
+        cpf = request.POST.get('cpf', '')
+        pis = request.POST.get('pis', '')
+        job_title = request.POST.get('job_title', '')
+        birth_date = request.POST.get('birth_date', '')
+        admission_date = request.POST.get('admission_date', '')
+        login_code = request.POST.get('login_code', '')
+        pdv = request.POST.get('pdv', '')
+        neighborhood = request.POST.get('neighborhood', '')
+        city = request.POST.get('city', '')
+        
         try:
             # Verificar se email já existe (exceto para o próprio usuário)
             if User.objects.filter(email=email).exclude(id=user_id).exists():
@@ -543,6 +741,18 @@ def edit_user_view(request, user_id):
                 user_to_edit.uniform_size_shirt = uniform_size_shirt
                 user_to_edit.uniform_size_pants = uniform_size_pants
                 user_to_edit.is_active = is_active
+                
+                # Salvar novos campos de RH
+                user_to_edit.cpf = cpf
+                user_to_edit.pis = pis
+                user_to_edit.job_title = job_title
+                user_to_edit.birth_date = birth_date if birth_date else None
+                user_to_edit.admission_date = admission_date if admission_date else None
+                user_to_edit.login_code = login_code
+                user_to_edit.pdv = pdv
+                user_to_edit.neighborhood = neighborhood
+                user_to_edit.city = city
+                
                 user_to_edit.save()
                 
                 # Atualizar setores múltiplos

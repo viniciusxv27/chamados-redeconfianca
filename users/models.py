@@ -123,6 +123,18 @@ class User(AbstractUser):
     disc_profile = models.CharField(max_length=5, blank=True, verbose_name="Perfil DISC", help_text="Perfil comportamental DISC (até 5 letras)")
     uniform_size_shirt = models.CharField(max_length=3, blank=True, verbose_name="Tamanho uniforme (Blusa)", help_text="Ex: P, M, G, GG")
     uniform_size_pants = models.CharField(max_length=3, blank=True, verbose_name="Tamanho uniforme (Calça)", help_text="Ex: P, M, G, GG, 38, 40")
+    
+    # Campos de dados pessoais/RH
+    cpf = models.CharField(max_length=14, blank=True, verbose_name="CPF")
+    pis = models.CharField(max_length=20, blank=True, verbose_name="PIS")
+    birth_date = models.DateField(null=True, blank=True, verbose_name="Data de Nascimento")
+    admission_date = models.DateField(null=True, blank=True, verbose_name="Data de Admissão")
+    job_title = models.CharField(max_length=100, blank=True, verbose_name="Cargo")
+    login_code = models.CharField(max_length=20, blank=True, verbose_name="Login/Código")
+    pdv = models.CharField(max_length=100, blank=True, verbose_name="PDV")
+    neighborhood = models.CharField(max_length=100, blank=True, verbose_name="Bairro")
+    city = models.CharField(max_length=100, blank=True, verbose_name="Cidade")
+    
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
