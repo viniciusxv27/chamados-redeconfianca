@@ -1792,12 +1792,7 @@
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Selecione o setor</option>
                             {% for sector in user_support_sectors %}
-                                {% if 'Ilha de Qualidade' in sector.name %}
-                                <option value="{{ sector.id }}" data-virtual="lojas">ILHA - SUPORTE LOJAS</option>
-                                <option value="{{ sector.id }}" data-virtual="logins">ILHA - SUPORTE LOGINS</option>
-                                {% else %}
                                 <option value="{{ sector.id }}">{{ sector.name }}</option>
-                                {% endif %}
                             {% endfor %}
                         </select>
                     </div>

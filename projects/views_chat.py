@@ -230,20 +230,12 @@ def create_support_chat(request):
     message = request.POST.get('message', '').strip()
     sector_id = request.POST.get('sector_id')
     category_id = request.POST.get('category_id')
-    virtual_type = request.POST.get('virtual_type', '')  # Para Ilha de Qualidade
     
     if not title or not message:
         return JsonResponse({'success': False, 'error': 'Título e mensagem são obrigatórios'})
     
     # Importar modelos necessários
     from users.models import Sector
-    
-    # Ajustar título para setores virtuais (Ilha de Qualidade)
-    if virtual_type:
-        if virtual_type == 'lojas':
-            title = title.replace('Ilha de Qualidade', 'ILHA - SUPORTE LOJAS')
-        elif virtual_type == 'logins':
-            title = title.replace('Ilha de Qualidade', 'ILHA - SUPORTE LOGINS')
     
     # Criar chat
     chat_data = {
@@ -360,12 +352,7 @@ def get_sectors(request):
     
     sectors_data = []
     for s in sectors:
-        # Duplicar "Ilha de Qualidade" como dois setores virtuais
-        if 'ilha de qualidade' in s.name.lower():
-            sectors_data.append({'id': s.id, 'name': 'ILHA - SUPORTE LOJAS', 'virtual_type': 'lojas', 'original_id': s.id})
-            sectors_data.append({'id': s.id, 'name': 'ILHA - SUPORTE LOGINS', 'virtual_type': 'logins', 'original_id': s.id})
-        else:
-            sectors_data.append({'id': s.id, 'name': s.name})
+        sectors_data.append({'id': s.id, 'name': s.name})
     
     # Ordenar por nome
     sectors_data.sort(key=lambda x: x['name'])
@@ -410,27 +397,6 @@ def get_sector_categories(request, sector_id):
     ).order_by('name')
     
     categories_data = [{'id': c.id, 'name': c.name, 'description': c.description} for c in categories]
-    
-    # Se for Ilha de Qualidade e não houver categorias, criar as categorias virtuais automaticamente
-    if 'ilha de qualidade' in sector.name.lower():
-        # Verificar se as categorias já existem, senão criar
-        lojas_cat, _ = SupportCategory.objects.get_or_create(
-            name='ILHA - SUPORTE LOJAS',
-            sector=sector,
-            defaults={'description': 'Suporte para lojas', 'is_active': True}
-        )
-        logins_cat, _ = SupportCategory.objects.get_or_create(
-            name='ILHA - SUPORTE LOGINS',
-            sector=sector,
-            defaults={'description': 'Suporte para logins', 'is_active': True}
-        )
-        
-        # Recarregar categorias
-        categories = SupportCategory.objects.filter(
-            sector_id=sector_id, 
-            is_active=True
-        ).order_by('name')
-        categories_data = [{'id': c.id, 'name': c.name, 'description': c.description} for c in categories]
     
     return JsonResponse({'success': True, 'categories': categories_data})
 
