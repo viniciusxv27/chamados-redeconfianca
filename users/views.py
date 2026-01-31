@@ -255,7 +255,8 @@ def export_users_excel(request):
         'Setor ID', 'Setor Nome', 'Hierarquia', 'Saldo C$', 'Ativo', 
         'Data Criação', 'Último Login',
         'CPF', 'PIS', 'Cargo', 'Data Nascimento', 'Data Admissão',
-        'Login/Código', 'PDV', 'Bairro', 'Cidade'
+        'Login/Código', 'PDV', 'Bairro', 'Cidade',
+        'Perfil DISC', 'Tamanho Blusa', 'Tamanho Calça'
     ]
     
     # Estilizar cabeçalhos
@@ -295,6 +296,9 @@ def export_users_excel(request):
         ws.cell(row=row, column=18, value=user.pdv or "")
         ws.cell(row=row, column=19, value=user.neighborhood or "")
         ws.cell(row=row, column=20, value=user.city or "")
+        ws.cell(row=row, column=21, value=user.disc_profile or "")
+        ws.cell(row=row, column=22, value=user.uniform_size_shirt or "")
+        ws.cell(row=row, column=23, value=user.uniform_size_pants or "")
     
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
@@ -356,7 +360,13 @@ def import_users_excel(request):
             # Processar cada linha (pular cabeçalho)
             for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
                 try:
-                    username, email, full_name, phone, sector_id, sector_name, hierarchy, balance_cs, is_active, date_created, last_login = row
+                    # Desempacotar todos os campos (23 colunas)
+                    row_data = list(row) + [None] * (23 - len(row))  # Garantir 23 campos
+                    (username, email, full_name, phone, sector_id, sector_name, hierarchy, 
+                     balance_cs, is_active, date_created, last_login,
+                     cpf, pis, job_title, birth_date, admission_date,
+                     login_code, pdv, neighborhood, city,
+                     disc_profile, uniform_size_shirt, uniform_size_pants) = row_data[:23]
                     
                     # Separar nome completo: primeira palavra = first_name, restante = last_name
                     name_parts = (full_name or '').strip().split()
@@ -374,6 +384,27 @@ def import_users_excel(request):
                         except Sector.DoesNotExist:
                             pass
                     
+                    # Processar datas
+                    from datetime import datetime
+                    birth_date_parsed = None
+                    admission_date_parsed = None
+                    if birth_date:
+                        try:
+                            if isinstance(birth_date, str):
+                                birth_date_parsed = datetime.strptime(birth_date, '%d/%m/%Y').date()
+                            else:
+                                birth_date_parsed = birth_date
+                        except:
+                            pass
+                    if admission_date:
+                        try:
+                            if isinstance(admission_date, str):
+                                admission_date_parsed = datetime.strptime(admission_date, '%d/%m/%Y').date()
+                            else:
+                                admission_date_parsed = admission_date
+                        except:
+                            pass
+                    
                     # Verificar se usuário já existe
                     user, created = User.objects.get_or_create(
                         email=email,
@@ -386,6 +417,18 @@ def import_users_excel(request):
                             'hierarchy': hierarchy or 'PADRAO',
                             'balance_cs': Decimal(str(balance_cs)) if balance_cs else Decimal('0'),
                             'is_active': str(is_active).lower() in ['sim', 'true', '1'] if is_active else True,
+                            'cpf': cpf or '',
+                            'pis': pis or '',
+                            'job_title': job_title or '',
+                            'birth_date': birth_date_parsed,
+                            'admission_date': admission_date_parsed,
+                            'login_code': login_code or '',
+                            'pdv': pdv or '',
+                            'neighborhood': neighborhood or '',
+                            'city': city or '',
+                            'disc_profile': disc_profile or '',
+                            'uniform_size_shirt': uniform_size_shirt or '',
+                            'uniform_size_pants': uniform_size_pants or '',
                         }
                     )
                     
@@ -408,6 +451,31 @@ def import_users_excel(request):
                             user.balance_cs = Decimal(str(balance_cs))
                         if is_active is not None:
                             user.is_active = str(is_active).lower() in ['sim', 'true', '1']
+                        # Novos campos
+                        if cpf:
+                            user.cpf = cpf
+                        if pis:
+                            user.pis = pis
+                        if job_title:
+                            user.job_title = job_title
+                        if birth_date_parsed:
+                            user.birth_date = birth_date_parsed
+                        if admission_date_parsed:
+                            user.admission_date = admission_date_parsed
+                        if login_code:
+                            user.login_code = login_code
+                        if pdv:
+                            user.pdv = pdv
+                        if neighborhood:
+                            user.neighborhood = neighborhood
+                        if city:
+                            user.city = city
+                        if disc_profile:
+                            user.disc_profile = disc_profile
+                        if uniform_size_shirt:
+                            user.uniform_size_shirt = uniform_size_shirt
+                        if uniform_size_pants:
+                            user.uniform_size_pants = uniform_size_pants
                         user.save()
                         updated_count += 1
                         
