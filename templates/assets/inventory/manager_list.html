@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+
+{% block title %}Gestores de Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between mb-6">
+        <div class="flex-1 min-w-0">
+            <nav class="flex mb-2" aria-label="Breadcrumb">
+                <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                    <li class="inline-flex items-center">
+                        <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                            <i class="fas fa-warehouse mr-1"></i> Inventário
+                        </a>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                            <span class="text-sm text-gray-700">Gestores</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+                <i class="fas fa-user-shield text-indigo-600 mr-2"></i>
+                Gestores de Inventário
+            </h2>
+            <p class="mt-1 text-sm text-gray-500">
+                Gerencie as permissões de acesso ao sistema de inventário
+            </p>
+        </div>
+        <div class="mt-4 flex md:mt-0 md:ml-4">
+            <a href="{% url 'assets:manager_create' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                <i class="fas fa-plus mr-2"></i>
+                Novo Gestor
+            </a>
+        </div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-500 text-xl"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Sobre gestores de inventário</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <p>Gestores são usuários com permissões especiais para gerenciar o inventário. Os <strong>Superadministradores</strong> automaticamente têm acesso total.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Gestores -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <ul class="divide-y divide-gray-200">
+            {% for manager in managers %}
+            <li class="hover:bg-gray-50">
+                <div class="px-4 py-4 sm:px-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                {% if manager.user.avatar %}
+                                <img src="{{ manager.user.avatar.url }}" alt="" class="h-12 w-12 rounded-full">
+                                {% else %}
+                                <div class="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                                    <i class="fas fa-user text-indigo-600 text-xl"></i>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="ml-4">
+                                <h3 class="text-lg font-medium text-gray-900">{{ manager.user.get_full_name|default:manager.user.email }}</h3>
+                                <p class="text-sm text-gray-500">{{ manager.user.email }}</p>
+                                {% if manager.user.sector %}
+                                <p class="text-xs text-gray-400">
+                                    <i class="fas fa-building mr-1"></i>
+                                    {{ manager.user.sector.name }}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="flex flex-wrap gap-1">
+                                {% if manager.can_manage_products %}
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800" title="Pode gerenciar produtos">
+                                    <i class="fas fa-box mr-1"></i> Produtos
+                                </span>
+                                {% endif %}
+                                {% if manager.can_manage_items %}
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800" title="Pode gerenciar itens">
+                                    <i class="fas fa-tag mr-1"></i> Itens
+                                </span>
+                                {% endif %}
+                                {% if manager.can_register_entries %}
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-800" title="Pode registrar entradas">
+                                    <i class="fas fa-arrow-down mr-1"></i> Entradas
+                                </span>
+                                {% endif %}
+                                {% if manager.can_register_exits %}
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800" title="Pode registrar saídas">
+                                    <i class="fas fa-arrow-up mr-1"></i> Saídas
+                                </span>
+                                {% endif %}
+                                {% if manager.can_view_reports %}
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800" title="Pode visualizar relatórios">
+                                    <i class="fas fa-chart-bar mr-1"></i> Relatórios
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="flex space-x-2">
+                                <a href="{% url 'assets:manager_edit' manager.pk %}" 
+                                   class="text-indigo-600 hover:text-indigo-800" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{% url 'assets:manager_delete' manager.pk %}" 
+                                   class="text-red-600 hover:text-red-800" title="Remover">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            {% empty %}
+            <li class="px-4 py-12 text-center">
+                <div class="text-gray-500">
+                    <i class="fas fa-user-shield text-4xl mb-3"></i>
+                    <p class="text-lg font-medium">Nenhum gestor cadastrado</p>
+                    <p class="text-sm mb-4">Adicione gestores para gerenciar o inventário</p>
+                    <a href="{% url 'assets:manager_create' %}" 
+                       class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                        <i class="fas fa-plus mr-2"></i>
+                        Adicionar Primeiro Gestor
+                    </a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Legenda -->
+    <div class="mt-6 bg-gray-50 rounded-lg p-4">
+        <h4 class="text-sm font-medium text-gray-700 mb-3">Legenda de Permissões:</h4>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div class="flex items-center">
+                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800 mr-2">
+                    <i class="fas fa-box"></i>
+                </span>
+                <span class="text-gray-600">Criar/editar produtos e categorias</span>
+            </div>
+            <div class="flex items-center">
+                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800 mr-2">
+                    <i class="fas fa-tag"></i>
+                </span>
+                <span class="text-gray-600">Criar/editar itens de inventário</span>
+            </div>
+            <div class="flex items-center">
+                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800 mr-2">
+                    <i class="fas fa-exchange-alt"></i>
+                </span>
+                <span class="text-gray-600">Registrar entradas e saídas</span>
+            </div>
+            <div class="flex items-center">
+                <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800 mr-2">
+                    <i class="fas fa-chart-bar"></i>
+                </span>
+                <span class="text-gray-600">Acessar relatórios e exportar dados</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

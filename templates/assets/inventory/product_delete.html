@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir Produto - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:product_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Produtos</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Excluir</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-trash-alt text-red-600 mr-2"></i>
+            Excluir Produto
+        </h2>
+    </div>
+
+    <!-- Confirmation Card -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="text-center">
+                <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+                </div>
+                
+                <h3 class="text-lg font-medium text-gray-900 mb-2">
+                    Confirmar Exclusão
+                </h3>
+                
+                <!-- Product Info -->
+                <div class="flex items-center justify-center mb-4">
+                    {% if product.primary_image %}
+                    <img src="{{ product.primary_image.file.url }}" alt="" class="h-16 w-16 object-cover rounded-lg mr-4">
+                    {% else %}
+                    <div class="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center mr-4">
+                        <i class="fas fa-box text-gray-400 text-2xl"></i>
+                    </div>
+                    {% endif %}
+                    <div class="text-left">
+                        <p class="text-sm text-indigo-600 font-medium">{{ product.sku }}</p>
+                        <p class="text-lg font-semibold text-gray-900">{{ product.name }}</p>
+                        {% if product.category %}
+                        <p class="text-sm text-gray-500">{{ product.category.name }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if product.items.exists %}
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-ban text-red-400"></i>
+                        </div>
+                        <div class="ml-3 text-left">
+                            <h4 class="text-sm font-medium text-red-800">
+                                Não é possível excluir
+                            </h4>
+                            <p class="text-sm text-red-700 mt-1">
+                                Este produto possui <strong>{{ product.items.count }}</strong> 
+                                item(ns) de inventário associado(s).
+                                Você deve excluir ou transferir esses itens antes de excluir o produto.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-center space-x-4">
+                    <a href="{% url 'assets:product_detail' product.pk %}" 
+                       class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                        Ver Itens do Produto
+                    </a>
+                    <a href="{% url 'assets:product_list' %}" 
+                       class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Voltar
+                    </a>
+                </div>
+                {% else %}
+                <p class="text-gray-500 mb-6">
+                    Tem certeza que deseja excluir este produto?
+                </p>
+                
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <p class="text-sm text-yellow-700">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Esta ação não pode ser desfeita. Todas as mídias (fotos e vídeos) associadas também serão removidas.
+                    </p>
+                </div>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="flex justify-center space-x-4">
+                        <a href="{% url 'assets:product_list' %}" 
+                           class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            <i class="fas fa-trash-alt mr-2"></i>
+                            Sim, Excluir Produto
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

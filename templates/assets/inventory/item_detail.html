@@ -1,0 +1,393 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ item.inventory_number }} - Inventário{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border-radius: 9999px;
+    }
+    .status-available { background-color: #dcfce7; color: #166534; }
+    .status-in_use { background-color: #dbeafe; color: #1e40af; }
+    .status-maintenance { background-color: #fef3c7; color: #92400e; }
+    .status-damaged { background-color: #fecaca; color: #dc2626; }
+    .status-disposed { background-color: #e5e7eb; color: #4b5563; }
+    
+    .movement-entry { border-left: 4px solid #22c55e; }
+    .movement-exit { border-left: 4px solid #ef4444; }
+    .movement-transfer { border-left: 4px solid #3b82f6; }
+    .movement-adjustment { border-left: 4px solid #f59e0b; }
+    .movement-return { border-left: 4px solid #8b5cf6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:item_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Itens</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">{{ item.inventory_number }}</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <div class="md:flex md:items-center md:justify-between">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center space-x-3">
+                    <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+                        {{ item.inventory_number }}
+                    </h2>
+                    <span class="status-badge status-{{ item.status }}">
+                        {{ item.get_status_display }}
+                    </span>
+                </div>
+                <div class="mt-2">
+                    <a href="{% url 'assets:product_detail' item.product.pk %}" class="text-indigo-600 hover:text-indigo-800">
+                        <i class="fas fa-box mr-1"></i>
+                        {{ item.product.name }} ({{ item.product.sku }})
+                    </a>
+                </div>
+            </div>
+            {% if is_manager %}
+            <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
+                {% if item.status == 'available' %}
+                <a href="{% url 'assets:stock_exit' %}?item={{ item.pk }}" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700">
+                    <i class="fas fa-arrow-up mr-2"></i>
+                    Registrar Saída
+                </a>
+                {% else %}
+                <a href="{% url 'assets:stock_entry' %}?item={{ item.pk }}" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                    <i class="fas fa-arrow-down mr-2"></i>
+                    Registrar Entrada
+                </a>
+                {% endif %}
+                <a href="{% url 'assets:item_edit' item.pk %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    <i class="fas fa-edit mr-2"></i>
+                    Editar
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Coluna Principal -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Informações do Item -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-info-circle text-indigo-600 mr-2"></i>
+                        Informações do Item
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Número de Inventário</p>
+                            <p class="mt-1 text-lg font-semibold text-gray-900">{{ item.inventory_number }}</p>
+                        </div>
+                        {% if item.serial_number %}
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Número de Série</p>
+                            <p class="mt-1 text-gray-900">{{ item.serial_number }}</p>
+                        </div>
+                        {% endif %}
+                        {% if item.batch_number %}
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Número do Lote</p>
+                            <p class="mt-1 text-gray-900">{{ item.batch_number }}</p>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Condição</p>
+                            <p class="mt-1 text-gray-900">{{ item.get_condition_display }}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Localização</p>
+                            <p class="mt-1 text-gray-900">{{ item.location|default:"Não definida" }}</p>
+                        </div>
+                        {% if item.purchase_date %}
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Data de Compra</p>
+                            <p class="mt-1 text-gray-900">{{ item.purchase_date|date:"d/m/Y" }}</p>
+                        </div>
+                        {% endif %}
+                        {% if item.purchase_price %}
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Preço de Compra</p>
+                            <p class="mt-1 text-gray-900">R$ {{ item.purchase_price|floatformat:2 }}</p>
+                        </div>
+                        {% endif %}
+                        {% if item.warranty_expiry %}
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Garantia até</p>
+                            <p class="mt-1 {% if item.is_warranty_valid %}text-green-600{% else %}text-red-600{% endif %}">
+                                {{ item.warranty_expiry|date:"d/m/Y" }}
+                                {% if item.is_warranty_valid %}
+                                <i class="fas fa-check-circle ml-1"></i>
+                                {% else %}
+                                <i class="fas fa-times-circle ml-1"></i> (Expirada)
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if item.notes %}
+                    <div class="mt-6 pt-4 border-t border-gray-200">
+                        <h4 class="text-sm font-medium text-gray-500 mb-2">Observações</h4>
+                        <p class="text-gray-900">{{ item.notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Responsável Atual -->
+            {% if item.assigned_to or item.assigned_sector %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-user-tag text-indigo-600 mr-2"></i>
+                        Responsável Atual
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex items-center">
+                        {% if item.assigned_to %}
+                        <div class="flex-shrink-0">
+                            {% if item.assigned_to.avatar %}
+                            <img src="{{ item.assigned_to.avatar.url }}" alt="" class="h-12 w-12 rounded-full">
+                            {% else %}
+                            <div class="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                                <i class="fas fa-user text-indigo-600"></i>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-lg font-medium text-gray-900">{{ item.assigned_to.get_full_name }}</p>
+                            <p class="text-sm text-gray-500">{{ item.assigned_to.email }}</p>
+                            {% if item.assigned_to.sector %}
+                            <p class="text-sm text-gray-500">
+                                <i class="fas fa-building mr-1"></i>
+                                {{ item.assigned_to.sector.name }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if item.assigned_sector and not item.assigned_to %}
+                        <div class="flex-shrink-0">
+                            <div class="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                                <i class="fas fa-building text-blue-600"></i>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-lg font-medium text-gray-900">{{ item.assigned_sector.name }}</p>
+                            <p class="text-sm text-gray-500">Setor</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if item.assigned_date %}
+                    <p class="mt-3 text-sm text-gray-500">
+                        Atribuído em: {{ item.assigned_date|date:"d/m/Y H:i" }}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Histórico de Movimentações -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-history text-indigo-600 mr-2"></i>
+                        Histórico de Movimentações
+                    </h3>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    {% for movement in movements %}
+                    <div class="px-4 py-4 sm:px-6 movement-{{ movement.movement_type }}">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                {% if movement.movement_type == 'entry' %}
+                                <span class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                                    <i class="fas fa-arrow-down text-green-600"></i>
+                                </span>
+                                {% elif movement.movement_type == 'exit' %}
+                                <span class="flex-shrink-0 h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                                    <i class="fas fa-arrow-up text-red-600"></i>
+                                </span>
+                                {% elif movement.movement_type == 'transfer' %}
+                                <span class="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <i class="fas fa-exchange-alt text-blue-600"></i>
+                                </span>
+                                {% else %}
+                                <span class="flex-shrink-0 h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                                    <i class="fas fa-sync text-yellow-600"></i>
+                                </span>
+                                {% endif %}
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-900">
+                                        {{ movement.get_movement_type_display }} - {{ movement.get_reason_display }}
+                                    </p>
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        {% if movement.from_user %}
+                                        <span class="mr-3">De: {{ movement.from_user.get_full_name }}</span>
+                                        {% endif %}
+                                        {% if movement.to_user %}
+                                        <span class="mr-3">Para: {{ movement.to_user.get_full_name }}</span>
+                                        {% endif %}
+                                        {% if movement.from_sector %}
+                                        <span class="mr-3">De: {{ movement.from_sector.name }}</span>
+                                        {% endif %}
+                                        {% if movement.to_sector %}
+                                        <span class="mr-3">Para: {{ movement.to_sector.name }}</span>
+                                        {% endif %}
+                                        {% if movement.to_location %}
+                                        <span>Local: {{ movement.to_location }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if movement.notes %}
+                                    <p class="text-xs text-gray-400 mt-1">{{ movement.notes }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-900">{{ movement.created_at|date:"d/m/Y" }}</p>
+                                <p class="text-xs text-gray-500">{{ movement.created_at|date:"H:i" }}</p>
+                                <p class="text-xs text-gray-400">{{ movement.created_by.get_full_name|default:movement.created_by.email }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-inbox text-4xl mb-2"></i>
+                        <p>Nenhuma movimentação registrada</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna Lateral -->
+        <div class="space-y-6">
+            <!-- Foto do Item -->
+            {% if item.photo %}
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <img src="{{ item.photo.url }}" alt="{{ item.inventory_number }}" class="w-full object-cover">
+            </div>
+            {% endif %}
+
+            <!-- Produto -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-box text-indigo-600 mr-2"></i>
+                        Produto
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <a href="{% url 'assets:product_detail' item.product.pk %}" class="block hover:bg-gray-50 -m-4 p-4 rounded-lg">
+                        <div class="flex items-center">
+                            {% if item.product.primary_image %}
+                            <img src="{{ item.product.primary_image.file.url }}" alt="" class="h-16 w-16 object-cover rounded-lg">
+                            {% else %}
+                            <div class="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-box text-gray-400 text-2xl"></i>
+                            </div>
+                            {% endif %}
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-indigo-600">{{ item.product.sku }}</p>
+                                <p class="text-sm font-semibold text-gray-900">{{ item.product.name }}</p>
+                                {% if item.product.category %}
+                                <p class="text-xs text-gray-500">{{ item.product.category.name }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Ações Rápidas -->
+            {% if is_manager %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-bolt text-indigo-600 mr-2"></i>
+                        Ações
+                    </h3>
+                </div>
+                <div class="p-4 space-y-2">
+                    {% if item.status == 'available' %}
+                    <a href="{% url 'assets:stock_exit' %}?item={{ item.pk }}" 
+                       class="flex items-center p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                        <i class="fas fa-arrow-up text-orange-600 mr-3"></i>
+                        <span class="text-sm font-medium">Registrar Saída</span>
+                    </a>
+                    {% else %}
+                    <a href="{% url 'assets:stock_entry' %}?item={{ item.pk }}" 
+                       class="flex items-center p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                        <i class="fas fa-arrow-down text-green-600 mr-3"></i>
+                        <span class="text-sm font-medium">Registrar Entrada</span>
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'assets:item_edit' item.pk %}" 
+                       class="flex items-center p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                        <i class="fas fa-edit text-indigo-600 mr-3"></i>
+                        <span class="text-sm font-medium">Editar Item</span>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Informações de Auditoria -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-clipboard-list text-indigo-600 mr-2"></i>
+                        Auditoria
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6 text-sm">
+                    <div class="mb-3">
+                        <p class="text-gray-500">Cadastrado por</p>
+                        <p class="text-gray-900 font-medium">
+                            {{ item.created_by.get_full_name|default:item.created_by.email }}
+                        </p>
+                        <p class="text-gray-500 text-xs">{{ item.created_at|date:"d/m/Y H:i" }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500">Última atualização</p>
+                        <p class="text-gray-500 text-xs">{{ item.updated_at|date:"d/m/Y H:i" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

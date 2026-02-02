@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Remover Gestor - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:manager_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Gestores</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Remover</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-user-minus text-red-600 mr-2"></i>
+            Remover Gestor
+        </h2>
+    </div>
+
+    <!-- Confirmation Card -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="text-center">
+                <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+                </div>
+                
+                <h3 class="text-lg font-medium text-gray-900 mb-2">
+                    Confirmar Remoção
+                </h3>
+                
+                <p class="text-gray-500 mb-4">
+                    Tem certeza que deseja remover as permissões de gestor de
+                </p>
+                
+                <!-- User Info -->
+                <div class="flex items-center justify-center mb-6">
+                    <div class="flex-shrink-0">
+                        {% if manager.user.avatar %}
+                        <img src="{{ manager.user.avatar.url }}" alt="" class="h-12 w-12 rounded-full">
+                        {% else %}
+                        <div class="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <i class="fas fa-user text-indigo-600 text-xl"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="ml-4 text-left">
+                        <p class="text-lg font-semibold text-gray-900">{{ manager.user.get_full_name|default:manager.user.email }}</p>
+                        <p class="text-sm text-gray-500">{{ manager.user.email }}</p>
+                    </div>
+                </div>
+                
+                <!-- Current Permissions -->
+                <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Permissões atuais:</p>
+                    <div class="flex flex-wrap justify-center gap-2">
+                        {% if manager.can_manage_products %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                            <i class="fas fa-box mr-1"></i> Produtos
+                        </span>
+                        {% endif %}
+                        {% if manager.can_manage_items %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                            <i class="fas fa-tag mr-1"></i> Itens
+                        </span>
+                        {% endif %}
+                        {% if manager.can_register_entries %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-800">
+                            <i class="fas fa-arrow-down mr-1"></i> Entradas
+                        </span>
+                        {% endif %}
+                        {% if manager.can_register_exits %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800">
+                            <i class="fas fa-arrow-up mr-1"></i> Saídas
+                        </span>
+                        {% endif %}
+                        {% if manager.can_view_reports %}
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">
+                            <i class="fas fa-chart-bar mr-1"></i> Relatórios
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <p class="text-sm text-yellow-700">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        O usuário perderá todas as permissões de gestão de inventário, mas continuará podendo acessar o sistema normalmente.
+                    </p>
+                </div>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="flex justify-center space-x-4">
+                        <a href="{% url 'assets:manager_list' %}" 
+                           class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                            Cancelar
+                        </a>
+                        <button type="submit" 
+                                class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            <i class="fas fa-user-minus mr-2"></i>
+                            Sim, Remover Gestor
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

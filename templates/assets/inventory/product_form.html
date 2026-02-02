@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:product_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Produtos</a>
+                    </div>
+                </li>
+                {% if product %}
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:product_detail' product.pk %}" class="text-sm text-gray-500 hover:text-indigo-600">{{ product.sku }}</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Editar</span>
+                    </div>
+                </li>
+                {% else %}
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Novo Produto</span>
+                    </div>
+                </li>
+                {% endif %}
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+            <i class="fas fa-box mr-3 text-indigo-600"></i>
+            {{ title }}
+        </h2>
+    </div>
+
+    <!-- Formulário -->
+    <div class="bg-white shadow-lg rounded-lg">
+        <form method="post" enctype="multipart/form-data" class="space-y-6 p-6">
+            {% csrf_token %}
+            
+            <!-- Informações Básicas -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-info-circle mr-2 text-indigo-600"></i>
+                    Informações Básicas
+                </h3>
+                
+                <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                    <!-- Nome -->
+                    <div class="sm:col-span-2">
+                        <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.name.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <div class="mt-1 text-sm text-red-600">{{ form.name.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- SKU -->
+                    <div>
+                        <label for="{{ form.sku.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.sku.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.sku }}
+                        {% if form.sku.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.sku.help_text }}</p>
+                        {% endif %}
+                        {% if form.sku.errors %}
+                        <div class="mt-1 text-sm text-red-600">{{ form.sku.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Categoria -->
+                    <div>
+                        <label for="{{ form.category.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.category.label }}
+                        </label>
+                        {{ form.category }}
+                        {% if form.category.errors %}
+                        <div class="mt-1 text-sm text-red-600">{{ form.category.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Descrição -->
+                    <div class="sm:col-span-2">
+                        <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.description.label }}
+                        </label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                        <div class="mt-1 text-sm text-red-600">{{ form.description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detalhes do Produto -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-tags mr-2 text-indigo-600"></i>
+                    Detalhes do Produto
+                </h3>
+                
+                <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3">
+                    <!-- Marca -->
+                    <div>
+                        <label for="{{ form.brand.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.brand.label }}
+                        </label>
+                        {{ form.brand }}
+                    </div>
+                    
+                    <!-- Modelo -->
+                    <div>
+                        <label for="{{ form.model.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.model.label }}
+                        </label>
+                        {{ form.model }}
+                    </div>
+                    
+                    <!-- Unidade de Medida -->
+                    <div>
+                        <label for="{{ form.unit_of_measure.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.unit_of_measure.label }}
+                        </label>
+                        {{ form.unit_of_measure }}
+                        {% if form.unit_of_measure.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.unit_of_measure.help_text }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Tamanho -->
+                    <div>
+                        <label for="{{ form.size.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.size.label }}
+                        </label>
+                        {{ form.size }}
+                    </div>
+                    
+                    <!-- Tamanho Personalizado -->
+                    <div>
+                        <label for="{{ form.size_custom.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.size_custom.label }}
+                        </label>
+                        {{ form.size_custom }}
+                        {% if form.size_custom.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.size_custom.help_text }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Localização -->
+                    <div>
+                        <label for="{{ form.location.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.location.label }}
+                        </label>
+                        {{ form.location }}
+                        {% if form.location.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.location.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controle de Estoque -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-boxes mr-2 text-indigo-600"></i>
+                    Controle de Estoque
+                </h3>
+                
+                <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3">
+                    <!-- Estoque Mínimo -->
+                    <div>
+                        <label for="{{ form.min_stock.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.min_stock.label }}
+                        </label>
+                        {{ form.min_stock }}
+                        {% if form.min_stock.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.min_stock.help_text }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Estoque Máximo -->
+                    <div>
+                        <label for="{{ form.max_stock.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.max_stock.label }}
+                        </label>
+                        {{ form.max_stock }}
+                        {% if form.max_stock.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.max_stock.help_text }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Custo Unitário -->
+                    <div>
+                        <label for="{{ form.unit_cost.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.unit_cost.label }}
+                        </label>
+                        {{ form.unit_cost }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Observações -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    <i class="fas fa-sticky-note mr-2 text-indigo-600"></i>
+                    Observações
+                </h3>
+                
+                <div class="mt-6">
+                    <label for="{{ form.notes.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        {{ form.notes.label }}
+                    </label>
+                    {{ form.notes }}
+                </div>
+            </div>
+
+            <!-- Status -->
+            <div class="flex items-center space-x-4 pt-4 border-t border-gray-200">
+                <div class="flex items-center">
+                    {{ form.is_active }}
+                    <label for="{{ form.is_active.id_for_label }}" class="ml-2 text-sm font-medium text-gray-700">
+                        {{ form.is_active.label }}
+                    </label>
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                <a href="{% if product %}{% url 'assets:product_detail' product.pk %}{% else %}{% url 'assets:product_list' %}{% endif %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    <i class="fas fa-times mr-2"></i>
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                    <i class="fas fa-save mr-2"></i>
+                    {% if product %}Salvar Alterações{% else %}Cadastrar Produto{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

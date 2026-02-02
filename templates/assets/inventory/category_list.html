@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+
+{% block title %}Categorias - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between mb-6">
+        <div class="flex-1 min-w-0">
+            <nav class="flex mb-2" aria-label="Breadcrumb">
+                <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                    <li class="inline-flex items-center">
+                        <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                            <i class="fas fa-warehouse mr-1"></i> Inventário
+                        </a>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                            <span class="text-sm text-gray-700">Categorias</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+                <i class="fas fa-tags text-indigo-600 mr-2"></i>
+                Categorias de Produtos
+            </h2>
+            <p class="mt-1 text-sm text-gray-500">
+                Gerencie as categorias para organizar seus produtos
+            </p>
+        </div>
+        {% if is_manager %}
+        <div class="mt-4 flex md:mt-0 md:ml-4">
+            <a href="{% url 'assets:category_create' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                <i class="fas fa-plus mr-2"></i>
+                Nova Categoria
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lista de Categorias -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <ul class="divide-y divide-gray-200">
+            {% for category in categories %}
+            <li class="hover:bg-gray-50">
+                <div class="px-4 py-4 sm:px-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                                <i class="fas fa-tag text-indigo-600"></i>
+                            </div>
+                            <div class="ml-4">
+                                <h3 class="text-lg font-medium text-gray-900">{{ category.name }}</h3>
+                                {% if category.description %}
+                                <p class="text-sm text-gray-500">{{ category.description|truncatewords:20 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="text-right">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                    {{ category.products.count }} produto{{ category.products.count|pluralize:"s" }}
+                                </span>
+                            </div>
+                            {% if is_manager %}
+                            <div class="flex space-x-2">
+                                <a href="{% url 'assets:category_edit' category.pk %}" 
+                                   class="text-indigo-600 hover:text-indigo-800" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if not category.products.exists %}
+                                <a href="{% url 'assets:category_delete' category.pk %}" 
+                                   class="text-red-600 hover:text-red-800" title="Excluir">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </li>
+            {% empty %}
+            <li class="px-4 py-12 text-center">
+                <div class="text-gray-500">
+                    <i class="fas fa-tags text-4xl mb-3"></i>
+                    <p class="text-lg font-medium">Nenhuma categoria cadastrada</p>
+                    <p class="text-sm mb-4">Crie categorias para organizar seus produtos</p>
+                    {% if is_manager %}
+                    <a href="{% url 'assets:category_create' %}" 
+                       class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                        <i class="fas fa-plus mr-2"></i>
+                        Criar Primeira Categoria
+                    </a>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

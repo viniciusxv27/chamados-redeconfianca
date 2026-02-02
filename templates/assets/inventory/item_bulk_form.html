@@ -1,0 +1,298 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastro em Lote - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:item_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Itens</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Cadastro em Lote</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-layer-group text-indigo-600 mr-2"></i>
+            Cadastro de Itens em Lote
+        </h2>
+        <p class="mt-1 text-sm text-gray-500">
+            Crie múltiplos itens do mesmo produto de uma só vez
+        </p>
+    </div>
+
+    <!-- Informações -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-500 text-xl"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Como funciona</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <ul class="list-disc list-inside space-y-1">
+                        <li>Selecione o produto e defina a quantidade de itens a criar</li>
+                        <li>O sistema gerará automaticamente os números de inventário sequenciais</li>
+                        <li>Você pode definir um prefixo personalizado para os números</li>
+                        <li>Todos os itens serão criados com o mesmo status e condição inicial</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <!-- Produto -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-box text-indigo-600 mr-2"></i>
+                    Produto
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div>
+                    <label for="id_product" class="block text-sm font-medium text-gray-700 mb-1">
+                        Selecione o Produto <span class="text-red-500">*</span>
+                    </label>
+                    <select name="product" id="id_product" required
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 {% if form.product.errors %}border-red-500{% endif %}">
+                        <option value="">Selecione um produto</option>
+                        {% for product in form.fields.product.queryset %}
+                        <option value="{{ product.pk }}" {% if form.product.value == product.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ product.sku }} - {{ product.name }} (Estoque atual: {{ product.current_stock }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if form.product.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.product.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quantidade e Identificação -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-hashtag text-indigo-600 mr-2"></i>
+                    Quantidade e Identificação
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="id_quantity" class="block text-sm font-medium text-gray-700 mb-1">
+                            Quantidade de Itens <span class="text-red-500">*</span>
+                        </label>
+                        <input type="number" name="quantity" id="id_quantity" 
+                               value="{{ form.quantity.value|default:1 }}" min="1" max="100" required
+                               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 {% if form.quantity.errors %}border-red-500{% endif %}">
+                        {% if form.quantity.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.quantity.errors|join:", " }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-gray-500">Máximo de 100 itens por vez</p>
+                    </div>
+                    
+                    <div>
+                        <label for="id_prefix" class="block text-sm font-medium text-gray-700 mb-1">
+                            Prefixo do Número de Inventário <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" name="prefix" id="id_prefix" 
+                               value="{{ form.prefix.value|default:'INV' }}" required
+                               placeholder="INV"
+                               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 {% if form.prefix.errors %}border-red-500{% endif %}">
+                        {% if form.prefix.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.prefix.errors|join:", " }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-gray-500">Ex: INV, PAT, EQUIP. Números serão gerados como: INV-2024-0001</p>
+                    </div>
+                </div>
+                
+                <!-- Preview -->
+                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Prévia dos números gerados:</p>
+                    <div class="text-sm text-gray-500" id="preview-numbers">
+                        <code class="bg-white px-2 py-1 rounded">INV-{{ "now"|date:"Y" }}-0001</code>
+                        <span class="mx-2">até</span>
+                        <code class="bg-white px-2 py-1 rounded">INV-{{ "now"|date:"Y" }}-0001</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status e Localização -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-clipboard-check text-indigo-600 mr-2"></i>
+                    Status e Localização Inicial
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label for="id_condition" class="block text-sm font-medium text-gray-700 mb-1">
+                            Condição <span class="text-red-500">*</span>
+                        </label>
+                        <select name="condition" id="id_condition" required
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            {% for value, label in form.fields.condition.choices %}
+                            <option value="{{ value }}" {% if form.condition.value == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if form.condition.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.condition.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label for="id_location" class="block text-sm font-medium text-gray-700 mb-1">
+                            Localização Inicial
+                        </label>
+                        <input type="text" name="location" id="id_location" 
+                               value="{{ form.location.value|default:'' }}"
+                               placeholder="Almoxarifado Central, Prateleira A"
+                               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        {% if form.location.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.location.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações de Compra (Opcional) -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-shopping-cart text-indigo-600 mr-2"></i>
+                    Informações de Compra (Opcional)
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label for="id_batch_number" class="block text-sm font-medium text-gray-700 mb-1">
+                            Número do Lote
+                        </label>
+                        <input type="text" name="batch_number" id="id_batch_number" 
+                               value="{{ form.batch_number.value|default:'' }}"
+                               placeholder="LOTE-2024-001"
+                               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        {% if form.batch_number.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.batch_number.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        <label for="id_purchase_date" class="block text-sm font-medium text-gray-700 mb-1">
+                            Data de Compra
+                        </label>
+                        <input type="date" name="purchase_date" id="id_purchase_date" 
+                               value="{{ form.purchase_date.value|date:'Y-m-d'|default:'' }}"
+                               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        {% if form.purchase_date.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.purchase_date.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        <label for="id_purchase_price" class="block text-sm font-medium text-gray-700 mb-1">
+                            Preço Unitário
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">R$</span>
+                            <input type="number" step="0.01" min="0" name="purchase_price" id="id_purchase_price" 
+                                   value="{{ form.purchase_price.value|default:'' }}"
+                                   placeholder="0,00"
+                                   class="w-full pl-10 border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        {% if form.purchase_price.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.purchase_price.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumo -->
+        <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <i class="fas fa-check-circle text-indigo-600 text-xl mr-3"></i>
+                <div>
+                    <p class="text-sm font-medium text-indigo-900">Resumo da Operação</p>
+                    <p class="text-sm text-indigo-700" id="summary-text">
+                        Serão criados <strong id="summary-qty">1</strong> novos itens de inventário.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botões -->
+        <div class="flex justify-end space-x-4">
+            <a href="{% url 'assets:item_list' %}" 
+               class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                Cancelar
+            </a>
+            <button type="submit" 
+                    class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                <i class="fas fa-layer-group mr-2"></i>
+                Criar Itens em Lote
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const quantityInput = document.getElementById('id_quantity');
+    const prefixInput = document.getElementById('id_prefix');
+    const previewDiv = document.getElementById('preview-numbers');
+    const summaryQty = document.getElementById('summary-qty');
+    const year = new Date().getFullYear();
+    
+    function updatePreview() {
+        const qty = parseInt(quantityInput.value) || 1;
+        const prefix = prefixInput.value || 'INV';
+        
+        const first = `${prefix}-${year}-0001`;
+        const last = `${prefix}-${year}-${String(qty).padStart(4, '0')}`;
+        
+        if (qty === 1) {
+            previewDiv.innerHTML = `<code class="bg-white px-2 py-1 rounded">${first}</code>`;
+        } else {
+            previewDiv.innerHTML = `<code class="bg-white px-2 py-1 rounded">${first}</code>
+                <span class="mx-2">até</span>
+                <code class="bg-white px-2 py-1 rounded">${last}</code>`;
+        }
+        
+        summaryQty.textContent = qty;
+    }
+    
+    quantityInput.addEventListener('input', updatePreview);
+    prefixInput.addEventListener('input', updatePreview);
+    
+    updatePreview();
+});
+</script>
+{% endblock %}

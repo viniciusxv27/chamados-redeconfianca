@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventário - Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    .status-available { background-color: #dcfce7; color: #166534; }
+    .status-in_use { background-color: #dbeafe; color: #1e40af; }
+    .status-maintenance { background-color: #fef3c7; color: #92400e; }
+    .status-damaged { background-color: #fecaca; color: #dc2626; }
+    .status-disposed { background-color: #e5e7eb; color: #4b5563; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-xl sm:text-2xl lg:text-3xl font-bold leading-7 text-gray-900 truncate">
+                <i class="fas fa-warehouse mr-2 sm:mr-3 text-indigo-600"></i>
+                Inventário / Almoxarifado
+            </h2>
+            <p class="mt-1 text-xs sm:text-sm text-gray-500">
+                Gestão completa de estoque e inventário
+            </p>
+        </div>
+        {% if is_manager %}
+        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+            <a href="{% url 'assets:product_create' %}" 
+               class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-plus mr-1 sm:mr-2"></i>
+                Novo Produto
+            </a>
+            <a href="{% url 'assets:item_create' %}" 
+               class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                <i class="fas fa-barcode mr-1 sm:mr-2"></i>
+                Novo Item
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat-card bg-white rounded-lg shadow p-4 sm:p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-indigo-100 rounded-lg p-3">
+                    <i class="fas fa-boxes text-indigo-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-xs sm:text-sm font-medium text-gray-500">Produtos</p>
+                    <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ total_products }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card bg-white rounded-lg shadow p-4 sm:p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-green-100 rounded-lg p-3">
+                    <i class="fas fa-cubes text-green-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-xs sm:text-sm font-medium text-gray-500">Total Itens</p>
+                    <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ total_items }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card bg-white rounded-lg shadow p-4 sm:p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-blue-100 rounded-lg p-3">
+                    <i class="fas fa-check-circle text-blue-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-xs sm:text-sm font-medium text-gray-500">Disponíveis</p>
+                    <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ available_items }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card bg-white rounded-lg shadow p-4 sm:p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-yellow-100 rounded-lg p-3">
+                    <i class="fas fa-user-clock text-yellow-600 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-xs sm:text-sm font-medium text-gray-500">Em Uso</p>
+                    <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ in_use_items }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <a href="{% url 'assets:product_list' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
+            <i class="fas fa-boxes text-2xl text-indigo-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Produtos</p>
+        </a>
+        <a href="{% url 'assets:item_list' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
+            <i class="fas fa-barcode text-2xl text-green-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Itens</p>
+        </a>
+        {% if is_manager %}
+        <a href="{% url 'assets:stock_entry' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-down text-2xl text-blue-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Entrada</p>
+        </a>
+        <a href="{% url 'assets:stock_exit' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-up text-2xl text-orange-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Saída</p>
+        </a>
+        {% endif %}
+        <a href="{% url 'assets:movement_list' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
+            <i class="fas fa-exchange-alt text-2xl text-purple-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Movimentações</p>
+        </a>
+        <a href="{% url 'assets:report_dashboard' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chart-bar text-2xl text-teal-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Relatórios</p>
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Low Stock Alert -->
+        {% if low_stock_products %}
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>
+                    Estoque Baixo
+                </h3>
+            </div>
+            <ul class="divide-y divide-gray-200">
+                {% for product in low_stock_products %}
+                <li class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                    <a href="{% url 'assets:product_detail' product.pk %}" class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-indigo-600">{{ product.sku }}</p>
+                            <p class="text-sm text-gray-900">{{ product.name }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-semibold text-red-600">{{ product.current_stock }} / {{ product.min_stock }}</p>
+                            <p class="text-xs text-gray-500">Atual / Mínimo</p>
+                        </div>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- Recent Movements -->
+        <div class="bg-white rounded-lg shadow {% if not low_stock_products %}lg:col-span-2{% endif %}">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-history text-indigo-600 mr-2"></i>
+                    Últimas Movimentações
+                </h3>
+                <a href="{% url 'assets:movement_list' %}" class="text-sm text-indigo-600 hover:text-indigo-800">
+                    Ver todas <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <ul class="divide-y divide-gray-200">
+                {% for movement in recent_movements %}
+                <li class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            {% if movement.movement_type == 'entry' %}
+                            <span class="flex-shrink-0 h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                                <i class="fas fa-arrow-down text-green-600"></i>
+                            </span>
+                            {% elif movement.movement_type == 'exit' %}
+                            <span class="flex-shrink-0 h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                                <i class="fas fa-arrow-up text-red-600"></i>
+                            </span>
+                            {% else %}
+                            <span class="flex-shrink-0 h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                <i class="fas fa-exchange-alt text-blue-600"></i>
+                            </span>
+                            {% endif %}
+                            <div class="ml-3">
+                                <p class="text-sm font-medium text-gray-900">
+                                    {{ movement.get_movement_type_display }} - {{ movement.inventory_item.inventory_number }}
+                                </p>
+                                <p class="text-xs text-gray-500">
+                                    {{ movement.inventory_item.product.name }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-gray-500">{{ movement.created_at|date:"d/m/Y H:i" }}</p>
+                            <p class="text-xs text-gray-400">{{ movement.created_by.get_full_name|default:movement.created_by.email }}</p>
+                        </div>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-inbox text-4xl mb-2"></i>
+                    <p>Nenhuma movimentação registrada</p>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Categories Stats -->
+    {% if categories_stats %}
+    <div class="mt-6 bg-white rounded-lg shadow">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">
+                <i class="fas fa-tags text-indigo-600 mr-2"></i>
+                Itens por Categoria
+            </h3>
+        </div>
+        <div class="p-4 sm:p-6">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {% for category in categories_stats %}
+                <div class="border rounded-lg p-4" style="border-color: {{ category.color }}20; background-color: {{ category.color }}10;">
+                    <div class="flex items-center mb-2">
+                        <i class="{{ category.icon }} mr-2" style="color: {{ category.color }};"></i>
+                        <span class="font-medium text-gray-900">{{ category.name }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">Produtos:</span>
+                        <span class="font-semibold">{{ category.product_count }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">Itens:</span>
+                        <span class="font-semibold">{{ category.item_count }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Status Overview -->
+    {% if status_stats %}
+    <div class="mt-6 bg-white rounded-lg shadow">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">
+                <i class="fas fa-chart-pie text-indigo-600 mr-2"></i>
+                Itens por Status
+            </h3>
+        </div>
+        <div class="p-4 sm:p-6">
+            <div class="flex flex-wrap gap-4">
+                {% for stat in status_stats %}
+                <div class="flex items-center px-4 py-2 rounded-full status-{{ stat.status }}">
+                    <span class="font-semibold mr-2">{{ stat.count }}</span>
+                    <span class="text-sm">
+                        {% if stat.status == 'available' %}Disponíveis
+                        {% elif stat.status == 'in_use' %}Em Uso
+                        {% elif stat.status == 'maintenance' %}Em Manutenção
+                        {% elif stat.status == 'damaged' %}Danificados
+                        {% elif stat.status == 'disposed' %}Descartados
+                        {% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Admin Section -->
+    {% if request.user.hierarchy == 'SUPERADMIN' or request.user.hierarchy == 'ADMIN' %}
+    <div class="mt-6 bg-white rounded-lg shadow">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">
+                <i class="fas fa-cog text-indigo-600 mr-2"></i>
+                Administração
+            </h3>
+        </div>
+        <div class="p-4 sm:p-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <a href="{% url 'assets:category_list' %}" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-tags text-indigo-600 mr-3"></i>
+                    <span class="text-sm font-medium">Categorias</span>
+                </a>
+                <a href="{% url 'assets:manager_list' %}" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-users-cog text-indigo-600 mr-3"></i>
+                    <span class="text-sm font-medium">Gestores</span>
+                </a>
+                <a href="{% url 'assets:item_bulk_create' %}" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-layer-group text-indigo-600 mr-3"></i>
+                    <span class="text-sm font-medium">Cadastro em Lote</span>
+                </a>
+                <a href="{% url 'assets:list' %}" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-archive text-gray-400 mr-3"></i>
+                    <span class="text-sm font-medium text-gray-500">Ativos (Legado)</span>
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

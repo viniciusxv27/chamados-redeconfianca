@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatório de Entradas - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between mb-6">
+        <div class="flex-1 min-w-0">
+            <nav class="flex mb-2" aria-label="Breadcrumb">
+                <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                    <li class="inline-flex items-center">
+                        <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                            <i class="fas fa-warehouse mr-1"></i> Inventário
+                        </a>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                            <a href="{% url 'assets:report_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">Relatórios</a>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                            <span class="text-sm text-gray-700">Entradas</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+                <i class="fas fa-arrow-down text-green-600 mr-2"></i>
+                Relatório de Entradas
+            </h2>
+            <p class="mt-1 text-sm text-gray-500">
+                Histórico de todas as entradas de estoque
+            </p>
+        </div>
+        <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
+            <a href="{% url 'assets:report_entries' %}?export=excel{% for key, value in request.GET.items %}{% if key != 'export' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+               class="inline-flex items-center px-4 py-2 border border-green-600 rounded-md shadow-sm text-sm font-medium text-green-600 bg-white hover:bg-green-50">
+                <i class="fas fa-file-excel mr-2"></i>
+                Exportar Excel
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-4 py-5 sm:p-6">
+            <form method="get" class="space-y-4 sm:space-y-0 sm:flex sm:items-end sm:space-x-4">
+                <div class="flex-1">
+                    <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+                    <input type="text" name="search" id="search" value="{{ request.GET.search }}"
+                           placeholder="Número de inventário, produto..."
+                           class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="w-full sm:w-40">
+                    <label for="reason" class="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
+                    <select name="reason" id="reason" 
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">Todos</option>
+                        <option value="purchase" {% if request.GET.reason == 'purchase' %}selected{% endif %}>Compra</option>
+                        <option value="return" {% if request.GET.reason == 'return' %}selected{% endif %}>Devolução</option>
+                        <option value="adjustment" {% if request.GET.reason == 'adjustment' %}selected{% endif %}>Ajuste</option>
+                        <option value="donation" {% if request.GET.reason == 'donation' %}selected{% endif %}>Doação</option>
+                        <option value="transfer" {% if request.GET.reason == 'transfer' %}selected{% endif %}>Transferência</option>
+                    </select>
+                </div>
+                <div class="w-full sm:w-40">
+                    <label for="date_from" class="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
+                    <input type="date" name="date_from" id="date_from" value="{{ request.GET.date_from }}"
+                           class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="w-full sm:w-40">
+                    <label for="date_to" class="block text-sm font-medium text-gray-700 mb-1">Data Fim</label>
+                    <input type="date" name="date_to" id="date_to" value="{{ request.GET.date_to }}"
+                           class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="flex space-x-2">
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                        <i class="fas fa-search mr-2"></i>
+                        Filtrar
+                    </button>
+                    <a href="{% url 'assets:report_entries' %}" 
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        <i class="fas fa-times mr-2"></i>
+                        Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resumo -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white shadow rounded-lg p-4 text-center">
+            <p class="text-2xl font-bold text-green-600">{{ summary.total|default:0 }}</p>
+            <p class="text-sm text-gray-500">Total de Entradas</p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-4 text-center">
+            <p class="text-2xl font-bold text-blue-600">{{ summary.purchase|default:0 }}</p>
+            <p class="text-sm text-gray-500">Compras</p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-4 text-center">
+            <p class="text-2xl font-bold text-purple-600">{{ summary.return|default:0 }}</p>
+            <p class="text-sm text-gray-500">Devoluções</p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-4 text-center">
+            <p class="text-2xl font-bold text-yellow-600">{{ summary.other|default:0 }}</p>
+            <p class="text-sm text-gray-500">Outros</p>
+        </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Data/Hora
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Item
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Produto
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Motivo
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Localização
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Registrado por
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Observações
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for entry in entries %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">{{ entry.created_at|date:"d/m/Y" }}</div>
+                            <div class="text-xs text-gray-500">{{ entry.created_at|date:"H:i" }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <a href="{% url 'assets:item_detail' entry.item.pk %}" 
+                               class="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                                {{ entry.item.inventory_number }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">{{ entry.item.product.name }}</div>
+                            <div class="text-xs text-gray-500">{{ entry.item.product.sku }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if entry.reason == 'purchase' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <i class="fas fa-shopping-cart mr-1"></i> Compra
+                            </span>
+                            {% elif entry.reason == 'return' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                <i class="fas fa-undo mr-1"></i> Devolução
+                            </span>
+                            {% elif entry.reason == 'adjustment' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                <i class="fas fa-balance-scale mr-1"></i> Ajuste
+                            </span>
+                            {% elif entry.reason == 'donation' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                                <i class="fas fa-gift mr-1"></i> Doação
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                {{ entry.get_reason_display }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-sm text-gray-500">{{ entry.to_location|default:"-" }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-900">{{ entry.created_by.get_full_name|default:entry.created_by.email }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm text-gray-500">{{ entry.notes|truncatewords:10|default:"-" }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center">
+                            <div class="text-gray-500">
+                                <i class="fas fa-inbox text-4xl mb-3"></i>
+                                <p class="text-lg font-medium">Nenhuma entrada encontrada</p>
+                                <p class="text-sm">Ajuste os filtros para ver os resultados</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Paginação -->
+        {% if entries.has_other_pages %}
+        <div class="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+            <div class="flex items-center justify-between">
+                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-sm text-gray-700">
+                            Mostrando
+                            <span class="font-medium">{{ entries.start_index }}</span>
+                            a
+                            <span class="font-medium">{{ entries.end_index }}</span>
+                            de
+                            <span class="font-medium">{{ entries.paginator.count }}</span>
+                            resultados
+                        </p>
+                    </div>
+                    <div>
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                            {% if entries.has_previous %}
+                            <a href="?page={{ entries.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                            {% endif %}
+                            
+                            {% for num in entries.paginator.page_range %}
+                                {% if entries.number == num %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-indigo-500 bg-indigo-50 text-sm font-medium text-indigo-600">
+                                    {{ num }}
+                                </span>
+                                {% elif num > entries.number|add:'-3' and num < entries.number|add:'3' %}
+                                <a href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}"
+                                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    {{ num }}
+                                </a>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if entries.has_next %}
+                            <a href="?page={{ entries.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

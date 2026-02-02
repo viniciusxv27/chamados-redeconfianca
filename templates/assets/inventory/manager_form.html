@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if manager %}Editar Gestor{% else %}Novo Gestor{% endif %} - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:manager_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Gestores</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">{% if manager %}Editar{% else %}Novo{% endif %}</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold text-gray-900">
+            {% if manager %}
+            <i class="fas fa-edit text-indigo-600 mr-2"></i>
+            Editar Gestor
+            {% else %}
+            <i class="fas fa-user-plus text-indigo-600 mr-2"></i>
+            Novo Gestor de Inventário
+            {% endif %}
+        </h2>
+        <p class="mt-1 text-sm text-gray-500">
+            {% if manager %}Atualize as permissões do gestor{% else %}Adicione um novo gestor ao sistema de inventário{% endif %}
+        </p>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <!-- Seleção de Usuário -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-user text-indigo-600 mr-2"></i>
+                    Usuário
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div>
+                    <label for="id_user" class="block text-sm font-medium text-gray-700 mb-1">
+                        Selecione o Usuário <span class="text-red-500">*</span>
+                    </label>
+                    <select name="user" id="id_user" required {% if manager %}disabled{% endif %}
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 {% if form.user.errors %}border-red-500{% endif %} {% if manager %}bg-gray-100{% endif %}">
+                        <option value="">Selecione um usuário</option>
+                        {% for user in form.fields.user.queryset %}
+                        <option value="{{ user.pk }}" {% if form.user.value == user.pk|stringformat:"s" or manager and manager.user_id == user.pk %}selected{% endif %}>
+                            {{ user.get_full_name|default:user.email }} ({{ user.email }})
+                            {% if user.sector %} - {{ user.sector.name }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if manager %}
+                    <input type="hidden" name="user" value="{{ manager.user.pk }}">
+                    <p class="mt-1 text-xs text-gray-500">O usuário não pode ser alterado após a criação</p>
+                    {% endif %}
+                    {% if form.user.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.user.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Permissões -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-key text-indigo-600 mr-2"></i>
+                    Permissões
+                </h3>
+                <p class="mt-1 text-sm text-gray-500">Defina o que este gestor pode fazer no sistema de inventário</p>
+            </div>
+            <div class="px-4 py-5 sm:p-6 space-y-4">
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input type="checkbox" name="can_manage_products" id="id_can_manage_products"
+                               {% if form.can_manage_products.value or manager and manager.can_manage_products %}checked{% endif %}
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    </div>
+                    <div class="ml-3">
+                        <label for="id_can_manage_products" class="font-medium text-gray-700">
+                            <i class="fas fa-box text-blue-600 mr-2"></i>
+                            Gerenciar Produtos
+                        </label>
+                        <p class="text-sm text-gray-500">Pode criar, editar e excluir produtos e categorias</p>
+                    </div>
+                </div>
+
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input type="checkbox" name="can_manage_items" id="id_can_manage_items"
+                               {% if form.can_manage_items.value or manager and manager.can_manage_items %}checked{% endif %}
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    </div>
+                    <div class="ml-3">
+                        <label for="id_can_manage_items" class="font-medium text-gray-700">
+                            <i class="fas fa-tag text-green-600 mr-2"></i>
+                            Gerenciar Itens
+                        </label>
+                        <p class="text-sm text-gray-500">Pode criar, editar e excluir itens de inventário</p>
+                    </div>
+                </div>
+
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input type="checkbox" name="can_register_entries" id="id_can_register_entries"
+                               {% if form.can_register_entries.value or manager and manager.can_register_entries %}checked{% endif %}
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    </div>
+                    <div class="ml-3">
+                        <label for="id_can_register_entries" class="font-medium text-gray-700">
+                            <i class="fas fa-arrow-down text-green-600 mr-2"></i>
+                            Registrar Entradas
+                        </label>
+                        <p class="text-sm text-gray-500">Pode registrar entradas de estoque</p>
+                    </div>
+                </div>
+
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input type="checkbox" name="can_register_exits" id="id_can_register_exits"
+                               {% if form.can_register_exits.value or manager and manager.can_register_exits %}checked{% endif %}
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    </div>
+                    <div class="ml-3">
+                        <label for="id_can_register_exits" class="font-medium text-gray-700">
+                            <i class="fas fa-arrow-up text-orange-600 mr-2"></i>
+                            Registrar Saídas
+                        </label>
+                        <p class="text-sm text-gray-500">Pode registrar saídas de estoque</p>
+                    </div>
+                </div>
+
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input type="checkbox" name="can_view_reports" id="id_can_view_reports"
+                               {% if form.can_view_reports.value or manager and manager.can_view_reports %}checked{% endif %}
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                    </div>
+                    <div class="ml-3">
+                        <label for="id_can_view_reports" class="font-medium text-gray-700">
+                            <i class="fas fa-chart-bar text-purple-600 mr-2"></i>
+                            Visualizar Relatórios
+                        </label>
+                        <p class="text-sm text-gray-500">Pode acessar relatórios e exportar dados em Excel</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Atalhos de Permissão -->
+        <div class="bg-gray-50 rounded-lg p-4">
+            <p class="text-sm font-medium text-gray-700 mb-3">Atalhos:</p>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="setAllPermissions(true)" 
+                        class="px-3 py-1 text-xs font-medium border border-green-600 text-green-600 rounded hover:bg-green-50 transition-colors">
+                    <i class="fas fa-check-double mr-1"></i>
+                    Selecionar Todos
+                </button>
+                <button type="button" onclick="setAllPermissions(false)" 
+                        class="px-3 py-1 text-xs font-medium border border-gray-400 text-gray-600 rounded hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-times mr-1"></i>
+                    Desmarcar Todos
+                </button>
+                <button type="button" onclick="setBasicPermissions()" 
+                        class="px-3 py-1 text-xs font-medium border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors">
+                    <i class="fas fa-user mr-1"></i>
+                    Permissões Básicas
+                </button>
+            </div>
+        </div>
+
+        <!-- Botões -->
+        <div class="flex justify-end space-x-4">
+            <a href="{% url 'assets:manager_list' %}" 
+               class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                Cancelar
+            </a>
+            <button type="submit" 
+                    class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                <i class="fas fa-save mr-2"></i>
+                {% if manager %}Salvar Alterações{% else %}Adicionar Gestor{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function setAllPermissions(value) {
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = value;
+    });
+}
+
+function setBasicPermissions() {
+    document.getElementById('id_can_manage_products').checked = false;
+    document.getElementById('id_can_manage_items').checked = true;
+    document.getElementById('id_can_register_entries').checked = true;
+    document.getElementById('id_can_register_exits').checked = true;
+    document.getElementById('id_can_view_reports').checked = true;
+}
+</script>
+{% endblock %}

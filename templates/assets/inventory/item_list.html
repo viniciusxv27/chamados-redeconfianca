@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+
+{% block title %}Itens de Inventário{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 9999px;
+    }
+    .status-available { background-color: #dcfce7; color: #166534; }
+    .status-in_use { background-color: #dbeafe; color: #1e40af; }
+    .status-maintenance { background-color: #fef3c7; color: #92400e; }
+    .status-damaged { background-color: #fecaca; color: #dc2626; }
+    .status-disposed { background-color: #e5e7eb; color: #4b5563; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
+        <div class="flex-1 min-w-0">
+            <nav class="flex mb-2" aria-label="Breadcrumb">
+                <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                    <li class="inline-flex items-center">
+                        <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                            <i class="fas fa-warehouse mr-1"></i> Inventário
+                        </a>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                            <span class="text-sm text-gray-700">Itens</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h2 class="text-xl sm:text-2xl lg:text-3xl font-bold leading-7 text-gray-900 truncate">
+                <i class="fas fa-barcode mr-2 sm:mr-3 text-indigo-600"></i>
+                Itens de Inventário
+            </h2>
+            <p class="mt-1 text-xs sm:text-sm text-gray-500">
+                {{ total_items }} ite{{ total_items|pluralize:"m,ns" }}
+            </p>
+        </div>
+        {% if is_manager %}
+        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+            <a href="{% url 'assets:item_bulk_create' %}" 
+               class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <i class="fas fa-layer-group mr-1 sm:mr-2"></i>
+                Lote
+            </a>
+            <a href="{% url 'assets:item_create' %}" 
+               class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                <i class="fas fa-plus mr-1 sm:mr-2"></i>
+                Novo Item
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white shadow rounded-lg p-4 sm:p-6 mb-6">
+        <form method="GET" class="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-6 lg:gap-4">
+            <div class="lg:col-span-2">
+                <label for="q" class="block text-xs sm:text-sm font-medium text-gray-700">Buscar</label>
+                <input type="text" 
+                       name="q" 
+                       id="q" 
+                       value="{{ query }}"
+                       placeholder="Nº Inventário, Série, Produto..."
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            
+            <div>
+                <label for="product" class="block text-sm font-medium text-gray-700">Produto</label>
+                <select name="product" id="product"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">Todos</option>
+                    {% for prod in products %}
+                    <option value="{{ prod.pk }}" {% if product_filter == prod.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ prod.sku }} - {{ prod.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+                <select name="status" id="status"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">Todos</option>
+                    {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="sector" class="block text-sm font-medium text-gray-700">Setor</label>
+                <select name="sector" id="sector"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">Todos</option>
+                    {% for sector in sectors %}
+                    <option value="{{ sector.pk }}" {% if sector_filter == sector.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ sector.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="flex items-end space-x-2">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    <i class="fas fa-search mr-2"></i>
+                    Filtrar
+                </button>
+                <a href="{% url 'assets:item_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    <i class="fas fa-times"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Itens -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Item
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Produto
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Responsável/Setor
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Localização
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Condição
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for item in page_obj %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'assets:item_detail' item.pk %}'">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                {% if item.photo %}
+                                <img src="{{ item.photo.url }}" alt="" class="h-10 w-10 rounded-lg object-cover mr-3">
+                                {% else %}
+                                <div class="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center mr-3">
+                                    <i class="fas fa-barcode text-gray-400"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <p class="text-sm font-medium text-indigo-600">{{ item.inventory_number }}</p>
+                                    {% if item.serial_number %}
+                                    <p class="text-xs text-gray-500">SN: {{ item.serial_number }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <p class="text-sm font-medium text-gray-900">{{ item.product.name }}</p>
+                            <p class="text-xs text-gray-500">{{ item.product.sku }}</p>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="status-badge status-{{ item.status }}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {% if item.assigned_to %}
+                            <i class="fas fa-user mr-1 text-gray-400"></i>
+                            {{ item.assigned_to.get_full_name }}
+                            {% elif item.assigned_sector %}
+                            <i class="fas fa-building mr-1 text-gray-400"></i>
+                            {{ item.assigned_sector.name }}
+                            {% else %}
+                            <span class="text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ item.location|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ item.get_condition_display }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center">
+                            <i class="fas fa-inbox text-6xl text-gray-300 mb-4"></i>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhum item encontrado</h3>
+                            <p class="text-gray-500 mb-4">
+                                {% if query or product_filter or status_filter or sector_filter %}
+                                Tente ajustar os filtros de busca.
+                                {% else %}
+                                Comece cadastrando itens de inventário.
+                                {% endif %}
+                            </p>
+                            {% if is_manager %}
+                            <a href="{% url 'assets:item_create' %}" 
+                               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                                <i class="fas fa-plus mr-2"></i>
+                                Novo Item
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Paginação -->
+    {% if page_obj.has_other_pages %}
+    <div class="mt-6 flex justify-center">
+        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <span class="relative inline-flex items-center px-4 py-2 border border-indigo-500 bg-indigo-50 text-sm font-medium text-indigo-600">
+                    {{ num }}
+                </span>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <a href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    {{ num }}
+                </a>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if sector_filter %}&sector={{ sector_filter }}{% endif %}" 
+               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

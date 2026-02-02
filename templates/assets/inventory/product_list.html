@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+
+{% block title %}Produtos - Inventário{% endblock %}
+
+{% block extra_css %}
+<style>
+    .product-card {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .product-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    .low-stock {
+        border-left: 4px solid #ef4444;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
+        <div class="flex-1 min-w-0">
+            <nav class="flex mb-2" aria-label="Breadcrumb">
+                <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                    <li class="inline-flex items-center">
+                        <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                            <i class="fas fa-warehouse mr-1"></i> Inventário
+                        </a>
+                    </li>
+                    <li>
+                        <div class="flex items-center">
+                            <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                            <span class="text-sm text-gray-700">Produtos</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            <h2 class="text-xl sm:text-2xl lg:text-3xl font-bold leading-7 text-gray-900 truncate">
+                <i class="fas fa-boxes mr-2 sm:mr-3 text-indigo-600"></i>
+                Produtos
+            </h2>
+            <p class="mt-1 text-xs sm:text-sm text-gray-500">
+                {{ total_products }} produto{{ total_products|pluralize }}
+            </p>
+        </div>
+        {% if is_manager %}
+        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+            <a href="{% url 'assets:category_list' %}" 
+               class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <i class="fas fa-tags mr-1 sm:mr-2"></i>
+                Categorias
+            </a>
+            <a href="{% url 'assets:product_create' %}" 
+               class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                <i class="fas fa-plus mr-1 sm:mr-2"></i>
+                Novo Produto
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white shadow rounded-lg p-4 sm:p-6 mb-6">
+        <form method="GET" class="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-5 lg:gap-4">
+            <div class="lg:col-span-2">
+                <label for="q" class="block text-xs sm:text-sm font-medium text-gray-700">Buscar</label>
+                <input type="text" 
+                       name="q" 
+                       id="q" 
+                       value="{{ query }}"
+                       placeholder="Nome, SKU, Marca, Modelo..."
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            
+            <div>
+                <label for="category" class="block text-sm font-medium text-gray-700">Categoria</label>
+                <select name="category" id="category"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">Todas</option>
+                    {% for category in categories %}
+                    <option value="{{ category.pk }}" {% if category_filter == category.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+                <select name="status" id="status"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">Todos</option>
+                    <option value="low_stock" {% if status_filter == 'low_stock' %}selected{% endif %}>Estoque Baixo</option>
+                </select>
+            </div>
+            
+            <div class="flex items-end space-x-2">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    <i class="fas fa-search mr-2"></i>
+                    Filtrar
+                </button>
+                <a href="{% url 'assets:product_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    <i class="fas fa-times mr-2"></i>
+                    Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Produtos -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for product in page_obj %}
+        <div class="product-card bg-white rounded-lg shadow overflow-hidden {% if product.is_low_stock %}low-stock{% endif %}">
+            <a href="{% url 'assets:product_detail' product.pk %}" class="block">
+                <div class="p-4">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <p class="text-xs font-medium text-indigo-600 uppercase tracking-wide">{{ product.sku }}</p>
+                            <h3 class="mt-1 text-lg font-semibold text-gray-900 truncate">{{ product.name }}</h3>
+                            {% if product.category %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mt-1" 
+                                  style="background-color: {{ product.category.color }}20; color: {{ product.category.color }};">
+                                <i class="{{ product.category.icon }} mr-1 text-xs"></i>
+                                {{ product.category.name }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% if product.primary_image %}
+                        <img src="{{ product.primary_image.file.url }}" alt="{{ product.name }}" 
+                             class="w-16 h-16 object-cover rounded-lg ml-4">
+                        {% else %}
+                        <div class="w-16 h-16 bg-gray-100 rounded-lg ml-4 flex items-center justify-center">
+                            <i class="fas fa-box text-gray-400 text-2xl"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between text-sm">
+                        <div>
+                            <span class="text-gray-500">Em estoque:</span>
+                            <span class="font-semibold {% if product.is_low_stock %}text-red-600{% else %}text-gray-900{% endif %}">
+                                {{ product.current_stock }}
+                            </span>
+                            {% if product.min_stock > 0 %}
+                            <span class="text-gray-400">/ {{ product.min_stock }}</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Total:</span>
+                            <span class="font-semibold text-gray-900">{{ product.total_items }}</span>
+                        </div>
+                    </div>
+                    
+                    {% if product.brand or product.model %}
+                    <div class="mt-2 text-xs text-gray-500">
+                        {% if product.brand %}{{ product.brand }}{% endif %}
+                        {% if product.brand and product.model %} - {% endif %}
+                        {% if product.model %}{{ product.model }}{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="bg-gray-50 px-4 py-3">
+                    <div class="flex items-center justify-between text-xs text-gray-500">
+                        <span>
+                            <i class="fas fa-map-marker-alt mr-1"></i>
+                            {{ product.location|default:"Não definido" }}
+                        </span>
+                        {% if product.is_low_stock %}
+                        <span class="text-red-600 font-medium">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                            Estoque Baixo
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% empty %}
+        <div class="col-span-full">
+            <div class="bg-white rounded-lg shadow p-8 text-center">
+                <i class="fas fa-box-open text-6xl text-gray-300 mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhum produto encontrado</h3>
+                <p class="text-gray-500 mb-4">
+                    {% if query or category_filter or status_filter %}
+                    Tente ajustar os filtros de busca.
+                    {% else %}
+                    Comece cadastrando seu primeiro produto.
+                    {% endif %}
+                </p>
+                {% if is_manager %}
+                <a href="{% url 'assets:product_create' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                    <i class="fas fa-plus mr-2"></i>
+                    Novo Produto
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Paginação -->
+    {% if page_obj.has_other_pages %}
+    <div class="mt-6 flex justify-center">
+        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <span class="relative inline-flex items-center px-4 py-2 border border-indigo-500 bg-indigo-50 text-sm font-medium text-indigo-600">
+                    {{ num }}
+                </span>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <a href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    {{ num }}
+                </a>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" 
+               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

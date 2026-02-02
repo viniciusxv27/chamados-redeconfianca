@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+
+{% block title %}Saída de Estoque - Inventário{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-4" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Inventário
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Saída de Estoque</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-arrow-up text-orange-600 mr-2"></i>
+            Registrar Saída de Estoque
+        </h2>
+        <p class="mt-1 text-sm text-gray-500">
+            Registre a saída de itens do estoque (uso, transferência, descarte, etc.)
+        </p>
+    </div>
+
+    <!-- Info Box -->
+    <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-orange-500 text-xl"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-orange-800">Atenção ao registrar saída</h3>
+                <div class="mt-2 text-sm text-orange-700">
+                    <p>Ao registrar uma saída, o item será retirado do estoque disponível:</p>
+                    <ul class="list-disc list-inside mt-1 space-y-1">
+                        <li><strong>Uso:</strong> Item em uso por um usuário ou setor</li>
+                        <li><strong>Manutenção:</strong> Item enviado para reparo</li>
+                        <li><strong>Empréstimo:</strong> Item emprestado temporariamente</li>
+                        <li><strong>Descarte:</strong> Item sendo descartado (baixa permanente)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <!-- Seleção de Item -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-box text-orange-600 mr-2"></i>
+                    Selecione o Item
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div>
+                    <label for="id_item" class="block text-sm font-medium text-gray-700 mb-1">
+                        Item de Inventário <span class="text-red-500">*</span>
+                    </label>
+                    <select name="item" id="id_item" required
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 {% if form.item.errors %}border-red-500{% endif %}">
+                        <option value="">Selecione um item disponível</option>
+                        {% for item in form.fields.item.queryset %}
+                        <option value="{{ item.pk }}" 
+                                data-product="{{ item.product.name }}"
+                                data-location="{{ item.location|default:'Não definida' }}"
+                                {% if form.item.value == item.pk|stringformat:"s" or selected_item and selected_item.pk == item.pk %}selected{% endif %}>
+                            {{ item.inventory_number }} - {{ item.product.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if form.item.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.item.errors|join:", " }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-gray-500">Apenas itens disponíveis são exibidos</p>
+                </div>
+                
+                <!-- Item Info Box -->
+                <div id="item-info" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Informações do Item:</p>
+                    <div id="item-details" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Motivo da Saída -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-tag text-orange-600 mr-2"></i>
+                    Motivo da Saída
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        Selecione o Motivo <span class="text-red-500">*</span>
+                    </label>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {% for value, label in form.fields.reason.choices %}
+                        <label class="relative flex items-center justify-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                            <input type="radio" name="reason" value="{{ value }}" 
+                                   class="sr-only peer" 
+                                   {% if form.reason.value == value %}checked{% endif %}
+                                   required>
+                            <div class="text-center peer-checked:text-orange-600">
+                                {% if value == 'use' %}
+                                <i class="fas fa-user text-2xl mb-2"></i>
+                                {% elif value == 'maintenance' %}
+                                <i class="fas fa-tools text-2xl mb-2"></i>
+                                {% elif value == 'loan' %}
+                                <i class="fas fa-handshake text-2xl mb-2"></i>
+                                {% elif value == 'disposal' %}
+                                <i class="fas fa-trash text-2xl mb-2"></i>
+                                {% elif value == 'loss' %}
+                                <i class="fas fa-search text-2xl mb-2"></i>
+                                {% else %}
+                                <i class="fas fa-box text-2xl mb-2"></i>
+                                {% endif %}
+                                <p class="text-sm font-medium">{{ label }}</p>
+                            </div>
+                            <span class="absolute inset-0 border-2 rounded-lg peer-checked:border-orange-500 pointer-events-none"></span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% if form.reason.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.reason.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Destino -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-map-marker-alt text-orange-600 mr-2"></i>
+                    Destino
+                </h3>
+                <p class="mt-1 text-sm text-gray-500">Informe para quem ou onde o item está sendo enviado</p>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="id_to_user" class="block text-sm font-medium text-gray-700 mb-1">
+                            Usuário Responsável
+                        </label>
+                        <select name="to_user" id="id_to_user"
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">Selecione um usuário</option>
+                            {% for user in form.fields.to_user.queryset %}
+                            <option value="{{ user.pk }}" {% if form.to_user.value == user.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ user.get_full_name|default:user.email }}
+                                {% if user.sector %} - {{ user.sector.name }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if form.to_user.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.to_user.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        <label for="id_to_sector" class="block text-sm font-medium text-gray-700 mb-1">
+                            Setor de Destino
+                        </label>
+                        <select name="to_sector" id="id_to_sector"
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">Selecione um setor</option>
+                            {% for sector in form.fields.to_sector.queryset %}
+                            <option value="{{ sector.pk }}" {% if form.to_sector.value == sector.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ sector.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if form.to_sector.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.to_sector.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label for="id_to_location" class="block text-sm font-medium text-gray-700 mb-1">
+                        Local de Destino
+                    </label>
+                    <input type="text" name="to_location" id="id_to_location" 
+                           value="{{ form.to_location.value|default:'' }}"
+                           placeholder="Ex: Sala 301, Mesa 5, Recepção, etc."
+                           class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    {% if form.to_location.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.to_location.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                
+                <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p class="text-sm text-yellow-700">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Informe pelo menos um destino: usuário, setor ou local.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Novo Status -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-clipboard-check text-orange-600 mr-2"></i>
+                    Status após Saída
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div>
+                    <label for="id_new_status" class="block text-sm font-medium text-gray-700 mb-1">
+                        Novo Status do Item <span class="text-red-500">*</span>
+                    </label>
+                    <select name="new_status" id="id_new_status" required
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        {% for value, label in form.fields.new_status.choices %}
+                        <option value="{{ value }}" {% if form.new_status.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.new_status.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.new_status.errors|join:", " }}</p>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-gray-500">Selecione o status apropriado baseado no motivo da saída</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Observações -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-comment text-orange-600 mr-2"></i>
+                    Observações
+                </h3>
+            </div>
+            <div class="px-4 py-5 sm:p-6">
+                <div>
+                    <label for="id_notes" class="block text-sm font-medium text-gray-700 mb-1">
+                        Observações Adicionais
+                    </label>
+                    <textarea name="notes" id="id_notes" rows="4"
+                              placeholder="Motivo detalhado da saída, número do protocolo, etc..."
+                              class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">{{ form.notes.value|default:'' }}</textarea>
+                    {% if form.notes.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.notes.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumo -->
+        <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <i class="fas fa-arrow-up text-orange-600 text-xl mr-3"></i>
+                <div>
+                    <p class="text-sm font-medium text-orange-900">Confirmar Saída</p>
+                    <p class="text-sm text-orange-700">
+                        O item será removido do estoque disponível e a movimentação será registrada com rastreabilidade completa.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botões -->
+        <div class="flex justify-end space-x-4">
+            <a href="{% url 'assets:inventory_dashboard' %}" 
+               class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                Cancelar
+            </a>
+            <button type="submit" 
+                    class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors">
+                <i class="fas fa-arrow-up mr-2"></i>
+                Registrar Saída
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemSelect = document.getElementById('id_item');
+    const itemInfo = document.getElementById('item-info');
+    const itemDetails = document.getElementById('item-details');
+    const reasonRadios = document.querySelectorAll('input[name="reason"]');
+    const statusSelect = document.getElementById('id_new_status');
+    
+    // Item selection handler
+    itemSelect.addEventListener('change', function() {
+        const selected = this.options[this.selectedIndex];
+        
+        if (this.value) {
+            const product = selected.dataset.product;
+            const location = selected.dataset.location;
+            
+            itemDetails.innerHTML = `
+                <p><strong>Produto:</strong> ${product}</p>
+                <p><strong>Localização atual:</strong> ${location}</p>
+            `;
+            itemInfo.classList.remove('hidden');
+        } else {
+            itemInfo.classList.add('hidden');
+        }
+    });
+    
+    // Reason selection - auto update status
+    reasonRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const reason = this.value;
+            
+            // Auto-select appropriate status based on reason
+            if (reason === 'use' || reason === 'loan') {
+                statusSelect.value = 'in_use';
+            } else if (reason === 'maintenance') {
+                statusSelect.value = 'maintenance';
+            } else if (reason === 'disposal' || reason === 'loss') {
+                statusSelect.value = 'disposed';
+            }
+        });
+    });
+    
+    // Trigger on load if item is pre-selected
+    if (itemSelect.value) {
+        itemSelect.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %}

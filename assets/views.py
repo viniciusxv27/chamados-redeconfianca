@@ -1,17 +1,1028 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Count, Sum
 from django.core.paginator import Paginator
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
+from functools import wraps
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import Asset
-from .forms import AssetForm
+from datetime import timedelta
+
+from .models import (
+    Asset, Product, ProductMedia, InventoryItem, 
+    StockMovement, InventoryCategory, InventoryManager
+)
+from .forms import (
+    AssetForm, ProductForm, ProductMediaForm, InventoryItemForm,
+    StockEntryForm, StockExitForm, InventoryCategoryForm,
+    InventoryManagerForm, BulkInventoryItemForm
+)
+from users.models import User, Sector
 from core.middleware import log_action
 
+
+# ============================================================================
+# DECORADORES E PERMISSÕES
+# ============================================================================
+
+def is_inventory_manager(user):
+    """Verifica se o usuário é gestor de inventário ou superadmin"""
+    if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
+        return True
+    return hasattr(user, 'inventory_manager_profile') and user.inventory_manager_profile.is_active
+
+
+def inventory_permission_required(permission=None):
+    """Decorator para verificar permissões de inventário"""
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            user = request.user
+            
+            # Superadmin e Admin têm acesso total
+            if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
+                return view_func(request, *args, **kwargs)
+            
+            # Verificar se é gestor de inventário
+            if not hasattr(user, 'inventory_manager_profile'):
+                messages.error(request, 'Você não tem permissão para acessar esta área.')
+                return redirect('assets:inventory_dashboard')
+            
+            manager = user.inventory_manager_profile
+            if not manager.is_active:
+                messages.error(request, 'Seu acesso ao inventário está desativado.')
+                return redirect('assets:inventory_dashboard')
+            
+            # Verificar permissão específica
+            if permission:
+                if not getattr(manager, permission, False):
+                    messages.error(request, 'Você não tem permissão para esta ação.')
+                    return redirect('assets:inventory_dashboard')
+            
+            return view_func(request, *args, **kwargs)
+        return _wrapped_view
+    return decorator
+
+
+# ============================================================================
+# DASHBOARD DE INVENTÁRIO
+# ============================================================================
+
+@login_required
+def inventory_dashboard(request):
+    """Dashboard principal do inventário"""
+    # Estatísticas gerais
+    total_products = Product.objects.filter(is_active=True).count()
+    total_items = InventoryItem.objects.count()
+    available_items = InventoryItem.objects.filter(status='available').count()
+    in_use_items = InventoryItem.objects.filter(status='in_use').count()
+    
+    # Produtos com estoque baixo
+    low_stock_products = []
+    for product in Product.objects.filter(is_active=True, min_stock__gt=0):
+        if product.is_low_stock:
+            low_stock_products.append(product)
+    
+    # Últimas movimentações
+    recent_movements = StockMovement.objects.select_related(
+        'inventory_item', 'inventory_item__product', 'created_by'
+    ).order_by('-created_at')[:10]
+    
+    # Estatísticas por categoria
+    categories_stats = InventoryCategory.objects.filter(is_active=True).annotate(
+        product_count=Count('products', filter=Q(products__is_active=True)),
+        item_count=Count('products__inventory_items')
+    )
+    
+    # Items por status
+    status_stats = InventoryItem.objects.values('status').annotate(
+        count=Count('id')
+    ).order_by('status')
+    
+    # Verificar se é gestor
+    is_manager = is_inventory_manager(request.user)
+    
+    context = {
+        'total_products': total_products,
+        'total_items': total_items,
+        'available_items': available_items,
+        'in_use_items': in_use_items,
+        'low_stock_products': low_stock_products[:5],
+        'recent_movements': recent_movements,
+        'categories_stats': categories_stats,
+        'status_stats': status_stats,
+        'is_manager': is_manager,
+    }
+    
+    return render(request, 'assets/inventory/dashboard.html', context)
+
+
+# ============================================================================
+# CATEGORIAS
+# ============================================================================
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def category_list(request):
+    """Lista todas as categorias"""
+    categories = InventoryCategory.objects.annotate(
+        product_count=Count('products', filter=Q(products__is_active=True))
+    ).order_by('name')
+    
+    context = {
+        'categories': categories,
+    }
+    return render(request, 'assets/inventory/category_list.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def category_create(request):
+    """Criar nova categoria"""
+    if request.method == 'POST':
+        form = InventoryCategoryForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Categoria criada com sucesso!')
+            return redirect('assets:category_list')
+    else:
+        form = InventoryCategoryForm()
+    
+    context = {
+        'form': form,
+        'title': 'Nova Categoria',
+    }
+    return render(request, 'assets/inventory/category_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def category_edit(request, pk):
+    """Editar categoria existente"""
+    category = get_object_or_404(InventoryCategory, pk=pk)
+    
+    if request.method == 'POST':
+        form = InventoryCategoryForm(request.POST, instance=category)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Categoria atualizada com sucesso!')
+            return redirect('assets:category_list')
+    else:
+        form = InventoryCategoryForm(instance=category)
+    
+    context = {
+        'form': form,
+        'category': category,
+        'title': f'Editar Categoria - {category.name}',
+    }
+    return render(request, 'assets/inventory/category_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def category_delete(request, pk):
+    """Deletar categoria"""
+    category = get_object_or_404(InventoryCategory, pk=pk)
+    
+    if request.method == 'POST':
+        name = category.name
+        # Verificar se há produtos vinculados
+        if category.products.exists():
+            messages.error(request, f'Não é possível excluir a categoria "{name}". Existem produtos vinculados.')
+            return redirect('assets:category_list')
+        
+        category.delete()
+        messages.success(request, f'Categoria "{name}" excluída com sucesso!')
+        return redirect('assets:category_list')
+    
+    context = {
+        'category': category,
+    }
+    return render(request, 'assets/inventory/category_delete.html', context)
+
+
+# ============================================================================
+# PRODUTOS
+# ============================================================================
+
+@login_required
+def product_list(request):
+    """Lista todos os produtos"""
+    query = request.GET.get('q', '')
+    category_filter = request.GET.get('category', '')
+    status_filter = request.GET.get('status', '')
+    
+    products = Product.objects.filter(is_active=True).select_related('category')
+    
+    if query:
+        products = products.filter(
+            Q(name__icontains=query) |
+            Q(sku__icontains=query) |
+            Q(brand__icontains=query) |
+            Q(model__icontains=query)
+        )
+    
+    if category_filter:
+        products = products.filter(category_id=category_filter)
+    
+    if status_filter == 'low_stock':
+        # Filtrar produtos com estoque baixo (feito em Python pois é propriedade)
+        products = [p for p in products if p.is_low_stock]
+    
+    # Paginação
+    paginator = Paginator(products, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    categories = InventoryCategory.objects.filter(is_active=True)
+    
+    context = {
+        'page_obj': page_obj,
+        'query': query,
+        'category_filter': category_filter,
+        'status_filter': status_filter,
+        'categories': categories,
+        'total_products': len(products) if isinstance(products, list) else products.count(),
+        'is_manager': is_inventory_manager(request.user),
+    }
+    
+    return render(request, 'assets/inventory/product_list.html', context)
+
+
+@login_required
+def product_detail(request, pk):
+    """Detalhes de um produto"""
+    product = get_object_or_404(Product.objects.select_related('category', 'created_by'), pk=pk)
+    
+    # Itens deste produto
+    items = product.inventory_items.select_related('assigned_to', 'assigned_sector').order_by('inventory_number')
+    
+    # Estatísticas
+    items_by_status = items.values('status').annotate(count=Count('id'))
+    
+    # Mídias
+    media_items = product.media.all()
+    
+    context = {
+        'product': product,
+        'items': items,
+        'items_by_status': items_by_status,
+        'media_items': media_items,
+        'is_manager': is_inventory_manager(request.user),
+    }
+    
+    return render(request, 'assets/inventory/product_detail.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def product_create(request):
+    """Criar novo produto"""
+    if request.method == 'POST':
+        form = ProductForm(request.POST)
+        if form.is_valid():
+            product = form.save(commit=False)
+            product.created_by = request.user
+            product.save()
+            messages.success(request, f'Produto "{product.name}" criado com sucesso!')
+            return redirect('assets:product_detail', pk=product.pk)
+    else:
+        form = ProductForm()
+    
+    context = {
+        'form': form,
+        'title': 'Novo Produto',
+    }
+    return render(request, 'assets/inventory/product_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def product_edit(request, pk):
+    """Editar produto existente"""
+    product = get_object_or_404(Product, pk=pk)
+    
+    if request.method == 'POST':
+        form = ProductForm(request.POST, instance=product)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Produto "{product.name}" atualizado com sucesso!')
+            return redirect('assets:product_detail', pk=product.pk)
+    else:
+        form = ProductForm(instance=product)
+    
+    context = {
+        'form': form,
+        'product': product,
+        'title': f'Editar Produto - {product.name}',
+    }
+    return render(request, 'assets/inventory/product_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def product_delete(request, pk):
+    """Deletar produto"""
+    product = get_object_or_404(Product, pk=pk)
+    
+    if request.method == 'POST':
+        name = product.name
+        # Verificar se há itens vinculados
+        if product.inventory_items.exists():
+            messages.error(request, f'Não é possível excluir o produto "{name}". Existem itens de inventário vinculados.')
+            return redirect('assets:product_detail', pk=pk)
+        
+        product.delete()
+        messages.success(request, f'Produto "{name}" excluído com sucesso!')
+        return redirect('assets:product_list')
+    
+    context = {
+        'product': product,
+    }
+    return render(request, 'assets/inventory/product_delete.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+def product_media_upload(request, pk):
+    """Upload de mídia para produto"""
+    product = get_object_or_404(Product, pk=pk)
+    
+    if request.method == 'POST':
+        form = ProductMediaForm(request.POST, request.FILES)
+        if form.is_valid():
+            media = form.save(commit=False)
+            media.product = product
+            media.save()
+            messages.success(request, 'Mídia adicionada com sucesso!')
+            return redirect('assets:product_detail', pk=pk)
+    else:
+        form = ProductMediaForm()
+    
+    context = {
+        'form': form,
+        'product': product,
+        'title': f'Adicionar Mídia - {product.name}',
+    }
+    return render(request, 'assets/inventory/product_media_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_products')
+@require_POST
+def product_media_delete(request, pk, media_pk):
+    """Deletar mídia do produto"""
+    media = get_object_or_404(ProductMedia, pk=media_pk, product_id=pk)
+    media.delete()
+    messages.success(request, 'Mídia removida com sucesso!')
+    return redirect('assets:product_detail', pk=pk)
+
+
+# ============================================================================
+# ITENS DE INVENTÁRIO
+# ============================================================================
+
+@login_required
+def item_list(request):
+    """Lista todos os itens de inventário"""
+    query = request.GET.get('q', '')
+    product_filter = request.GET.get('product', '')
+    status_filter = request.GET.get('status', '')
+    sector_filter = request.GET.get('sector', '')
+    
+    items = InventoryItem.objects.select_related(
+        'product', 'product__category', 'assigned_to', 'assigned_sector'
+    )
+    
+    if query:
+        items = items.filter(
+            Q(inventory_number__icontains=query) |
+            Q(serial_number__icontains=query) |
+            Q(product__name__icontains=query) |
+            Q(product__sku__icontains=query)
+        )
+    
+    if product_filter:
+        items = items.filter(product_id=product_filter)
+    
+    if status_filter:
+        items = items.filter(status=status_filter)
+    
+    if sector_filter:
+        items = items.filter(assigned_sector_id=sector_filter)
+    
+    items = items.order_by('inventory_number')
+    
+    # Paginação
+    paginator = Paginator(items, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    products = Product.objects.filter(is_active=True)
+    sectors = Sector.objects.all()
+    
+    context = {
+        'page_obj': page_obj,
+        'query': query,
+        'product_filter': product_filter,
+        'status_filter': status_filter,
+        'sector_filter': sector_filter,
+        'products': products,
+        'sectors': sectors,
+        'status_choices': InventoryItem.STATUS_CHOICES,
+        'total_items': items.count(),
+        'is_manager': is_inventory_manager(request.user),
+    }
+    
+    return render(request, 'assets/inventory/item_list.html', context)
+
+
+@login_required
+def item_detail(request, pk):
+    """Detalhes de um item de inventário"""
+    item = get_object_or_404(
+        InventoryItem.objects.select_related(
+            'product', 'product__category', 'assigned_to', 
+            'assigned_sector', 'created_by'
+        ),
+        pk=pk
+    )
+    
+    # Histórico de movimentações
+    movements = item.movements.select_related(
+        'created_by', 'to_user', 'from_user', 'to_sector', 'from_sector'
+    ).order_by('-created_at')
+    
+    context = {
+        'item': item,
+        'movements': movements,
+        'is_manager': is_inventory_manager(request.user),
+    }
+    
+    return render(request, 'assets/inventory/item_detail.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_items')
+def item_create(request):
+    """Criar novo item de inventário"""
+    product_id = request.GET.get('product')
+    
+    if request.method == 'POST':
+        form = InventoryItemForm(request.POST, request.FILES)
+        if form.is_valid():
+            item = form.save(commit=False)
+            item.created_by = request.user
+            item.save()
+            
+            # Registrar movimentação de entrada
+            StockMovement.objects.create(
+                inventory_item=item,
+                movement_type='entry',
+                reason='initial_stock',
+                to_location=item.location,
+                notes='Cadastro inicial do item',
+                created_by=request.user
+            )
+            
+            messages.success(request, f'Item "{item.inventory_number}" cadastrado com sucesso!')
+            return redirect('assets:item_detail', pk=item.pk)
+    else:
+        initial = {}
+        if product_id:
+            initial['product'] = product_id
+        form = InventoryItemForm(initial=initial)
+    
+    context = {
+        'form': form,
+        'title': 'Novo Item de Inventário',
+    }
+    return render(request, 'assets/inventory/item_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_items')
+def item_edit(request, pk):
+    """Editar item de inventário"""
+    item = get_object_or_404(InventoryItem, pk=pk)
+    
+    if request.method == 'POST':
+        form = InventoryItemForm(request.POST, request.FILES, instance=item)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Item "{item.inventory_number}" atualizado com sucesso!')
+            return redirect('assets:item_detail', pk=item.pk)
+    else:
+        form = InventoryItemForm(instance=item)
+    
+    context = {
+        'form': form,
+        'item': item,
+        'title': f'Editar Item - {item.inventory_number}',
+    }
+    return render(request, 'assets/inventory/item_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_manage_items')
+def item_bulk_create(request):
+    """Cadastro em lote de itens"""
+    if request.method == 'POST':
+        form = BulkInventoryItemForm(request.POST)
+        if form.is_valid():
+            product = form.cleaned_data['product']
+            quantity = form.cleaned_data['quantity']
+            prefix = form.cleaned_data['prefix']
+            start_number = form.cleaned_data['start_number']
+            condition = form.cleaned_data['condition']
+            location = form.cleaned_data['location']
+            purchase_date = form.cleaned_data['purchase_date']
+            purchase_price = form.cleaned_data['purchase_price']
+            
+            created_items = []
+            errors = []
+            
+            for i in range(quantity):
+                inv_number = f"{prefix}{start_number + i:04d}"
+                
+                # Verificar se já existe
+                if InventoryItem.objects.filter(inventory_number=inv_number).exists():
+                    errors.append(f"Número {inv_number} já existe")
+                    continue
+                
+                item = InventoryItem.objects.create(
+                    product=product,
+                    inventory_number=inv_number,
+                    condition=condition,
+                    location=location,
+                    purchase_date=purchase_date,
+                    purchase_price=purchase_price,
+                    status='available',
+                    created_by=request.user
+                )
+                created_items.append(item)
+                
+                # Registrar movimentação
+                StockMovement.objects.create(
+                    inventory_item=item,
+                    movement_type='entry',
+                    reason='initial_stock',
+                    to_location=location,
+                    notes='Cadastro em lote',
+                    created_by=request.user
+                )
+            
+            if created_items:
+                messages.success(request, f'{len(created_items)} itens cadastrados com sucesso!')
+            if errors:
+                messages.warning(request, f'{len(errors)} erros: {", ".join(errors[:5])}')
+            
+            return redirect('assets:product_detail', pk=product.pk)
+    else:
+        form = BulkInventoryItemForm()
+    
+    context = {
+        'form': form,
+        'title': 'Cadastro em Lote',
+    }
+    return render(request, 'assets/inventory/item_bulk_form.html', context)
+
+
+# ============================================================================
+# MOVIMENTAÇÕES DE ESTOQUE
+# ============================================================================
+
+@login_required
+@inventory_permission_required('can_register_entries')
+def stock_entry(request):
+    """Registrar entrada de estoque"""
+    if request.method == 'POST':
+        form = StockEntryForm(request.POST)
+        if form.is_valid():
+            movement = form.save(commit=False)
+            movement.created_by = request.user
+            movement.save()
+            
+            # Atualizar status do item para disponível
+            item = movement.inventory_item
+            item.status = 'available'
+            item.assigned_to = None
+            item.assigned_sector = None
+            item.assigned_date = None
+            item.save()
+            
+            messages.success(request, f'Entrada registrada para o item {item.inventory_number}!')
+            return redirect('assets:item_detail', pk=item.pk)
+    else:
+        item_id = request.GET.get('item')
+        initial = {}
+        if item_id:
+            initial['inventory_item'] = item_id
+        form = StockEntryForm(initial=initial)
+    
+    context = {
+        'form': form,
+        'title': 'Registrar Entrada',
+    }
+    return render(request, 'assets/inventory/stock_entry_form.html', context)
+
+
+@login_required
+@inventory_permission_required('can_register_exits')
+def stock_exit(request):
+    """Registrar saída de estoque"""
+    if request.method == 'POST':
+        form = StockExitForm(request.POST)
+        if form.is_valid():
+            movement = form.save(commit=False)
+            movement.created_by = request.user
+            movement.save()  # form.save já atualiza o status do item
+            
+            messages.success(request, f'Saída registrada para o item {movement.inventory_item.inventory_number}!')
+            return redirect('assets:item_detail', pk=movement.inventory_item.pk)
+    else:
+        item_id = request.GET.get('item')
+        initial = {}
+        if item_id:
+            initial['inventory_item'] = item_id
+        form = StockExitForm(initial=initial)
+    
+    context = {
+        'form': form,
+        'title': 'Registrar Saída',
+    }
+    return render(request, 'assets/inventory/stock_exit_form.html', context)
+
+
+@login_required
+def movement_list(request):
+    """Lista todas as movimentações"""
+    query = request.GET.get('q', '')
+    type_filter = request.GET.get('type', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    
+    movements = StockMovement.objects.select_related(
+        'inventory_item', 'inventory_item__product', 
+        'created_by', 'to_user', 'from_user', 'to_sector', 'from_sector'
+    )
+    
+    if query:
+        movements = movements.filter(
+            Q(inventory_item__inventory_number__icontains=query) |
+            Q(inventory_item__product__name__icontains=query) |
+            Q(document_reference__icontains=query)
+        )
+    
+    if type_filter:
+        movements = movements.filter(movement_type=type_filter)
+    
+    if date_from:
+        movements = movements.filter(created_at__date__gte=date_from)
+    
+    if date_to:
+        movements = movements.filter(created_at__date__lte=date_to)
+    
+    movements = movements.order_by('-created_at')
+    
+    # Paginação
+    paginator = Paginator(movements, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'query': query,
+        'type_filter': type_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'movement_types': StockMovement.MOVEMENT_TYPE_CHOICES,
+        'total_movements': movements.count(),
+    }
+    
+    return render(request, 'assets/inventory/movement_list.html', context)
+
+
+# ============================================================================
+# RELATÓRIOS
+# ============================================================================
+
+@login_required
+@inventory_permission_required('can_view_reports')
+def report_dashboard(request):
+    """Dashboard de relatórios"""
+    context = {
+        'total_products': Product.objects.filter(is_active=True).count(),
+        'total_items': InventoryItem.objects.count(),
+        'total_movements': StockMovement.objects.count(),
+    }
+    return render(request, 'assets/inventory/report_dashboard.html', context)
+
+
+@login_required
+@inventory_permission_required('can_view_reports')
+def report_stock(request):
+    """Relatório de estoque atual"""
+    products = Product.objects.filter(is_active=True).select_related('category').annotate(
+        available_count=Count('inventory_items', filter=Q(inventory_items__status='available')),
+        in_use_count=Count('inventory_items', filter=Q(inventory_items__status='in_use')),
+        maintenance_count=Count('inventory_items', filter=Q(inventory_items__status='maintenance')),
+        total_count=Count('inventory_items')
+    ).order_by('category__name', 'name')
+    
+    context = {
+        'products': products,
+    }
+    return render(request, 'assets/inventory/report_stock.html', context)
+
+
+@login_required
+@inventory_permission_required('can_view_reports')
+def report_entries(request):
+    """Relatório de entradas"""
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    
+    entries = StockMovement.objects.filter(
+        movement_type='entry'
+    ).select_related(
+        'inventory_item', 'inventory_item__product', 
+        'created_by', 'from_user', 'from_sector'
+    )
+    
+    if date_from:
+        entries = entries.filter(created_at__date__gte=date_from)
+    if date_to:
+        entries = entries.filter(created_at__date__lte=date_to)
+    
+    entries = entries.order_by('-created_at')
+    
+    # Paginação
+    paginator = Paginator(entries, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'date_from': date_from,
+        'date_to': date_to,
+        'total_entries': entries.count(),
+    }
+    return render(request, 'assets/inventory/report_entries.html', context)
+
+
+@login_required
+@inventory_permission_required('can_view_reports')
+def report_exits(request):
+    """Relatório de saídas"""
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    
+    exits = StockMovement.objects.filter(
+        movement_type='exit'
+    ).select_related(
+        'inventory_item', 'inventory_item__product', 
+        'created_by', 'to_user', 'to_sector'
+    )
+    
+    if date_from:
+        exits = exits.filter(created_at__date__gte=date_from)
+    if date_to:
+        exits = exits.filter(created_at__date__lte=date_to)
+    
+    exits = exits.order_by('-created_at')
+    
+    # Paginação
+    paginator = Paginator(exits, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'date_from': date_from,
+        'date_to': date_to,
+        'total_exits': exits.count(),
+    }
+    return render(request, 'assets/inventory/report_exits.html', context)
+
+
+@login_required
+@inventory_permission_required('can_view_reports')
+def export_stock_excel(request):
+    """Exportar estoque atual para Excel"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Estoque Atual"
+    
+    headers = [
+        'Código', 'Produto', 'Categoria', 'Nº Inventário', 'Status', 
+        'Condição', 'Responsável', 'Setor', 'Localização', 'Data Compra', 'Valor'
+    ]
+    
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+    
+    items = InventoryItem.objects.select_related(
+        'product', 'product__category', 'assigned_to', 'assigned_sector'
+    ).order_by('product__name', 'inventory_number')
+    
+    for row, item in enumerate(items, 2):
+        ws.cell(row=row, column=1, value=item.product.sku)
+        ws.cell(row=row, column=2, value=item.product.name)
+        ws.cell(row=row, column=3, value=item.product.category.name if item.product.category else '')
+        ws.cell(row=row, column=4, value=item.inventory_number)
+        ws.cell(row=row, column=5, value=item.get_status_display())
+        ws.cell(row=row, column=6, value=item.get_condition_display())
+        ws.cell(row=row, column=7, value=item.assigned_to.get_full_name() if item.assigned_to else '')
+        ws.cell(row=row, column=8, value=item.assigned_sector.name if item.assigned_sector else '')
+        ws.cell(row=row, column=9, value=item.location)
+        ws.cell(row=row, column=10, value=item.purchase_date.strftime("%d/%m/%Y") if item.purchase_date else '')
+        ws.cell(row=row, column=11, value=float(item.purchase_price) if item.purchase_price else 0)
+    
+    # Ajustar largura
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 15
+    
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="estoque_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    wb.save(response)
+    
+    return response
+
+
+@login_required
+@inventory_permission_required('can_view_reports')
+def export_movements_excel(request):
+    """Exportar movimentações para Excel"""
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    movement_type = request.GET.get('type', '')
+    
+    movements = StockMovement.objects.select_related(
+        'inventory_item', 'inventory_item__product', 
+        'created_by', 'to_user', 'from_user', 'to_sector', 'from_sector'
+    )
+    
+    if movement_type:
+        movements = movements.filter(movement_type=movement_type)
+    if date_from:
+        movements = movements.filter(created_at__date__gte=date_from)
+    if date_to:
+        movements = movements.filter(created_at__date__lte=date_to)
+    
+    movements = movements.order_by('-created_at')
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Movimentações"
+    
+    headers = [
+        'Data/Hora', 'Tipo', 'Motivo', 'Nº Inventário', 'Produto',
+        'De (Usuário)', 'Para (Usuário)', 'De (Setor)', 'Para (Setor)',
+        'Observações', 'Registrado por'
+    ]
+    
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+    
+    for row, mov in enumerate(movements, 2):
+        ws.cell(row=row, column=1, value=mov.created_at.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row, column=2, value=mov.get_movement_type_display())
+        ws.cell(row=row, column=3, value=mov.get_reason_display())
+        ws.cell(row=row, column=4, value=mov.inventory_item.inventory_number)
+        ws.cell(row=row, column=5, value=mov.inventory_item.product.name)
+        ws.cell(row=row, column=6, value=mov.from_user.get_full_name() if mov.from_user else '')
+        ws.cell(row=row, column=7, value=mov.to_user.get_full_name() if mov.to_user else '')
+        ws.cell(row=row, column=8, value=mov.from_sector.name if mov.from_sector else '')
+        ws.cell(row=row, column=9, value=mov.to_sector.name if mov.to_sector else '')
+        ws.cell(row=row, column=10, value=mov.notes)
+        ws.cell(row=row, column=11, value=mov.created_by.get_full_name() if mov.created_by else '')
+    
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
+    
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="movimentacoes_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    wb.save(response)
+    
+    return response
+
+
+# ============================================================================
+# GESTORES DE INVENTÁRIO
+# ============================================================================
+
+@login_required
+def manager_list(request):
+    """Lista gestores de inventário"""
+    # Apenas superadmin e admin podem ver esta página
+    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
+        # Ou gestores com permissão
+        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+            messages.error(request, 'Você não tem permissão para acessar esta área.')
+            return redirect('assets:inventory_dashboard')
+    
+    managers = InventoryManager.objects.select_related('user', 'created_by').order_by(
+        '-is_active', 'user__first_name'
+    )
+    
+    context = {
+        'managers': managers,
+    }
+    return render(request, 'assets/inventory/manager_list.html', context)
+
+
+@login_required
+def manager_create(request):
+    """Criar novo gestor de inventário"""
+    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
+        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+            messages.error(request, 'Você não tem permissão para esta ação.')
+            return redirect('assets:inventory_dashboard')
+    
+    if request.method == 'POST':
+        form = InventoryManagerForm(request.POST)
+        if form.is_valid():
+            manager = form.save(commit=False)
+            manager.created_by = request.user
+            manager.save()
+            messages.success(request, f'Gestor "{manager.user.get_full_name()}" adicionado com sucesso!')
+            return redirect('assets:manager_list')
+    else:
+        form = InventoryManagerForm()
+    
+    context = {
+        'form': form,
+        'title': 'Novo Gestor de Inventário',
+    }
+    return render(request, 'assets/inventory/manager_form.html', context)
+
+
+@login_required
+def manager_edit(request, pk):
+    """Editar gestor de inventário"""
+    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
+        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+            messages.error(request, 'Você não tem permissão para esta ação.')
+            return redirect('assets:inventory_dashboard')
+    
+    manager = get_object_or_404(InventoryManager, pk=pk)
+    
+    if request.method == 'POST':
+        form = InventoryManagerForm(request.POST, instance=manager)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Permissões de "{manager.user.get_full_name()}" atualizadas!')
+            return redirect('assets:manager_list')
+    else:
+        form = InventoryManagerForm(instance=manager)
+    
+    context = {
+        'form': form,
+        'manager': manager,
+        'title': f'Editar Gestor - {manager.user.get_full_name()}',
+    }
+    return render(request, 'assets/inventory/manager_form.html', context)
+
+
+@login_required
+@require_POST
+def manager_toggle(request, pk):
+    """Ativar/desativar gestor de inventário"""
+    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
+        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+            return JsonResponse({'error': 'Sem permissão'}, status=403)
+    
+    manager = get_object_or_404(InventoryManager, pk=pk)
+    manager.is_active = not manager.is_active
+    manager.save()
+    
+    status = 'ativado' if manager.is_active else 'desativado'
+    messages.success(request, f'Gestor "{manager.user.get_full_name()}" {status}!')
+    return redirect('assets:manager_list')
+
+
+# ============================================================================
+# VIEWS LEGADAS - MANTIDAS PARA COMPATIBILIDADE
+# ============================================================================
 
 @login_required
 def asset_list(request):
@@ -172,7 +1183,7 @@ def export_assets_excel(request):
         ws.cell(row=row, column=5, value=asset.pdv)
         ws.cell(row=row, column=6, value=asset.get_estado_fisico_display())
         ws.cell(row=row, column=7, value=asset.observacoes or "")
-        ws.cell(row=row, column=8, value=asset.created_by.full_name)
+        ws.cell(row=row, column=8, value=asset.created_by.get_full_name() if asset.created_by else "")
         ws.cell(row=row, column=9, value=asset.created_at.strftime("%Y-%m-%d %H:%M:%S"))
         ws.cell(row=row, column=10, value=asset.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
     
