@@ -1,0 +1,367 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Atribuições Pendentes - Checklists{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100 p-4 md:p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-orange-500 to-amber-600 rounded-2xl shadow-xl p-6 mb-6 text-white">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold">
+                        <i class="fas fa-clock mr-2"></i>Atribuições Pendentes
+                    </h1>
+                    <p class="text-orange-100 mt-1">Aprove ou rejeite solicitações de atribuição de checklists</p>
+                </div>
+                <div class="flex gap-3">
+                    {% if is_superadmin %}
+                    <a href="{% url 'checklists:admin_assignment_approvers' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
+                        <i class="fas fa-cog mr-2"></i>Configurações
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'checklists:dashboard' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 rounded-xl shadow p-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 rounded-full bg-yellow-100 flex items-center justify-center">
+                        <i class="fas fa-hourglass-half text-yellow-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-yellow-700">{{ pending_assignments.count }}</div>
+                        <div class="text-sm text-yellow-600">Pendentes</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-green-50 border-l-4 border-green-400 rounded-xl shadow p-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                        <i class="fas fa-check text-green-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-green-700">{{ history|length }}</div>
+                        <div class="text-sm text-green-600">Processadas (30 dias)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-400 rounded-xl shadow p-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                        <i class="fas fa-info-circle text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm font-medium text-blue-700">Dica</div>
+                        <div class="text-xs text-blue-600">Clique para aprovar ou rejeitar</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pendentes -->
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+            <div class="p-4 border-b border-gray-200 bg-yellow-50">
+                <h2 class="text-lg font-semibold text-gray-800">
+                    <i class="fas fa-clock text-yellow-500 mr-2"></i>Aguardando Aprovação
+                </h2>
+            </div>
+            
+            <div class="divide-y divide-gray-200">
+                {% for pending in pending_assignments %}
+                <div class="p-4 hover:bg-gray-50 transition-colors" id="pending-{{ pending.id }}">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    {{ pending.template.sector.name }}
+                                </span>
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    {% if pending.period == 'morning' %}
+                                    <i class="fas fa-sun mr-1"></i>Manhã
+                                    {% elif pending.period == 'afternoon' %}
+                                    <i class="fas fa-cloud-sun mr-1"></i>Tarde
+                                    {% else %}
+                                    <i class="fas fa-clock mr-1"></i>Manhã e Tarde
+                                    {% endif %}
+                                </span>
+                            </div>
+                            
+                            <h3 class="font-semibold text-gray-800 text-lg">{{ pending.template.name }}</h3>
+                            
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p>
+                                    <i class="fas fa-user text-gray-400 mr-1 w-5"></i>
+                                    <strong>Para:</strong> {{ pending.assigned_to.get_full_name }}
+                                </p>
+                                <p>
+                                    <i class="fas fa-user-edit text-gray-400 mr-1 w-5"></i>
+                                    <strong>Solicitado por:</strong> {{ pending.assigned_by.get_full_name }}
+                                </p>
+                                <p>
+                                    <i class="fas fa-calendar text-gray-400 mr-1 w-5"></i>
+                                    <strong>Período:</strong> {{ pending.start_date|date:"d/m/Y" }} - {{ pending.end_date|date:"d/m/Y" }}
+                                </p>
+                                <p>
+                                    <i class="fas fa-clock text-gray-400 mr-1 w-5"></i>
+                                    <strong>Solicitado em:</strong> {{ pending.created_at|date:"d/m/Y H:i" }}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-2">
+                            <button onclick="approveAssignment({{ pending.id }})" 
+                                    class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+                                <i class="fas fa-check mr-2"></i>Aprovar
+                            </button>
+                            <button onclick="showRejectModal({{ pending.id }}, '{{ pending.template.name }}')" 
+                                    class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
+                                <i class="fas fa-times mr-2"></i>Rejeitar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-12 text-center">
+                    <div class="text-gray-400">
+                        <i class="fas fa-check-circle text-5xl mb-4"></i>
+                        <p class="text-lg font-medium">Nenhuma atribuição pendente</p>
+                        <p class="text-sm mt-2">Todas as solicitações foram processadas</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Histórico -->
+        {% if history %}
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div class="p-4 border-b border-gray-200 bg-gray-50">
+                <h2 class="text-lg font-semibold text-gray-800">
+                    <i class="fas fa-history text-gray-500 mr-2"></i>Histórico Recente (últimos 30 dias)
+                </h2>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Checklist</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atribuído para</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Solicitante</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Processado por</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for item in history %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3">
+                                <span class="font-medium text-gray-900">{{ item.template.name }}</span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ item.assigned_to.get_full_name }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ item.assigned_by.get_full_name }}</td>
+                            <td class="px-4 py-3">
+                                {% if item.status == 'approved' %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <i class="fas fa-check mr-1"></i>Aprovada
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    <i class="fas fa-times mr-1"></i>Rejeitada
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600">
+                                {{ item.approved_by.get_full_name|default:"-" }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">{{ item.approved_at|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal de Rejeição -->
+<div id="rejectModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div class="text-center mb-4">
+            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-times text-red-600 text-3xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Rejeitar Atribuição</h3>
+            <p class="text-gray-600" id="rejectModalMessage">
+                Tem certeza que deseja rejeitar esta atribuição?
+            </p>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Motivo da rejeição (opcional)</label>
+            <textarea id="rejectReason" rows="3" 
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Informe o motivo da rejeição..."></textarea>
+        </div>
+        
+        <input type="hidden" id="rejectPendingId" value="">
+        
+        <div class="flex gap-3">
+            <button onclick="hideRejectModal()" class="flex-1 px-4 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
+                Cancelar
+            </button>
+            <button onclick="confirmReject()" class="flex-1 px-4 py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
+                <i class="fas fa-times mr-2"></i>Rejeitar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+<!-- Loading Modal -->
+<div id="loadingModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+        <p class="text-gray-600 font-medium">Processando...</p>
+    </div>
+</div>
+
+<script>
+async function approveAssignment(pendingId) {
+    document.getElementById('loadingModal').classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`/checklists/api/pending-assignment/${pendingId}/approve/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+        
+        const data = await response.json();
+        document.getElementById('loadingModal').classList.add('hidden');
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            // Remover item da lista
+            const element = document.getElementById(`pending-${pendingId}`);
+            if (element) {
+                element.style.opacity = '0';
+                setTimeout(() => {
+                    element.remove();
+                    // Verificar se não há mais pendentes
+                    if (document.querySelectorAll('[id^="pending-"]').length === 0) {
+                        location.reload();
+                    }
+                }, 300);
+            }
+        } else {
+            showToast(data.error || 'Erro ao aprovar', 'error');
+        }
+    } catch (error) {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao processar a solicitação', 'error');
+        console.error('Erro:', error);
+    }
+}
+
+function showRejectModal(pendingId, templateName) {
+    document.getElementById('rejectPendingId').value = pendingId;
+    document.getElementById('rejectModalMessage').textContent = `Tem certeza que deseja rejeitar a atribuição de "${templateName}"?`;
+    document.getElementById('rejectReason').value = '';
+    document.getElementById('rejectModal').classList.remove('hidden');
+}
+
+function hideRejectModal() {
+    document.getElementById('rejectModal').classList.add('hidden');
+}
+
+async function confirmReject() {
+    const pendingId = document.getElementById('rejectPendingId').value;
+    const reason = document.getElementById('rejectReason').value;
+    
+    hideRejectModal();
+    document.getElementById('loadingModal').classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`/checklists/api/pending-assignment/${pendingId}/reject/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ reason: reason })
+        });
+        
+        const data = await response.json();
+        document.getElementById('loadingModal').classList.add('hidden');
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            // Remover item da lista
+            const element = document.getElementById(`pending-${pendingId}`);
+            if (element) {
+                element.style.opacity = '0';
+                setTimeout(() => {
+                    element.remove();
+                    if (document.querySelectorAll('[id^="pending-"]').length === 0) {
+                        location.reload();
+                    }
+                }, 300);
+            }
+        } else {
+            showToast(data.error || 'Erro ao rejeitar', 'error');
+        }
+    } catch (error) {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao processar a solicitação', 'error');
+        console.error('Erro:', error);
+    }
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    toast.className = `${bgColor} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
+    toast.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fas ${icon}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Fechar modais
+document.getElementById('rejectModal').addEventListener('click', function(e) {
+    if (e.target === this) hideRejectModal();
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') hideRejectModal();
+});
+</script>
+{% endblock %}

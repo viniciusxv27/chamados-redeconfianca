@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Visão Macro - Checklists{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100 p-4 md:p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-teal-600 to-cyan-600 rounded-2xl shadow-xl p-6 mb-6 text-white">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold">
+                        <i class="fas fa-chart-pie mr-2"></i>Visão Macro - Checklists
+                    </h1>
+                    <p class="text-teal-100 mt-1">Acompanhamento por usuário, turno e atrasos</p>
+                </div>
+                <div class="flex gap-3">
+                    <a href="{% url 'checklists:admin_executions' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
+                        <i class="fas fa-list mr-2"></i>Visão Detalhada
+                    </a>
+                    <a href="{% url 'checklists:dashboard' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
+                        <i class="fas fa-arrow-left mr-2"></i>Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <form method="get" class="flex flex-wrap items-end gap-4">
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                    <input type="date" name="date" value="{{ filters.date }}" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                </div>
+                
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
+                    <select name="sector" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                        <option value="">Todos os Setores</option>
+                        {% for sector in sectors %}
+                        <option value="{{ sector.id }}" {% if filters.sector == sector.id|stringformat:"s" %}selected{% endif %}>
+                            {{ sector.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button type="submit" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                        <i class="fas fa-search mr-2"></i>Filtrar
+                    </button>
+                    <a href="{% url 'checklists:admin_executions_macro' %}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Estatísticas Gerais -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+            <div class="bg-white rounded-xl shadow p-4 text-center">
+                <div class="text-3xl font-bold text-gray-800">{{ total_stats.users_count }}</div>
+                <div class="text-sm text-gray-500">Usuários</div>
+            </div>
+            <div class="bg-yellow-50 rounded-xl shadow p-4 text-center border-l-4 border-yellow-400">
+                <div class="text-3xl font-bold text-yellow-600">{{ total_stats.morning_total }}</div>
+                <div class="text-sm text-yellow-700"><i class="fas fa-sun mr-1"></i>Total Manhã</div>
+            </div>
+            <div class="bg-green-50 rounded-xl shadow p-4 text-center border-l-4 border-green-400">
+                <div class="text-3xl font-bold text-green-600">{{ total_stats.morning_completed }}</div>
+                <div class="text-sm text-green-700"><i class="fas fa-check mr-1"></i>Manhã OK</div>
+            </div>
+            <div class="bg-orange-50 rounded-xl shadow p-4 text-center border-l-4 border-orange-400">
+                <div class="text-3xl font-bold text-orange-600">{{ total_stats.afternoon_total }}</div>
+                <div class="text-sm text-orange-700"><i class="fas fa-cloud-sun mr-1"></i>Total Tarde</div>
+            </div>
+            <div class="bg-blue-50 rounded-xl shadow p-4 text-center border-l-4 border-blue-400">
+                <div class="text-3xl font-bold text-blue-600">{{ total_stats.afternoon_completed }}</div>
+                <div class="text-sm text-blue-700"><i class="fas fa-check mr-1"></i>Tarde OK</div>
+            </div>
+            <div class="bg-red-50 rounded-xl shadow p-4 text-center border-l-4 border-red-400">
+                <div class="text-3xl font-bold text-red-600">{{ total_stats.total_delayed }}</div>
+                <div class="text-sm text-red-700"><i class="fas fa-exclamation-triangle mr-1"></i>Atrasados</div>
+            </div>
+            <div class="bg-teal-50 rounded-xl shadow p-4 text-center border-l-4 border-teal-400">
+                <div class="text-3xl font-bold text-teal-600">{{ total_stats.completion_rate }}%</div>
+                <div class="text-sm text-teal-700"><i class="fas fa-percentage mr-1"></i>Conclusão</div>
+            </div>
+        </div>
+
+        <!-- Info Data -->
+        <div class="bg-white rounded-xl shadow-lg p-4 mb-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 rounded-full bg-teal-100 flex items-center justify-center">
+                        <i class="fas fa-calendar-day text-teal-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-semibold text-gray-800">{{ selected_date|date:"d/m/Y" }}</h2>
+                        <p class="text-sm text-gray-500">{{ selected_date|date:"l" }}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Atrasos consideram checklists de {{ delay_threshold|date:"d/m/Y" }} ou antes
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela de Usuários -->
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-yellow-600 uppercase tracking-wider" colspan="3">
+                                <i class="fas fa-sun mr-1"></i>Manhã
+                            </th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-orange-600 uppercase tracking-wider" colspan="3">
+                                <i class="fas fa-cloud-sun mr-1"></i>Tarde
+                            </th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-red-600 uppercase tracking-wider">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>Atrasados
+                            </th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-teal-600 uppercase tracking-wider">Total Dia</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">% Conclusão</th>
+                        </tr>
+                        <tr class="bg-gray-100 text-xs">
+                            <th class="px-4 py-1"></th>
+                            <th class="px-2 py-1 text-center text-gray-500">Total</th>
+                            <th class="px-2 py-1 text-center text-gray-500">Pend.</th>
+                            <th class="px-2 py-1 text-center text-green-600">OK</th>
+                            <th class="px-2 py-1 text-center text-gray-500">Total</th>
+                            <th class="px-2 py-1 text-center text-gray-500">Pend.</th>
+                            <th class="px-2 py-1 text-center text-green-600">OK</th>
+                            <th class="px-2 py-1"></th>
+                            <th class="px-2 py-1"></th>
+                            <th class="px-2 py-1"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for data in users_data %}
+                        <tr class="hover:bg-gray-50 transition-colors {% if data.delayed > 0 %}bg-red-50{% endif %}">
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center text-white font-bold">
+                                        {{ data.user.first_name|slice:":1" }}{{ data.user.last_name|slice:":1" }}
+                                    </div>
+                                    <div>
+                                        <div class="font-medium text-gray-900">{{ data.user.get_full_name }}</div>
+                                        {% if data.user.sector %}
+                                        <div class="text-xs text-gray-500">{{ data.user.sector.name }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            
+                            <!-- Manhã -->
+                            <td class="px-2 py-3 text-center">
+                                {% if data.morning.total > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    {{ data.morning.total }}
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-2 py-3 text-center">
+                                {% if data.morning.pending > 0 or data.morning.in_progress > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    {{ data.morning.pending|add:data.morning.in_progress }}
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-2 py-3 text-center">
+                                {% if data.morning.completed > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {{ data.morning.completed }}
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Tarde -->
+                            <td class="px-2 py-3 text-center">
+                                {% if data.afternoon.total > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    {{ data.afternoon.total }}
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-2 py-3 text-center">
+                                {% if data.afternoon.pending > 0 or data.afternoon.in_progress > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    {{ data.afternoon.pending|add:data.afternoon.in_progress }}
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-2 py-3 text-center">
+                                {% if data.afternoon.completed > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {{ data.afternoon.completed }}
+                                </span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Atrasados -->
+                            <td class="px-2 py-3 text-center">
+                                {% if data.delayed > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-bold bg-red-500 text-white animate-pulse">
+                                    {{ data.delayed }}
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Total Dia -->
+                            <td class="px-2 py-3 text-center">
+                                <span class="font-semibold text-gray-800">
+                                    {{ data.day_completed }}/{{ data.day_total }}
+                                </span>
+                            </td>
+                            
+                            <!-- % Conclusão -->
+                            <td class="px-4 py-3 text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    <div class="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div class="h-full rounded-full {% if data.completion_rate >= 80 %}bg-green-500{% elif data.completion_rate >= 50 %}bg-yellow-500{% else %}bg-red-500{% endif %}" 
+                                             style="width: {{ data.completion_rate }}%"></div>
+                                    </div>
+                                    <span class="text-sm font-medium {% if data.completion_rate >= 80 %}text-green-600{% elif data.completion_rate >= 50 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                        {{ data.completion_rate }}%
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="px-4 py-12 text-center">
+                                <div class="text-gray-400">
+                                    <i class="fas fa-users text-5xl mb-4"></i>
+                                    <p class="text-lg font-medium">Nenhum usuário com checklists nesta data</p>
+                                    <p class="text-sm">Ajuste os filtros para ver mais resultados</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Legenda -->
+        <div class="mt-6 bg-white rounded-xl shadow-lg p-4">
+            <h3 class="font-semibold text-gray-700 mb-3">
+                <i class="fas fa-info-circle text-blue-500 mr-2"></i>Legenda
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium">N</span>
+                    <span class="text-gray-600">Total de checklists da manhã</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-800 text-xs font-medium">N</span>
+                    <span class="text-gray-600">Total de checklists da tarde</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-800 text-xs font-medium">N</span>
+                    <span class="text-gray-600">Concluídos</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold">N</span>
+                    <span class="text-gray-600">Atrasados (2+ dias)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

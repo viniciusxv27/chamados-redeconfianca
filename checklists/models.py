@@ -575,6 +575,155 @@ class ChecklistTaskExecution(models.Model):
             execution.save()
 
 
+class ChecklistAssignmentApprover(models.Model):
+    """Define quais usuários podem aprovar atribuições de checklists"""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='checklist_approver_permissions',
+        verbose_name='Aprovador'
+    )
+    
+    # Setor onde pode aprovar (opcional - se vazio, pode aprovar de todos)
+    sector = models.ForeignKey(
+        Sector,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='checklist_approvers',
+        verbose_name='Setor',
+        help_text='Se vazio, pode aprovar de todos os setores'
+    )
+    
+    # Quem adicionou
+    added_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='checklist_approvers_added',
+        verbose_name='Adicionado por'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Adicionado em')
+    is_active = models.BooleanField(default=True, verbose_name='Ativo')
+    
+    class Meta:
+        verbose_name = 'Aprovador de Atribuição'
+        verbose_name_plural = 'Aprovadores de Atribuição'
+        unique_together = ['user', 'sector']
+        ordering = ['user__first_name', 'user__last_name']
+    
+    def __str__(self):
+        sector_name = self.sector.name if self.sector else 'Todos os setores'
+        return f'{self.user.get_full_name()} - {sector_name}'
+
+
+class ChecklistPendingAssignment(models.Model):
+    """Atribuições de checklist pendentes de aprovação"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovada'),
+        ('rejected', 'Rejeitada'),
+    ]
+    
+    SCHEDULE_CHOICES = [
+        ('this_week', 'Esta Semana'),
+        ('weekdays_month', 'Dias Úteis do Mês'),
+        ('weekends_month', 'Fins de Semana do Mês'),
+        ('daily', 'Todos os Dias'),
+        ('custom', 'Datas Personalizadas'),
+    ]
+    
+    PERIOD_CHOICES = [
+        ('morning', 'Manhã'),
+        ('afternoon', 'Tarde'),
+        ('both', 'Manhã e Tarde'),
+    ]
+    
+    template = models.ForeignKey(
+        'ChecklistTemplate',
+        on_delete=models.CASCADE,
+        verbose_name='Template'
+    )
+    
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='pending_checklist_assignments',
+        verbose_name='Atribuído para'
+    )
+    
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='pending_checklist_assignments_created',
+        verbose_name='Solicitado por'
+    )
+    
+    schedule_type = models.CharField(
+        max_length=20,
+        choices=SCHEDULE_CHOICES,
+        default='custom',
+        verbose_name='Tipo de Agendamento'
+    )
+    
+    period = models.CharField(
+        max_length=10,
+        choices=PERIOD_CHOICES,
+        default='both',
+        verbose_name='Período'
+    )
+    
+    custom_dates = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Datas Personalizadas'
+    )
+    
+    start_date = models.DateField(verbose_name='Data de Início')
+    end_date = models.DateField(verbose_name='Data de Fim')
+    
+    # Status da aprovação
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='Status'
+    )
+    
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_pending_assignments',
+        verbose_name='Aprovado/Rejeitado por'
+    )
+    
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Aprovação/Rejeição'
+    )
+    
+    rejection_reason = models.TextField(
+        blank=True,
+        verbose_name='Motivo da Rejeição'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    
+    class Meta:
+        verbose_name = 'Atribuição Pendente'
+        verbose_name_plural = 'Atribuições Pendentes'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f'{self.template.name} → {self.assigned_to.get_full_name()} ({self.get_status_display()})'
+
+
 class ChecklistTaskEvidence(models.Model):
     """Múltiplas evidências (fotos/vídeos/documentos) para uma tarefa executada"""
     

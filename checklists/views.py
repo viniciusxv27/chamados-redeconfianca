@@ -3,14 +3,17 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
-from django.db.models import Q, Count
-from django.core.paginator import Paginator
+from django.db.models import Q, Count, Sum, Case, When, IntegerField, F
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from datetime import datetime, timedelta, date
 from itertools import chain
 import json
 
-from .models import ChecklistTemplate, ChecklistTask, ChecklistAssignment, ChecklistExecution, ChecklistTaskExecution
+from .models import (
+    ChecklistTemplate, ChecklistTask, ChecklistAssignment, ChecklistExecution, 
+    ChecklistTaskExecution, ChecklistAssignmentApprover, ChecklistPendingAssignment
+)
 from users.models import User, Sector
 
 
@@ -186,6 +189,13 @@ def checklist_dashboard(request):
             calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
             calendar_executions.sort(key=lambda x: x.execution_date)
     
+    # Contar atribuições pendentes de aprovação (para admins/supervisores)
+    pending_assignments_count = 0
+    if is_superadmin or is_supervisor:
+        pending_assignments_count = ChecklistPendingAssignment.objects.filter(
+            status='pending'
+        ).count()
+    
     context = {
         'my_assignments': my_assignments[:5],  # Primeiros 5
         'sector_assignments': sector_assignments[:5] if is_supervisor else [],  # Primeiros 5 do setor
@@ -197,6 +207,7 @@ def checklist_dashboard(request):
         'calendar_executions': calendar_executions,
         'is_supervisor': is_supervisor,
         'is_superadmin': is_superadmin,
+        'pending_assignments_count': pending_assignments_count,
     }
     return render(request, 'checklists/dashboard.html', context)
 
@@ -286,8 +297,26 @@ def create_assignment(request):
                 except (json.JSONDecodeError, TypeError):
                     custom_dates = []
             
+            # Verificar se precisa de aprovação
+            # Apenas SUPERADMIN e quem tem permissão de aprovador pode pular a aprovação
+            needs_approval = True
+            is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+            
+            if is_superadmin:
+                needs_approval = False
+            else:
+                # Verificar se o usuário atual é um aprovador
+                is_approver = ChecklistAssignmentApprover.objects.filter(
+                    user=request.user,
+                    is_active=True
+                ).exists()
+                if is_approver:
+                    needs_approval = False
+            
             # Criar atribuições para cada combinação de template e usuário
             assignments_created = 0
+            pending_created = 0
+            
             for template in templates:
                 for user in users_to_assign:
                     # Para schedule_type 'custom', usar primeira e última data do array
@@ -298,29 +327,51 @@ def create_assignment(request):
                         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
                         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
                     
-                    assignment = ChecklistAssignment.objects.create(
-                        template=template,
-                        assigned_to=user,
-                        assigned_by=request.user,
-                        schedule_type=schedule_type,
-                        period=period,
-                        start_date=start_date_obj,
-                        end_date=end_date_obj,
-                        custom_dates=custom_dates
-                    )
-                    
-                    # Criar execuções para as datas ativas
-                    create_executions_for_assignment(assignment)
-                    assignments_created += 1
+                    if needs_approval:
+                        # Criar solicitação pendente de aprovação
+                        ChecklistPendingAssignment.objects.create(
+                            template=template,
+                            assigned_to=user,
+                            assigned_by=request.user,
+                            schedule_type=schedule_type,
+                            period=period,
+                            start_date=start_date_obj,
+                            end_date=end_date_obj,
+                            custom_dates=custom_dates,
+                            status='pending'
+                        )
+                        pending_created += 1
+                    else:
+                        # Criar atribuição diretamente
+                        assignment = ChecklistAssignment.objects.create(
+                            template=template,
+                            assigned_to=user,
+                            assigned_by=request.user,
+                            schedule_type=schedule_type,
+                            period=period,
+                            start_date=start_date_obj,
+                            end_date=end_date_obj,
+                            custom_dates=custom_dates
+                        )
+                        
+                        # Criar execuções para as datas ativas
+                        create_executions_for_assignment(assignment)
+                        assignments_created += 1
             
             # Mensagem de sucesso personalizada
             template_count = len(template_ids)
             user_count = len(users_to_assign)
             
-            if assignment_type == 'group':
-                messages.success(request, f'✅ {template_count} checklist(s) atribuído(s) para {user_count} usuário(s) do grupo com sucesso!')
+            if pending_created > 0:
+                if assignment_type == 'group':
+                    messages.info(request, f'⏳ {template_count} checklist(s) enviado(s) para aprovação de {user_count} usuário(s) do grupo. Aguardando confirmação de um aprovador.')
+                else:
+                    messages.info(request, f'⏳ {template_count} checklist(s) enviado(s) para aprovação de {users_to_assign[0].get_full_name()}. Aguardando confirmação de um aprovador.')
             else:
-                messages.success(request, f'✅ {template_count} checklist(s) atribuído(s) para {users_to_assign[0].get_full_name()} com sucesso!')
+                if assignment_type == 'group':
+                    messages.success(request, f'✅ {template_count} checklist(s) atribuído(s) para {user_count} usuário(s) do grupo com sucesso!')
+                else:
+                    messages.success(request, f'✅ {template_count} checklist(s) atribuído(s) para {users_to_assign[0].get_full_name()} com sucesso!')
                 
             return redirect('checklists:dashboard')
             
@@ -2473,6 +2524,431 @@ def admin_executions(request):
     }
     
     return render(request, 'checklists/admin_executions.html', context)
+
+
+@login_required
+def admin_executions_macro(request):
+    """Visão macro de execuções de checklists - por usuário, turno e atrasados"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+    
+    if not is_authorized:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Filtros
+    sector_filter = request.GET.get('sector', '')
+    date_filter = request.GET.get('date', timezone.now().date().strftime('%Y-%m-%d'))
+    
+    # Converter data
+    try:
+        selected_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
+    except ValueError:
+        selected_date = timezone.now().date()
+    
+    # Data limite para considerar atrasado (2 dias atrás ou mais)
+    delay_threshold = selected_date - timedelta(days=2)
+    
+    # Obter setores para filtro
+    if request.user.is_superuser:
+        sectors = Sector.objects.all().order_by('name')
+    else:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
+    
+    # Base queryset de execuções
+    executions_qs = ChecklistExecution.objects.select_related(
+        'assignment__template',
+        'assignment__template__sector',
+        'assignment__assigned_to'
+    )
+    
+    # Filtrar por setores do usuário
+    if not request.user.is_superuser:
+        user_sectors = list(request.user.sectors.all())
+        if request.user.sector:
+            user_sectors.append(request.user.sector)
+        if user_sectors:
+            executions_qs = executions_qs.filter(assignment__template__sector__in=user_sectors)
+        else:
+            executions_qs = executions_qs.none()
+    
+    # Aplicar filtro de setor
+    if sector_filter:
+        executions_qs = executions_qs.filter(assignment__template__sector_id=sector_filter)
+    
+    # Dados por usuário
+    users_data = []
+    
+    # Buscar usuários com atribuições
+    if request.user.is_superuser:
+        users_with_assignments = User.objects.filter(
+            is_active=True,
+            checklist_assignments__isnull=False
+        ).distinct()
+    else:
+        users_with_assignments = User.objects.filter(
+            is_active=True,
+            checklist_assignments__isnull=False,
+            checklist_assignments__template__sector__in=user_sectors
+        ).distinct()
+    
+    if sector_filter:
+        users_with_assignments = users_with_assignments.filter(
+            checklist_assignments__template__sector_id=sector_filter
+        ).distinct()
+    
+    users_with_assignments = users_with_assignments.order_by('first_name', 'last_name')
+    
+    for user in users_with_assignments:
+        # Execuções do dia selecionado para este usuário
+        user_executions = executions_qs.filter(
+            assignment__assigned_to=user,
+            execution_date=selected_date
+        )
+        
+        # Separar por turno
+        morning = user_executions.filter(period='morning')
+        afternoon = user_executions.filter(period='afternoon')
+        
+        # Contar status por turno
+        morning_stats = {
+            'total': morning.count(),
+            'pending': morning.filter(status='pending').count(),
+            'in_progress': morning.filter(status='in_progress').count(),
+            'completed': morning.filter(status__in=['completed', 'awaiting_approval']).count(),
+        }
+        
+        afternoon_stats = {
+            'total': afternoon.count(),
+            'pending': afternoon.filter(status='pending').count(),
+            'in_progress': afternoon.filter(status='in_progress').count(),
+            'completed': afternoon.filter(status__in=['completed', 'awaiting_approval']).count(),
+        }
+        
+        # Execuções atrasadas (2 dias atrás ou mais, não concluídas)
+        delayed = executions_qs.filter(
+            assignment__assigned_to=user,
+            execution_date__lte=delay_threshold,
+            status__in=['pending', 'in_progress', 'overdue']
+        ).count()
+        
+        # Total do dia
+        day_total = morning_stats['total'] + afternoon_stats['total']
+        day_completed = morning_stats['completed'] + afternoon_stats['completed']
+        completion_rate = round((day_completed / day_total * 100) if day_total > 0 else 0)
+        
+        if day_total > 0 or delayed > 0:
+            users_data.append({
+                'user': user,
+                'morning': morning_stats,
+                'afternoon': afternoon_stats,
+                'delayed': delayed,
+                'day_total': day_total,
+                'day_completed': day_completed,
+                'completion_rate': completion_rate,
+            })
+    
+    # Estatísticas gerais
+    total_stats = {
+        'users_count': len(users_data),
+        'morning_total': sum(u['morning']['total'] for u in users_data),
+        'morning_completed': sum(u['morning']['completed'] for u in users_data),
+        'afternoon_total': sum(u['afternoon']['total'] for u in users_data),
+        'afternoon_completed': sum(u['afternoon']['completed'] for u in users_data),
+        'total_delayed': sum(u['delayed'] for u in users_data),
+    }
+    
+    # Taxa de conclusão geral
+    total_day = total_stats['morning_total'] + total_stats['afternoon_total']
+    total_completed = total_stats['morning_completed'] + total_stats['afternoon_completed']
+    total_stats['completion_rate'] = round((total_completed / total_day * 100) if total_day > 0 else 0)
+    
+    context = {
+        'users_data': users_data,
+        'sectors': sectors,
+        'total_stats': total_stats,
+        'selected_date': selected_date,
+        'delay_threshold': delay_threshold,
+        'filters': {
+            'sector': sector_filter,
+            'date': date_filter,
+        }
+    }
+    
+    return render(request, 'checklists/admin_executions_macro.html', context)
+
+
+@login_required
+def admin_assignment_approvers(request):
+    """Gerenciar aprovadores de atribuição de checklists - Somente SUPERADMIN"""
+    # Verificar permissão (somente SUPERADMIN)
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+    
+    if not is_superadmin:
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Listar aprovadores atuais
+    approvers = ChecklistAssignmentApprover.objects.filter(
+        is_active=True
+    ).select_related('user', 'sector', 'added_by').order_by('user__first_name', 'user__last_name')
+    
+    # Usuários disponíveis para adicionar como aprovadores
+    existing_approver_ids = approvers.values_list('user_id', flat=True)
+    available_users = User.objects.filter(
+        is_active=True
+    ).exclude(
+        id__in=existing_approver_ids
+    ).order_by('first_name', 'last_name')
+    
+    # Setores disponíveis
+    sectors = Sector.objects.all().order_by('name')
+    
+    context = {
+        'approvers': approvers,
+        'available_users': available_users,
+        'sectors': sectors,
+    }
+    
+    return render(request, 'checklists/admin_assignment_approvers.html', context)
+
+
+@login_required
+@require_POST
+def api_add_assignment_approver(request):
+    """API para adicionar aprovador de atribuição"""
+    # Verificar permissão (somente SUPERADMIN)
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+    
+    if not is_superadmin:
+        return JsonResponse({'error': 'Você não tem permissão para esta ação.'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        user_id = data.get('user_id')
+        sector_id = data.get('sector_id')  # Pode ser vazio/null
+        
+        if not user_id:
+            return JsonResponse({'error': 'Selecione um usuário.'}, status=400)
+        
+        user = get_object_or_404(User, id=user_id, is_active=True)
+        sector = None
+        if sector_id:
+            sector = get_object_or_404(Sector, id=sector_id)
+        
+        # Verificar se já existe
+        existing = ChecklistAssignmentApprover.objects.filter(
+            user=user,
+            sector=sector,
+            is_active=True
+        ).first()
+        
+        if existing:
+            return JsonResponse({'error': 'Este usuário já é aprovador para este setor.'}, status=400)
+        
+        # Criar aprovador
+        approver = ChecklistAssignmentApprover.objects.create(
+            user=user,
+            sector=sector,
+            added_by=request.user,
+            is_active=True
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{user.get_full_name()} adicionado como aprovador!'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Dados inválidos.'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao adicionar: {str(e)}'}, status=500)
+
+
+@login_required
+@require_POST
+def api_remove_assignment_approver(request, approver_id):
+    """API para remover aprovador de atribuição"""
+    # Verificar permissão (somente SUPERADMIN)
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+    
+    if not is_superadmin:
+        return JsonResponse({'error': 'Você não tem permissão para esta ação.'}, status=403)
+    
+    try:
+        approver = get_object_or_404(ChecklistAssignmentApprover, id=approver_id)
+        user_name = approver.user.get_full_name()
+        approver.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{user_name} removido da lista de aprovadores!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao remover: {str(e)}'}, status=500)
+
+
+@login_required
+def admin_pending_assignments(request):
+    """Listar atribuições pendentes de aprovação"""
+    # Verificar permissão - aprovadores ou admins
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+    
+    is_approver = ChecklistAssignmentApprover.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
+    
+    is_admin = hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['ADMIN', 'SUPERADMIN']
+    
+    if not (is_superadmin or is_approver or is_admin):
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('checklists:dashboard')
+    
+    # Buscar atribuições pendentes
+    pending = ChecklistPendingAssignment.objects.filter(
+        status='pending'
+    ).select_related('template', 'template__sector', 'assigned_to', 'assigned_by').order_by('-created_at')
+    
+    # Se for aprovador com setor específico, filtrar
+    if not is_superadmin:
+        approver_sectors = ChecklistAssignmentApprover.objects.filter(
+            user=request.user,
+            is_active=True
+        ).values_list('sector_id', flat=True)
+        
+        # Se tiver algum setor None, pode ver todos
+        if None not in list(approver_sectors):
+            pending = pending.filter(template__sector_id__in=[s for s in approver_sectors if s])
+    
+    # Histórico de aprovações/rejeições recentes (últimos 30 dias)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    history = ChecklistPendingAssignment.objects.filter(
+        status__in=['approved', 'rejected'],
+        approved_at__gte=thirty_days_ago
+    ).select_related('template', 'assigned_to', 'assigned_by', 'approved_by').order_by('-approved_at')[:50]
+    
+    context = {
+        'pending_assignments': pending,
+        'history': history,
+        'is_superadmin': is_superadmin,
+    }
+    
+    return render(request, 'checklists/admin_pending_assignments.html', context)
+
+
+@login_required
+@require_POST
+def api_approve_pending_assignment(request, pending_id):
+    """API para aprovar atribuição pendente"""
+    # Verificar permissão
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+    
+    is_approver = ChecklistAssignmentApprover.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
+    
+    if not (is_superadmin or is_approver):
+        return JsonResponse({'error': 'Você não tem permissão para aprovar atribuições.'}, status=403)
+    
+    try:
+        pending = get_object_or_404(ChecklistPendingAssignment, id=pending_id, status='pending')
+        
+        # Se não for superadmin, verificar se pode aprovar este setor
+        if not is_superadmin:
+            approver_sectors = list(ChecklistAssignmentApprover.objects.filter(
+                user=request.user,
+                is_active=True
+            ).values_list('sector_id', flat=True))
+            
+            if None not in approver_sectors and pending.template.sector_id not in approver_sectors:
+                return JsonResponse({'error': 'Você não pode aprovar atribuições deste setor.'}, status=403)
+        
+        # Criar a atribuição real
+        assignment = ChecklistAssignment.objects.create(
+            template=pending.template,
+            assigned_to=pending.assigned_to,
+            assigned_by=pending.assigned_by,
+            schedule_type=pending.schedule_type,
+            period=pending.period,
+            start_date=pending.start_date,
+            end_date=pending.end_date,
+            custom_dates=pending.custom_dates
+        )
+        
+        # Criar execuções
+        create_executions_for_assignment(assignment)
+        
+        # Atualizar status da pendência
+        pending.status = 'approved'
+        pending.approved_by = request.user
+        pending.approved_at = timezone.now()
+        pending.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Atribuição aprovada! Checklist "{pending.template.name}" atribuído para {pending.assigned_to.get_full_name()}.'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao aprovar: {str(e)}'}, status=500)
+
+
+@login_required
+@require_POST
+def api_reject_pending_assignment(request, pending_id):
+    """API para rejeitar atribuição pendente"""
+    # Verificar permissão
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+    
+    is_approver = ChecklistAssignmentApprover.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
+    
+    if not (is_superadmin or is_approver):
+        return JsonResponse({'error': 'Você não tem permissão para rejeitar atribuições.'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        reason = data.get('reason', '')
+        
+        pending = get_object_or_404(ChecklistPendingAssignment, id=pending_id, status='pending')
+        
+        # Se não for superadmin, verificar se pode aprovar este setor
+        if not is_superadmin:
+            approver_sectors = list(ChecklistAssignmentApprover.objects.filter(
+                user=request.user,
+                is_active=True
+            ).values_list('sector_id', flat=True))
+            
+            if None not in approver_sectors and pending.template.sector_id not in approver_sectors:
+                return JsonResponse({'error': 'Você não pode rejeitar atribuições deste setor.'}, status=403)
+        
+        # Atualizar status da pendência
+        pending.status = 'rejected'
+        pending.approved_by = request.user
+        pending.approved_at = timezone.now()
+        pending.rejection_reason = reason
+        pending.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Atribuição rejeitada.'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Dados inválidos.'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao rejeitar: {str(e)}'}, status=500)
 
 
 @login_required

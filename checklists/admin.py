@@ -6,7 +6,9 @@ from .models import (
     ChecklistAssignment, 
     ChecklistExecution, 
     ChecklistTaskExecution,
-    ChecklistTaskEvidence
+    ChecklistTaskEvidence,
+    ChecklistAssignmentApprover,
+    ChecklistPendingAssignment
 )
 
 
@@ -89,3 +91,19 @@ class ChecklistTaskEvidenceAdmin(admin.ModelAdmin):
     search_fields = ['task_execution__task__title']
     readonly_fields = ['uploaded_at']
     date_hierarchy = 'uploaded_at'
+
+
+@admin.register(ChecklistAssignmentApprover)
+class ChecklistAssignmentApproverAdmin(admin.ModelAdmin):
+    list_display = ['user', 'sector', 'is_active', 'added_by', 'created_at']
+    list_filter = ['is_active', 'sector', 'created_at']
+    search_fields = ['user__first_name', 'user__last_name', 'user__email']
+    autocomplete_fields = ['user', 'sector']
+
+
+@admin.register(ChecklistPendingAssignment)
+class ChecklistPendingAssignmentAdmin(admin.ModelAdmin):
+    list_display = ['template', 'assigned_to', 'assigned_by', 'status', 'created_at', 'approved_at']
+    list_filter = ['status', 'created_at', 'approved_at']
+    search_fields = ['template__name', 'assigned_to__first_name', 'assigned_to__last_name']
+    date_hierarchy = 'created_at'

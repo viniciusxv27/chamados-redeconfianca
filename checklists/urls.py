@@ -26,7 +26,7 @@ urlpatterns = [
     path('admin/templates/<int:template_id>/edit/', views.edit_template, name='edit_template'),
     path('admin/templates/<int:template_id>/delete/', views.delete_template, name='delete_template'),
     
-    # Admin - Approvals
+    # Admin - Approvals (de execuções concluídas)
     path('admin/approvals/', views.admin_approvals, name='admin_approvals'),
     path('admin/approve/<int:execution_id>/', views.approve_checklist, name='approve_checklist'),
     path('admin/reject/<int:execution_id>/', views.reject_checklist, name='reject_checklist'),
@@ -44,5 +44,16 @@ urlpatterns = [
     
     # Admin - Controle de Execuções
     path('admin/executions/', views.admin_executions, name='admin_executions'),
+    path('admin/executions/macro/', views.admin_executions_macro, name='admin_executions_macro'),
     path('api/delete-executions/', views.api_delete_executions, name='api_delete_executions'),
+    
+    # Admin - Configurações de Aprovação de Atribuições
+    path('admin/settings/approvers/', views.admin_assignment_approvers, name='admin_assignment_approvers'),
+    path('api/assignment-approvers/add/', views.api_add_assignment_approver, name='api_add_assignment_approver'),
+    path('api/assignment-approvers/<int:approver_id>/remove/', views.api_remove_assignment_approver, name='api_remove_assignment_approver'),
+    
+    # Admin - Aprovação de Atribuições Pendentes
+    path('admin/pending-assignments/', views.admin_pending_assignments, name='admin_pending_assignments'),
+    path('api/pending-assignment/<int:pending_id>/approve/', views.api_approve_pending_assignment, name='api_approve_pending_assignment'),
+    path('api/pending-assignment/<int:pending_id>/reject/', views.api_reject_pending_assignment, name='api_reject_pending_assignment'),
 ]
