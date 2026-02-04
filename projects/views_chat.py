@@ -2127,3 +2127,50 @@ def upload_chat_file_with_message(request, chat_id):
             }]
         }
     })
+
+
+@login_required
+@require_POST
+def update_chat_status(request, chat_id):
+    """Atualiza o status de um chat via drag and drop"""
+    # Permitir acesso para supervisores ou agentes de suporte
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    is_support_agent = SupportAgent.objects.filter(
+        user=request.user, 
+        is_active=True
+    ).exists()
+    
+    if not (is_supervisor_or_higher or is_support_agent):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+    
+    try:
+        chat = SupportChat.objects.get(id=chat_id)
+    except SupportChat.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Chat não encontrado'}, status=404)
+    
+    # Obter novo status do request
+    new_status = request.POST.get('status', '').upper()
+    
+    # Validar status
+    valid_statuses = ['AGUARDANDO', 'ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']
+    if new_status not in valid_statuses:
+        return JsonResponse({'success': False, 'error': 'Status inválido'}, status=400)
+    
+    # Atualizar status
+    chat.status = new_status
+    
+    # Se movendo para EM_ANDAMENTO e não tem responsável, atribuir ao usuário atual
+    if new_status == 'EM_ANDAMENTO' and not chat.assigned_to:
+        chat.assigned_to = request.user
+    
+    chat.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Status atualizado com sucesso',
+        'chat': {
+            'id': chat.id,
+            'status': chat.status,
+            'assigned_to': chat.assigned_to.get_full_name() if chat.assigned_to else None
+        }
+    })

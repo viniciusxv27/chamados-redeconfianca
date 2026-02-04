@@ -74,6 +74,30 @@
         background-color: #FECACA;
         color: #991B1B;
     }
+
+    /* Estilos para Drag and Drop */
+    [draggable="true"] {
+        cursor: grab;
+    }
+
+    [draggable="true"]:active {
+        cursor: grabbing;
+    }
+
+    [draggable="true"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .drop-zone {
+        position: relative;
+        transition: all 200ms ease;
+    }
+
+    .drop-zone.drag-over {
+        background-color: #EBF8FF !important;
+        border: 2px dashed #3B82F6 !important;
+    }
 </style>
 {% endblock %}
 
@@ -134,7 +158,7 @@
                 <span>Abertos</span>
                 <span class="bg-red-200 px-2 py-1 rounded-full text-xs">{{ stats.open }}</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2" id="open-tickets">
+            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="open-tickets" data-status="ABERTO">
                 <!-- Tickets abertos serão carregados aqui -->
             </div>
         </div>
@@ -145,7 +169,7 @@
                 <span>Em Andamento</span>
                 <span class="bg-yellow-200 px-2 py-1 rounded-full text-xs">{{ stats.in_progress }}</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2" id="progress-tickets">
+            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="progress-tickets" data-status="EM_ANDAMENTO">
                 <!-- Tickets em andamento serão carregados aqui -->
             </div>
         </div>
@@ -156,7 +180,7 @@
                 <span>Resolvidos</span>
                 <span class="bg-blue-200 px-2 py-1 rounded-full text-xs" id="resolved-count">0</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2" id="resolved-tickets">
+            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="resolved-tickets" data-status="RESOLVIDO">
                 <!-- Tickets resolvidos serão carregados aqui -->
             </div>
         </div>
@@ -167,7 +191,7 @@
                 <span>Fechados</span>
                 <span class="bg-green-200 px-2 py-1 rounded-full text-xs" id="closed-count">0</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2" id="closed-tickets">
+            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="closed-tickets" data-status="FECHADO">
                 <!-- Tickets fechados serão carregados aqui -->
             </div>
         </div>
@@ -416,6 +440,127 @@
 
 {% block extra_js %}
 <script>
+// ===== DRAG AND DROP SETUP =====
+let draggedElement = null;
+window.isDragging = false;
+
+function handleDragStart(e) {
+    window.isDragging = true;
+    draggedElement = this;
+    this.classList.add('opacity-50', 'shadow-lg');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    console.log('[Drag] Iniciado:', this.dataset.ticketId);
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('opacity-50', 'shadow-lg');
+    console.log('[Drag] Finalizado:', this.dataset.ticketId);
+    
+    // Resetar estado de isDragging após um pequeno delay
+    setTimeout(() => {
+        window.isDragging = false;
+    }, 100);
+}
+
+function setupDropZones() {
+    const dropZones = document.querySelectorAll('.drop-zone');
+    
+    dropZones.forEach(zone => {
+        zone.addEventListener('dragover', handleDragOver);
+        zone.addEventListener('drop', handleDrop);
+        zone.addEventListener('dragleave', handleDragLeave);
+    });
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (!this.classList.contains('drag-over')) {
+        this.classList.add('drag-over', 'bg-blue-50', 'border-blue-400', 'border-2');
+    }
+    
+    return false;
+}
+
+function handleDragLeave(e) {
+    // Apenas remover se sair da zona
+    if (e.target === this) {
+        this.classList.remove('drag-over', 'bg-blue-50', 'border-blue-400', 'border-2');
+    }
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    this.classList.remove('drag-over', 'bg-blue-50', 'border-blue-400', 'border-2');
+    
+    const chatId = draggedElement.dataset.ticketId;
+    const oldStatus = draggedElement.dataset.ticketStatus;
+    const newStatus = this.dataset.status;
+    
+    console.log(`[Drop] Chat ${chatId}: ${oldStatus} → ${newStatus}`);
+    
+    if (oldStatus !== newStatus) {
+        // Enviar para backend
+        updateChatStatusViaKanban(chatId, newStatus);
+        
+        // Mover elemento visualmente (feedback imediato)
+        this.appendChild(draggedElement);
+        draggedElement.dataset.ticketStatus = newStatus;
+    }
+    
+    return false;
+}
+
+function updateChatStatusViaKanban(chatId, newStatus) {
+    console.log(`[Update] Atualizando chat ${chatId} para status ${newStatus}`);
+    
+    const formData = new FormData();
+    formData.append('status', newStatus);
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+    
+    fetch(`/projects/support/chat/${chatId}/update-status/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('[Update] Status atualizado com sucesso:', data.chat);
+            showToast(`Ticket movido para ${getStatusLabel(newStatus)}`, 'success');
+            
+            // Recarregar contadores
+            setTimeout(() => loadSupportTickets(), 500);
+        } else {
+            console.error('[Update] Erro:', data.error);
+            showToast('Erro ao mover ticket: ' + data.error, 'error');
+            // Recarregar para desfazer movimento visual
+            loadSupportTickets();
+        }
+    })
+    .catch(error => {
+        console.error('[Update] Erro de conexão:', error);
+        showToast('Erro ao mover ticket', 'error');
+        // Recarregar para desfazer movimento visual
+        loadSupportTickets();
+    });
+}
+
+function getStatusLabel(status) {
+    const labels = {
+        'ABERTO': 'Abertos',
+        'EM_ANDAMENTO': 'Em Andamento',
+        'RESOLVIDO': 'Resolvidos',
+        'FECHADO': 'Fechados'
+    };
+    return labels[status] || status;
+}
+
+// ===== FIM DO DRAG AND DROP =====
+
 // Helper para pegar CSRF token
 function getCsrfToken() {
     const token = document.querySelector('[name=csrfmiddlewaretoken]');
@@ -434,6 +579,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('CSRF Token disponível:', getCsrfToken() ? 'Sim' : 'Não');
     
     loadSupportTickets();
+    setupDropZones();
     
     // Polling em tempo real para atualizações (a cada 3 segundos)
     console.log('[Dashboard] Iniciando polling em tempo real');
@@ -626,14 +772,29 @@ function renderTickets(tickets) {
     
     // Atualizar contadores
     updateTicketCounts(tickets);
+    
+    // Configurar drop zones
+    setupDropZones();
 }
 
 function createTicketElement(ticket) {
     console.log('createTicketElement para ticket:', ticket);
     
     const div = document.createElement('div');
-    div.className = 'bg-white rounded-md p-3 mb-2 border border-gray-200 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-blue-400';
-    div.onclick = () => openTicketModal(ticket.id);
+    div.className = 'bg-white rounded-md p-3 mb-2 border border-gray-200 cursor-move transition-all duration-200 hover:shadow-md hover:border-blue-400';
+    div.draggable = true;
+    div.dataset.ticketId = ticket.id;
+    div.dataset.ticketStatus = ticket.status;
+    div.onclick = (e) => {
+        // Não abrir modal se estiver começando um drag
+        if (!window.isDragging) {
+            openTicketModal(ticket.id);
+        }
+    };
+    
+    // Event listeners para drag
+    div.addEventListener('dragstart', handleDragStart);
+    div.addEventListener('dragend', handleDragEnd);
     
     const priorityColors = {
         'baixa': 'bg-green-100 text-green-800',
