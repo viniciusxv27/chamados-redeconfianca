@@ -1321,8 +1321,12 @@ def get_support_categories_api(request):
     
     if request.method == 'GET':
         try:
+            # Verificar se é supervisor ou maior
+            is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+            
             # Obter setores do usuário
-            if request.user.is_superuser:
+            if request.user.is_superuser or is_supervisor_or_higher:
+                # Supervisores e acima veem todas as categorias
                 user_sectors = Sector.objects.all()
             else:
                 user_sectors_list = list(request.user.sectors.all())

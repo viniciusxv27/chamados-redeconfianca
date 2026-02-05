@@ -1573,12 +1573,17 @@ function loadSectorsForCategories() {
 }
 
 function loadCategories() {
+    console.log('Carregando categorias...');
     fetch('/projects/support/api/categories/')
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('Categories data:', data);
             const container = document.getElementById('categoriesList');
             
-            if (data.success && data.categories.length > 0) {
+            if (data.success && data.categories && data.categories.length > 0) {
                 container.innerHTML = '';
                 
                 data.categories.forEach(category => {
@@ -1608,14 +1613,16 @@ function loadCategories() {
                     `;
                     container.appendChild(div);
                 });
+            } else if (data.success && (!data.categories || data.categories.length === 0)) {
+                container.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhuma categoria encontrada. Crie uma nova categoria no formulário ao lado.</div>';
             } else {
-                container.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhuma categoria encontrada</div>';
+                container.innerHTML = `<div class="text-center text-red-500 py-4">Erro: ${data.error || 'Erro desconhecido'}</div>`;
             }
         })
         .catch(error => {
             console.error('Erro ao carregar categorias:', error);
             document.getElementById('categoriesList').innerHTML = 
-                '<div class="text-center text-red-500 py-4">Erro ao carregar categorias</div>';
+                '<div class="text-center text-red-500 py-4">Erro ao carregar categorias: ' + error.message + '</div>';
         });
 }
 

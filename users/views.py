@@ -548,16 +548,57 @@ def import_colaboradores_csv(request):
                     if not colaborador_nome:
                         continue
                     
+                    # Normalizar nome (remover acentos e espaços extras)
+                    import unicodedata
+                    def normalize_name(name):
+                        # Remover acentos
+                        nfkd = unicodedata.normalize('NFKD', name)
+                        without_accents = ''.join(c for c in nfkd if not unicodedata.combining(c))
+                        # Converter para minúsculas e remover espaços extras
+                        return ' '.join(without_accents.lower().split())
+                    
                     # Separar nome: primeira palavra = first_name, restante = last_name
                     name_parts = colaborador_nome.split()
                     first_name = name_parts[0] if name_parts else ''
                     last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                    full_name_normalized = normalize_name(colaborador_nome)
                     
-                    # Buscar usuário pelo nome completo (first_name + last_name)
+                    # Tentar várias estratégias de busca
+                    user = None
+                    
+                    # 1. Busca exata por first_name e last_name
                     user = User.objects.filter(
                         first_name__iexact=first_name,
                         last_name__iexact=last_name
                     ).first()
+                    
+                    # 2. Busca por nome completo concatenado
+                    if not user:
+                        for u in User.objects.all():
+                            db_full_name = f"{u.first_name} {u.last_name}".strip()
+                            if normalize_name(db_full_name) == full_name_normalized:
+                                user = u
+                                break
+                    
+                    # 3. Busca por primeiro nome + primeiro sobrenome (ignora nomes do meio)
+                    if not user and len(name_parts) >= 2:
+                        first = name_parts[0]
+                        last = name_parts[-1]  # Último nome
+                        for u in User.objects.filter(first_name__iexact=first):
+                            if u.last_name and normalize_name(u.last_name).endswith(normalize_name(last)):
+                                user = u
+                                break
+                            if u.last_name and normalize_name(last) in normalize_name(u.last_name):
+                                user = u
+                                break
+                    
+                    # 4. Busca contém (mais flexível)
+                    if not user:
+                        for u in User.objects.filter(first_name__iexact=first_name):
+                            db_full = normalize_name(f"{u.first_name} {u.last_name}")
+                            if full_name_normalized in db_full or db_full in full_name_normalized:
+                                user = u
+                                break
                     
                     if not user:
                         not_found_count += 1
