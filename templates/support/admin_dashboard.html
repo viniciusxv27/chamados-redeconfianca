@@ -1073,12 +1073,10 @@ function renderTicketDetails(data) {
                         <p class="text-sm text-gray-900">${data.chat.user.get_full_name}</p>
                     </div>
                     
-                    ${data.chat.user.login_code ? `
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Login</label>
-                        <p class="text-sm text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">${data.chat.user.login_code}</p>
+                        <p class="text-sm text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">${data.chat.user.login_code || '-'}</p>
                     </div>
-                    ` : ''}
                     
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Setor</label>
