@@ -992,23 +992,32 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function atualizarGraficoRepresentatividade(pilarIndex) {
         var nomes = [];
-        var valores = [];
+        var valoresProduzido = [];  // Produzido de cada colaborador
+        var valoresMonetarios = []; // Valor em R$ da comissão proporcional
         var percentuais = [];
-        var totalVendedores = 0;
+        var totalProduzidoLoja = 0;
         
-        // Comissão do gerente no pilar selecionado (base para cálculo proporcional)
+        // Comissão do gerente no pilar selecionado
         var gerenteComissao = pilarIndex === 'total' ? gerenteComissaoTotal : gerenteComissaoPilares[parseInt(pilarIndex)];
         
-        // Calcular valores e percentuais proporcionais de cada vendedor
+        // Primeiro: calcular o total produzido pela loja (soma de todos os colaboradores)
         vendedoresData.forEach(function(v) {
-            var valor = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
-            if (valor > 0) {
+            var produzido = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
+            totalProduzidoLoja += produzido;
+        });
+        
+        // Segundo: calcular % e valor monetário de cada colaborador
+        vendedoresData.forEach(function(v) {
+            var produzido = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
+            if (produzido > 0) {
                 nomes.push(v.nome);
-                valores.push(valor);
-                // Percentual proporcional em relação à comissão do gerente
-                var pctProporcional = gerenteComissao > 0 ? ((valor / gerenteComissao) * 100) : 0;
-                percentuais.push(pctProporcional);
-                totalVendedores += valor;
+                valoresProduzido.push(produzido);
+                // % de representatividade = produzido_colaborador / produzido_total_loja
+                var pctRepresentatividade = totalProduzidoLoja > 0 ? ((produzido / totalProduzidoLoja) * 100) : 0;
+                percentuais.push(pctRepresentatividade);
+                // Valor monetário = % de representatividade * comissão do gerente
+                var valorMonetario = totalProduzidoLoja > 0 ? ((produzido / totalProduzidoLoja) * gerenteComissao) : 0;
+                valoresMonetarios.push(valorMonetario);
             }
         });
         
@@ -1018,18 +1027,21 @@ document.addEventListener('DOMContentLoaded', function() {
             var html = '';
             var vendedorIdx = 0;
             vendedoresData.forEach(function(v, idx) {
-                var valor = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
-                // Percentual proporcional em relação à comissão do gerente
-                var pctProporcional = gerenteComissao > 0 ? ((valor / gerenteComissao) * 100) : 0;
+                var produzido = pilarIndex === 'total' ? v.total : v.pilares[parseInt(pilarIndex)];
+                // % de representatividade
+                var pctRepresentatividade = totalProduzidoLoja > 0 ? ((produzido / totalProduzidoLoja) * 100) : 0;
+                // Valor monetário proporcional
+                var valorMonetario = totalProduzidoLoja > 0 ? ((produzido / totalProduzidoLoja) * gerenteComissao) : 0;
+                
                 html += '<div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">';
                 html += '<div class="flex items-center gap-3">';
                 html += '<div class="w-3 h-3 rounded-full" style="background-color: ' + chartColors[idx % chartColors.length] + '"></div>';
                 html += '<span class="font-medium text-gray-700 text-sm">' + v.nome + '</span>';
                 html += '</div>';
                 html += '<div class="text-right flex items-center gap-2">';
-                if (valor > 0) {
-                    html += '<span class="font-bold text-green-600 text-sm">' + pctProporcional.toFixed(1) + '%</span>';
-                    html += '<span class="text-gray-500 text-xs">(R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ')</span>';
+                if (produzido > 0) {
+                    html += '<span class="font-bold text-green-600 text-sm">' + pctRepresentatividade.toFixed(1) + '%</span>';
+                    html += '<span class="text-gray-500 text-xs">(R$ ' + valorMonetario.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ')</span>';
                 } else {
                     html += '<span class="text-gray-400 text-sm">-</span>';
                 }
@@ -1045,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', function() {
             listaDiv.innerHTML = html;
         }
         
-        // Atualiza gráfico
+        // Atualiza gráfico - usando valores monetários para melhor visualização
         if (representatividadeChart) {
             representatividadeChart.destroy();
         }
@@ -1056,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data: {
                     labels: nomes,
                     datasets: [{
-                        data: percentuais,
+                        data: valoresMonetarios,
                         backgroundColor: chartColors.slice(0, nomes.length),
                         borderWidth: 2,
                         borderColor: '#fff'
@@ -1073,10 +1085,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    var pct = context.raw;
+                                    var valorMon = context.raw;
                                     var idx = context.dataIndex;
-                                    var valor = valores[idx];
-                                    return context.label + ': ' + pct.toFixed(1) + '% (R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + ')';
+                                    var pct = percentuais[idx];
+                                    return context.label + ': R$ ' + valorMon.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + ' (' + pct.toFixed(1) + '%)';
                                 }
                             }
                         }
