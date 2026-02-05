@@ -242,7 +242,7 @@
                     {% csrf_token %}
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
-                        <select id="newCategorySector" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <select id="newCategorySector" required onchange="loadAgentsForCategory(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
                             <option value="">Selecione o setor</option>
                         </select>
                     </div>
@@ -257,6 +257,14 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                         <textarea id="newCategoryDescription" rows="3"
                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Agente Padrão</label>
+                        <select id="newCategoryDefaultAgent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                            <option value="">Nenhum (fila normal)</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Tickets desta categoria serão atribuídos automaticamente a este agente</p>
                     </div>
                     
                     <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md">
@@ -606,9 +614,6 @@ function pollForUpdates() {
                 lastCheckTimestamp = data.timestamp;
                 
                 if (data.has_updates) {
-                    console.log('[Polling] Novas atualizações detectadas:', data.new_tickets.length, 'novos tickets');
-                    console.log('[Polling] Novos tickets:', data.new_tickets);
-                    
                     // Recarregar todos os tickets para garantir ordem correta
                     loadSupportTickets();
                     
@@ -618,31 +623,44 @@ function pollForUpdates() {
                         updateStatCounters(data.stats);
                     }
                     
-                    // Notificação visual destacada
-                    const ticketWord = data.new_tickets.length === 1 ? 'ticket' : 'tickets';
-                    showToast(`🔔 ${data.new_tickets.length} novo(s) ${ticketWord} recebido(s)!`, 'success');
-                    
-                    // Efeito visual na coluna de abertos
-                    const openTicketsContainer = document.getElementById('open-tickets');
-                    if (openTicketsContainer && openTicketsContainer.parentElement) {
-                        openTicketsContainer.parentElement.classList.add('ring-2', 'ring-red-400');
-                        setTimeout(() => {
-                            openTicketsContainer.parentElement.classList.remove('ring-2', 'ring-red-400');
-                        }, 2000);
+                    // Notificação para novos tickets
+                    if (data.new_tickets && data.new_tickets.length > 0) {
+                        console.log('[Polling] Novas atualizações detectadas:', data.new_tickets.length, 'novos tickets');
+                        const ticketWord = data.new_tickets.length === 1 ? 'ticket' : 'tickets';
+                        showToast(`🔔 ${data.new_tickets.length} novo(s) ${ticketWord} recebido(s)!`, 'success');
+                        
+                        // Efeito visual na coluna de abertos
+                        const openTicketsContainer = document.getElementById('open-tickets');
+                        if (openTicketsContainer && openTicketsContainer.parentElement) {
+                            openTicketsContainer.parentElement.classList.add('ring-2', 'ring-red-400');
+                            setTimeout(() => {
+                                openTicketsContainer.parentElement.classList.remove('ring-2', 'ring-red-400');
+                            }, 2000);
+                        }
+                        
+                        // Tocar som de notificação
+                        playNotificationSound();
+                        
+                        // Piscar título da página se não estiver em foco
+                        if (document.hidden) {
+                            startTitleBlink(data.new_tickets.length);
+                        }
                     }
                     
-                    // Notificação sonora opcional (apenas se o usuário permitir)
-                    try {
-                        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSt9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFAg+muDyvmwhBSp9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFA');
-                        audio.volume = 0.3;
-                        audio.play().catch(() => {}); // Ignora erro se não permitido
-                    } catch (e) {
-                        // Notificação sonora não disponível
-                    }
-                    
-                    // Piscar título da página se não estiver em foco
-                    if (document.hidden) {
-                        startTitleBlink(data.new_tickets.length);
+                    // Notificação para novas mensagens em tickets atribuídos ao agente
+                    if (data.new_messages && data.new_messages.length > 0) {
+                        console.log('[Polling] Novas mensagens detectadas:', data.new_messages.length);
+                        data.new_messages.forEach(msg => {
+                            showToast(`💬 ${msg.user_name}: ${msg.message}`, 'info', 5000);
+                        });
+                        
+                        // Tocar som de mensagem
+                        playMessageSound();
+                        
+                        // Piscar título da página se não estiver em foco
+                        if (document.hidden) {
+                            startTitleBlink(data.new_messages.length, 'mensagem');
+                        }
                     }
                 }
             }
@@ -654,11 +672,38 @@ function pollForUpdates() {
         });
 }
 
-function startTitleBlink(count) {
+// Função para tocar som de notificação de novo ticket
+function playNotificationSound() {
+    try {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSt9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFAg+muDyvmwhBSp9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFA');
+        audio.volume = 0.4;
+        audio.play().catch(() => {}); // Ignora erro se não permitido
+    } catch (e) {
+        // Notificação sonora não disponível
+    }
+}
+
+// Função para tocar som de nova mensagem (mais suave)
+function playMessageSound() {
+    try {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSt9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFAg+muDyvmwhBSp9zPLTgjMGHm7A7+OZJQ0XYrfp7qNSFA');
+        audio.volume = 0.2;
+        audio.play().catch(() => {}); // Ignora erro se não permitido
+    } catch (e) {
+        // Som de mensagem não disponível
+    }
+}
+
+function startTitleBlink(count, type = 'ticket') {
     if (blinkTitleInterval) return; // Já está piscando
     
     let isOriginal = true;
-    const newTitle = `(${count}) Novo${count > 1 ? 's' : ''} ticket${count > 1 ? 's' : ''}!`;
+    let newTitle = '';
+    if (type === 'mensagem') {
+        newTitle = `(${count}) Nova${count > 1 ? 's' : ''} mensagem${count > 1 ? 'ns' : ''}!`;
+    } else {
+        newTitle = `(${count}) Novo${count > 1 ? 's' : ''} ticket${count > 1 ? 's' : ''}!`;
+    }
     
     blinkTitleInterval = setInterval(() => {
         document.title = isOriginal ? newTitle : originalTitle;
@@ -948,6 +993,13 @@ function renderTicketDetails(data) {
                         <label class="block text-xs font-medium text-gray-700">Cliente</label>
                         <p class="text-sm text-gray-900">${data.chat.user.get_full_name}</p>
                     </div>
+                    
+                    ${data.chat.user.login_code ? `
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Login</label>
+                        <p class="text-sm text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">${data.chat.user.login_code}</p>
+                    </div>
+                    ` : ''}
                     
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Setor</label>
@@ -1460,11 +1512,12 @@ function loadCategories() {
                             <div class="font-medium text-gray-900">${category.name}</div>
                             <div class="text-sm text-gray-600">
                                 <span class="font-medium">Setor:</span> ${category.sector ? category.sector.name : 'N/A'}
+                                ${category.default_agent ? `<br><span class="text-xs text-green-600"><i class="fas fa-user-check mr-1"></i>Agente padrão: ${category.default_agent.name}</span>` : ''}
                                 ${category.description ? `<br><span class="text-xs text-gray-500">${category.description}</span>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center space-x-2">
-                            <button onclick="editCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}', '${(category.description || '').replace(/'/g, "\\'")}', ${category.sector ? category.sector.id : 'null'})" 
+                            <button onclick="editCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}', '${(category.description || '').replace(/'/g, "\\'")}', ${category.sector ? category.sector.id : 'null'}, ${category.default_agent ? category.default_agent.id : 'null'})" 
                                     class="text-blue-600 hover:text-blue-800 px-2 py-1">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -1487,6 +1540,41 @@ function loadCategories() {
         });
 }
 
+// Carregar agentes disponíveis para uma categoria baseado no setor
+function loadAgentsForCategory(sectorId) {
+    const select = document.getElementById('newCategoryDefaultAgent');
+    
+    if (!sectorId) {
+        select.innerHTML = '<option value="">Nenhum (fila normal)</option>';
+        return;
+    }
+    
+    select.innerHTML = '<option value="">Carregando...</option>';
+    
+    fetch('/projects/support/api/agents/')
+        .then(response => response.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Nenhum (fila normal)</option>';
+            
+            if (data.success && data.agents) {
+                data.agents.forEach(agent => {
+                    // Verificar se o agente atende ao setor selecionado
+                    const atendsSector = agent.sectors && agent.sectors.some(s => s.id == sectorId);
+                    if (atendsSector) {
+                        const option = document.createElement('option');
+                        option.value = agent.user.id;
+                        option.textContent = agent.user.name;
+                        select.appendChild(option);
+                    }
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar agentes:', error);
+            select.innerHTML = '<option value="">Nenhum (fila normal)</option>';
+        });
+}
+
 document.getElementById('newCategoryForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -1494,7 +1582,8 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
         action: 'create',
         sector_id: document.getElementById('newCategorySector').value,
         name: document.getElementById('newCategoryName').value,
-        description: document.getElementById('newCategoryDescription').value
+        description: document.getElementById('newCategoryDescription').value,
+        default_agent_id: document.getElementById('newCategoryDefaultAgent').value || null
     };
     
     fetch('/projects/support/api/categories/', {
@@ -1521,36 +1610,97 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
     });
 });
 
-function editCategory(id, name, description, sectorId) {
-    const newName = prompt('Nome da categoria:', name);
-    if (newName && newName !== name) {
-        fetch('/projects/support/api/categories/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({
-                action: 'update',
-                category_id: id,
-                name: newName,
-                description: description
-            })
-        })
+function editCategory(id, name, description, sectorId, defaultAgentId) {
+    // Criar modal de edição simples
+    const modalHtml = `
+        <div id="editCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
+            <div class="bg-white rounded-lg p-6 w-96">
+                <h3 class="text-lg font-semibold mb-4">Editar Categoria</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                        <input type="text" id="editCategoryName" value="${name}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                        <textarea id="editCategoryDescription" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">${description || ''}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Agente Padrão</label>
+                        <select id="editCategoryDefaultAgent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                            <option value="">Nenhum (fila normal)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-2 mt-6">
+                    <button onclick="closeEditCategoryModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancelar</button>
+                    <button onclick="saveEditCategory(${id})" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md">Salvar</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Carregar agentes para o setor da categoria
+    fetch('/projects/support/api/agents/')
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                loadCategories();
-                showToast('Categoria atualizada!', 'success');
-            } else {
-                alert('Erro: ' + data.error);
+            const select = document.getElementById('editCategoryDefaultAgent');
+            if (data.success && data.agents) {
+                data.agents.forEach(agent => {
+                    const atendsSector = agent.sectors && agent.sectors.some(s => s.id == sectorId);
+                    if (atendsSector) {
+                        const option = document.createElement('option');
+                        option.value = agent.user.id;
+                        option.textContent = agent.user.name;
+                        if (defaultAgentId && agent.user.id == defaultAgentId) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    }
+                });
             }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            alert('Erro ao atualizar categoria');
         });
-    }
+}
+
+function closeEditCategoryModal() {
+    const modal = document.getElementById('editCategoryModal');
+    if (modal) modal.remove();
+}
+
+function saveEditCategory(categoryId) {
+    const name = document.getElementById('editCategoryName').value;
+    const description = document.getElementById('editCategoryDescription').value;
+    const defaultAgentId = document.getElementById('editCategoryDefaultAgent').value;
+    
+    fetch('/projects/support/api/categories/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            action: 'update',
+            category_id: categoryId,
+            name: name,
+            description: description,
+            default_agent_id: defaultAgentId || null
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeEditCategoryModal();
+            loadCategories();
+            showToast('Categoria atualizada!', 'success');
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atualizar categoria');
+    });
 }
 
 function deleteCategory(id) {

@@ -202,7 +202,8 @@ def get_support_chat(request, chat_id):
             'queue_position': queue_position,
             'user': {
                 'id': chat.user.id,
-                'get_full_name': chat.user.get_full_name()
+                'get_full_name': chat.user.get_full_name(),
+                'login_code': getattr(chat.user, 'login_code', '') or ''
             },
             'sector': {
                 'id': chat.sector.id,
@@ -251,10 +252,16 @@ def create_support_chat(request):
         except Sector.DoesNotExist:
             pass
     
+    category = None
     if category_id:
         try:
             category = SupportCategory.objects.get(id=category_id)
             chat_data['category'] = category
+            
+            # Se a categoria tem um agente padrão, atribuir automaticamente
+            if category.default_agent:
+                chat_data['assigned_to'] = category.default_agent
+                chat_data['status'] = 'EM_ANDAMENTO'  # Já assumido pelo agente padrão
         except SupportCategory.DoesNotExist:
             pass
     
@@ -266,6 +273,17 @@ def create_support_chat(request):
         user=request.user,
         message=message
     )
+    
+    # Notificar o agente padrão se foi atribuído automaticamente
+    if category and category.default_agent:
+        from notifications.models import Notification
+        Notification.objects.create(
+            user=category.default_agent,
+            title='Novo Ticket Atribuído',
+            message=f'Um novo ticket de suporte foi atribuído automaticamente para você: "{title}"',
+            notification_type='SUPPORT_ASSIGNED',
+            link=f'/projects/support/admin/'
+        )
     
     # Calcular posição na fila
     queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
@@ -322,6 +340,53 @@ def send_support_message(request, chat_id):
         chat.status = 'EM_ANDAMENTO'
         chat.assigned_to = request.user
         chat.save()
+    
+    # Notificar o agente atribuído se a mensagem não é dele
+    if chat.assigned_to and chat.assigned_to != request.user and not is_internal:
+        try:
+            from notifications.models import PushNotification, UserNotification
+            # Criar notificação push para o agente
+            notification = PushNotification.objects.create(
+                title='Nova Mensagem de Suporte',
+                message=f'{request.user.get_full_name()}: {message_text[:100]}...' if len(message_text) > 100 else f'{request.user.get_full_name()}: {message_text}',
+                notification_type='CUSTOM',
+                priority='HIGH',
+                action_url=f'/projects/support/admin/',
+                action_text='Ver Ticket',
+                created_by=request.user,
+                is_sent=True
+            )
+            notification.target_users.add(chat.assigned_to)
+            UserNotification.objects.create(
+                notification=notification,
+                user=chat.assigned_to,
+                is_read=False
+            )
+        except Exception as e:
+            pass  # Não falhar por causa de notificações
+    
+    # Notificar o cliente se a mensagem é de um agente
+    if chat.user != request.user and (is_support_agent or is_supervisor_or_higher) and not is_internal:
+        try:
+            from notifications.models import PushNotification, UserNotification
+            notification = PushNotification.objects.create(
+                title='Resposta do Suporte',
+                message=f'Nova resposta no ticket: {chat.title}',
+                notification_type='CUSTOM',
+                priority='NORMAL',
+                action_url=f'/projects/support/',
+                action_text='Ver Resposta',
+                created_by=request.user,
+                is_sent=True
+            )
+            notification.target_users.add(chat.user)
+            UserNotification.objects.create(
+                notification=notification,
+                user=chat.user,
+                is_read=False
+            )
+        except Exception as e:
+            pass  # Não falhar por causa de notificações
     
     return JsonResponse({
         'success': True,
@@ -668,10 +733,20 @@ def manage_support_categories(request):
             if not request.user.is_superuser and sector not in user_sectors:
                 return JsonResponse({'success': False, 'error': 'Você não pode criar categorias neste setor'})
             
+            # Processar agente padrão
+            from users.models import User
+            default_agent = None
+            if data.get('default_agent_id'):
+                try:
+                    default_agent = User.objects.get(id=data['default_agent_id'])
+                except User.DoesNotExist:
+                    pass
+            
             category = SupportCategory.objects.create(
                 name=data['name'],
                 sector=sector,
-                description=data.get('description', '')
+                description=data.get('description', ''),
+                default_agent=default_agent
             )
             return JsonResponse({'success': True, 'category_id': category.id})
         
@@ -684,6 +759,18 @@ def manage_support_categories(request):
             
             category.name = data['name']
             category.description = data.get('description', '')
+            
+            # Processar agente padrão
+            from users.models import User
+            if 'default_agent_id' in data:
+                if data['default_agent_id']:
+                    try:
+                        category.default_agent = User.objects.get(id=data['default_agent_id'])
+                    except User.DoesNotExist:
+                        pass
+                else:
+                    category.default_agent = None
+            
             category.save()
             return JsonResponse({'success': True})
         
@@ -1226,7 +1313,7 @@ def get_support_categories_api(request):
         categories = SupportCategory.objects.filter(
             sector__in=user_sectors,
             is_active=True
-        ).select_related('sector')
+        ).select_related('sector', 'default_agent')
         
         categories_data = [{
             'id': cat.id,
@@ -1236,6 +1323,10 @@ def get_support_categories_api(request):
                 'id': cat.sector.id,
                 'name': cat.sector.name
             } if cat.sector else None,
+            'default_agent': {
+                'id': cat.default_agent.id,
+                'name': cat.default_agent.get_full_name()
+            } if cat.default_agent else None,
             'is_active': cat.is_active
         } for cat in categories]
         
@@ -1267,10 +1358,20 @@ def get_support_categories_api(request):
                 if not request.user.is_superuser and sector not in user_sectors:
                     return JsonResponse({'success': False, 'error': 'Você não pode criar categorias para este setor'}, status=403)
                 
+                # Processar agente padrão
+                from users.models import User
+                default_agent = None
+                if data.get('default_agent_id'):
+                    try:
+                        default_agent = User.objects.get(id=data['default_agent_id'])
+                    except User.DoesNotExist:
+                        pass
+                
                 category = SupportCategory.objects.create(
                     name=data['name'],
                     sector=sector,
                     description=data.get('description', ''),
+                    default_agent=default_agent,
                     is_active=True
                 )
                 
@@ -1280,7 +1381,8 @@ def get_support_categories_api(request):
                         'id': category.id,
                         'name': category.name,
                         'description': category.description,
-                        'sector': {'id': sector.id, 'name': sector.name}
+                        'sector': {'id': sector.id, 'name': sector.name},
+                        'default_agent': {'id': default_agent.id, 'name': default_agent.get_full_name()} if default_agent else None
                     }
                 })
             
@@ -1294,6 +1396,18 @@ def get_support_categories_api(request):
                 category.name = data.get('name', category.name)
                 category.description = data.get('description', category.description)
                 category.is_active = data.get('is_active', category.is_active)
+                
+                # Processar agente padrão
+                from users.models import User
+                if 'default_agent_id' in data:
+                    if data['default_agent_id']:
+                        try:
+                            category.default_agent = User.objects.get(id=data['default_agent_id'])
+                        except User.DoesNotExist:
+                            pass
+                    else:
+                        category.default_agent = None
+                
                 category.save()
                 
                 return JsonResponse({'success': True})
@@ -1843,6 +1957,7 @@ def poll_dashboard_updates(request):
     # Verificar se há novos tickets desde a última verificação
     has_updates = False
     new_tickets = []
+    new_messages = []
     
     if last_check_time:
         new_chats = SupportChat.objects.filter(
@@ -1882,6 +1997,34 @@ def poll_dashboard_updates(request):
                     } if chat.assigned_to else None,
                     'created_at': chat.created_at.isoformat()
                 })
+        
+        # Verificar novas mensagens nos tickets atribuídos ao agente atual
+        assigned_chats = SupportChat.objects.filter(
+            assigned_to=request.user,
+            status__in=['ABERTO', 'EM_ANDAMENTO']
+        )
+        
+        if assigned_chats.exists():
+            # Buscar mensagens recentes que não são do próprio agente
+            recent_messages = SupportChatMessage.objects.filter(
+                chat__in=assigned_chats,
+                created_at__gt=last_check_time,
+                is_internal=False
+            ).exclude(
+                user=request.user
+            ).select_related('chat', 'user').order_by('-created_at')[:10]
+            
+            if recent_messages.exists():
+                has_updates = True
+                for msg in recent_messages:
+                    new_messages.append({
+                        'id': msg.id,
+                        'chat_id': msg.chat.id,
+                        'chat_title': msg.chat.title,
+                        'user_name': msg.user.get_full_name(),
+                        'message': msg.message[:100] + '...' if len(msg.message) > 100 else msg.message,
+                        'created_at': msg.created_at.isoformat()
+                    })
     
     # Estatísticas atualizadas
     stats = {
@@ -1892,12 +2035,13 @@ def poll_dashboard_updates(request):
     }
     
     logger.info(f'[Polling] Stats: {stats}')
-    logger.info(f'[Polling] Has updates: {has_updates}, New tickets count: {len(new_tickets)}')
+    logger.info(f'[Polling] Has updates: {has_updates}, New tickets count: {len(new_tickets)}, New messages count: {len(new_messages)}')
     
     return JsonResponse({
         'success': True,
         'has_updates': has_updates,
         'new_tickets': new_tickets,
+        'new_messages': new_messages,
         'stats': stats,
         'timestamp': timezone.now().isoformat()
     })
@@ -2150,6 +2294,7 @@ def update_chat_status(request, chat_id):
     
     # Obter novo status do request
     new_status = request.POST.get('status', '').upper()
+    old_status = chat.status
     
     # Validar status
     valid_statuses = ['AGUARDANDO', 'ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']
@@ -2164,6 +2309,66 @@ def update_chat_status(request, chat_id):
         chat.assigned_to = request.user
     
     chat.save()
+    
+    # Notificar o cliente sobre mudanças de status significativas
+    if old_status != new_status and chat.user != request.user:
+        try:
+            from notifications.models import PushNotification, UserNotification
+            status_labels = {
+                'AGUARDANDO': 'Aguardando na Fila',
+                'ABERTO': 'Aberto',
+                'EM_ANDAMENTO': 'Em Andamento',
+                'RESOLVIDO': 'Resolvido',
+                'FECHADO': 'Fechado'
+            }
+            notification = PushNotification.objects.create(
+                title='Status do Ticket Atualizado',
+                message=f'Seu ticket "{chat.title}" agora está: {status_labels.get(new_status, new_status)}',
+                notification_type='CUSTOM',
+                priority='NORMAL',
+                action_url=f'/projects/support/',
+                action_text='Ver Ticket',
+                created_by=request.user,
+                is_sent=True
+            )
+            notification.target_users.add(chat.user)
+            UserNotification.objects.create(
+                notification=notification,
+                user=chat.user,
+                is_read=False
+            )
+        except Exception as e:
+            pass  # Não falhar por causa de notificações
+    
+    # Notificar o agente atribuído se não é quem fez a mudança
+    if chat.assigned_to and chat.assigned_to != request.user and old_status != new_status:
+        try:
+            from notifications.models import PushNotification, UserNotification
+            status_labels = {
+                'AGUARDANDO': 'Aguardando na Fila',
+                'ABERTO': 'Aberto',
+                'EM_ANDAMENTO': 'Em Andamento',
+                'RESOLVIDO': 'Resolvido',
+                'FECHADO': 'Fechado'
+            }
+            notification = PushNotification.objects.create(
+                title='Status do Ticket Alterado',
+                message=f'O ticket "{chat.title}" foi movido para: {status_labels.get(new_status, new_status)}',
+                notification_type='CUSTOM',
+                priority='HIGH',
+                action_url=f'/projects/support/admin/',
+                action_text='Ver Ticket',
+                created_by=request.user,
+                is_sent=True
+            )
+            notification.target_users.add(chat.assigned_to)
+            UserNotification.objects.create(
+                notification=notification,
+                user=chat.assigned_to,
+                is_read=False
+            )
+        except Exception as e:
+            pass  # Não falhar por causa de notificações
     
     return JsonResponse({
         'success': True,

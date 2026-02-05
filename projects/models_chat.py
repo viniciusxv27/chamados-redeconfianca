@@ -215,6 +215,15 @@ class SupportCategory(models.Model):
         verbose_name="Setor"
     )
     description = models.TextField(blank=True, verbose_name="Descrição")
+    default_agent = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='default_support_categories',
+        verbose_name="Agente Padrão",
+        help_text="Agente que será automaticamente atribuído aos tickets desta categoria"
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
