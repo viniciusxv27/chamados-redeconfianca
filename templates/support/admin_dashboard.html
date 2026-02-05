@@ -231,7 +231,9 @@
             <div class="w-2/3 border-r overflow-y-auto p-4">
                 <h4 class="font-semibold mb-4">Categorias Existentes</h4>
                 <div id="categoriesList" class="space-y-2">
-                    <!-- Categorias serão carregadas aqui -->
+                    <div class="text-center text-gray-500 py-4">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>Carregando categorias...
+                    </div>
                 </div>
             </div>
             
@@ -1508,8 +1510,22 @@ function closeChat(chatId) {
 
 // Funções para os modais de administração
 function openCategoriesModal() {
-    document.getElementById('categoriesModal').classList.remove('hidden');
+    console.log('Abrindo modal de categorias...');
+    const modal = document.getElementById('categoriesModal');
+    if (!modal) {
+        console.error('Modal de categorias não encontrado!');
+        alert('Erro: Modal de categorias não encontrado na página');
+        return;
+    }
+    modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    
+    // Mostrar loading enquanto carrega
+    const container = document.getElementById('categoriesList');
+    if (container) {
+        container.innerHTML = '<div class="text-center text-gray-500 py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando categorias...</div>';
+    }
+    
     loadCategories();
     loadSectorsForCategories();
 }
@@ -1573,15 +1589,26 @@ function loadSectorsForCategories() {
 }
 
 function loadCategories() {
-    console.log('Carregando categorias...');
+    console.log('loadCategories() chamado');
+    const container = document.getElementById('categoriesList');
+    
+    if (!container) {
+        console.error('Container categoriesList não encontrado!');
+        return;
+    }
+    
+    container.innerHTML = '<div class="text-center text-gray-500 py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando...</div>';
+    
     fetch('/projects/support/api/categories/')
         .then(response => {
             console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             return response.json();
         })
         .then(data => {
             console.log('Categories data:', data);
-            const container = document.getElementById('categoriesList');
             
             if (data.success && data.categories && data.categories.length > 0) {
                 container.innerHTML = '';
@@ -1613,16 +1640,17 @@ function loadCategories() {
                     `;
                     container.appendChild(div);
                 });
+                console.log(`${data.categories.length} categorias carregadas`);
             } else if (data.success && (!data.categories || data.categories.length === 0)) {
                 container.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhuma categoria encontrada. Crie uma nova categoria no formulário ao lado.</div>';
             } else {
-                container.innerHTML = `<div class="text-center text-red-500 py-4">Erro: ${data.error || 'Erro desconhecido'}</div>`;
+                console.error('Erro na resposta:', data);
+                container.innerHTML = `<div class="text-center text-red-500 py-4">Erro: ${data.error || 'Erro desconhecido'}<br><small>${data.traceback || ''}</small></div>`;
             }
         })
         .catch(error => {
             console.error('Erro ao carregar categorias:', error);
-            document.getElementById('categoriesList').innerHTML = 
-                '<div class="text-center text-red-500 py-4">Erro ao carregar categorias: ' + error.message + '</div>';
+            container.innerHTML = '<div class="text-center text-red-500 py-4">Erro ao carregar categorias: ' + error.message + '</div>';
         });
 }
 

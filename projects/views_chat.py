@@ -1321,24 +1321,27 @@ def get_support_categories_api(request):
     
     if request.method == 'GET':
         try:
-            # Verificar se é supervisor ou maior
+            # Verificar se é supervisor ou maior, ou agente de suporte
             is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+            is_support_agent = SupportAgent.objects.filter(user=request.user, is_active=True).exists()
             
-            # Obter setores do usuário
-            if request.user.is_superuser or is_supervisor_or_higher:
-                # Supervisores e acima veem todas as categorias
-                user_sectors = Sector.objects.all()
+            # Se é supervisor/admin ou agente de suporte, vê todas as categorias
+            if request.user.is_superuser or is_supervisor_or_higher or is_support_agent:
+                # Mostrar TODAS as categorias ativas
+                categories = SupportCategory.objects.filter(
+                    is_active=True
+                ).select_related('sector')
             else:
+                # Usuários comuns veem apenas categorias dos seus setores
                 user_sectors_list = list(request.user.sectors.all())
                 if request.user.sector:
                     user_sectors_list.append(request.user.sector)
                 user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list])
-            
-            # Mostrar categorias dos setores do usuário
-            categories = SupportCategory.objects.filter(
-                sector__in=user_sectors,
-                is_active=True
-            ).select_related('sector')
+                
+                categories = SupportCategory.objects.filter(
+                    sector__in=user_sectors,
+                    is_active=True
+                ).select_related('sector')
             
             # Tentar usar prefetch_related para default_agents se o campo existir
             try:
@@ -1372,7 +1375,8 @@ def get_support_categories_api(request):
             
             return JsonResponse({'success': True, 'categories': categories_data})
         except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+            import traceback
+            return JsonResponse({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}, status=500)
     
     elif request.method == 'POST':
         # Permitir SUPERVISOR ou hierarquia maior gerenciar categorias
