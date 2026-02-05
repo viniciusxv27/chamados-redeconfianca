@@ -930,7 +930,7 @@ function createTicketElement(ticket) {
     
     console.log('Ticket', ticket.id, '- isAgent:', isCurrentUserAgent, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
     
-    const canDelete = {% if is_supervisor_or_higher %}true{% else %}false{% endif %};
+    const canDelete = {% if is_superadmin %}true{% else %}false{% endif %};
     
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
