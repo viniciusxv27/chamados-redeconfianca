@@ -925,10 +925,10 @@ function createTicketElement(ticket) {
     const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
     const timeAgo = getTimeAgo(ticket.created_at);
     
-    // Verificar se pode assumir usando a variável global
-    const canAssign = isCurrentUserAgent && !ticket.assigned_to;
+    // Usar can_assume calculado pelo backend (considera múltiplos agentes na categoria)
+    const canAssign = ticket.can_assume || false;
     
-    console.log('Ticket', ticket.id, '- isAgent:', isCurrentUserAgent, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
+    console.log('Ticket', ticket.id, '- can_assume:', ticket.can_assume, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
     
     const canDelete = {% if is_superadmin %}true{% else %}false{% endif %};
     
@@ -1054,7 +1054,7 @@ function renderTicketDetails(data) {
     const isAgent = data.is_support_agent || false;
     const currentUserId = {{ request.user.id }};
     const isAssignedToMe = data.chat.assigned_to && data.chat.assigned_to.id === currentUserId;
-    const canAssign = isAgent && !data.chat.assigned_to;
+    const canAssign = data.can_assume || false;  // Usa o valor calculado pelo backend
     
     content.innerHTML = `
         <div class="flex h-full">
@@ -1125,6 +1125,15 @@ function renderTicketDetails(data) {
                             <i class="fas fa-times-circle mr-2"></i>Fechar Ticket
                         </button>
                         ` : ''}
+                    </div>
+                    ` : ''}
+                    
+                    ${data.is_superadmin ? `
+                    <div class="pt-4 border-t">
+                        <button onclick="deleteTicket(${data.chat.id}, '${data.chat.title.replace(/'/g, "\\'").replace(/"/g, '\\&quot;')}'); closeTicketModal();" 
+                                class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <i class="fas fa-trash mr-2"></i>Excluir Ticket
+                        </button>
                     </div>
                     ` : ''}
                 </div>

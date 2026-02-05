@@ -145,9 +145,29 @@ def get_support_chat(request, chat_id):
     # Verificar se o usuário pode acessar este chat
     is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
     is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    is_superadmin = request.user.hierarchy == 'SUPERADMIN' or request.user.is_superuser
     
     if not (chat.user == request.user or is_support_agent or is_supervisor_or_higher):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
+    
+    # Verificar se o usuário pode assumir este ticket
+    can_assume = False
+    if is_support_agent and not chat.assigned_to:
+        # Se não tem atendente, verificar se o usuário é um dos agentes padrão da categoria
+        if chat.category:
+            try:
+                category_agents = chat.category.default_agents.all()
+                if category_agents.exists():
+                    # Pode assumir se é um dos agentes da categoria
+                    can_assume = request.user in list(category_agents)
+                else:
+                    # Categoria sem agentes padrão - qualquer agente pode assumir
+                    can_assume = True
+            except Exception:
+                can_assume = True  # Em caso de erro, permitir assumir
+        else:
+            # Ticket sem categoria - qualquer agente pode assumir
+            can_assume = True
     
     # Buscar mensagens
     messages = SupportChatMessage.objects.filter(chat=chat).select_related('user').prefetch_related('files')
@@ -219,7 +239,9 @@ def get_support_chat(request, chat_id):
             } if chat.assigned_to else None,
             'is_own': chat.user == request.user
         },
-        'is_support_agent': is_support_agent
+        'is_support_agent': is_support_agent,
+        'is_superadmin': is_superadmin,
+        'can_assume': can_assume
     })
 
 
@@ -258,13 +280,14 @@ def create_support_chat(request):
             category = SupportCategory.objects.get(id=category_id)
             chat_data['category'] = category
             
-            # Se a categoria tem agentes padrão, pegar o primeiro disponível para atribuir
+            # Se a categoria tem apenas UM agente padrão, atribuir automaticamente
+            # Se tem múltiplos, deixar para os agentes assumirem
             try:
                 default_agents = category.default_agents.all()
-                if default_agents.exists():
-                    # Atribuir ao primeiro agente da lista (pode ser randomizado ou por carga)
+                if default_agents.count() == 1:
+                    # Apenas 1 agente - atribuir automaticamente
                     chat_data['assigned_to'] = default_agents.first()
-                    chat_data['status'] = 'EM_ANDAMENTO'  # Já assumido pelo agente
+                # Se tem múltiplos ou nenhum, não atribui - mantém status AGUARDANDO
             except Exception:
                 pass  # Campo pode não existir ainda
         except SupportCategory.DoesNotExist:
@@ -670,6 +693,21 @@ def support_admin_dashboard(request):
     # Serializar chats para JSON (se for AJAX request)
     recent_chats_data = []
     for chat in recent_chats:
+        # Calcular se o usuário pode assumir este ticket
+        can_assume = False
+        if is_support_agent and not chat.assigned_to:
+            if chat.category:
+                try:
+                    category_agents = chat.category.default_agents.all()
+                    if category_agents.exists():
+                        can_assume = request.user in list(category_agents)
+                    else:
+                        can_assume = True  # Sem agentes padrão, qualquer um pode assumir
+                except Exception:
+                    can_assume = True
+            else:
+                can_assume = True  # Sem categoria, qualquer agente pode assumir
+        
         recent_chats_data.append({
             'id': chat.id,
             'title': chat.title,
@@ -693,7 +731,8 @@ def support_admin_dashboard(request):
                 'id': chat.assigned_to.id,
                 'get_full_name': chat.assigned_to.get_full_name()
             } if chat.assigned_to else None,
-            'created_at': chat.created_at.isoformat()
+            'created_at': chat.created_at.isoformat(),
+            'can_assume': can_assume
         })
     
     is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
@@ -988,7 +1027,6 @@ def assign_chat_to_agent(request, chat_id):
         try:
             chat = SupportChat.objects.get(id=chat_id)
             chat.assigned_to = request.user
-            chat.status = 'EM_ANDAMENTO'
             chat.save()
             
             return JsonResponse({'success': True})
