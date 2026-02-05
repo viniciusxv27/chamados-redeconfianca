@@ -260,11 +260,11 @@
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Agente Padrão</label>
-                        <select id="newCategoryDefaultAgent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                            <option value="">Nenhum (fila normal)</option>
-                        </select>
-                        <p class="text-xs text-gray-500 mt-1">Tickets desta categoria serão atribuídos automaticamente a este agente</p>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Agentes Padrão</label>
+                        <div id="newCategoryAgentsContainer" class="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
+                            <!-- Checkboxes serão carregados via JS -->
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Tickets desta categoria serão atribuídos automaticamente a um destes agentes</p>
                     </div>
                     
                     <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md">
@@ -575,6 +575,53 @@ function getCsrfToken() {
     return token ? token.value : '';
 }
 
+// ===== BROWSER NOTIFICATIONS =====
+// Solicitar permissão para notificações do navegador
+function requestNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+            Notification.requestPermission().then(permission => {
+                console.log('[Notifications] Permissão:', permission);
+                if (permission === 'granted') {
+                    showToast('Notificações ativadas!', 'success');
+                }
+            });
+        }
+    }
+}
+
+// Enviar notificação do navegador (aparece no sistema operacional)
+function sendBrowserNotification(title, body, options = {}) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification(title, {
+            body: body,
+            icon: '/static/images/logo.png',
+            badge: '/static/images/logo.png',
+            tag: options.tag || 'support-notification',
+            requireInteraction: options.requireInteraction || false,
+            silent: false,
+            ...options
+        });
+        
+        // Quando clicado, foca na janela
+        notification.onclick = function() {
+            window.focus();
+            notification.close();
+            if (options.onClick) {
+                options.onClick();
+            }
+        };
+        
+        // Auto-fechar após 10 segundos se não for interação obrigatória
+        if (!options.requireInteraction) {
+            setTimeout(() => notification.close(), 10000);
+        }
+        
+        return notification;
+    }
+    return null;
+}
+
 // Variável global para armazenar se é agente
 const isCurrentUserAgent = {{ is_support_agent|yesno:"true,false" }};
 let originalTitle = document.title;
@@ -585,6 +632,9 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('=== Dashboard de Suporte Carregado ===');
     console.log('Usuário é agente:', isCurrentUserAgent);
     console.log('CSRF Token disponível:', getCsrfToken() ? 'Sim' : 'Não');
+    
+    // Solicitar permissão para notificações do navegador
+    requestNotificationPermission();
     
     loadSupportTickets();
     setupDropZones();
@@ -629,6 +679,19 @@ function pollForUpdates() {
                         const ticketWord = data.new_tickets.length === 1 ? 'ticket' : 'tickets';
                         showToast(`🔔 ${data.new_tickets.length} novo(s) ${ticketWord} recebido(s)!`, 'success');
                         
+                        // NOTIFICAÇÃO DO NAVEGADOR (aparece no sistema operacional)
+                        data.new_tickets.forEach(ticket => {
+                            sendBrowserNotification(
+                                '🎫 Novo Ticket de Suporte',
+                                `${ticket.user.get_full_name}: ${ticket.title}`,
+                                {
+                                    tag: `ticket-${ticket.id}`,
+                                    requireInteraction: true,
+                                    onClick: () => openTicketModal(ticket.id)
+                                }
+                            );
+                        });
+                        
                         // Efeito visual na coluna de abertos
                         const openTicketsContainer = document.getElementById('open-tickets');
                         if (openTicketsContainer && openTicketsContainer.parentElement) {
@@ -652,6 +715,16 @@ function pollForUpdates() {
                         console.log('[Polling] Novas mensagens detectadas:', data.new_messages.length);
                         data.new_messages.forEach(msg => {
                             showToast(`💬 ${msg.user_name}: ${msg.message}`, 'info', 5000);
+                            
+                            // NOTIFICAÇÃO DO NAVEGADOR para mensagens
+                            sendBrowserNotification(
+                                `💬 Nova Mensagem - ${msg.chat_title}`,
+                                `${msg.user_name}: ${msg.message}`,
+                                {
+                                    tag: `message-${msg.id}`,
+                                    onClick: () => openTicketModal(msg.chat_id)
+                                }
+                            );
                         });
                         
                         // Tocar som de mensagem
@@ -1505,6 +1578,8 @@ function loadCategories() {
                 container.innerHTML = '';
                 
                 data.categories.forEach(category => {
+                    const agentNames = (category.default_agents || []).map(a => a.name).join(', ');
+                    const agentIds = JSON.stringify((category.default_agents || []).map(a => a.id));
                     const div = document.createElement('div');
                     div.className = 'bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-between';
                     div.innerHTML = `
@@ -1512,12 +1587,12 @@ function loadCategories() {
                             <div class="font-medium text-gray-900">${category.name}</div>
                             <div class="text-sm text-gray-600">
                                 <span class="font-medium">Setor:</span> ${category.sector ? category.sector.name : 'N/A'}
-                                ${category.default_agent ? `<br><span class="text-xs text-green-600"><i class="fas fa-user-check mr-1"></i>Agente padrão: ${category.default_agent.name}</span>` : ''}
+                                ${agentNames ? `<br><span class="text-xs text-green-600"><i class="fas fa-user-check mr-1"></i>Agentes padrão: ${agentNames}</span>` : ''}
                                 ${category.description ? `<br><span class="text-xs text-gray-500">${category.description}</span>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center space-x-2">
-                            <button onclick="editCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}', '${(category.description || '').replace(/'/g, "\\'")}', ${category.sector ? category.sector.id : 'null'}, ${category.default_agent ? category.default_agent.id : 'null'})" 
+                            <button onclick='editCategory(${category.id}, "${category.name.replace(/"/g, '\\"')}", "${(category.description || '').replace(/"/g, '\\"')}", ${category.sector ? category.sector.id : 'null'}, ${agentIds})' 
                                     class="text-blue-600 hover:text-blue-800 px-2 py-1">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -1541,38 +1616,59 @@ function loadCategories() {
 }
 
 // Carregar agentes disponíveis para uma categoria baseado no setor
-function loadAgentsForCategory(sectorId) {
-    const select = document.getElementById('newCategoryDefaultAgent');
+function loadAgentsForCategory(sectorId, containerId = 'newCategoryAgentsContainer', selectedAgentIds = []) {
+    const container = document.getElementById(containerId);
     
     if (!sectorId) {
-        select.innerHTML = '<option value="">Nenhum (fila normal)</option>';
+        container.innerHTML = '<p class="text-gray-500 text-sm">Selecione um setor primeiro</p>';
         return;
     }
     
-    select.innerHTML = '<option value="">Carregando...</option>';
+    container.innerHTML = '<p class="text-gray-500 text-sm">Carregando...</p>';
     
     fetch('/projects/support/api/agents/')
         .then(response => response.json())
         .then(data => {
-            select.innerHTML = '<option value="">Nenhum (fila normal)</option>';
+            container.innerHTML = '';
             
             if (data.success && data.agents) {
+                let hasAgents = false;
                 data.agents.forEach(agent => {
                     // Verificar se o agente atende ao setor selecionado
                     const atendsSector = agent.sectors && agent.sectors.some(s => s.id == sectorId);
                     if (atendsSector) {
-                        const option = document.createElement('option');
-                        option.value = agent.user.id;
-                        option.textContent = agent.user.name;
-                        select.appendChild(option);
+                        hasAgents = true;
+                        const isChecked = selectedAgentIds.includes(agent.user.id);
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center py-1';
+                        div.innerHTML = `
+                            <input type="checkbox" id="${containerId}_agent_${agent.user.id}" 
+                                   value="${agent.user.id}" 
+                                   class="category-agent-checkbox mr-2"
+                                   ${isChecked ? 'checked' : ''}>
+                            <label for="${containerId}_agent_${agent.user.id}" class="text-sm text-gray-700">
+                                ${agent.user.name}
+                            </label>
+                        `;
+                        container.appendChild(div);
                     }
                 });
+                
+                if (!hasAgents) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">Nenhum agente disponível para este setor</p>';
+                }
             }
         })
         .catch(error => {
             console.error('Erro ao carregar agentes:', error);
-            select.innerHTML = '<option value="">Nenhum (fila normal)</option>';
+            container.innerHTML = '<p class="text-red-500 text-sm">Erro ao carregar agentes</p>';
         });
+}
+
+// Obter IDs dos agentes selecionados em um container
+function getSelectedAgentIds(containerId) {
+    const checkboxes = document.querySelectorAll(`#${containerId} .category-agent-checkbox:checked`);
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
 }
 
 document.getElementById('newCategoryForm').addEventListener('submit', function(e) {
@@ -1583,7 +1679,7 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
         sector_id: document.getElementById('newCategorySector').value,
         name: document.getElementById('newCategoryName').value,
         description: document.getElementById('newCategoryDescription').value,
-        default_agent_id: document.getElementById('newCategoryDefaultAgent').value || null
+        default_agent_ids: getSelectedAgentIds('newCategoryAgentsContainer')
     };
     
     fetch('/projects/support/api/categories/', {
@@ -1598,6 +1694,7 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
     .then(data => {
         if (data.success) {
             document.getElementById('newCategoryForm').reset();
+            document.getElementById('newCategoryAgentsContainer').innerHTML = '<p class="text-gray-500 text-sm">Selecione um setor primeiro</p>';
             loadCategories();
             showToast('Categoria criada com sucesso!', 'success');
         } else {
@@ -1610,7 +1707,12 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
     });
 });
 
-function editCategory(id, name, description, sectorId, defaultAgentId) {
+function editCategory(id, name, description, sectorId, defaultAgentIds) {
+    // Garantir que defaultAgentIds seja um array
+    if (!Array.isArray(defaultAgentIds)) {
+        defaultAgentIds = [];
+    }
+    
     // Criar modal de edição simples
     const modalHtml = `
         <div id="editCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
@@ -1626,10 +1728,10 @@ function editCategory(id, name, description, sectorId, defaultAgentId) {
                         <textarea id="editCategoryDescription" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">${description || ''}</textarea>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Agente Padrão</label>
-                        <select id="editCategoryDefaultAgent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                            <option value="">Nenhum (fila normal)</option>
-                        </select>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Agentes Padrão</label>
+                        <div id="editCategoryAgentsContainer" class="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
+                            <p class="text-gray-500 text-sm">Carregando...</p>
+                        </div>
                     </div>
                 </div>
                 <div class="flex justify-end space-x-2 mt-6">
@@ -1641,26 +1743,8 @@ function editCategory(id, name, description, sectorId, defaultAgentId) {
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
-    // Carregar agentes para o setor da categoria
-    fetch('/projects/support/api/agents/')
-        .then(response => response.json())
-        .then(data => {
-            const select = document.getElementById('editCategoryDefaultAgent');
-            if (data.success && data.agents) {
-                data.agents.forEach(agent => {
-                    const atendsSector = agent.sectors && agent.sectors.some(s => s.id == sectorId);
-                    if (atendsSector) {
-                        const option = document.createElement('option');
-                        option.value = agent.user.id;
-                        option.textContent = agent.user.name;
-                        if (defaultAgentId && agent.user.id == defaultAgentId) {
-                            option.selected = true;
-                        }
-                        select.appendChild(option);
-                    }
-                });
-            }
-        });
+    // Carregar agentes para o setor da categoria com os selecionados
+    loadAgentsForCategory(sectorId, 'editCategoryAgentsContainer', defaultAgentIds);
 }
 
 function closeEditCategoryModal() {
@@ -1671,7 +1755,7 @@ function closeEditCategoryModal() {
 function saveEditCategory(categoryId) {
     const name = document.getElementById('editCategoryName').value;
     const description = document.getElementById('editCategoryDescription').value;
-    const defaultAgentId = document.getElementById('editCategoryDefaultAgent').value;
+    const defaultAgentIds = getSelectedAgentIds('editCategoryAgentsContainer');
     
     fetch('/projects/support/api/categories/', {
         method: 'POST',
@@ -1684,7 +1768,7 @@ function saveEditCategory(categoryId) {
             category_id: categoryId,
             name: name,
             description: description,
-            default_agent_id: defaultAgentId || null
+            default_agent_ids: defaultAgentIds
         })
     })
     .then(response => response.json())

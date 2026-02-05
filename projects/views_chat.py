@@ -258,10 +258,12 @@ def create_support_chat(request):
             category = SupportCategory.objects.get(id=category_id)
             chat_data['category'] = category
             
-            # Se a categoria tem um agente padrão, atribuir automaticamente
-            if category.default_agent:
-                chat_data['assigned_to'] = category.default_agent
-                chat_data['status'] = 'EM_ANDAMENTO'  # Já assumido pelo agente padrão
+            # Se a categoria tem agentes padrão, pegar o primeiro disponível para atribuir
+            default_agents = category.default_agents.all()
+            if default_agents.exists():
+                # Atribuir ao primeiro agente da lista (pode ser randomizado ou por carga)
+                chat_data['assigned_to'] = default_agents.first()
+                chat_data['status'] = 'EM_ANDAMENTO'  # Já assumido pelo agente
         except SupportCategory.DoesNotExist:
             pass
     
@@ -274,16 +276,29 @@ def create_support_chat(request):
         message=message
     )
     
-    # Notificar o agente padrão se foi atribuído automaticamente
-    if category and category.default_agent:
-        from notifications.models import Notification
-        Notification.objects.create(
-            user=category.default_agent,
-            title='Novo Ticket Atribuído',
-            message=f'Um novo ticket de suporte foi atribuído automaticamente para você: "{title}"',
-            notification_type='SUPPORT_ASSIGNED',
-            link=f'/projects/support/admin/'
-        )
+    # Notificar todos os agentes padrão da categoria
+    if category and category.default_agents.exists():
+        try:
+            from notifications.models import PushNotification, UserNotification
+            for agent in category.default_agents.all():
+                notification = PushNotification.objects.create(
+                    title='Novo Ticket de Suporte',
+                    message=f'Um novo ticket foi aberto na categoria "{category.name}": "{title}"',
+                    notification_type='CUSTOM',
+                    priority='HIGH',
+                    action_url='/projects/support/admin/',
+                    action_text='Ver Ticket',
+                    created_by=request.user,
+                    is_sent=True
+                )
+                notification.target_users.add(agent)
+                UserNotification.objects.create(
+                    notification=notification,
+                    user=agent,
+                    is_read=False
+                )
+        except Exception as e:
+            pass  # Não falhar por causa de notificações
     
     # Calcular posição na fila
     queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
@@ -733,21 +748,19 @@ def manage_support_categories(request):
             if not request.user.is_superuser and sector not in user_sectors:
                 return JsonResponse({'success': False, 'error': 'Você não pode criar categorias neste setor'})
             
-            # Processar agente padrão
-            from users.models import User
-            default_agent = None
-            if data.get('default_agent_id'):
-                try:
-                    default_agent = User.objects.get(id=data['default_agent_id'])
-                except User.DoesNotExist:
-                    pass
-            
             category = SupportCategory.objects.create(
                 name=data['name'],
                 sector=sector,
-                description=data.get('description', ''),
-                default_agent=default_agent
+                description=data.get('description', '')
             )
+            
+            # Processar agentes padrão (múltiplos)
+            from users.models import User
+            default_agent_ids = data.get('default_agent_ids', [])
+            if default_agent_ids:
+                agents = User.objects.filter(id__in=default_agent_ids)
+                category.default_agents.set(agents)
+            
             return JsonResponse({'success': True, 'category_id': category.id})
         
         elif data.get('action') == 'update':
@@ -759,19 +772,14 @@ def manage_support_categories(request):
             
             category.name = data['name']
             category.description = data.get('description', '')
-            
-            # Processar agente padrão
-            from users.models import User
-            if 'default_agent_id' in data:
-                if data['default_agent_id']:
-                    try:
-                        category.default_agent = User.objects.get(id=data['default_agent_id'])
-                    except User.DoesNotExist:
-                        pass
-                else:
-                    category.default_agent = None
-            
             category.save()
+            
+            # Processar agentes padrão (múltiplos)
+            from users.models import User
+            default_agent_ids = data.get('default_agent_ids', [])
+            agents = User.objects.filter(id__in=default_agent_ids) if default_agent_ids else []
+            category.default_agents.set(agents)
+            
             return JsonResponse({'success': True})
         
         elif data.get('action') == 'delete':
@@ -1313,7 +1321,7 @@ def get_support_categories_api(request):
         categories = SupportCategory.objects.filter(
             sector__in=user_sectors,
             is_active=True
-        ).select_related('sector', 'default_agent')
+        ).select_related('sector').prefetch_related('default_agents')
         
         categories_data = [{
             'id': cat.id,
@@ -1323,10 +1331,10 @@ def get_support_categories_api(request):
                 'id': cat.sector.id,
                 'name': cat.sector.name
             } if cat.sector else None,
-            'default_agent': {
-                'id': cat.default_agent.id,
-                'name': cat.default_agent.get_full_name()
-            } if cat.default_agent else None,
+            'default_agents': [{
+                'id': agent.id,
+                'name': agent.get_full_name()
+            } for agent in cat.default_agents.all()],
             'is_active': cat.is_active
         } for cat in categories]
         
@@ -1358,22 +1366,21 @@ def get_support_categories_api(request):
                 if not request.user.is_superuser and sector not in user_sectors:
                     return JsonResponse({'success': False, 'error': 'Você não pode criar categorias para este setor'}, status=403)
                 
-                # Processar agente padrão
-                from users.models import User
-                default_agent = None
-                if data.get('default_agent_id'):
-                    try:
-                        default_agent = User.objects.get(id=data['default_agent_id'])
-                    except User.DoesNotExist:
-                        pass
-                
                 category = SupportCategory.objects.create(
                     name=data['name'],
                     sector=sector,
                     description=data.get('description', ''),
-                    default_agent=default_agent,
                     is_active=True
                 )
+                
+                # Processar agentes padrão (múltiplos)
+                from users.models import User
+                default_agent_ids = data.get('default_agent_ids', [])
+                agents_list = []
+                if default_agent_ids:
+                    agents = User.objects.filter(id__in=default_agent_ids)
+                    category.default_agents.set(agents)
+                    agents_list = [{'id': a.id, 'name': a.get_full_name()} for a in agents]
                 
                 return JsonResponse({
                     'success': True,
@@ -1382,7 +1389,7 @@ def get_support_categories_api(request):
                         'name': category.name,
                         'description': category.description,
                         'sector': {'id': sector.id, 'name': sector.name},
-                        'default_agent': {'id': default_agent.id, 'name': default_agent.get_full_name()} if default_agent else None
+                        'default_agents': agents_list
                     }
                 })
             
@@ -1396,19 +1403,14 @@ def get_support_categories_api(request):
                 category.name = data.get('name', category.name)
                 category.description = data.get('description', category.description)
                 category.is_active = data.get('is_active', category.is_active)
-                
-                # Processar agente padrão
-                from users.models import User
-                if 'default_agent_id' in data:
-                    if data['default_agent_id']:
-                        try:
-                            category.default_agent = User.objects.get(id=data['default_agent_id'])
-                        except User.DoesNotExist:
-                            pass
-                    else:
-                        category.default_agent = None
-                
                 category.save()
+                
+                # Processar agentes padrão (múltiplos)
+                from users.models import User
+                if 'default_agent_ids' in data:
+                    default_agent_ids = data.get('default_agent_ids', [])
+                    agents = User.objects.filter(id__in=default_agent_ids) if default_agent_ids else []
+                    category.default_agents.set(agents)
                 
                 return JsonResponse({'success': True})
             
