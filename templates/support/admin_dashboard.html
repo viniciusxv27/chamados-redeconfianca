@@ -928,16 +928,20 @@ function createTicketElement(ticket) {
     
     console.log('Ticket', ticket.id, '- isAgent:', isCurrentUserAgent, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
     
+    const canDelete = {% if is_supervisor_or_higher %}true{% else %}false{% endif %};
+    
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
             <h4 class="font-medium text-sm text-gray-900 truncate flex-1 mr-2">${escapeHtml(ticket.title)}</h4>
             <div class="flex items-center gap-1">
                 <span class="text-xs px-2 py-1 rounded-full font-medium ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
+                ${canDelete ? `
                 <button onclick="event.stopPropagation(); deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}');" 
                         class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
                         title="Excluir chat">
                     <i class="fas fa-trash text-xs"></i>
                 </button>
+                ` : ''}
             </div>
         </div>
         

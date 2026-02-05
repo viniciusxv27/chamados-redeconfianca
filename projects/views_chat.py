@@ -259,11 +259,14 @@ def create_support_chat(request):
             chat_data['category'] = category
             
             # Se a categoria tem agentes padrão, pegar o primeiro disponível para atribuir
-            default_agents = category.default_agents.all()
-            if default_agents.exists():
-                # Atribuir ao primeiro agente da lista (pode ser randomizado ou por carga)
-                chat_data['assigned_to'] = default_agents.first()
-                chat_data['status'] = 'EM_ANDAMENTO'  # Já assumido pelo agente
+            try:
+                default_agents = category.default_agents.all()
+                if default_agents.exists():
+                    # Atribuir ao primeiro agente da lista (pode ser randomizado ou por carga)
+                    chat_data['assigned_to'] = default_agents.first()
+                    chat_data['status'] = 'EM_ANDAMENTO'  # Já assumido pelo agente
+            except Exception:
+                pass  # Campo pode não existir ainda
         except SupportCategory.DoesNotExist:
             pass
     
@@ -277,8 +280,8 @@ def create_support_chat(request):
     )
     
     # Notificar todos os agentes padrão da categoria
-    if category and category.default_agents.exists():
-        try:
+    try:
+        if category and hasattr(category, 'default_agents') and category.default_agents.exists():
             from notifications.models import PushNotification, UserNotification
             for agent in category.default_agents.all():
                 notification = PushNotification.objects.create(
@@ -297,8 +300,8 @@ def create_support_chat(request):
                     user=agent,
                     is_read=False
                 )
-        except Exception as e:
-            pass  # Não falhar por causa de notificações
+    except Exception as e:
+        pass  # Não falhar por causa de notificações
     
     # Calcular posição na fila
     queue_position = chat.get_queue_position() if hasattr(chat, 'get_queue_position') else None
@@ -693,6 +696,8 @@ def support_admin_dashboard(request):
             'created_at': chat.created_at.isoformat()
         })
     
+    is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+    
     context = {
         'stats': {
             'total': total_chats,
@@ -705,6 +710,7 @@ def support_admin_dashboard(request):
         'recent_chats': recent_chats_data,
         'agents': agents_data,
         'is_support_agent': is_support_agent,
+        'is_supervisor_or_higher': is_supervisor_or_higher,
         'user_sectors': [{'id': s.id, 'name': s.name} for s in user_sectors]
     }
     
@@ -754,12 +760,15 @@ def manage_support_categories(request):
                 description=data.get('description', '')
             )
             
-            # Processar agentes padrão (múltiplos)
-            from users.models import User
-            default_agent_ids = data.get('default_agent_ids', [])
-            if default_agent_ids:
-                agents = User.objects.filter(id__in=default_agent_ids)
-                category.default_agents.set(agents)
+            # Processar agentes padrão (múltiplos) - com tratamento de erro
+            try:
+                from users.models import User
+                default_agent_ids = data.get('default_agent_ids', [])
+                if default_agent_ids:
+                    agents = User.objects.filter(id__in=default_agent_ids)
+                    category.default_agents.set(agents)
+            except Exception:
+                pass  # Campo pode não existir ainda
             
             return JsonResponse({'success': True, 'category_id': category.id})
         
@@ -774,11 +783,14 @@ def manage_support_categories(request):
             category.description = data.get('description', '')
             category.save()
             
-            # Processar agentes padrão (múltiplos)
-            from users.models import User
-            default_agent_ids = data.get('default_agent_ids', [])
-            agents = User.objects.filter(id__in=default_agent_ids) if default_agent_ids else []
-            category.default_agents.set(agents)
+            # Processar agentes padrão (múltiplos) - com tratamento de erro
+            try:
+                from users.models import User
+                default_agent_ids = data.get('default_agent_ids', [])
+                agents = User.objects.filter(id__in=default_agent_ids) if default_agent_ids else []
+                category.default_agents.set(agents)
+            except Exception:
+                pass  # Campo pode não existir ainda
             
             return JsonResponse({'success': True})
         
@@ -1308,37 +1320,55 @@ def get_support_categories_api(request):
     from users.models import Sector
     
     if request.method == 'GET':
-        # Obter setores do usuário
-        if request.user.is_superuser:
-            user_sectors = Sector.objects.all()
-        else:
-            user_sectors_list = list(request.user.sectors.all())
-            if request.user.sector:
-                user_sectors_list.append(request.user.sector)
-            user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list])
-        
-        # Mostrar categorias dos setores do usuário
-        categories = SupportCategory.objects.filter(
-            sector__in=user_sectors,
-            is_active=True
-        ).select_related('sector').prefetch_related('default_agents')
-        
-        categories_data = [{
-            'id': cat.id,
-            'name': cat.name,
-            'description': cat.description,
-            'sector': {
-                'id': cat.sector.id,
-                'name': cat.sector.name
-            } if cat.sector else None,
-            'default_agents': [{
-                'id': agent.id,
-                'name': agent.get_full_name()
-            } for agent in cat.default_agents.all()],
-            'is_active': cat.is_active
-        } for cat in categories]
-        
-        return JsonResponse({'success': True, 'categories': categories_data})
+        try:
+            # Obter setores do usuário
+            if request.user.is_superuser:
+                user_sectors = Sector.objects.all()
+            else:
+                user_sectors_list = list(request.user.sectors.all())
+                if request.user.sector:
+                    user_sectors_list.append(request.user.sector)
+                user_sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors_list])
+            
+            # Mostrar categorias dos setores do usuário
+            categories = SupportCategory.objects.filter(
+                sector__in=user_sectors,
+                is_active=True
+            ).select_related('sector')
+            
+            # Tentar usar prefetch_related para default_agents se o campo existir
+            try:
+                categories = categories.prefetch_related('default_agents')
+            except Exception:
+                pass
+            
+            categories_data = []
+            for cat in categories:
+                cat_data = {
+                    'id': cat.id,
+                    'name': cat.name,
+                    'description': cat.description,
+                    'sector': {
+                        'id': cat.sector.id,
+                        'name': cat.sector.name
+                    } if cat.sector else None,
+                    'is_active': cat.is_active
+                }
+                
+                # Tentar acessar default_agents (pode não existir ainda)
+                try:
+                    cat_data['default_agents'] = [{
+                        'id': agent.id,
+                        'name': agent.get_full_name()
+                    } for agent in cat.default_agents.all()]
+                except Exception:
+                    cat_data['default_agents'] = []
+                
+                categories_data.append(cat_data)
+            
+            return JsonResponse({'success': True, 'categories': categories_data})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
     
     elif request.method == 'POST':
         # Permitir SUPERVISOR ou hierarquia maior gerenciar categorias
@@ -1373,14 +1403,17 @@ def get_support_categories_api(request):
                     is_active=True
                 )
                 
-                # Processar agentes padrão (múltiplos)
-                from users.models import User
-                default_agent_ids = data.get('default_agent_ids', [])
+                # Processar agentes padrão (múltiplos) - com tratamento de erro caso o campo não exista
                 agents_list = []
-                if default_agent_ids:
-                    agents = User.objects.filter(id__in=default_agent_ids)
-                    category.default_agents.set(agents)
-                    agents_list = [{'id': a.id, 'name': a.get_full_name()} for a in agents]
+                try:
+                    from users.models import User
+                    default_agent_ids = data.get('default_agent_ids', [])
+                    if default_agent_ids:
+                        agents = User.objects.filter(id__in=default_agent_ids)
+                        category.default_agents.set(agents)
+                        agents_list = [{'id': a.id, 'name': a.get_full_name()} for a in agents]
+                except Exception:
+                    pass  # Campo pode não existir ainda
                 
                 return JsonResponse({
                     'success': True,
@@ -1405,12 +1438,15 @@ def get_support_categories_api(request):
                 category.is_active = data.get('is_active', category.is_active)
                 category.save()
                 
-                # Processar agentes padrão (múltiplos)
-                from users.models import User
-                if 'default_agent_ids' in data:
-                    default_agent_ids = data.get('default_agent_ids', [])
-                    agents = User.objects.filter(id__in=default_agent_ids) if default_agent_ids else []
-                    category.default_agents.set(agents)
+                # Processar agentes padrão (múltiplos) - com tratamento de erro
+                try:
+                    from users.models import User
+                    if 'default_agent_ids' in data:
+                        default_agent_ids = data.get('default_agent_ids', [])
+                        agents = User.objects.filter(id__in=default_agent_ids) if default_agent_ids else []
+                        category.default_agents.set(agents)
+                except Exception:
+                    pass  # Campo pode não existir ainda
                 
                 return JsonResponse({'success': True})
             
