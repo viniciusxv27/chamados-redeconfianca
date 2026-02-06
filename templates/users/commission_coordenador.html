@@ -908,9 +908,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===========================================
     
     // Gráfico de Remuneração Variável do Coordenador
-    const ctxComissoesCoord = document.getElementById('chartComissoesCoord');
-    if (ctxComissoesCoord && chartData.comissoes) {
-        new Chart(ctxComissoesCoord, {
+    const ctxRemunCoord = document.getElementById('chartRemunCoord');
+    if (ctxRemunCoord && chartData.comissoes) {
+        new Chart(ctxRemunCoord, {
             type: 'bar',
             data: {
                 labels: chartData.comissoes.labels,

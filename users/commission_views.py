@@ -752,8 +752,8 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
             exclusao = metas[pilar_key]['exclusao']
             total_geral_pago += pago
             total_geral_exclusao += exclusao
-            # Total = Pago + Exclusão para calcular porcentagem
-            metas[pilar_key]['total'] = (pago + exclusao) if (pago + exclusao) > 0 else 1
+            # Total = Pago + Exclusão
+            metas[pilar_key]['total'] = pago + exclusao
         
         print(f"[fetch_metas_por_pilar] RESULTADO FINAL: {metas}")
         print(f"[fetch_metas_por_pilar] Total geral pago: {total_geral_pago}, Total geral exclusão: {total_geral_exclusao}")
@@ -765,6 +765,227 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
         
     except Exception as e:
         print(f"[fetch_metas_por_pilar] Erro geral: {e}")
+        import traceback
+        traceback.print_exc()
+        return metas
+
+
+def fetch_metas_por_pilar_coordenador(coordenador_nome):
+    """
+    Busca Pago e Exclusão por pilar da planilha BASE_PAGAMENTO para um coordenador.
+    Filtra pela coluna COORDENACAO usando o primeiro nome do coordenador.
+    
+    Agrupa por PILAR e soma Receita de todas as lojas do coordenador.
+    """
+    cache_key = f"metas_pilar_coord_{coordenador_nome.replace(' ', '_')}"
+    
+    # Verificar cache
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        print(f"[fetch_metas_por_pilar_coordenador] Usando cache para {coordenador_nome}")
+        return cached_data
+    
+    # Inicializar metas
+    metas = {
+        'movel': {'total': 0, 'pago': 0, 'exclusao': 0},
+        'fixa': {'total': 0, 'pago': 0, 'exclusao': 0},
+        'smartphone': {'total': 0, 'pago': 0, 'exclusao': 0},
+        'eletronicos': {'total': 0, 'pago': 0, 'exclusao': 0},
+        'essenciais': {'total': 0, 'pago': 0, 'exclusao': 0},
+        'seguro': {'total': 0, 'pago': 0, 'exclusao': 0},
+        'sva': {'total': 0, 'pago': 0, 'exclusao': 0},
+    }
+    
+    # Mapeamento de texto do pilar para chave
+    pilar_mapping = {
+        'MÓVEL': 'movel',
+        'MOVEL': 'movel',
+        'FIXA': 'fixa',
+        'SMART': 'smartphone',
+        'SMARTPHONE': 'smartphone',
+        'ELETRO': 'eletronicos',
+        'ELETRÔNICO': 'eletronicos',
+        'ELETRONICOS': 'eletronicos',
+        'ELETRÔNICOS': 'eletronicos',
+        'ESSEN': 'essenciais',
+        'ESSENCIAL': 'essenciais',
+        'ESSENCIAIS': 'essenciais',
+        'SEG': 'seguro',
+        'SEGURO': 'seguro',
+        'SEGUROS': 'seguro',
+        'SVA': 'sva',
+    }
+    
+    def normalize_text(text):
+        if pd.isna(text):
+            return ""
+        return str(text).strip().upper()
+    
+    def get_first_name(name):
+        """Extrai o primeiro nome de uma string"""
+        if pd.isna(name) or not str(name).strip():
+            return ""
+        return str(name).strip().upper().split()[0]
+    
+    coord_first_name = get_first_name(coordenador_nome)
+    
+    print(f"[fetch_metas_por_pilar_coordenador] Buscando dados para coordenador: {coordenador_nome} (primeiro nome: {coord_first_name})")
+    
+    # Obter URLs dinâmicas
+    urls = get_excel_urls()
+    
+    try:
+        # Baixar planilha BASE_PAGAMENTO
+        excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento_coord")
+        if error:
+            print(f"[fetch_metas_por_pilar_coordenador] Erro ao baixar planilha BASE_PAGAMENTO: {error}")
+            return metas
+        
+        # Ler a sheet "Planilha1" da BASE_PAGAMENTO
+        try:
+            excel_file.seek(0)
+            df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
+            print(f"[fetch_metas_por_pilar_coordenador] Colunas da BASE_PAGAMENTO: {list(df.columns)}")
+            print(f"[fetch_metas_por_pilar_coordenador] Total de linhas: {len(df)}")
+        except Exception as e:
+            print(f"[fetch_metas_por_pilar_coordenador] Erro ao ler planilha: {e}")
+            return metas
+        
+        # Encontrar colunas necessárias
+        coord_col = None
+        receita_col = None
+        pilar_col = None
+        
+        for col in df.columns:
+            col_upper = str(col).strip().upper()
+            if col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
+                coord_col = col
+            elif col_upper == 'RECEITA':
+                receita_col = col
+            elif col_upper == 'PILAR':
+                pilar_col = col
+        
+        print(f"[fetch_metas_por_pilar_coordenador] coord_col={coord_col}, receita_col={receita_col}, pilar_col={pilar_col}")
+        
+        if coord_col is None:
+            print(f"[fetch_metas_por_pilar_coordenador] ERRO: Coluna COORDENACAO não encontrada")
+            return metas
+        
+        if receita_col is None or pilar_col is None:
+            print(f"[fetch_metas_por_pilar_coordenador] ERRO: Colunas obrigatórias não encontradas")
+            return metas
+        
+        # Debug: mostrar valores únicos de coordenação
+        coords_unicas = df[coord_col].dropna().unique()[:10]
+        print(f"[fetch_metas_por_pilar_coordenador] Valores de COORDENACAO (amostra): {list(coords_unicas)}")
+        
+        # Processar cada linha - filtrar por primeiro nome do coordenador
+        for idx, row in df.iterrows():
+            row_coord = normalize_text(row.get(coord_col, ''))
+            row_coord_first = get_first_name(row.get(coord_col, ''))
+            
+            # Comparar pelo primeiro nome
+            if row_coord_first and coord_first_name and row_coord_first == coord_first_name:
+                # Identificar o pilar desta linha
+                pilar_val = normalize_text(row.get(pilar_col, ''))
+                
+                # Mapear para chave do pilar
+                pilar_key = None
+                for key, value in pilar_mapping.items():
+                    if key in pilar_val or pilar_val == key:
+                        pilar_key = value
+                        break
+                
+                if pilar_key:
+                    # Somar receita ao pago
+                    val = row.get(receita_col)
+                    if pd.notna(val):
+                        try:
+                            valor_float = float(val)
+                            metas[pilar_key]['pago'] += valor_float
+                        except (ValueError, TypeError):
+                            pass
+        
+        # =====================================================
+        # PROCESSAR PLANILHA DE EXCLUSÃO
+        # =====================================================
+        try:
+            excel_file_exclusao, error_exclusao = download_excel_file(urls['base_exclusao'], "base_exclusao_coord")
+            if error_exclusao:
+                print(f"[fetch_metas_por_pilar_coordenador] Erro ao baixar planilha BASE_EXCLUSAO: {error_exclusao}")
+                df_exclusao = None
+            else:
+                excel_file_exclusao.seek(0)
+                df_exclusao = pd.read_excel(excel_file_exclusao, sheet_name='Planilha1', engine='openpyxl')
+                print(f"[fetch_metas_por_pilar_coordenador] Colunas da BASE_EXCLUSAO: {list(df_exclusao.columns)}")
+            
+            if df_exclusao is not None:
+                # Encontrar colunas na planilha de exclusão
+                coord_col_exc = None
+                receita_col_exc = None
+                pilar_col_exc = None
+                
+                for col in df_exclusao.columns:
+                    col_upper = str(col).strip().upper()
+                    if col_upper in ['COORDENACAO', 'COORDENAÇÃO', 'COORDENADOR']:
+                        coord_col_exc = col
+                    elif col_upper == 'RECEITA':
+                        receita_col_exc = col
+                    elif col_upper == 'PILAR':
+                        pilar_col_exc = col
+                
+                if coord_col_exc and receita_col_exc and pilar_col_exc:
+                    # Processar cada linha - filtrar por primeiro nome do coordenador
+                    for idx, row in df_exclusao.iterrows():
+                        row_coord = normalize_text(row.get(coord_col_exc, ''))
+                        row_coord_first = get_first_name(row.get(coord_col_exc, ''))
+                        
+                        if row_coord_first and coord_first_name and row_coord_first == coord_first_name:
+                            # Identificar o pilar desta linha
+                            pilar_val = normalize_text(row.get(pilar_col_exc, ''))
+                            
+                            # Mapear para chave do pilar
+                            pilar_key = None
+                            for key, value in pilar_mapping.items():
+                                if key in pilar_val or pilar_val == key:
+                                    pilar_key = value
+                                    break
+                            
+                            if pilar_key:
+                                # Somar receita ao exclusão
+                                val = row.get(receita_col_exc)
+                                if pd.notna(val):
+                                    try:
+                                        valor_float = float(val)
+                                        metas[pilar_key]['exclusao'] += valor_float
+                                    except (ValueError, TypeError):
+                                        pass
+                else:
+                    print(f"[fetch_metas_por_pilar_coordenador] AVISO: Colunas obrigatórias não encontradas na planilha EXCLUSÃO")
+                    
+        except Exception as e:
+            print(f"[fetch_metas_por_pilar_coordenador] Erro ao processar planilha EXCLUSÃO: {e}")
+        
+        # Calcular totais
+        total_geral_pago = 0
+        total_geral_exclusao = 0
+        for pilar_key in metas:
+            pago = metas[pilar_key]['pago']
+            exclusao = metas[pilar_key]['exclusao']
+            total_geral_pago += pago
+            total_geral_exclusao += exclusao
+            metas[pilar_key]['total'] = pago + exclusao
+        
+        print(f"[fetch_metas_por_pilar_coordenador] RESULTADO FINAL: {metas}")
+        print(f"[fetch_metas_por_pilar_coordenador] Total geral pago: {total_geral_pago}, Total geral exclusão: {total_geral_exclusao}")
+        
+        # Salvar no cache por 5 minutos
+        cache.set(cache_key, metas, 300)
+        
+        return metas
+        
+    except Exception as e:
+        print(f"[fetch_metas_por_pilar_coordenador] Erro geral: {e}")
         import traceback
         traceback.print_exc()
         return metas
@@ -1942,6 +2163,10 @@ def process_simple_commission_data(data, is_gerente=False):
     """
     Versão simplificada para listar múltiplos usuários
     """
+    # Debug: mostre todas as colunas que contêm REMUNE ou FINAL para rastrear
+    rem_cols = [k for k in data.keys() if 'REMUN' in str(k).upper() or 'FINAL' in str(k).upper()]
+    print(f"[process_simple_commission_data] Colunas com REMUN/FINAL: {rem_cols}")
+    
     pilares_config = [
         {'nome': 'Móvel', 'key': 'MOVEL', 'com_key': 'COM_MÓVEL', 'field': 'movel_comissao'},
         {'nome': 'Fixa', 'key': 'FIXA', 'com_key': 'COM_FIXA', 'field': 'fixa_comissao'},
@@ -1953,10 +2178,38 @@ def process_simple_commission_data(data, is_gerente=False):
     ]
     
     pilares = []
+    
+    # Buscar remuneração final com múltiplos fallbacks para diferentes nomes de coluna
+    # Iterar por todas as chaves para encontrar uma que contenha REMUNERA e FINAL
+    remuneracao_final = 0
+    for key in data.keys():
+        key_upper = str(key).upper()
+        if ('REMUNER' in key_upper or 'REMUN' in key_upper) and 'FINAL' in key_upper:
+            val = safe_float(data.get(key))
+            if val > 0:
+                remuneracao_final = val
+                print(f"[process_simple_commission_data] Encontrada remuneração final em '{key}': {val}")
+                break
+    
+    # Fallback para nomes específicos
+    if remuneracao_final == 0:
+        remuneracao_final = (
+            safe_float(data.get('REMUNERAÇÃO_FINAL_TOTAL')) or
+            safe_float(data.get('REMUNERAÇÃO FINAL TOTAL')) or
+            safe_float(data.get('REMUNERÇÃO FINAL')) or
+            safe_float(data.get('REMUNERAÇÃO FINAL')) or
+            safe_float(data.get(' REMUNERAÇÃO FINAL')) or  # Com espaço no início
+            safe_float(data.get('REMUNERAÇÃO FINAL GERENTE')) or
+            safe_float(data.get('REMUNERÇÃO FINAL GERENTE')) or
+            safe_float(data.get('REM. FINAL')) or
+            safe_float(data.get('TOTAL')) or
+            0
+        )
+    
     result = {
         'nome': data.get('NOME', ''),
         'pdv': data.get('PDV', ''),
-        'remuneracao_final': safe_float(data.get('REMUNERAÇÃO_FINAL_TOTAL') or data.get('REMUNERAÇÃO FINAL TOTAL')),
+        'remuneracao_final': remuneracao_final,
         'comissao_total': safe_float(data.get('Total Comissão')),
     }
     
@@ -2683,10 +2936,9 @@ def commission_coordenador_view(request):
         context['target_is_gerente'] = target_is_gerente
     elif not viewing_user and result.get('success'):
         # Coordenador visualizando seus próprios dados - usar função específica
-        # Buscar metas por pilar para o coordenador
+        # Buscar metas por pilar para o coordenador (filtra por COORDENACAO)
         coord_name = user.get_full_name() or user.first_name
-        coord_sector = user.sector.name if hasattr(user, 'sector') and user.sector else None
-        metas_pilar = fetch_metas_por_pilar(coord_name, is_gerente=False, user_sector=coord_sector)
+        metas_pilar = fetch_metas_por_pilar_coordenador(coord_name)
         processed = process_coordenador_commission_data(result['data'], metas_pilar)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
