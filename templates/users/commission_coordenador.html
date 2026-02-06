@@ -357,10 +357,10 @@
                 <h2 class="text-lg font-semibold text-gray-800">
                     Representatividade de Remuneração Variável
                     <span class="ml-2 text-green-600 text-base font-bold" id="totalGeralLojas">
-                        R$ {{ data.totais.remuneracao_pilares|floatformat:2 }}
+                        R$ {{ data.totais.remuneracao_final|floatformat:2 }}
                     </span>
                 </h2>
-                <p class="text-sm text-gray-500">Participação de cada loja no pilar selecionado</p>
+                <p class="text-sm text-gray-500">Participação de cada loja na comissão do coordenador</p>
             </div>
             <select id="pilarSelectLoja" 
                 class="text-sm border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-[180px]">
@@ -974,7 +974,8 @@ document.addEventListener('DOMContentLoaded', function() {
         '#795548', '#607D8B', '#2196F3', '#4CAF50', '#FFEB3B'
     ];
     
-    // Total do coordenador para referência
+    // Comissão total do coordenador para referência
+    const comissaoCoordenador = parseFloat("{{ data.totais.remuneracao_final|default_if_none:0 }}".replace(',', '.')) || 0;
     const totalPilaresCoordenador = parseFloat("{{ data.totais.remuneracao_pilares|default_if_none:0 }}".replace(',', '.')) || 0;
     const pilarNomes = ['Móvel', 'Fixa', 'Smartphone', 'Eletrônicos', 'Essenciais', 'Seguro', 'SVA'];
     
@@ -1010,32 +1011,36 @@ document.addEventListener('DOMContentLoaded', function() {
         // Calcular total de todas as lojas
         const total = dados.reduce((sum, d) => sum + d.valor, 0);
         
-        // Atualizar lista - mostra valor e percentual de participação
+        // Atualizar lista - mostra percentual e valor representado da comissão do coordenador
         let html = '';
         dados.forEach((d, i) => {
             const valor = d.valor;
             // Percentual = valor da loja / total de todas as lojas * 100
             const percent = total > 0 ? ((valor / total) * 100) : 0;
+            // Valor representado = percentual da comissão do coordenador
+            const valorRepresentado = (percent / 100) * comissaoCoordenador;
             
             html += '<div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">';
             html += '<div class="flex items-center gap-3">';
             html += '<div class="w-3 h-3 rounded-full" style="background-color: ' + lojaColors[i % lojaColors.length] + '"></div>';
             html += '<span class="font-medium text-gray-700 text-sm">' + d.nome + '</span>';
             html += '</div>';
-            html += '<div class="text-right flex items-center gap-2">';
+            html += '<div class="text-right flex items-center gap-3">';
             if (valor > 0) {
                 html += '<span class="font-bold text-green-600 text-sm">' + percent.toFixed(1) + '%</span>';
+                html += '<span class="font-semibold text-primary text-sm">R$ ' + valorRepresentado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
             } else {
                 html += '<span class="text-gray-400 text-sm">0%</span>';
+                html += '<span class="text-gray-400 text-sm">R$ 0,00</span>';
             }
             html += '</div>';
             html += '</div>';
         });
         
-        // Linha de total
+        // Linha de total - mostra a comissão do coordenador
         html += '<div class="flex items-center justify-between py-3 px-3 bg-primary/10 rounded-lg mt-4 border-t-2 border-primary">';
-        html += '<span class="font-semibold text-gray-800">Total ' + (pilarIndex === 'total' ? 'Geral' : pilarNomes[parseInt(pilarIndex)]) + '</span>';
-        html += '<span class="font-bold text-primary text-lg">R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
+        html += '<span class="font-semibold text-gray-800">Comissão do Coordenador</span>';
+        html += '<span class="font-bold text-primary text-lg">R$ ' + comissaoCoordenador.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
         html += '</div>';
         
         container.innerHTML = html;
