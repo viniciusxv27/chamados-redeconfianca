@@ -2289,6 +2289,7 @@ def fetch_lojas_por_coordenador(coordenador_nome):
     """
     Busca as lojas (PDVs) que pertencem a um coordenador específico.
     Lê a sheet REMUNERAÇÃO GERENTE e filtra pela coluna COORDENADOR (A).
+    Compara pelo primeiro nome do coordenador.
     """
     cache_key = f"lojas_coordenador_{coordenador_nome.replace(' ', '_')}"
     cached_data = cache.get(cache_key)
@@ -2306,43 +2307,64 @@ def fetch_lojas_por_coordenador(coordenador_nome):
         
         df = pd.read_excel(excel_file, sheet_name=SHEET_GERENTE, engine='openpyxl')
         
+        # Buscar a coluna correta: "COORDENADOR (A)" ou variações
         coord_col = None
         for col in df.columns:
-            if 'COORDENADOR' in str(col).upper():
+            col_upper = str(col).upper().strip()
+            # Priorizar "COORDENADOR (A)" ou "COORDENADOR(A)"
+            if 'COORDENADOR' in col_upper and ('(A)' in col_upper or col_upper == 'COORDENADOR'):
                 coord_col = col
                 break
         
+        # Fallback: qualquer coluna com COORDENADOR
         if coord_col is None:
+            for col in df.columns:
+                if 'COORDENADOR' in str(col).upper():
+                    coord_col = col
+                    break
+        
+        if coord_col is None:
+            print(f"[fetch_lojas_por_coordenador] Coluna COORDENADOR não encontrada. Colunas: {list(df.columns)}")
             return []
+        
+        print(f"[fetch_lojas_por_coordenador] Usando coluna: {coord_col}")
         
         def normalize_name(name):
             if pd.isna(name):
                 return ""
             return str(name).strip().upper()
         
-        coord_normalized = normalize_name(coordenador_nome)
+        def get_first_name(name):
+            """Extrai o primeiro nome de uma string"""
+            if pd.isna(name) or not str(name).strip():
+                return ""
+            return str(name).strip().upper().split()[0]
+        
+        # Primeiro nome do coordenador logado
+        coord_first_name = get_first_name(coordenador_nome)
         
         lojas = []
         for idx, row in df.iterrows():
-            row_coord = normalize_name(row.get(coord_col, ''))
-            # Comparar primeiro nome
-            if row_coord and (row_coord == coord_normalized or 
-                             coord_normalized in row_coord or 
-                             row_coord in coord_normalized):
+            # Pegar o primeiro nome do valor na coluna COORDENADOR (A)
+            row_coord_full = normalize_name(row.get(coord_col, ''))
+            row_coord_first = get_first_name(row.get(coord_col, ''))
+            
+            # Comparar pelo primeiro nome
+            if row_coord_first and coord_first_name and row_coord_first == coord_first_name:
                 pdv = row.get('PDV', '')
                 gerente = row.get('NOME', '')
                 if pd.notna(pdv) and str(pdv).strip():
-                    print(str(gerente).strip())
-                    print(pd.notna(gerente))
                     lojas.append({
                         'pdv': str(pdv).strip(),
                         'gerente': str(gerente).strip() if pd.notna(gerente) else '',
                     })
         
+        print(f"[fetch_lojas_por_coordenador] Encontradas {len(lojas)} lojas para coordenador '{coord_first_name}'")
         cache.set(cache_key, lojas, 300)
         return lojas
         
     except Exception as e:
+        print(f"[fetch_lojas_por_coordenador] Erro: {str(e)}")
         return []
 
 
@@ -2538,13 +2560,20 @@ def commission_coordenador_view(request):
     gerentes_data = []
     all_gerentes_result = fetch_all_users_from_sheet(SHEET_GERENTE)
     
+    def get_first_name(name):
+        """Extrai o primeiro nome de uma string"""
+        if pd.isna(name) or not str(name).strip():
+            return ""
+        return str(name).strip().upper().split()[0]
+    
     if all_gerentes_result.get('success'):
         for gerente_data in all_gerentes_result['users']:
             pdv = str(gerente_data['data'].get('PDV', '')).strip().upper()
-            coord = str(gerente_data['data'].get('COORDENADOR (A)', '')).strip().upper()
+            coord_full = str(gerente_data['data'].get('COORDENADOR (A)', '')).strip().upper()
+            coord_first = get_first_name(coord_full)
             
-            # Filtrar apenas gerentes deste coordenador
-            if user_first_name in coord or pdv in pdvs_coordenador:
+            # Filtrar apenas gerentes deste coordenador - comparar pelo primeiro nome
+            if (user_first_name and coord_first and coord_first == user_first_name) or pdv in pdvs_coordenador:
                 processed = process_simple_commission_data(gerente_data['data'], is_gerente=True)
                 processed['pdv'] = gerente_data['data'].get('PDV', '')
                 processed['coordenador'] = gerente_data['data'].get('COORDENADOR (A)', '')
