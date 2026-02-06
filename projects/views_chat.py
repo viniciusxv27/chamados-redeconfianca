@@ -223,7 +223,8 @@ def get_support_chat(request, chat_id):
             'user': {
                 'id': chat.user.id,
                 'get_full_name': chat.user.get_full_name(),
-                'login_code': getattr(chat.user, 'login_code', '') or ''
+                'login_code': getattr(chat.user, 'login_code', '') or '',
+                'pdv': getattr(chat.user, 'pdv', '') or ''
             },
             'sector': {
                 'id': chat.sector.id,
@@ -241,6 +242,7 @@ def get_support_chat(request, chat_id):
         },
         'is_support_agent': is_support_agent,
         'is_superadmin': is_superadmin,
+        'is_supervisor_or_higher': is_supervisor_or_higher,
         'can_assume': can_assume
     })
 
@@ -1836,17 +1838,17 @@ def close_support_chat(request, chat_id):
 @login_required
 @require_POST
 def delete_support_chat(request, chat_id):
-    """Exclui um chat de suporte (apenas para SUPERADMIN)"""
+    """Exclui um chat de suporte (apenas para SUPERVISOR ou superior)"""
     try:
         chat = get_object_or_404(SupportChat, id=chat_id)
         
-        # Verificar permissão: apenas SUPERADMIN pode excluir
-        is_superadmin = request.user.hierarchy == 'SUPERADMIN' or request.user.is_superuser
+        # Verificar permissão: SUPERVISOR ou superior pode excluir
+        is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
         
-        if not is_superadmin:
+        if not is_supervisor_or_higher:
             return JsonResponse({
                 'success': False,
-                'error': 'Apenas SUPERADMIN pode excluir chats de suporte'
+                'error': 'Apenas SUPERVISOR ou superior pode excluir chats de suporte'
             }, status=403)
         
         # Salvar informações para log

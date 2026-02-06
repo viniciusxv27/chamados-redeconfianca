@@ -88,6 +88,7 @@ def is_user_gerente(user):
     try:
         gerente_group = CommunicationGroup.objects.filter(name__icontains="GERENTES").first()
         if gerente_group:
+            print(f"[is_user_gerente] Verificando se {user.get_full_name()} está no grupo GERENTES")
             return user in gerente_group.members.all()
     except:
         pass
@@ -966,11 +967,12 @@ def find_column_value(data, search_patterns):
 def convert_percentage(value):
     """
     Converte valor decimal para percentual se necessário.
-    Valores <= 3 são considerados decimais (ex: 0.92 = 92%, 1.5 = 150%)
+    Valores <= 10 são considerados decimais (ex: 0.92 = 92%, 1.5 = 150%, 3.158 = 315.8%)
+    Suporta atingimentos de até 1000%.
     """
     if value is None or value == 0:
         return 0
-    if value <= 3:
+    if value <= 10:
         return value * 100
     return value
 
@@ -1280,8 +1282,9 @@ def fetch_vendedores_por_filial(user_sector):
                             if pd.notna(val):
                                 try:
                                     pct = float(val)
-                                    # Se valor < 3, provavelmente está em decimal (0.95 = 95%)
-                                    if pct < 3:
+                                    # Se valor <= 10, provavelmente está em decimal (3.158 = 315.8%)
+                                    # Suporta atingimentos de até 1000%
+                                    if pct <= 10:
                                         pct = pct * 100
                                     ating_por_vendedor[nome][pilar_key] = pct
                                 except (ValueError, TypeError):

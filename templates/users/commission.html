@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load tutorial_filters %}
 
 {% block title %}Remuneração Variável{% endblock %}
 
@@ -165,7 +166,7 @@
                     </svg>
                     <div class="absolute inset-0 flex items-center justify-center">
                         <span class="text-xs font-bold {% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
-                            {{ pilar.pct_1|default:0|floatformat:2 }}%
+                            {{ pilar.pct_1|default:0|format_br:2 }}%
                         </span>
                     </div>
                 </div>
@@ -177,19 +178,19 @@
                             <tr>
                                 <td class="text-gray-500 pr-1">{{ meses.mes_pct_3 }}:</td>
                                 <td class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
-                                    {{ pilar.pct_3|default:0|floatformat:2 }}%
+                                    {{ pilar.pct_3|default:0|format_br:2 }}%
                                 </td>
                             </tr>
                             <tr>
                                 <td class="text-gray-500 pr-1">{{ meses.mes_pct_2 }}:</td>
                                 <td class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
-                                    {{ pilar.pct_2|default:0|floatformat:2 }}%
+                                    {{ pilar.pct_2|default:0|format_br:2 }}%
                                 </td>
                             </tr>
                             <tr>
                                 <td class="text-gray-500 pr-1">{{ meses.mes_pct_1 }}:</td>
                                 <td class="{% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-bold">
-                                    {{ pilar.pct_1|default:0|floatformat:2 }}%
+                                    {{ pilar.pct_1|default:0|format_br:2 }}%
                                 </td>
                             </tr>
                         </tbody>

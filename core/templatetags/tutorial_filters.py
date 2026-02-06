@@ -3,6 +3,19 @@ from django import template
 register = template.Library()
 
 @register.filter
+def format_br(value, decimals=2):
+    """Formata número no padrão brasileiro (vírgula como separador decimal)"""
+    try:
+        if value is None:
+            value = 0
+        # Formatar com o número de casas decimais especificado
+        formatted = f"{float(value):.{decimals}f}"
+        # Trocar ponto por vírgula
+        return formatted.replace('.', ',')
+    except (ValueError, TypeError):
+        return value
+
+@register.filter
 def get_progress_for_user(tutorial, user):
     """Retorna o progresso do usuário para um tutorial específico"""
     try:

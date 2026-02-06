@@ -930,7 +930,7 @@ function createTicketElement(ticket) {
     
     console.log('Ticket', ticket.id, '- can_assume:', ticket.can_assume, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
     
-    const canDelete = {% if is_superadmin %}true{% else %}false{% endif %};
+    const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
     
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
@@ -1079,6 +1079,11 @@ function renderTicketDetails(data) {
                     </div>
                     
                     <div>
+                        <label class="block text-xs font-medium text-gray-700">PDV</label>
+                        <p class="text-sm text-gray-900">${data.chat.user.pdv || '-'}</p>
+                    </div>
+                    
+                    <div>
                         <label class="block text-xs font-medium text-gray-700">Setor</label>
                         <p class="text-sm text-gray-900">${data.chat.sector ? data.chat.sector.name : 'N/A'}</p>
                     </div>
@@ -1113,9 +1118,17 @@ function renderTicketDetails(data) {
                     </div>
                     ` : ''}
                     
+                    ${isAssignedToMe && (data.chat.status === 'AGUARDANDO' || data.chat.status === 'ABERTO') ? `
+                    <div class="pt-4 border-t">
+                        <button onclick="startChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <i class="fas fa-play-circle mr-2"></i>Começar Atendimento
+                        </button>
+                    </div>
+                    ` : ''}
+                    
                     ${isAssignedToMe && data.chat.status !== 'FECHADO' ? `
                     <div class="pt-4 border-t space-y-2">
-                        ${data.chat.status === 'ABERTO' || data.chat.status === 'EM_ANDAMENTO' ? `
+                        ${data.chat.status === 'EM_ANDAMENTO' ? `
                         <button onclick="resolveChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
                             <i class="fas fa-check-circle mr-2"></i>Marcar como Resolvido
                         </button>
@@ -1128,7 +1141,7 @@ function renderTicketDetails(data) {
                     </div>
                     ` : ''}
                     
-                    ${data.is_superadmin ? `
+                    ${(data.is_superadmin || data.is_supervisor_or_higher) ? `
                     <div class="pt-4 border-t">
                         <button onclick="deleteTicket(${data.chat.id}, '${data.chat.title.replace(/'/g, "\\'").replace(/"/g, '\\&quot;')}'); closeTicketModal();" 
                                 class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm transition-colors">
@@ -1146,6 +1159,13 @@ function renderTicketDetails(data) {
                 </div>
                 
                 <div class="border-t p-4 flex-shrink-0 bg-white">
+                    ${isAssignedToMe && data.chat.status === 'EM_ANDAMENTO' ? `
+                    <div class="flex justify-start mb-3">
+                        <button onclick="resolveChat(${data.chat.id})" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md text-sm transition-colors">
+                            <i class="fas fa-flag-checkered mr-2"></i>Finalizar Atendimento
+                        </button>
+                    </div>
+                    ` : ''}
                     <div class="flex space-x-2">
                         <input type="file" id="fileInput-${data.chat.id}" class="hidden" onchange="handleFileUpload(${data.chat.id}, this)">
                         <button onclick="document.getElementById('fileInput-${data.chat.id}').click()" 
@@ -1465,6 +1485,35 @@ function clearPastedImage(chatId) {
         preview.classList.add('hidden');
     }
     window.pastedImageFile = null;
+}
+
+function startChat(chatId) {
+    if (!confirm('Começar atendimento deste ticket?')) return;
+    
+    const formData = new FormData();
+    formData.append('status', 'EM_ANDAMENTO');
+    
+    fetch(`/projects/support/chat/${chatId}/update-status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Atendimento iniciado!', 'success');
+            openTicketModal(chatId);  // Recarrega o modal
+            loadSupportTickets();  // Atualiza o kanban
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao iniciar atendimento');
+    });
 }
 
 function resolveChat(chatId) {
