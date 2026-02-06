@@ -1007,15 +1007,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ordenar por valor
         dados.sort((a, b) => b.valor - a.valor);
         
-        // Calcular total
+        // Calcular total de todas as lojas
         const total = dados.reduce((sum, d) => sum + d.valor, 0);
         
-        // Atualizar lista (mesmo estilo do gerente)
+        // Atualizar lista - mostra valor e percentual de participação
         let html = '';
         dados.forEach((d, i) => {
             const valor = d.valor;
+            // Percentual = valor da loja / total de todas as lojas * 100
             const percent = total > 0 ? ((valor / total) * 100) : 0;
-            const valorRefTotal = (percent / 100) * totalPilaresCoordenador;
             
             html += '<div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">';
             html += '<div class="flex items-center gap-3">';
@@ -1024,17 +1024,15 @@ document.addEventListener('DOMContentLoaded', function() {
             html += '</div>';
             html += '<div class="text-right flex items-center gap-2">';
             if (valor > 0) {
-                html += '<span class="font-bold text-green-600 text-sm">R$ ' + valorRefTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
-                html += '<span class="font-semibold text-gray-800 text-sm">R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';
-                html += '<span class="text-gray-500 text-xs">(' + percent.toFixed(1) + '%)</span>';
+                html += '<span class="font-bold text-green-600 text-sm">' + percent.toFixed(1) + '%</span>';
             } else {
-                html += '<span class="text-gray-400 text-sm">-</span>';
+                html += '<span class="text-gray-400 text-sm">0%</span>';
             }
             html += '</div>';
             html += '</div>';
         });
         
-        // Linha de total (igual ao gerente)
+        // Linha de total
         html += '<div class="flex items-center justify-between py-3 px-3 bg-primary/10 rounded-lg mt-4 border-t-2 border-primary">';
         html += '<span class="font-semibold text-gray-800">Total ' + (pilarIndex === 'total' ? 'Geral' : pilarNomes[parseInt(pilarIndex)]) + '</span>';
         html += '<span class="font-bold text-primary text-lg">R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</span>';

@@ -733,7 +733,7 @@ def support_admin_dashboard(request):
                 'id': chat.assigned_to.id,
                 'get_full_name': chat.assigned_to.get_full_name()
             } if chat.assigned_to else None,
-            'created_at': chat.created_at.isoformat(),
+            'created_at': timezone.localtime(chat.created_at).isoformat(),
             'can_assume': can_assume
         })
     
@@ -2083,7 +2083,7 @@ def poll_dashboard_updates(request):
                         'id': chat.assigned_to.id,
                         'get_full_name': chat.assigned_to.get_full_name()
                     } if chat.assigned_to else None,
-                    'created_at': chat.created_at.isoformat()
+                    'created_at': timezone.localtime(chat.created_at).isoformat()
                 })
         
         # Verificar novas mensagens nos tickets atribuídos ao agente atual
@@ -2111,7 +2111,7 @@ def poll_dashboard_updates(request):
                         'chat_title': msg.chat.title,
                         'user_name': msg.user.get_full_name(),
                         'message': msg.message[:100] + '...' if len(msg.message) > 100 else msg.message,
-                        'created_at': msg.created_at.isoformat()
+                        'created_at': timezone.localtime(msg.created_at).isoformat()
                     })
     
     # Estatísticas atualizadas
