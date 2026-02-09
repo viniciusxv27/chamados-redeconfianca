@@ -37,12 +37,12 @@ def has_viewed(tutorial, user):
 
 @register.filter
 def iq_decimal(value):
-    """Converte IQ de percentual (80) para decimal (0,8) no formato brasileiro"""
+    """Converte IQ de percentual (80) para decimal (0,80) no formato brasileiro"""
     try:
         if value is None:
             value = 0
         decimal_value = float(value) / 100
-        formatted = f"{decimal_value:.1f}"
+        formatted = f"{decimal_value:.2f}"
         return formatted.replace('.', ',')
     except (ValueError, TypeError):
         return value
