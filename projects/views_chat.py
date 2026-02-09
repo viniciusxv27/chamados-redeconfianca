@@ -39,7 +39,7 @@ def get_task_chat(request, activity_id):
                 'avatar': msg.user.first_name[0].upper() if msg.user.first_name else 'U'
             },
             'message': msg.message,
-            'created_at': msg.created_at.strftime('%d/%m/%Y %H:%M'),
+            'created_at': timezone.localtime(msg.created_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': msg.user == request.user
         })
     
@@ -91,7 +91,7 @@ def send_task_message(request, activity_id):
                 'avatar': request.user.first_name[0].upper() if request.user.first_name else 'U'
             },
             'message': message.message,
-            'created_at': message.created_at.strftime('%d/%m/%Y %H:%M'),
+            'created_at': timezone.localtime(message.created_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': True
         }
     })
@@ -125,7 +125,7 @@ def support_chat_list(request):
             'user': chat.user.get_full_name(),
             'assigned_to': chat.assigned_to.get_full_name() if chat.assigned_to else None,
             'last_message': last_message.message[:100] if last_message else 'Sem mensagens',
-            'updated_at': chat.updated_at.strftime('%d/%m/%Y %H:%M'),
+            'updated_at': timezone.localtime(chat.updated_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': chat.user == request.user,
             'queue_position': queue_position
         })
@@ -188,7 +188,7 @@ def get_support_chat(request, chat_id):
             },
             'message': msg.message,
             'is_internal': msg.is_internal,
-            'created_at': msg.created_at.strftime('%d/%m/%Y %H:%M'),
+            'created_at': timezone.localtime(msg.created_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': msg.user == request.user,
             'files': []
         }
@@ -443,7 +443,7 @@ def send_support_message(request, chat_id):
             },
             'message': message.message,
             'is_internal': message.is_internal,
-            'created_at': message.created_at.strftime('%d/%m/%Y %H:%M'),
+            'created_at': timezone.localtime(message.created_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': True,
             'files': []
         }
@@ -1336,8 +1336,8 @@ def export_metrics_report(request):
         ws_chats.cell(row=row, column=6, value=chat.category.name if chat.category else 'N/A').border = border
         ws_chats.cell(row=row, column=7, value=chat.get_status_display()).border = border
         ws_chats.cell(row=row, column=8, value=chat.assigned_to.get_full_name() if chat.assigned_to else 'Não atribuído').border = border
-        ws_chats.cell(row=row, column=9, value=chat.created_at.strftime('%d/%m/%Y %H:%M')).border = border
-        ws_chats.cell(row=row, column=10, value=chat.closed_at.strftime('%d/%m/%Y %H:%M') if chat.closed_at else '').border = border
+        ws_chats.cell(row=row, column=9, value=timezone.localtime(chat.created_at).strftime('%d/%m/%Y %H:%M')).border = border
+        ws_chats.cell(row=row, column=10, value=timezone.localtime(chat.closed_at).strftime('%d/%m/%Y %H:%M') if chat.closed_at else '').border = border
     
     # Ajustar larguras
     widths = [8, 18, 40, 25, 20, 25, 15, 25, 18, 18]
@@ -2178,7 +2178,7 @@ def poll_chat_updates(request, chat_id):
             },
             'message': msg.message,
             'is_internal': msg.is_internal,
-            'created_at': msg.created_at.strftime('%d/%m/%Y %H:%M'),
+            'created_at': timezone.localtime(msg.created_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': msg.user == request.user,
             'files': []
         }
@@ -2348,7 +2348,7 @@ def upload_chat_file_with_message(request, chat_id):
             },
             'message': message.message,
             'is_internal': message.is_internal,
-            'created_at': message.created_at.strftime('%d/%m/%Y %H:%M'),
+            'created_at': timezone.localtime(message.created_at).strftime('%d/%m/%Y %H:%M'),
             'is_own': True,
             'files': [{
                 'id': chat_file.id,
