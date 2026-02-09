@@ -32,6 +32,7 @@ urlpatterns = [
     path('manage/users/', views.manage_users_view, name='manage_users'),
     path('manage/users/create/', views.create_user_view, name='create_user'),
     path('manage/users/<int:user_id>/edit/', views.edit_user_view, name='edit_user'),
+    path('manage/users/<int:user_id>/change-password/', views.admin_change_user_password, name='admin_change_user_password'),
     path('manage/users/export-excel/', views.export_users_excel, name='export_users_excel'),
     path('manage/users/import-excel/', views.import_users_excel, name='import_users_excel'),
     path('manage/users/import-colaboradores/', views.import_colaboradores_csv, name='import_colaboradores_csv'),

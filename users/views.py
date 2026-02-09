@@ -896,6 +896,45 @@ def edit_user_view(request, user_id):
 
 
 @login_required
+def admin_change_user_password(request, user_id):
+    """Alterar senha de usuário pelo admin"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+    
+    user_to_edit = get_object_or_404(User, id=user_id)
+    
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+        
+        if not new_password or len(new_password) < 6:
+            messages.error(request, 'A senha deve ter no mínimo 6 caracteres.')
+            return redirect('manage_users')
+        
+        if new_password != confirm_password:
+            messages.error(request, 'As senhas não coincidem.')
+            return redirect('manage_users')
+        
+        try:
+            user_to_edit.set_password(new_password)
+            user_to_edit.save()
+            
+            log_action(
+                request.user, 
+                'USER_PASSWORD_CHANGE', 
+                f'Senha alterada pelo admin para: {user_to_edit.full_name} ({user_to_edit.email})',
+                request
+            )
+            
+            messages.success(request, f'Senha do usuário {user_to_edit.full_name} alterada com sucesso!')
+        except Exception as e:
+            messages.error(request, f'Erro ao alterar senha: {str(e)}')
+    
+    return redirect('manage_users')
+
+
+@login_required
 def manage_cs_view(request):
     """Gerenciar Confianças C$"""
     if not request.user.can_manage_cs():
