@@ -1230,7 +1230,7 @@ function renderChatMessages(messages) {
                 }">
                     <p class="text-sm whitespace-pre-wrap">${escapeHtml(msg.message)}</p>
                     ${filesHtml}
-                    <p class="text-xs opacity-75 mt-1">${msg.user.name} - ${msg.created_at}</p>
+                    <p class="text-xs opacity-75 mt-1">${msg.user.name} - ${formatToBrasiliaTime(msg.created_at)}</p>
                 </div>
             </div>
         `;
@@ -1266,6 +1266,21 @@ function getTimeAgo(dateString) {
     
     const diffInDays = Math.floor(diffInHours / 24);
     return `${diffInDays}d atrás`;
+}
+
+function formatToBrasiliaTime(dateString) {
+    const date = new Date(dateString);
+    // Converte para horário de Brasília (UTC-3)
+    const options = {
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    };
+    return date.toLocaleString('pt-BR', options);
 }
 
 function assignToMe(chatId) {
