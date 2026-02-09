@@ -265,7 +265,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.movel|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.movel|default:"-" }}</td>
-                        <td class="px-4 py-3 text-right font-medium {% if data.pilares.0.iq_pct < 0 %}text-red-600{% elif data.pilares.0.iq_pct > 0 %}text-green-600{% else %}text-cyan-600{% endif %} bg-cyan-50/50">{{ data.pilares.0.iq_multiplicador|floatformat:1 }}%</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800 bg-cyan-50/50">{{ data.pilares.0.iq_multiplicador|iq_decimal }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.pilares.0.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="FIXA" data-pilar-nome="🏠 Fixa">
@@ -280,7 +280,7 @@
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.bonus.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">R$ {{ data.hunter.fixa|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-right text-gray-700">{{ data.bonus_hunter.fixa|default:"-" }}</td>
-                        <td class="px-4 py-3 text-right font-medium {% if data.pilares.1.iq_pct < 0 %}text-red-600{% elif data.pilares.1.iq_pct > 0 %}text-green-600{% else %}text-cyan-600{% endif %} bg-cyan-50/50">{{ data.pilares.1.iq_multiplicador|floatformat:1 }}%</td>
+                        <td class="px-4 py-3 text-right font-medium text-gray-800 bg-cyan-50/50">{{ data.pilares.1.iq_multiplicador|iq_decimal }}</td>
                         <td class="px-4 py-3 text-right font-bold text-purple-600 bg-purple-50">R$ {{ data.pilares.1.soma_com_iq|floatformat:2 }}</td>
                     </tr>
                     <tr class="hover:bg-purple-50 cursor-pointer pilar-row transition-colors" data-pilar="SMARTPHONE" data-pilar-nome="📲 Smartphone">

@@ -34,3 +34,15 @@ def has_viewed(tutorial, user):
     """Verifica se o usuário visualizou o tutorial"""
     progress = tutorial.get_progress_for_user(user)
     return progress and progress.viewed_at is not None
+
+@register.filter
+def iq_decimal(value):
+    """Converte IQ de percentual (80) para decimal (0,8) no formato brasileiro"""
+    try:
+        if value is None:
+            value = 0
+        decimal_value = float(value) / 100
+        formatted = f"{decimal_value:.1f}"
+        return formatted.replace('.', ',')
+    except (ValueError, TypeError):
+        return value
