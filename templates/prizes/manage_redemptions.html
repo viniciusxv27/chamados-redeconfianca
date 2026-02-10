@@ -220,21 +220,21 @@
             </div>
             
             <!-- Paginação -->
-            {% if is_paginated %}
+            {% if redemptions.has_other_pages %}
             <div class="px-6 py-4 border-t border-gray-200">
                 <div class="flex items-center justify-between">
                     <div class="text-sm text-gray-700">
-                        Mostrando {{ page_obj.start_index }} a {{ page_obj.end_index }} de {{ page_obj.paginator.count }} resultados
+                        Mostrando {{ redemptions.start_index }} a {{ redemptions.end_index }} de {{ redemptions.paginator.count }} resultados
                     </div>
                     <div class="flex space-x-2">
-                        {% if page_obj.has_previous %}
-                            <a href="?page={{ page_obj.previous_page_number }}" 
+                        {% if redemptions.has_previous %}
+                            <a href="?page={{ redemptions.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" 
                                class="px-3 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
                                 Anterior
                             </a>
                         {% endif %}
-                        {% if page_obj.has_next %}
-                            <a href="?page={{ page_obj.next_page_number }}" 
+                        {% if redemptions.has_next %}
+                            <a href="?page={{ redemptions.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" 
                                class="px-3 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
                                 Próxima
                             </a>

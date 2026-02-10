@@ -273,16 +273,36 @@ def manage_redemptions(request):
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
-    status_filter = request.GET.get('status', 'PENDENTE')
-    redemptions = Redemption.objects.filter(status=status_filter).order_by('-redeemed_at')
+    from django.db.models import Q
     
-    # Buscar resgates recentes (últimos 15 dias)
-    from datetime import timedelta
-    fifteen_days_ago = timezone.now() - timedelta(days=15)
-    recent_redemptions = Redemption.objects.filter(
-        redeemed_at__gte=fifteen_days_ago
-    ).select_related('user', 'prize').order_by('-redeemed_at')[:10]
+    # Filtros
+    search = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
     
+    redemptions = Redemption.objects.select_related('user', 'prize', 'prize__category').all()
+    
+    if search:
+        redemptions = redemptions.filter(
+            Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) |
+            Q(user__email__icontains=search) |
+            Q(prize__name__icontains=search)
+        )
+    
+    if status_filter:
+        redemptions = redemptions.filter(status=status_filter)
+    
+    redemptions = redemptions.order_by('-redeemed_at')
+    
+    # Estatísticas
+    stats = {
+        'pending': Redemption.objects.filter(status='PENDENTE').count(),
+        'approved': Redemption.objects.filter(status='APROVADO').count(),
+        'delivered': Redemption.objects.filter(status='ENTREGUE').count(),
+        'canceled': Redemption.objects.filter(status='CANCELADO').count(),
+    }
+    
+    # Paginação
     paginator = Paginator(redemptions, 20)
     page_number = request.GET.get('page')
     redemptions_page = paginator.get_page(page_number)
@@ -291,7 +311,7 @@ def manage_redemptions(request):
         'redemptions': redemptions_page,
         'current_status': status_filter,
         'status_choices': Redemption.STATUS_CHOICES,
-        'recent_redemptions': recent_redemptions,
+        'stats': stats,
     }
     return render(request, 'prizes/manage_redemptions.html', context)
 
