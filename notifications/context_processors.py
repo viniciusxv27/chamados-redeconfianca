@@ -19,11 +19,12 @@ def user_support_sectors(request):
     """
     Context processor para disponibilizar TODOS os setores para o chat de suporte.
     Qualquer usuário autenticado pode abrir chat de suporte para qualquer setor.
+    Exclui setores que contêm "loja" no nome.
     """
     if request.user.is_authenticated:
         from users.models import Sector
-        # Retornar TODOS os setores - usuários podem abrir chat para qualquer setor
-        all_sectors = Sector.objects.all().order_by('name')
+        # Retornar TODOS os setores, excluindo os que contêm "loja" no nome
+        all_sectors = Sector.objects.exclude(name__icontains='loja').order_by('name')
         sectors_data = [{'id': sector.id, 'name': sector.name} for sector in all_sectors]
         return {
             'user_support_sectors': sectors_data,
