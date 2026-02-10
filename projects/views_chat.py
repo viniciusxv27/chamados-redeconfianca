@@ -1007,10 +1007,11 @@ def support_admin_template(request):
         ).aggregate(avg_rating=models.Avg('rating'))['avg_rating'] or 0, 1)
     }
     
-    # Lista de setores do usuário para o template
+    # Lista de setores do usuário para o template (excluindo setores com "loja" no nome)
     user_sectors_data = [
         {'id': sector.id, 'name': sector.name} 
         for sector in user_sectors
+        if 'loja' not in sector.name.lower()
     ]
     
     return render(request, 'support/admin_dashboard.html', {
