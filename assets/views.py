@@ -14,13 +14,13 @@ from datetime import timedelta
 
 from .models import (
     Asset, Product, ProductMedia, InventoryItem, 
-    StockMovement, InventoryCategory, InventoryManager, ItemRequest
+    StockMovement, InventoryCategory, InventoryManager, ItemRequest, ItemRequestItem
 )
 from .forms import (
     AssetForm, ProductForm, ProductMediaForm, InventoryItemForm,
     StockEntryForm, StockExitForm, InventoryCategoryForm,
     InventoryManagerForm, BulkInventoryItemForm,
-    ItemRequestForm, ItemRequestReviewForm, ItemRequestDeliveryForm
+    ItemRequestForm, ItemRequestItemForm, ItemRequestReviewForm, ItemRequestDeliveryForm
 )
 from users.models import User, Sector
 from core.middleware import log_action
@@ -1048,21 +1048,68 @@ def can_approve_requests(user):
 
 @login_required
 def item_request_create(request):
-    """Criar nova solicitação de item do almoxarifado"""
+    """Criar nova solicitação de item do almoxarifado (múltiplos itens)"""
+    products = Product.objects.filter(is_active=True).order_by('name')
+    
     if request.method == 'POST':
         form = ItemRequestForm(request.POST)
-        if form.is_valid():
+        
+        # Extrair itens do POST (enviados via JS)
+        item_products = request.POST.getlist('item_product')
+        item_quantities = request.POST.getlist('item_quantity')
+        
+        items_valid = True
+        items_data = []
+        errors = []
+        
+        if not item_products or len(item_products) == 0:
+            items_valid = False
+            errors.append('Adicione pelo menos um item à solicitação.')
+        else:
+            for i, (prod_id, qty) in enumerate(zip(item_products, item_quantities)):
+                try:
+                    product = Product.objects.get(pk=prod_id, is_active=True)
+                    quantity = int(qty)
+                    if quantity < 1:
+                        raise ValueError
+                    if product.current_stock < quantity:
+                        errors.append(f'Estoque insuficiente para "{product.name}". Disponível: {product.current_stock}.')
+                        items_valid = False
+                    items_data.append({'product': product, 'quantity': quantity})
+                except (Product.DoesNotExist, ValueError, TypeError):
+                    errors.append(f'Item {i+1}: produto ou quantidade inválidos.')
+                    items_valid = False
+            
+            # Verificar produtos duplicados
+            product_ids = [d['product'].pk for d in items_data]
+            if len(product_ids) != len(set(product_ids)):
+                errors.append('Não é possível adicionar o mesmo produto mais de uma vez. Ajuste a quantidade.')
+                items_valid = False
+        
+        if form.is_valid() and items_valid:
             item_request = form.save(commit=False)
             item_request.requested_by = request.user
             item_request.save()
+            
+            for item_data in items_data:
+                ItemRequestItem.objects.create(
+                    request=item_request,
+                    product=item_data['product'],
+                    quantity=item_data['quantity']
+                )
+            
             messages.success(request, 'Solicitação enviada com sucesso! Aguarde a aprovação.')
             return redirect('assets:item_request_list')
+        else:
+            for error in errors:
+                messages.error(request, error)
     else:
         form = ItemRequestForm()
     
     return render(request, 'assets/inventory/item_request_form.html', {
         'form': form,
-        'title': 'Solicitar Item do Almoxarifado'
+        'title': 'Solicitar Itens do Almoxarifado',
+        'products': products,
     })
 
 
@@ -1086,7 +1133,9 @@ def item_request_list(request):
         requests_qs = requests_qs.filter(status=status_filter)
     
     requests_qs = requests_qs.select_related(
-        'product', 'product__category', 'requested_by', 'reviewed_by', 'delivered_by'
+        'requested_by', 'reviewed_by', 'delivered_by'
+    ).prefetch_related(
+        'items', 'items__product', 'items__product__category'
     ).order_by('-requested_at')
     
     # Contadores
@@ -1112,7 +1161,9 @@ def item_request_detail(request, pk):
     """Detalhes de uma solicitação"""
     item_request = get_object_or_404(
         ItemRequest.objects.select_related(
-            'product', 'product__category', 'requested_by', 'reviewed_by', 'delivered_by'
+            'requested_by', 'reviewed_by', 'delivered_by'
+        ).prefetch_related(
+            'items', 'items__product', 'items__product__category'
         ), pk=pk
     )
     
@@ -1201,36 +1252,48 @@ def item_request_deliver(request, pk):
     if request.method == 'POST':
         form = ItemRequestDeliveryForm(request.POST)
         if form.is_valid():
-            # Verificar estoque disponível
-            product = item_request.product
-            available_items = InventoryItem.objects.filter(
-                product=product, status='available'
-            ).order_by('created_at')[:item_request.quantity]
+            # Verificar estoque de cada item da solicitação
+            request_items = item_request.items.select_related('product').all()
+            stock_errors = []
             
-            if available_items.count() < item_request.quantity:
+            for req_item in request_items:
+                available_count = InventoryItem.objects.filter(
+                    product=req_item.product, status='available'
+                ).count()
+                if available_count < req_item.quantity:
+                    stock_errors.append(
+                        f'"{req_item.product.name}": disponível {available_count}, solicitado {req_item.quantity}'
+                    )
+            
+            if stock_errors:
                 messages.error(
-                    request, 
-                    f'Estoque insuficiente. Disponível: {available_items.count()}, '
-                    f'Solicitado: {item_request.quantity}'
+                    request,
+                    'Estoque insuficiente para: ' + '; '.join(stock_errors)
                 )
                 return redirect('assets:item_request_detail', pk=pk)
             
             # Registrar saída de cada item
-            for item in available_items:
-                item.status = 'in_use'
-                item.assigned_to = item_request.requested_by
-                item.assigned_date = timezone.now()
-                item.save()
+            total_delivered = 0
+            for req_item in request_items:
+                available_items = InventoryItem.objects.filter(
+                    product=req_item.product, status='available'
+                ).order_by('created_at')[:req_item.quantity]
                 
-                # Criar movimentação de estoque
-                StockMovement.objects.create(
-                    inventory_item=item,
-                    movement_type='exit',
-                    reason='assigned_to_user',
-                    to_user=item_request.requested_by,
-                    notes=f'Solicitação #{item_request.pk}: {item_request.reason}',
-                    created_by=request.user
-                )
+                for inv_item in available_items:
+                    inv_item.status = 'in_use'
+                    inv_item.assigned_to = item_request.requested_by
+                    inv_item.assigned_date = timezone.now()
+                    inv_item.save()
+                    
+                    StockMovement.objects.create(
+                        inventory_item=inv_item,
+                        movement_type='exit',
+                        reason='assigned_to_user',
+                        to_user=item_request.requested_by,
+                        notes=f'Solicitação #{item_request.pk}: {item_request.reason}',
+                        created_by=request.user
+                    )
+                total_delivered += req_item.quantity
             
             # Atualizar a solicitação
             item_request.status = 'delivered'
@@ -1242,7 +1305,7 @@ def item_request_deliver(request, pk):
             messages.success(
                 request, 
                 f'Solicitação #{item_request.pk} entregue com sucesso! '
-                f'{item_request.quantity} item(ns) de "{product.name}" removido(s) do estoque.'
+                f'{total_delivered} item(ns) removido(s) do estoque.'
             )
             return redirect('assets:item_request_detail', pk=pk)
     

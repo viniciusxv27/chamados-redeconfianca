@@ -528,7 +528,7 @@ class InventoryManager(models.Model):
 
 
 class ItemRequest(models.Model):
-    """Solicitação de itens do almoxarifado"""
+    """Solicitação de itens do almoxarifado (pode conter múltiplos itens)"""
     STATUS_CHOICES = [
         ('pending', 'Pendente'),
         ('approved', 'Aprovada'),
@@ -537,20 +537,9 @@ class ItemRequest(models.Model):
         ('cancelled', 'Cancelada'),
     ]
     
-    product = models.ForeignKey(
-        Product,
-        on_delete=models.CASCADE,
-        related_name='requests',
-        verbose_name='Produto'
-    )
-    quantity = models.PositiveIntegerField(
-        default=1,
-        validators=[MinValueValidator(1)],
-        verbose_name='Quantidade'
-    )
     reason = models.TextField(
         verbose_name='Motivo da Solicitação',
-        help_text='Descreva o motivo pelo qual precisa deste item'
+        help_text='Descreva o motivo pelo qual precisa destes itens'
     )
     status = models.CharField(
         max_length=20,
@@ -615,7 +604,8 @@ class ItemRequest(models.Model):
         ordering = ['-requested_at']
     
     def __str__(self):
-        return f"#{self.pk} - {self.product.name} (x{self.quantity}) - {self.get_status_display()}"
+        count = self.items.count()
+        return f"#{self.pk} - {count} item(ns) - {self.get_status_display()}"
     
     @property
     def can_approve(self):
@@ -631,7 +621,54 @@ class ItemRequest(models.Model):
     
     @property
     def has_enough_stock(self):
-        """Verifica se há estoque suficiente para atender a solicitação"""
+        """Verifica se há estoque suficiente para todos os itens"""
+        for item in self.items.select_related('product').all():
+            if item.product.current_stock < item.quantity:
+                return False
+        return True
+    
+    @property
+    def total_items_count(self):
+        """Total de itens diferentes na solicitação"""
+        return self.items.count()
+    
+    @property
+    def total_quantity(self):
+        """Quantidade total somando todos os itens"""
+        from django.db.models import Sum
+        return self.items.aggregate(total=Sum('quantity'))['total'] or 0
+
+
+class ItemRequestItem(models.Model):
+    """Item individual dentro de uma solicitação"""
+    request = models.ForeignKey(
+        ItemRequest,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='Solicitação'
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='request_items',
+        verbose_name='Produto'
+    )
+    quantity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name='Quantidade'
+    )
+    
+    class Meta:
+        verbose_name = 'Item da Solicitação'
+        verbose_name_plural = 'Itens da Solicitação'
+        unique_together = ['request', 'product']
+    
+    def __str__(self):
+        return f"{self.product.name} x{self.quantity}"
+    
+    @property
+    def has_enough_stock(self):
         return self.product.current_stock >= self.quantity
 
 

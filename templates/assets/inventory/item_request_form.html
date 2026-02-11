@@ -3,7 +3,7 @@
 {% block title %}{{ title }} - Almoxarifado{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
     <!-- Header -->
     <div class="mb-6">
         <nav class="flex mb-2" aria-label="Breadcrumb">
@@ -28,93 +28,306 @@
             </ol>
         </nav>
         <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
-            <i class="fas fa-hand-holding-box text-indigo-600 mr-2"></i>
+            <i class="fas fa-cart-plus text-indigo-600 mr-2"></i>
             {{ title }}
         </h2>
         <p class="mt-1 text-sm text-gray-500">
-            Solicite itens disponíveis no almoxarifado. Sua solicitação será analisada por um gestor.
+            Adicione os itens que deseja solicitar e envie o pedido para aprovação.
         </p>
     </div>
 
     <!-- Formulário -->
-    <div class="bg-white shadow rounded-lg">
-        <form method="post" class="p-6 space-y-6">
-            {% csrf_token %}
-            
-            {% if form.non_field_errors %}
-            <div class="rounded-md bg-red-50 p-4">
+    <form method="post" id="requestForm">
+        {% csrf_token %}
+        
+        {% if messages %}
+        <div class="mb-4">
+            {% for message in messages %}
+            <div class="rounded-md {% if message.tags == 'error' %}bg-red-50{% else %}bg-green-50{% endif %} p-4 mb-2">
                 <div class="flex">
-                    <i class="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
-                    <div class="ml-3">
-                        {% for error in form.non_field_errors %}
-                        <p class="text-sm text-red-700">{{ error }}</p>
-                        {% endfor %}
+                    <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle text-red-400{% else %}fa-check-circle text-green-400{% endif %} mt-0.5"></i>
+                    <p class="ml-3 text-sm {% if message.tags == 'error' %}text-red-700{% else %}text-green-700{% endif %}">{{ message }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Coluna Esquerda: Adicionar Itens -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Adicionar Item -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            <i class="fas fa-plus-circle text-indigo-600 mr-2"></i>
+                            Adicionar Item ao Pedido
+                        </h3>
+                    </div>
+                    <div class="px-4 py-5 sm:px-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+                            <div class="sm:col-span-7">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    <i class="fas fa-box mr-1"></i> Produto
+                                </label>
+                                <select id="add_product" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                    <option value="">Selecione um produto...</option>
+                                    {% for product in products %}
+                                    <option value="{{ product.pk }}" data-name="{{ product.name }}" data-stock="{{ product.current_stock }}" data-sku="{{ product.sku }}">
+                                        {{ product.name }} (Disponível: {{ product.current_stock }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="sm:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    <i class="fas fa-sort-numeric-up mr-1"></i> Qtd
+                                </label>
+                                <input type="number" id="add_quantity" min="1" value="1" 
+                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <button type="button" onclick="addItem()" 
+                                        class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                    <i class="fas fa-plus mr-1"></i> Adicionar
+                                </button>
+                            </div>
+                        </div>
+                        <p id="add_error" class="mt-2 text-sm text-red-600 hidden"></p>
+                    </div>
+                </div>
+
+                <!-- Lista de Itens do Pedido -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            <i class="fas fa-shopping-cart text-indigo-600 mr-2"></i>
+                            Itens do Pedido
+                            <span id="cart_count" class="ml-2 inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">0</span>
+                        </h3>
+                    </div>
+                    <div id="cart_items">
+                        <!-- Estado vazio -->
+                        <div id="cart_empty" class="text-center py-8">
+                            <i class="fas fa-inbox text-3xl text-gray-300 mb-3"></i>
+                            <p class="text-sm text-gray-500">Nenhum item adicionado ainda.</p>
+                            <p class="text-xs text-gray-400 mt-1">Use o formulário acima para adicionar produtos.</p>
+                        </div>
+                        <!-- Tabela de itens -->
+                        <div id="cart_table_wrapper" class="hidden">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estoque</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cart_body" class="bg-white divide-y divide-gray-200">
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-            {% endif %}
 
-            <!-- Produto -->
-            <div>
-                <label for="{{ form.product.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    <i class="fas fa-box mr-1"></i> Produto *
-                </label>
-                {{ form.product }}
-                {% if form.product.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.product.errors.0 }}</p>
-                {% endif %}
-                <p class="mt-1 text-xs text-gray-500">Selecione o produto que deseja solicitar</p>
-            </div>
-
-            <!-- Quantidade -->
-            <div>
-                <label for="{{ form.quantity.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    <i class="fas fa-sort-numeric-up mr-1"></i> Quantidade *
-                </label>
-                {{ form.quantity }}
-                {% if form.quantity.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.quantity.errors.0 }}</p>
-                {% endif %}
-            </div>
-
-            <!-- Motivo -->
-            <div>
-                <label for="{{ form.reason.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    <i class="fas fa-comment-alt mr-1"></i> Motivo da Solicitação *
-                </label>
-                {{ form.reason }}
-                {% if form.reason.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.reason.errors.0 }}</p>
-                {% endif %}
-                <p class="mt-1 text-xs text-gray-500">Descreva detalhadamente por que precisa deste item</p>
-            </div>
-
-            <!-- Info Box -->
-            <div class="rounded-md bg-blue-50 p-4">
-                <div class="flex">
-                    <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
-                    <div class="ml-3">
-                        <p class="text-sm text-blue-700">
-                            Após enviar, sua solicitação será analisada por um gestor do almoxarifado. 
-                            Você será notificado sobre a aprovação ou rejeição.
-                        </p>
+            <!-- Coluna Direita: Motivo e Enviar -->
+            <div class="space-y-6">
+                <!-- Motivo -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-sm font-medium text-gray-900">
+                            <i class="fas fa-comment-alt text-indigo-600 mr-1"></i>
+                            Motivo da Solicitação *
+                        </h3>
+                    </div>
+                    <div class="px-4 py-4 sm:px-6">
+                        {{ form.reason }}
+                        {% if form.reason.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.reason.errors.0 }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-gray-500">Descreva por que precisa destes itens</p>
                     </div>
                 </div>
-            </div>
 
-            <!-- Botões -->
-            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                <a href="{% url 'assets:item_request_list' %}" 
-                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                    Cancelar
-                </a>
-                <button type="submit" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    <i class="fas fa-paper-plane mr-2"></i>
-                    Enviar Solicitação
-                </button>
+                <!-- Info Box -->
+                <div class="rounded-md bg-blue-50 p-4">
+                    <div class="flex">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-700">
+                                Após enviar, sua solicitação será analisada por um gestor do almoxarifado.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resumo -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-sm font-medium text-gray-900">
+                            <i class="fas fa-receipt text-indigo-600 mr-1"></i>
+                            Resumo
+                        </h3>
+                    </div>
+                    <div class="px-4 py-4 sm:px-6">
+                        <dl class="space-y-2">
+                            <div class="flex justify-between">
+                                <dt class="text-sm text-gray-500">Itens diferentes:</dt>
+                                <dd id="summary_items" class="text-sm font-semibold text-gray-900">0</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-sm text-gray-500">Qtd total:</dt>
+                                <dd id="summary_total" class="text-sm font-semibold text-gray-900">0</dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="space-y-3">
+                    <button type="submit" id="btn_submit"
+                            class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            disabled>
+                        <i class="fas fa-paper-plane mr-2"></i>
+                        Enviar Solicitação
+                    </button>
+                    <a href="{% url 'assets:item_request_list' %}" 
+                       class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        Cancelar
+                    </a>
+                </div>
             </div>
-        </form>
-    </div>
+        </div>
+    </form>
 </div>
+
+<script>
+let cartItems = [];
+
+function addItem() {
+    const select = document.getElementById('add_product');
+    const qtyInput = document.getElementById('add_quantity');
+    const errorEl = document.getElementById('add_error');
+    
+    errorEl.classList.add('hidden');
+    
+    const productId = select.value;
+    const quantity = parseInt(qtyInput.value);
+    const option = select.options[select.selectedIndex];
+    
+    if (!productId) {
+        errorEl.textContent = 'Selecione um produto.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    if (!quantity || quantity < 1) {
+        errorEl.textContent = 'Quantidade deve ser pelo menos 1.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    const stock = parseInt(option.dataset.stock);
+    if (quantity > stock) {
+        errorEl.textContent = `Estoque insuficiente. Disponível: ${stock}.`;
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    // Verificar duplicata
+    if (cartItems.find(item => item.productId === productId)) {
+        errorEl.textContent = 'Este produto já foi adicionado. Remova-o e adicione novamente se quiser alterar.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    cartItems.push({
+        productId: productId,
+        name: option.dataset.name,
+        sku: option.dataset.sku,
+        stock: stock,
+        quantity: quantity
+    });
+    
+    // Reset
+    select.value = '';
+    qtyInput.value = 1;
+    
+    renderCart();
+}
+
+function removeItem(index) {
+    cartItems.splice(index, 1);
+    renderCart();
+}
+
+function renderCart() {
+    const empty = document.getElementById('cart_empty');
+    const tableWrapper = document.getElementById('cart_table_wrapper');
+    const tbody = document.getElementById('cart_body');
+    const countBadge = document.getElementById('cart_count');
+    const summaryItems = document.getElementById('summary_items');
+    const summaryTotal = document.getElementById('summary_total');
+    const btnSubmit = document.getElementById('btn_submit');
+    
+    // Limpar hidden inputs antigos
+    document.querySelectorAll('.cart-hidden-input').forEach(el => el.remove());
+    
+    if (cartItems.length === 0) {
+        empty.classList.remove('hidden');
+        tableWrapper.classList.add('hidden');
+        btnSubmit.disabled = true;
+    } else {
+        empty.classList.add('hidden');
+        tableWrapper.classList.remove('hidden');
+        btnSubmit.disabled = false;
+    }
+    
+    countBadge.textContent = cartItems.length;
+    
+    let totalQty = 0;
+    tbody.innerHTML = '';
+    
+    cartItems.forEach((item, index) => {
+        totalQty += item.quantity;
+        
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50';
+        row.innerHTML = `
+            <td class="px-4 py-3">
+                <div class="text-sm font-medium text-gray-900">${item.name}</div>
+                <div class="text-xs text-gray-500">${item.sku}</div>
+            </td>
+            <td class="px-4 py-3 text-center text-sm font-semibold text-indigo-600">${item.quantity}</td>
+            <td class="px-4 py-3 text-center text-sm ${item.quantity > item.stock ? 'text-red-600 font-semibold' : 'text-green-600'}">${item.stock}</td>
+            <td class="px-4 py-3 text-center">
+                <button type="button" onclick="removeItem(${index})" class="text-red-500 hover:text-red-700" title="Remover">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+        
+        // Hidden inputs para enviar via POST
+        const hiddenProduct = document.createElement('input');
+        hiddenProduct.type = 'hidden';
+        hiddenProduct.name = 'item_product';
+        hiddenProduct.value = item.productId;
+        hiddenProduct.className = 'cart-hidden-input';
+        document.getElementById('requestForm').appendChild(hiddenProduct);
+        
+        const hiddenQty = document.createElement('input');
+        hiddenQty.type = 'hidden';
+        hiddenQty.name = 'item_quantity';
+        hiddenQty.value = item.quantity;
+        hiddenQty.className = 'cart-hidden-input';
+        document.getElementById('requestForm').appendChild(hiddenQty);
+    });
+    
+    summaryItems.textContent = cartItems.length;
+    summaryTotal.textContent = totalQty;
+}
+</script>
 {% endblock %}

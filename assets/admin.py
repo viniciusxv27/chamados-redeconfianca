@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Asset, InventoryCategory, Product, ProductMedia, 
-    InventoryItem, StockMovement, InventoryManager, ItemRequest
+    InventoryItem, StockMovement, InventoryManager, ItemRequest, ItemRequestItem
 )
 
 
@@ -243,12 +243,26 @@ class AssetAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class ItemRequestItemInline(admin.TabularInline):
+    model = ItemRequestItem
+    extra = 1
+    raw_id_fields = ['product']
+
+
 @admin.register(ItemRequest)
 class ItemRequestAdmin(admin.ModelAdmin):
-    list_display = ['id', 'product', 'quantity', 'requested_by', 'status', 'requested_at']
+    list_display = ['id', 'get_items_summary', 'requested_by', 'status', 'requested_at']
     list_filter = ['status', 'requested_at']
-    search_fields = ['product__name', 'requested_by__first_name', 'requested_by__last_name', 'reason']
+    search_fields = ['items__product__name', 'requested_by__first_name', 'requested_by__last_name', 'reason']
     readonly_fields = ['requested_at', 'reviewed_at', 'delivered_at']
     list_per_page = 25
     date_hierarchy = 'requested_at'
-    raw_id_fields = ['requested_by', 'reviewed_by', 'delivered_by', 'product']
+    raw_id_fields = ['requested_by', 'reviewed_by', 'delivered_by']
+    inlines = [ItemRequestItemInline]
+
+    def get_items_summary(self, obj):
+        items = obj.items.select_related('product').all()
+        if items:
+            return ', '.join([f'{i.product.name} x{i.quantity}' for i in items])
+        return '-'
+    get_items_summary.short_description = 'Itens'

@@ -104,8 +104,8 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Itens</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd Total</th>
                         {% if view_mode == 'all' %}
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Solicitante</th>
                         {% endif %}
@@ -120,14 +120,18 @@
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                             #{{ req.pk }}
                         </td>
-                        <td class="px-4 py-3 whitespace-nowrap">
-                            <div class="text-sm font-medium text-gray-900">{{ req.product.name }}</div>
-                            {% if req.product.category %}
-                            <div class="text-xs text-gray-500">{{ req.product.category.name }}</div>
-                            {% endif %}
+                        <td class="px-4 py-3">
+                            {% for req_item in req.items.all %}
+                            <div class="{% if not forloop.first %}mt-1{% endif %}">
+                                <span class="text-sm text-gray-900">{{ req_item.product.name }}</span>
+                                <span class="text-xs text-gray-500 ml-1">x{{ req_item.quantity }}</span>
+                            </div>
+                            {% empty %}
+                            <span class="text-sm text-gray-400">-</span>
+                            {% endfor %}
                         </td>
-                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                            {{ req.quantity }}
+                        <td class="px-4 py-3 text-center text-sm text-gray-900 font-semibold">
+                            {{ req.total_quantity }}
                         </td>
                         {% if view_mode == 'all' %}
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">

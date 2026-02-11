@@ -60,7 +60,6 @@
                     </span>
                 </div>
             </div>
-            <!-- Ação de Cancelar (para quem solicitou) -->
             {% if item_request.can_cancel and item_request.requested_by == request.user %}
             <div class="mt-4 sm:mt-0">
                 <form method="post" action="{% url 'assets:item_request_cancel' item_request.pk %}" 
@@ -80,48 +79,72 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Informações Principais -->
         <div class="lg:col-span-2 space-y-6">
-            <!-- Detalhes do Produto -->
+            <!-- Itens Solicitados -->
             <div class="bg-white shadow rounded-lg">
                 <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
                     <h3 class="text-lg font-medium text-gray-900">
-                        <i class="fas fa-box text-indigo-600 mr-2"></i>
-                        Produto Solicitado
+                        <i class="fas fa-boxes text-indigo-600 mr-2"></i>
+                        Itens Solicitados
+                        <span class="ml-2 inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
+                            {{ item_request.total_items_count }}
+                        </span>
                     </h3>
                 </div>
-                <div class="px-4 py-5 sm:px-6">
-                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">Produto</dt>
-                            <dd class="mt-1 text-sm text-gray-900 font-semibold">
-                                <a href="{% url 'assets:product_detail' item_request.product.pk %}" class="text-indigo-600 hover:text-indigo-800">
-                                    {{ item_request.product.name }}
-                                </a>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">SKU</dt>
-                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.product.sku }}</dd>
-                        </div>
-                        {% if item_request.product.category %}
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">Categoria</dt>
-                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.product.category.name }}</dd>
-                        </div>
-                        {% endif %}
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">Quantidade Solicitada</dt>
-                            <dd class="mt-1 text-2xl font-bold text-indigo-600">{{ item_request.quantity }}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">Estoque Disponível</dt>
-                            <dd class="mt-1 text-sm font-semibold {% if item_request.product.current_stock < item_request.quantity %}text-red-600{% else %}text-green-600{% endif %}">
-                                {{ item_request.product.current_stock }} unidade(s)
-                                {% if item_request.product.current_stock < item_request.quantity %}
-                                <i class="fas fa-exclamation-triangle text-red-500 ml-1"></i>
-                                {% endif %}
-                            </dd>
-                        </div>
-                    </dl>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estoque</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for req_item in item_request.items.all %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        <a href="{% url 'assets:product_detail' req_item.product.pk %}" class="text-indigo-600 hover:text-indigo-800">
+                                            {{ req_item.product.name }}
+                                        </a>
+                                    </div>
+                                    <div class="text-xs text-gray-500">
+                                        {{ req_item.product.sku }}
+                                        {% if req_item.product.category %} &middot; {{ req_item.product.category.name }}{% endif %}
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-center text-sm font-bold text-indigo-600">
+                                    {{ req_item.quantity }}
+                                </td>
+                                <td class="px-4 py-3 text-center text-sm font-semibold {% if req_item.product.current_stock < req_item.quantity %}text-red-600{% else %}text-green-600{% endif %}">
+                                    {{ req_item.product.current_stock }}
+                                    {% if req_item.product.current_stock < req_item.quantity %}
+                                    <i class="fas fa-exclamation-triangle text-red-500 ml-1 text-xs"></i>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    {% if req_item.has_enough_stock %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <i class="fas fa-check mr-1"></i> OK
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        <i class="fas fa-times mr-1"></i> Insuficiente
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="bg-gray-50">
+                            <tr>
+                                <td class="px-4 py-3 text-sm font-semibold text-gray-700">Total</td>
+                                <td class="px-4 py-3 text-center text-sm font-bold text-indigo-700">{{ item_request.total_quantity }}</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
 
@@ -209,11 +232,30 @@
                         Solicitante
                     </h3>
                 </div>
-                <div class="px-4 py-4 sm:px-6">
+                <div class="px-4 py-4 sm:px-6 space-y-2">
                     <p class="text-sm font-medium text-gray-900">
-                        {{ item_request.requested_by.get_full_name|default:item_request.requested_by.email }}
+                        {{ item_request.requested_by.get_full_name|default:item_request.requested_by.username }}
                     </p>
-                    <p class="text-xs text-gray-500 mt-1">{{ item_request.requested_at|date:"d/m/Y \à\s H:i" }}</p>
+                    {% if item_request.requested_by.email %}
+                    <p class="text-sm text-gray-600">
+                        <i class="fas fa-envelope text-gray-400 mr-1"></i>
+                        <a href="mailto:{{ item_request.requested_by.email }}" class="hover:text-indigo-600">
+                            {{ item_request.requested_by.email }}
+                        </a>
+                    </p>
+                    {% endif %}
+                    {% if item_request.requested_by.phone %}
+                    <p class="text-sm text-gray-600">
+                        <i class="fas fa-phone text-gray-400 mr-1"></i>
+                        <a href="tel:{{ item_request.requested_by.phone }}" class="hover:text-indigo-600">
+                            {{ item_request.requested_by.phone }}
+                        </a>
+                    </p>
+                    {% endif %}
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-calendar-alt mr-1"></i>
+                        {{ item_request.requested_at|date:"d/m/Y \à\s H:i" }}
+                    </p>
                 </div>
             </div>
 
@@ -237,12 +279,12 @@
                                   placeholder="Motivo da aprovação/rejeição..."></textarea>
                     </div>
 
-                    {% if item_request.product.current_stock < item_request.quantity %}
+                    {% if not item_request.has_enough_stock %}
                     <div class="rounded-md bg-red-50 p-3">
                         <div class="flex">
                             <i class="fas fa-exclamation-triangle text-red-400 mt-0.5 text-xs"></i>
                             <p class="ml-2 text-xs text-red-700">
-                                Estoque insuficiente para atender ({{ item_request.product.current_stock }}/{{ item_request.quantity }})
+                                Estoque insuficiente para um ou mais itens solicitados.
                             </p>
                         </div>
                     </div>
@@ -285,7 +327,7 @@
                 </div>
                 <div class="px-4 py-4 sm:px-6">
                     <form method="post" action="{% url 'assets:item_request_deliver' item_request.pk %}"
-                          onsubmit="return confirm('Confirmar entrega? Isso removerá {{ item_request.quantity }} item(ns) do estoque.')">
+                          onsubmit="return confirm('Confirmar entrega? Isso removerá {{ item_request.total_quantity }} item(ns) do estoque.')">
                         {% csrf_token %}
                         <div class="mb-4">
                             <label class="block text-xs font-medium text-gray-500 mb-1">Observações da Entrega</label>
@@ -294,12 +336,12 @@
                                       placeholder="Observações sobre a entrega..."></textarea>
                         </div>
 
-                        {% if item_request.product.current_stock >= item_request.quantity %}
+                        {% if item_request.has_enough_stock %}
                         <div class="rounded-md bg-green-50 p-3 mb-4">
                             <div class="flex">
                                 <i class="fas fa-check-circle text-green-400 mt-0.5 text-xs"></i>
                                 <p class="ml-2 text-xs text-green-700">
-                                    Estoque disponível: {{ item_request.product.current_stock }} unidade(s)
+                                    Estoque disponível para todos os itens.
                                 </p>
                             </div>
                         </div>
@@ -308,15 +350,15 @@
                             <div class="flex">
                                 <i class="fas fa-exclamation-triangle text-red-400 mt-0.5 text-xs"></i>
                                 <p class="ml-2 text-xs text-red-700">
-                                    Estoque insuficiente! Disponível: {{ item_request.product.current_stock }}, Solicitado: {{ item_request.quantity }}
+                                    Estoque insuficiente para um ou mais itens!
                                 </p>
                             </div>
                         </div>
                         {% endif %}
 
                         <button type="submit" 
-                                class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-                                {% if item_request.product.current_stock < item_request.quantity %}disabled title="Estoque insuficiente" class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-400 cursor-not-allowed"{% endif %}>
+                                class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white {% if item_request.has_enough_stock %}bg-blue-600 hover:bg-blue-700{% else %}bg-gray-400 cursor-not-allowed{% endif %}"
+                                {% if not item_request.has_enough_stock %}disabled title="Estoque insuficiente"{% endif %}>
                             <i class="fas fa-truck mr-2"></i>
                             Marcar como Entregue
                         </button>

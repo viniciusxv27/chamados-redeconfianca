@@ -2,7 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
     Asset, Product, ProductMedia, InventoryItem, 
-    StockMovement, InventoryCategory, InventoryManager, ItemRequest
+    StockMovement, InventoryCategory, InventoryManager, ItemRequest, ItemRequestItem
 )
 from users.models import User, Sector
 
@@ -480,17 +480,11 @@ class BulkInventoryItemForm(forms.Form):
 
 
 class ItemRequestForm(forms.ModelForm):
-    """Formulário para solicitar itens do almoxarifado"""
+    """Formulário para a solicitação (cabeçalho - apenas motivo)"""
     class Meta:
         model = ItemRequest
-        fields = ['product', 'quantity', 'reason']
+        fields = ['reason']
         widgets = {
-            'product': forms.Select(attrs={'class': SELECT_CLASSES}),
-            'quantity': forms.NumberInput(attrs={
-                'class': INPUT_CLASSES,
-                'min': 1,
-                'value': 1
-            }),
             'reason': forms.Textarea(attrs={
                 'class': TEXTAREA_CLASSES,
                 'rows': 4,
@@ -498,9 +492,23 @@ class ItemRequestForm(forms.ModelForm):
             }),
         }
 
+
+class ItemRequestItemForm(forms.ModelForm):
+    """Formulário para cada item da solicitação"""
+    class Meta:
+        model = ItemRequestItem
+        fields = ['product', 'quantity']
+        widgets = {
+            'product': forms.Select(attrs={'class': SELECT_CLASSES}),
+            'quantity': forms.NumberInput(attrs={
+                'class': INPUT_CLASSES,
+                'min': 1,
+                'value': 1
+            }),
+        }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Mostrar apenas produtos ativos com estoque disponível
         self.fields['product'].queryset = Product.objects.filter(
             is_active=True
         ).order_by('name')
@@ -513,7 +521,7 @@ class ItemRequestForm(forms.ModelForm):
         if product and quantity:
             if product.current_stock < quantity:
                 raise ValidationError(
-                    f'Estoque insuficiente. Disponível: {product.current_stock} unidade(s).'
+                    f'Estoque insuficiente para "{product.name}". Disponível: {product.current_stock} unidade(s).'
                 )
         return cleaned_data
 

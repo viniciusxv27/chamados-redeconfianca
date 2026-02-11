@@ -182,7 +182,7 @@
                 <li class="px-4 py-3 sm:px-6 hover:bg-gray-50">
                     <a href="{% url 'assets:item_request_detail' req.pk %}" class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-900">{{ req.product.name }} (x{{ req.quantity }})</p>
+                            <p class="text-sm font-medium text-gray-900">{{ req.total_items_count }} item(ns) - {{ req.total_quantity }} unid.</p>
                             <p class="text-xs text-gray-500">{{ req.requested_at|date:"d/m/Y H:i" }}</p>
                         </div>
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
