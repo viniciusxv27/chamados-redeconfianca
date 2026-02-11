@@ -2,7 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
     Asset, Product, ProductMedia, InventoryItem, 
-    StockMovement, InventoryCategory, InventoryManager
+    StockMovement, InventoryCategory, InventoryManager, ItemRequest
 )
 from users.models import User, Sector
 
@@ -387,7 +387,7 @@ class InventoryManagerForm(forms.ModelForm):
         fields = [
             'user', 'can_manage_products', 'can_manage_items',
             'can_register_entries', 'can_register_exits',
-            'can_view_reports', 'can_manage_managers', 'is_active'
+            'can_view_reports', 'can_manage_managers', 'can_approve_requests', 'is_active'
         ]
         widgets = {
             'can_manage_products': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASSES}),
@@ -396,6 +396,7 @@ class InventoryManagerForm(forms.ModelForm):
             'can_register_exits': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASSES}),
             'can_view_reports': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASSES}),
             'can_manage_managers': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASSES}),
+            'can_approve_requests': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASSES}),
             'is_active': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASSES}),
         }
 
@@ -475,6 +476,71 @@ class BulkInventoryItemForm(forms.Form):
             'min': 0
         }),
         label='Preço de Compra (por unidade)'
+    )
+
+
+class ItemRequestForm(forms.ModelForm):
+    """Formulário para solicitar itens do almoxarifado"""
+    class Meta:
+        model = ItemRequest
+        fields = ['product', 'quantity', 'reason']
+        widgets = {
+            'product': forms.Select(attrs={'class': SELECT_CLASSES}),
+            'quantity': forms.NumberInput(attrs={
+                'class': INPUT_CLASSES,
+                'min': 1,
+                'value': 1
+            }),
+            'reason': forms.Textarea(attrs={
+                'class': TEXTAREA_CLASSES,
+                'rows': 4,
+                'placeholder': 'Descreva o motivo da solicitação...'
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Mostrar apenas produtos ativos com estoque disponível
+        self.fields['product'].queryset = Product.objects.filter(
+            is_active=True
+        ).order_by('name')
+        self.fields['product'].label_from_instance = lambda obj: f"{obj.name} (Disponível: {obj.current_stock})"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        product = cleaned_data.get('product')
+        quantity = cleaned_data.get('quantity')
+        if product and quantity:
+            if product.current_stock < quantity:
+                raise ValidationError(
+                    f'Estoque insuficiente. Disponível: {product.current_stock} unidade(s).'
+                )
+        return cleaned_data
+
+
+class ItemRequestReviewForm(forms.Form):
+    """Formulário para aprovação/rejeição de solicitação"""
+    review_notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': TEXTAREA_CLASSES,
+            'rows': 3,
+            'placeholder': 'Observações sobre a aprovação/rejeição...'
+        }),
+        label='Observações'
+    )
+
+
+class ItemRequestDeliveryForm(forms.Form):
+    """Formulário para marcar entrega de solicitação"""
+    delivery_notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': TEXTAREA_CLASSES,
+            'rows': 3,
+            'placeholder': 'Observações sobre a entrega...'
+        }),
+        label='Observações da Entrega'
     )
 
 

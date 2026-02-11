@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Almoxarifado{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-2" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Almoxarifado
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:item_request_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Solicitações</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Nova Solicitação</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+        <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+            <i class="fas fa-hand-holding-box text-indigo-600 mr-2"></i>
+            {{ title }}
+        </h2>
+        <p class="mt-1 text-sm text-gray-500">
+            Solicite itens disponíveis no almoxarifado. Sua solicitação será analisada por um gestor.
+        </p>
+    </div>
+
+    <!-- Formulário -->
+    <div class="bg-white shadow rounded-lg">
+        <form method="post" class="p-6 space-y-6">
+            {% csrf_token %}
+            
+            {% if form.non_field_errors %}
+            <div class="rounded-md bg-red-50 p-4">
+                <div class="flex">
+                    <i class="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
+                    <div class="ml-3">
+                        {% for error in form.non_field_errors %}
+                        <p class="text-sm text-red-700">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Produto -->
+            <div>
+                <label for="{{ form.product.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    <i class="fas fa-box mr-1"></i> Produto *
+                </label>
+                {{ form.product }}
+                {% if form.product.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.product.errors.0 }}</p>
+                {% endif %}
+                <p class="mt-1 text-xs text-gray-500">Selecione o produto que deseja solicitar</p>
+            </div>
+
+            <!-- Quantidade -->
+            <div>
+                <label for="{{ form.quantity.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    <i class="fas fa-sort-numeric-up mr-1"></i> Quantidade *
+                </label>
+                {{ form.quantity }}
+                {% if form.quantity.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.quantity.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <!-- Motivo -->
+            <div>
+                <label for="{{ form.reason.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    <i class="fas fa-comment-alt mr-1"></i> Motivo da Solicitação *
+                </label>
+                {{ form.reason }}
+                {% if form.reason.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.reason.errors.0 }}</p>
+                {% endif %}
+                <p class="mt-1 text-xs text-gray-500">Descreva detalhadamente por que precisa deste item</p>
+            </div>
+
+            <!-- Info Box -->
+            <div class="rounded-md bg-blue-50 p-4">
+                <div class="flex">
+                    <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                    <div class="ml-3">
+                        <p class="text-sm text-blue-700">
+                            Após enviar, sua solicitação será analisada por um gestor do almoxarifado. 
+                            Você será notificado sobre a aprovação ou rejeição.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <a href="{% url 'assets:item_request_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-paper-plane mr-2"></i>
+                    Enviar Solicitação
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

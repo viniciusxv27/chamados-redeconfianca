@@ -14,12 +14,13 @@ from datetime import timedelta
 
 from .models import (
     Asset, Product, ProductMedia, InventoryItem, 
-    StockMovement, InventoryCategory, InventoryManager
+    StockMovement, InventoryCategory, InventoryManager, ItemRequest
 )
 from .forms import (
     AssetForm, ProductForm, ProductMediaForm, InventoryItemForm,
     StockEntryForm, StockExitForm, InventoryCategoryForm,
-    InventoryManagerForm, BulkInventoryItemForm
+    InventoryManagerForm, BulkInventoryItemForm,
+    ItemRequestForm, ItemRequestReviewForm, ItemRequestDeliveryForm
 )
 from users.models import User, Sector
 from core.middleware import log_action
@@ -106,6 +107,14 @@ def inventory_dashboard(request):
     # Verificar se é gestor
     is_manager = is_inventory_manager(request.user)
     
+    # Solicitações pendentes (para gestores)
+    pending_requests_count = ItemRequest.objects.filter(status='pending').count()
+    
+    # Minhas solicitações recentes
+    my_recent_requests = ItemRequest.objects.filter(
+        requested_by=request.user
+    ).order_by('-requested_at')[:5]
+    
     context = {
         'total_products': total_products,
         'total_items': total_items,
@@ -116,6 +125,9 @@ def inventory_dashboard(request):
         'categories_stats': categories_stats,
         'status_stats': status_stats,
         'is_manager': is_manager,
+        'pending_requests_count': pending_requests_count,
+        'my_recent_requests': my_recent_requests,
+        'is_approver': can_approve_requests(request.user),
     }
     
     return render(request, 'assets/inventory/dashboard.html', context)
@@ -1018,6 +1030,246 @@ def manager_toggle(request, pk):
     status = 'ativado' if manager.is_active else 'desativado'
     messages.success(request, f'Gestor "{manager.user.get_full_name()}" {status}!')
     return redirect('assets:manager_list')
+
+
+# ============================================================================
+# SOLICITAÇÕES DE ITENS
+# ============================================================================
+
+def can_approve_requests(user):
+    """Verifica se o usuário pode aprovar/reprovar solicitações"""
+    if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
+        return True
+    if hasattr(user, 'inventory_manager_profile'):
+        manager = user.inventory_manager_profile
+        return manager.is_active and manager.can_approve_requests
+    return False
+
+
+@login_required
+def item_request_create(request):
+    """Criar nova solicitação de item do almoxarifado"""
+    if request.method == 'POST':
+        form = ItemRequestForm(request.POST)
+        if form.is_valid():
+            item_request = form.save(commit=False)
+            item_request.requested_by = request.user
+            item_request.save()
+            messages.success(request, 'Solicitação enviada com sucesso! Aguarde a aprovação.')
+            return redirect('assets:item_request_list')
+    else:
+        form = ItemRequestForm()
+    
+    return render(request, 'assets/inventory/item_request_form.html', {
+        'form': form,
+        'title': 'Solicitar Item do Almoxarifado'
+    })
+
+
+@login_required
+def item_request_list(request):
+    """Lista solicitações de itens"""
+    user = request.user
+    is_approver = can_approve_requests(user)
+    
+    # Filtros
+    status_filter = request.GET.get('status', '')
+    view_mode = request.GET.get('view', 'mine')  # mine ou all
+    
+    if is_approver and view_mode == 'all':
+        requests_qs = ItemRequest.objects.all()
+    else:
+        requests_qs = ItemRequest.objects.filter(requested_by=user)
+        view_mode = 'mine'
+    
+    if status_filter:
+        requests_qs = requests_qs.filter(status=status_filter)
+    
+    requests_qs = requests_qs.select_related(
+        'product', 'product__category', 'requested_by', 'reviewed_by', 'delivered_by'
+    ).order_by('-requested_at')
+    
+    # Contadores
+    pending_count = ItemRequest.objects.filter(status='pending').count()
+    
+    paginator = Paginator(requests_qs, 20)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    
+    context = {
+        'page_obj': page_obj,
+        'status_filter': status_filter,
+        'view_mode': view_mode,
+        'is_approver': is_approver,
+        'pending_count': pending_count,
+        'status_choices': ItemRequest.STATUS_CHOICES,
+        'total_requests': requests_qs.count(),
+    }
+    return render(request, 'assets/inventory/item_request_list.html', context)
+
+
+@login_required
+def item_request_detail(request, pk):
+    """Detalhes de uma solicitação"""
+    item_request = get_object_or_404(
+        ItemRequest.objects.select_related(
+            'product', 'product__category', 'requested_by', 'reviewed_by', 'delivered_by'
+        ), pk=pk
+    )
+    
+    user = request.user
+    is_approver = can_approve_requests(user)
+    
+    # Apenas o solicitante ou gestores podem ver
+    if item_request.requested_by != user and not is_approver:
+        messages.error(request, 'Você não tem permissão para ver esta solicitação.')
+        return redirect('assets:item_request_list')
+    
+    context = {
+        'item_request': item_request,
+        'is_approver': is_approver,
+    }
+    return render(request, 'assets/inventory/item_request_detail.html', context)
+
+
+@login_required
+def item_request_approve(request, pk):
+    """Aprovar uma solicitação"""
+    if not can_approve_requests(request.user):
+        messages.error(request, 'Você não tem permissão para aprovar solicitações.')
+        return redirect('assets:item_request_list')
+    
+    item_request = get_object_or_404(ItemRequest, pk=pk)
+    
+    if not item_request.can_approve:
+        messages.error(request, 'Esta solicitação não pode ser aprovada.')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ItemRequestReviewForm(request.POST)
+        if form.is_valid():
+            item_request.status = 'approved'
+            item_request.reviewed_by = request.user
+            item_request.reviewed_at = timezone.now()
+            item_request.review_notes = form.cleaned_data.get('review_notes', '')
+            item_request.save()
+            messages.success(request, f'Solicitação #{item_request.pk} aprovada com sucesso!')
+            return redirect('assets:item_request_detail', pk=pk)
+    
+    return redirect('assets:item_request_detail', pk=pk)
+
+
+@login_required
+def item_request_reject(request, pk):
+    """Reprovar uma solicitação"""
+    if not can_approve_requests(request.user):
+        messages.error(request, 'Você não tem permissão para reprovar solicitações.')
+        return redirect('assets:item_request_list')
+    
+    item_request = get_object_or_404(ItemRequest, pk=pk)
+    
+    if not item_request.can_approve:
+        messages.error(request, 'Esta solicitação não pode ser reprovada.')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ItemRequestReviewForm(request.POST)
+        if form.is_valid():
+            item_request.status = 'rejected'
+            item_request.reviewed_by = request.user
+            item_request.reviewed_at = timezone.now()
+            item_request.review_notes = form.cleaned_data.get('review_notes', '')
+            item_request.save()
+            messages.success(request, f'Solicitação #{item_request.pk} rejeitada.')
+            return redirect('assets:item_request_detail', pk=pk)
+    
+    return redirect('assets:item_request_detail', pk=pk)
+
+
+@login_required
+def item_request_deliver(request, pk):
+    """Marcar solicitação como entregue e remover itens do estoque"""
+    if not can_approve_requests(request.user):
+        messages.error(request, 'Você não tem permissão para registrar entregas.')
+        return redirect('assets:item_request_list')
+    
+    item_request = get_object_or_404(ItemRequest, pk=pk)
+    
+    if not item_request.can_deliver:
+        messages.error(request, 'Esta solicitação não pode ser entregue (precisa estar aprovada).')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ItemRequestDeliveryForm(request.POST)
+        if form.is_valid():
+            # Verificar estoque disponível
+            product = item_request.product
+            available_items = InventoryItem.objects.filter(
+                product=product, status='available'
+            ).order_by('created_at')[:item_request.quantity]
+            
+            if available_items.count() < item_request.quantity:
+                messages.error(
+                    request, 
+                    f'Estoque insuficiente. Disponível: {available_items.count()}, '
+                    f'Solicitado: {item_request.quantity}'
+                )
+                return redirect('assets:item_request_detail', pk=pk)
+            
+            # Registrar saída de cada item
+            for item in available_items:
+                item.status = 'in_use'
+                item.assigned_to = item_request.requested_by
+                item.assigned_date = timezone.now()
+                item.save()
+                
+                # Criar movimentação de estoque
+                StockMovement.objects.create(
+                    inventory_item=item,
+                    movement_type='exit',
+                    reason='assigned_to_user',
+                    to_user=item_request.requested_by,
+                    notes=f'Solicitação #{item_request.pk}: {item_request.reason}',
+                    created_by=request.user
+                )
+            
+            # Atualizar a solicitação
+            item_request.status = 'delivered'
+            item_request.delivered_by = request.user
+            item_request.delivered_at = timezone.now()
+            item_request.delivery_notes = form.cleaned_data.get('delivery_notes', '')
+            item_request.save()
+            
+            messages.success(
+                request, 
+                f'Solicitação #{item_request.pk} entregue com sucesso! '
+                f'{item_request.quantity} item(ns) de "{product.name}" removido(s) do estoque.'
+            )
+            return redirect('assets:item_request_detail', pk=pk)
+    
+    return redirect('assets:item_request_detail', pk=pk)
+
+
+@login_required
+def item_request_cancel(request, pk):
+    """Cancelar uma solicitação"""
+    item_request = get_object_or_404(ItemRequest, pk=pk)
+    
+    # Apenas o solicitante ou gestores podem cancelar
+    if item_request.requested_by != request.user and not can_approve_requests(request.user):
+        messages.error(request, 'Você não tem permissão para cancelar esta solicitação.')
+        return redirect('assets:item_request_list')
+    
+    if not item_request.can_cancel:
+        messages.error(request, 'Esta solicitação não pode ser cancelada.')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        item_request.status = 'cancelled'
+        item_request.save()
+        messages.success(request, f'Solicitação #{item_request.pk} cancelada.')
+        return redirect('assets:item_request_list')
+    
+    return redirect('assets:item_request_detail', pk=pk)
 
 
 # ============================================================================

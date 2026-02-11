@@ -100,7 +100,18 @@
     </div>
 
     <!-- Quick Actions -->
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+        <a href="{% url 'assets:item_request_create' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors border-2 border-indigo-200">
+            <i class="fas fa-hand-holding-box text-2xl text-indigo-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Solicitar Item</p>
+        </a>
+        <a href="{% url 'assets:item_request_list' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors relative">
+            <i class="fas fa-clipboard-list text-2xl text-yellow-600 mb-2"></i>
+            <p class="text-sm font-medium text-gray-900">Solicitações</p>
+            {% if pending_requests_count > 0 and is_approver %}
+            <span class="absolute top-2 right-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">{{ pending_requests_count }}</span>
+            {% endif %}
+        </a>
         <a href="{% url 'assets:product_list' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
             <i class="fas fa-boxes text-2xl text-indigo-600 mb-2"></i>
             <p class="text-sm font-medium text-gray-900">Produtos</p>
@@ -130,6 +141,65 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Pending Requests for Approvers -->
+        {% if is_approver and pending_requests_count > 0 %}
+        <div class="bg-white rounded-lg shadow border-l-4 border-yellow-400">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-clock text-yellow-500 mr-2"></i>
+                    Solicitações Pendentes
+                    <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">{{ pending_requests_count }}</span>
+                </h3>
+                <a href="{% url 'assets:item_request_list' %}?view=all&status=pending" class="text-sm text-indigo-600 hover:text-indigo-800">
+                    Ver todas <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <div class="p-4">
+                <p class="text-sm text-gray-600 mb-3">Há {{ pending_requests_count }} solicitação(ões) aguardando sua aprovação.</p>
+                <a href="{% url 'assets:item_request_list' %}?view=all&status=pending" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700">
+                    <i class="fas fa-gavel mr-2"></i>
+                    Revisar Solicitações
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- My Recent Requests -->
+        {% if my_recent_requests %}
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium text-gray-900">
+                    <i class="fas fa-clipboard-list text-indigo-600 mr-2"></i>
+                    Minhas Solicitações
+                </h3>
+                <a href="{% url 'assets:item_request_list' %}" class="text-sm text-indigo-600 hover:text-indigo-800">
+                    Ver todas <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <ul class="divide-y divide-gray-200">
+                {% for req in my_recent_requests %}
+                <li class="px-4 py-3 sm:px-6 hover:bg-gray-50">
+                    <a href="{% url 'assets:item_request_detail' req.pk %}" class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">{{ req.product.name }} (x{{ req.quantity }})</p>
+                            <p class="text-xs text-gray-500">{{ req.requested_at|date:"d/m/Y H:i" }}</p>
+                        </div>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                            {% if req.status == 'pending' %}bg-yellow-100 text-yellow-800
+                            {% elif req.status == 'approved' %}bg-green-100 text-green-800
+                            {% elif req.status == 'rejected' %}bg-red-100 text-red-800
+                            {% elif req.status == 'delivered' %}bg-blue-100 text-blue-800
+                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ req.get_status_display }}
+                        </span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
         <!-- Low Stock Alert -->
         {% if low_stock_products %}
         <div class="bg-white rounded-lg shadow">
@@ -291,6 +361,10 @@
                 <a href="{% url 'assets:manager_list' %}" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
                     <i class="fas fa-users-cog text-indigo-600 mr-3"></i>
                     <span class="text-sm font-medium">Gestores</span>
+                </a>
+                <a href="{% url 'assets:item_request_list' %}?view=all" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-clipboard-list text-indigo-600 mr-3"></i>
+                    <span class="text-sm font-medium">Solicitações</span>
                 </a>
                 <a href="{% url 'assets:item_bulk_create' %}" class="flex items-center p-3 border rounded-lg hover:bg-gray-50">
                     <i class="fas fa-layer-group text-indigo-600 mr-3"></i>

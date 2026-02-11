@@ -1,0 +1,358 @@
+{% extends 'base.html' %}
+
+{% block title %}Solicitação #{{ item_request.pk }} - Almoxarifado{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-pending { background-color: #fef3c7; color: #92400e; }
+    .status-approved { background-color: #d1fae5; color: #065f46; }
+    .status-rejected { background-color: #fecaca; color: #991b1b; }
+    .status-delivered { background-color: #dbeafe; color: #1e40af; }
+    .status-cancelled { background-color: #e5e7eb; color: #4b5563; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-2" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Almoxarifado
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:item_request_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Solicitações</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">#{{ item_request.pk }}</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+                    <i class="fas fa-clipboard-list text-indigo-600 mr-2"></i>
+                    Solicitação #{{ item_request.pk }}
+                </h2>
+                <div class="mt-2">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium status-{{ item_request.status }}">
+                        {% if item_request.status == 'pending' %}
+                        <i class="fas fa-clock mr-1"></i>
+                        {% elif item_request.status == 'approved' %}
+                        <i class="fas fa-check mr-1"></i>
+                        {% elif item_request.status == 'rejected' %}
+                        <i class="fas fa-times mr-1"></i>
+                        {% elif item_request.status == 'delivered' %}
+                        <i class="fas fa-truck mr-1"></i>
+                        {% elif item_request.status == 'cancelled' %}
+                        <i class="fas fa-ban mr-1"></i>
+                        {% endif %}
+                        {{ item_request.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            <!-- Ação de Cancelar (para quem solicitou) -->
+            {% if item_request.can_cancel and item_request.requested_by == request.user %}
+            <div class="mt-4 sm:mt-0">
+                <form method="post" action="{% url 'assets:item_request_cancel' item_request.pk %}" 
+                      onsubmit="return confirm('Tem certeza que deseja cancelar esta solicitação?')">
+                    {% csrf_token %}
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50">
+                        <i class="fas fa-ban mr-2"></i>
+                        Cancelar Solicitação
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Informações Principais -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Detalhes do Produto -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-box text-indigo-600 mr-2"></i>
+                        Produto Solicitado
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:px-6">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Produto</dt>
+                            <dd class="mt-1 text-sm text-gray-900 font-semibold">
+                                <a href="{% url 'assets:product_detail' item_request.product.pk %}" class="text-indigo-600 hover:text-indigo-800">
+                                    {{ item_request.product.name }}
+                                </a>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">SKU</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.product.sku }}</dd>
+                        </div>
+                        {% if item_request.product.category %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Categoria</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.product.category.name }}</dd>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Quantidade Solicitada</dt>
+                            <dd class="mt-1 text-2xl font-bold text-indigo-600">{{ item_request.quantity }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Estoque Disponível</dt>
+                            <dd class="mt-1 text-sm font-semibold {% if item_request.product.current_stock < item_request.quantity %}text-red-600{% else %}text-green-600{% endif %}">
+                                {{ item_request.product.current_stock }} unidade(s)
+                                {% if item_request.product.current_stock < item_request.quantity %}
+                                <i class="fas fa-exclamation-triangle text-red-500 ml-1"></i>
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Motivo -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-comment-alt text-indigo-600 mr-2"></i>
+                        Motivo da Solicitação
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:px-6">
+                    <p class="text-sm text-gray-900 whitespace-pre-wrap">{{ item_request.reason }}</p>
+                </div>
+            </div>
+
+            <!-- Histórico de Revisão -->
+            {% if item_request.reviewed_by %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-gavel text-indigo-600 mr-2"></i>
+                        Revisão
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:px-6">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Revisado por</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.reviewed_by.get_full_name|default:item_request.reviewed_by.email }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Data da Revisão</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.reviewed_at|date:"d/m/Y H:i" }}</dd>
+                        </div>
+                        {% if item_request.review_notes %}
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm font-medium text-gray-500">Observações</dt>
+                            <dd class="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{{ item_request.review_notes }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Histórico de Entrega -->
+            {% if item_request.delivered_by %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-truck text-green-600 mr-2"></i>
+                        Entrega
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:px-6">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Entregue por</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.delivered_by.get_full_name|default:item_request.delivered_by.email }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Data da Entrega</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.delivered_at|date:"d/m/Y H:i" }}</dd>
+                        </div>
+                        {% if item_request.delivery_notes %}
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm font-medium text-gray-500">Observações</dt>
+                            <dd class="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{{ item_request.delivery_notes }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Info do Solicitante -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-sm font-medium text-gray-900">
+                        <i class="fas fa-user text-indigo-600 mr-1"></i>
+                        Solicitante
+                    </h3>
+                </div>
+                <div class="px-4 py-4 sm:px-6">
+                    <p class="text-sm font-medium text-gray-900">
+                        {{ item_request.requested_by.get_full_name|default:item_request.requested_by.email }}
+                    </p>
+                    <p class="text-xs text-gray-500 mt-1">{{ item_request.requested_at|date:"d/m/Y \à\s H:i" }}</p>
+                </div>
+            </div>
+
+            <!-- Ações do Gestor -->
+            {% if is_approver %}
+            
+            <!-- Aprovar / Rejeitar -->
+            {% if item_request.can_approve %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-sm font-medium text-gray-900">
+                        <i class="fas fa-gavel text-indigo-600 mr-1"></i>
+                        Ação do Gestor
+                    </h3>
+                </div>
+                <div class="px-4 py-4 sm:px-6 space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Observações (opcional)</label>
+                        <textarea id="review_notes" rows="3" 
+                                  class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                  placeholder="Motivo da aprovação/rejeição..."></textarea>
+                    </div>
+
+                    {% if item_request.product.current_stock < item_request.quantity %}
+                    <div class="rounded-md bg-red-50 p-3">
+                        <div class="flex">
+                            <i class="fas fa-exclamation-triangle text-red-400 mt-0.5 text-xs"></i>
+                            <p class="ml-2 text-xs text-red-700">
+                                Estoque insuficiente para atender ({{ item_request.product.current_stock }}/{{ item_request.quantity }})
+                            </p>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="flex space-x-3">
+                        <form method="post" action="{% url 'assets:item_request_approve' item_request.pk %}" class="flex-1"
+                              onsubmit="document.getElementById('approve_notes').value=document.getElementById('review_notes').value">
+                            {% csrf_token %}
+                            <input type="hidden" name="review_notes" id="approve_notes" value="">
+                            <button type="submit" 
+                                    class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                                <i class="fas fa-check mr-2"></i>
+                                Aprovar
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'assets:item_request_reject' item_request.pk %}" class="flex-1"
+                              onsubmit="document.getElementById('reject_notes').value=document.getElementById('review_notes').value">
+                            {% csrf_token %}
+                            <input type="hidden" name="review_notes" id="reject_notes" value="">
+                            <button type="submit" 
+                                    class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700">
+                                <i class="fas fa-times mr-2"></i>
+                                Rejeitar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Marcar como Entregue -->
+            {% if item_request.can_deliver %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-sm font-medium text-gray-900">
+                        <i class="fas fa-truck text-green-600 mr-1"></i>
+                        Registrar Entrega
+                    </h3>
+                </div>
+                <div class="px-4 py-4 sm:px-6">
+                    <form method="post" action="{% url 'assets:item_request_deliver' item_request.pk %}"
+                          onsubmit="return confirm('Confirmar entrega? Isso removerá {{ item_request.quantity }} item(ns) do estoque.')">
+                        {% csrf_token %}
+                        <div class="mb-4">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Observações da Entrega</label>
+                            <textarea name="delivery_notes" rows="3" 
+                                      class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                      placeholder="Observações sobre a entrega..."></textarea>
+                        </div>
+
+                        {% if item_request.product.current_stock >= item_request.quantity %}
+                        <div class="rounded-md bg-green-50 p-3 mb-4">
+                            <div class="flex">
+                                <i class="fas fa-check-circle text-green-400 mt-0.5 text-xs"></i>
+                                <p class="ml-2 text-xs text-green-700">
+                                    Estoque disponível: {{ item_request.product.current_stock }} unidade(s)
+                                </p>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="rounded-md bg-red-50 p-3 mb-4">
+                            <div class="flex">
+                                <i class="fas fa-exclamation-triangle text-red-400 mt-0.5 text-xs"></i>
+                                <p class="ml-2 text-xs text-red-700">
+                                    Estoque insuficiente! Disponível: {{ item_request.product.current_stock }}, Solicitado: {{ item_request.quantity }}
+                                </p>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <button type="submit" 
+                                class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                                {% if item_request.product.current_stock < item_request.quantity %}disabled title="Estoque insuficiente" class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-400 cursor-not-allowed"{% endif %}>
+                            <i class="fas fa-truck mr-2"></i>
+                            Marcar como Entregue
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Cancelar (gestor) -->
+            {% if item_request.can_cancel and item_request.requested_by != request.user %}
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-4 sm:px-6">
+                    <form method="post" action="{% url 'assets:item_request_cancel' item_request.pk %}" 
+                          onsubmit="return confirm('Tem certeza que deseja cancelar esta solicitação?')">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            <i class="fas fa-ban mr-2"></i>
+                            Cancelar Solicitação
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {% endif %}
+
+            <!-- Voltar -->
+            <div>
+                <a href="{% url 'assets:item_request_list' %}" 
+                   class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar às Solicitações
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

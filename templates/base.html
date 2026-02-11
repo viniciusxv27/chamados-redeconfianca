@@ -511,6 +511,15 @@
                             </a>
                         </li>
                         
+                        <!-- Menu Almoxarifado - Liberado para todos -->
+                        <li>
+                            <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
+                                <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
+                                <span class="text-sm flex-1">Almoxarifado</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        
                         <!-- Menu GESTÃO - Para usuários autorizados -->
                         {% if user.can_manage_users or user.groups.all %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
@@ -597,13 +606,6 @@
                                         <i class="fas fa-coins text-yellow-400 flex-shrink-0"></i>
                                         <span>Dinheiro Vivo</span>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Estoque">
-                                        <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
-                                        <span>Estoque</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
                                 <li>
@@ -705,6 +707,9 @@
                                 <a href="{% url 'dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if request.resolver_match.url_name == 'dashboard' %}text-primary border-b-2 border-primary{% endif %}">Dashboard</a>
                                 <a href="{% url 'communications:communications_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'communications' in request.path %}text-primary border-b-2 border-primary{% endif %}">Comunicados</a>
                                 <a href="{% url 'tickets_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'tickets' in request.path %}text-primary border-b-2 border-primary{% endif %}">Chamados</a>
+                                <a href="{% url 'assets:inventory_dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'assets' in request.path %}text-primary border-b-2 border-primary{% endif %}">
+                                    <i class="fas fa-warehouse mr-1"></i>Almoxarifado
+                                </a>
                             </nav>
                             {% endblock %}
                         </div>

@@ -501,6 +501,10 @@ class InventoryManager(models.Model):
         default=False, 
         verbose_name='Pode gerenciar outros gestores'
     )
+    can_approve_requests = models.BooleanField(
+        default=True,
+        verbose_name='Pode aprovar/reprovar solicitações'
+    )
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
     
     # Campos de auditoria
@@ -521,6 +525,114 @@ class InventoryManager(models.Model):
     
     def __str__(self):
         return f"{self.user.get_full_name() or self.user.email}"
+
+
+class ItemRequest(models.Model):
+    """Solicitação de itens do almoxarifado"""
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovada'),
+        ('rejected', 'Rejeitada'),
+        ('delivered', 'Entregue'),
+        ('cancelled', 'Cancelada'),
+    ]
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='requests',
+        verbose_name='Produto'
+    )
+    quantity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name='Quantidade'
+    )
+    reason = models.TextField(
+        verbose_name='Motivo da Solicitação',
+        help_text='Descreva o motivo pelo qual precisa deste item'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='Status'
+    )
+    
+    # Quem solicitou
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='item_requests_made',
+        verbose_name='Solicitado por'
+    )
+    requested_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Data da Solicitação'
+    )
+    
+    # Quem aprovou/reprovou
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='item_requests_reviewed',
+        verbose_name='Revisado por'
+    )
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Revisão'
+    )
+    review_notes = models.TextField(
+        blank=True,
+        verbose_name='Observações da Revisão'
+    )
+    
+    # Entrega
+    delivered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='item_requests_delivered',
+        verbose_name='Entregue por'
+    )
+    delivered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Entrega'
+    )
+    delivery_notes = models.TextField(
+        blank=True,
+        verbose_name='Observações da Entrega'
+    )
+    
+    class Meta:
+        verbose_name = 'Solicitação de Item'
+        verbose_name_plural = 'Solicitações de Itens'
+        ordering = ['-requested_at']
+    
+    def __str__(self):
+        return f"#{self.pk} - {self.product.name} (x{self.quantity}) - {self.get_status_display()}"
+    
+    @property
+    def can_approve(self):
+        return self.status == 'pending'
+    
+    @property
+    def can_deliver(self):
+        return self.status == 'approved'
+    
+    @property
+    def can_cancel(self):
+        return self.status in ['pending', 'approved']
+    
+    @property
+    def has_enough_stock(self):
+        """Verifica se há estoque suficiente para atender a solicitação"""
+        return self.product.current_stock >= self.quantity
 
 
 # ============================================================================

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Asset, InventoryCategory, Product, ProductMedia, 
-    InventoryItem, StockMovement, InventoryManager
+    InventoryItem, StockMovement, InventoryManager, ItemRequest
 )
 
 
@@ -241,3 +241,14 @@ class AssetAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ItemRequest)
+class ItemRequestAdmin(admin.ModelAdmin):
+    list_display = ['id', 'product', 'quantity', 'requested_by', 'status', 'requested_at']
+    list_filter = ['status', 'requested_at']
+    search_fields = ['product__name', 'requested_by__first_name', 'requested_by__last_name', 'reason']
+    readonly_fields = ['requested_at', 'reviewed_at', 'delivered_at']
+    list_per_page = 25
+    date_hierarchy = 'requested_at'
+    raw_id_fields = ['requested_by', 'reviewed_by', 'delivered_by', 'product']
