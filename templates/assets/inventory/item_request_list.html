@@ -5,6 +5,8 @@
 {% block extra_css %}
 <style>
     .status-pending { background-color: #fef3c7; color: #92400e; }
+    .status-counterproposal { background-color: #e0e7ff; color: #3730a3; }
+    .status-accepted { background-color: #d1fae5; color: #065f46; }
     .status-approved { background-color: #d1fae5; color: #065f46; }
     .status-rejected { background-color: #fecaca; color: #991b1b; }
     .status-delivered { background-color: #dbeafe; color: #1e40af; }
@@ -142,6 +144,10 @@
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium status-{{ req.status }}">
                                 {% if req.status == 'pending' %}
                                 <i class="fas fa-clock mr-1"></i>
+                                {% elif req.status == 'counterproposal' %}
+                                <i class="fas fa-exchange-alt mr-1"></i>
+                                {% elif req.status == 'accepted' %}
+                                <i class="fas fa-handshake mr-1"></i>
                                 {% elif req.status == 'approved' %}
                                 <i class="fas fa-check mr-1"></i>
                                 {% elif req.status == 'rejected' %}

@@ -52,6 +52,9 @@ urlpatterns = [
     path('gestores/<int:pk>/editar/', views.manager_edit, name='manager_edit'),
     path('gestores/<int:pk>/toggle/', views.manager_toggle, name='manager_toggle'),
     
+    # Catálogo / Mercadinho (visão do solicitante)
+    path('catalogo/', views.store_catalog, name='store_catalog'),
+
     # Solicitações de Itens
     path('solicitacoes/', views.item_request_list, name='item_request_list'),
     path('solicitacoes/nova/', views.item_request_create, name='item_request_create'),
@@ -60,6 +63,9 @@ urlpatterns = [
     path('solicitacoes/<int:pk>/rejeitar/', views.item_request_reject, name='item_request_reject'),
     path('solicitacoes/<int:pk>/entregar/', views.item_request_deliver, name='item_request_deliver'),
     path('solicitacoes/<int:pk>/cancelar/', views.item_request_cancel, name='item_request_cancel'),
+    path('solicitacoes/<int:pk>/contraproposta/', views.item_request_counterproposal, name='item_request_counterproposal'),
+    path('solicitacoes/<int:pk>/aceitar-contraproposta/', views.item_request_accept_counterproposal, name='item_request_accept_counterproposal'),
+    path('solicitacoes/<int:pk>/recusar-contraproposta/', views.item_request_reject_counterproposal, name='item_request_reject_counterproposal'),
     
     # =========================================================================
     # ATIVOS LEGADOS (DEPRECATED - manter por compatibilidade)

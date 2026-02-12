@@ -1,0 +1,270 @@
+{% extends 'base.html' %}
+
+{% block title %}Contraproposta - Solicitação #{{ item_request.pk }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .qty-changed { background-color: #fef3c7; }
+    .qty-removed { background-color: #fecaca; opacity: 0.7; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-2" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'assets:inventory_dashboard' %}" class="text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-warehouse mr-1"></i> Almoxarifado
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:item_request_list' %}" class="text-sm text-gray-500 hover:text-indigo-600">Solicitações</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <a href="{% url 'assets:item_request_detail' item_request.pk %}" class="text-sm text-gray-500 hover:text-indigo-600">#{{ item_request.pk }}</a>
+                    </div>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i>
+                        <span class="text-sm text-gray-700">Contraproposta</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+        <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl">
+            <i class="fas fa-exchange-alt text-amber-600 mr-2"></i>
+            Contraproposta - Solicitação #{{ item_request.pk }}
+        </h2>
+        <p class="mt-1 text-sm text-gray-500">
+            Ajuste as quantidades que serão enviadas. O solicitante deverá aceitar ou recusar.
+        </p>
+    </div>
+
+    <!-- Info do Solicitante -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex items-start">
+            <i class="fas fa-user-circle text-blue-500 text-xl mt-0.5 mr-3"></i>
+            <div>
+                <p class="text-sm font-medium text-blue-900">
+                    Solicitante: {{ item_request.requested_by.get_full_name|default:item_request.requested_by.email }}
+                </p>
+                <p class="text-sm text-blue-700 mt-1">
+                    <strong>Motivo:</strong> {{ item_request.reason }}
+                </p>
+                <p class="text-xs text-blue-500 mt-1">
+                    <i class="fas fa-calendar-alt mr-1"></i> {{ item_request.requested_at|date:"d/m/Y H:i" }}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="counterproposalForm">
+        {% csrf_token %}
+        
+        {% if messages %}
+        <div class="mb-4">
+            {% for message in messages %}
+            <div class="rounded-md {% if message.tags == 'error' %}bg-red-50{% elif message.tags == 'warning' %}bg-yellow-50{% else %}bg-green-50{% endif %} p-4 mb-2">
+                <div class="flex">
+                    <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle text-red-400{% elif message.tags == 'warning' %}fa-exclamation-triangle text-yellow-400{% else %}fa-check-circle text-green-400{% endif %} mt-0.5"></i>
+                    <p class="ml-3 text-sm {% if message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-yellow-700{% else %}text-green-700{% endif %}">{{ message }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Itens -->
+            <div class="lg:col-span-2">
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            <i class="fas fa-boxes text-indigo-600 mr-2"></i>
+                            Ajustar Quantidades
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Defina a quantidade que será enviada para cada item. Use 0 para remover um item.
+                        </p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Solicitado</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estoque</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd Proposta</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for req_item in item_request.items.all %}
+                                <tr id="row_{{ req_item.pk }}" class="hover:bg-gray-50">
+                                    <td class="px-4 py-3">
+                                        <div class="text-sm font-medium text-gray-900">{{ req_item.product.name }}</div>
+                                        <div class="text-xs text-gray-500">
+                                            {{ req_item.product.sku }}
+                                            {% if req_item.product.category %} · {{ req_item.product.category.name }}{% endif %}
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-center text-sm font-bold text-indigo-600">
+                                        {{ req_item.quantity }}
+                                    </td>
+                                    <td class="px-4 py-3 text-center text-sm font-semibold {% if req_item.product.current_stock < req_item.quantity %}text-red-600{% else %}text-green-600{% endif %}">
+                                        {{ req_item.product.current_stock }}
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        <input type="number" 
+                                               name="proposed_qty_{{ req_item.pk }}" 
+                                               value="{{ req_item.quantity }}" 
+                                               min="0" 
+                                               max="{{ req_item.product.current_stock }}"
+                                               data-original="{{ req_item.quantity }}"
+                                               data-row-id="{{ req_item.pk }}"
+                                               onchange="updateRowStyle(this)"
+                                               oninput="updateRowStyle(this)"
+                                               class="w-20 text-center px-2 py-1 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Legenda -->
+                    <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                        <div class="flex items-center space-x-4 text-xs text-gray-500">
+                            <span class="flex items-center">
+                                <span class="w-3 h-3 rounded bg-yellow-200 mr-1.5"></span>
+                                Quantidade alterada
+                            </span>
+                            <span class="flex items-center">
+                                <span class="w-3 h-3 rounded bg-red-200 mr-1.5"></span>
+                                Item removido (qtd = 0)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="space-y-6">
+                <!-- Motivo da Contraproposta -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-sm font-medium text-gray-900">
+                            <i class="fas fa-comment-alt text-amber-600 mr-1"></i>
+                            Motivo da Contraproposta *
+                        </h3>
+                    </div>
+                    <div class="px-4 py-4 sm:px-6">
+                        {{ form.counterproposal_notes }}
+                        {% if form.counterproposal_notes.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.counterproposal_notes.errors.0 }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-gray-500">Explique ao solicitante por que as quantidades foram ajustadas.</p>
+                    </div>
+                </div>
+
+                <!-- Info -->
+                <div class="rounded-md bg-amber-50 p-4">
+                    <div class="flex">
+                        <i class="fas fa-info-circle text-amber-400 mt-0.5"></i>
+                        <div class="ml-3">
+                            <p class="text-sm text-amber-700">
+                                O solicitante receberá uma notificação e poderá <strong>aceitar</strong> ou <strong>recusar</strong> esta contraproposta.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resumo -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-sm font-medium text-gray-900">
+                            <i class="fas fa-receipt text-indigo-600 mr-1"></i>
+                            Resumo da Contraproposta
+                        </h3>
+                    </div>
+                    <div class="px-4 py-4 sm:px-6">
+                        <dl class="space-y-2">
+                            <div class="flex justify-between">
+                                <dt class="text-sm text-gray-500">Itens alterados:</dt>
+                                <dd id="summary_changed" class="text-sm font-semibold text-amber-600">0</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-sm text-gray-500">Itens removidos:</dt>
+                                <dd id="summary_removed" class="text-sm font-semibold text-red-600">0</dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="space-y-3">
+                    <button type="submit" 
+                            class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500">
+                        <i class="fas fa-paper-plane mr-2"></i>
+                        Enviar Contraproposta
+                    </button>
+                    <a href="{% url 'assets:item_request_detail' item_request.pk %}" 
+                       class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        Cancelar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function updateRowStyle(input) {
+    const original = parseInt(input.dataset.original);
+    const current = parseInt(input.value) || 0;
+    const rowId = input.dataset.rowId;
+    const row = document.getElementById('row_' + rowId);
+    
+    row.classList.remove('qty-changed', 'qty-removed');
+    
+    if (current === 0) {
+        row.classList.add('qty-removed');
+    } else if (current !== original) {
+        row.classList.add('qty-changed');
+    }
+    
+    updateSummary();
+}
+
+function updateSummary() {
+    const inputs = document.querySelectorAll('input[name^="proposed_qty_"]');
+    let changed = 0;
+    let removed = 0;
+    
+    inputs.forEach(input => {
+        const original = parseInt(input.dataset.original);
+        const current = parseInt(input.value) || 0;
+        
+        if (current === 0) {
+            removed++;
+        } else if (current !== original) {
+            changed++;
+        }
+    });
+    
+    document.getElementById('summary_changed').textContent = changed;
+    document.getElementById('summary_removed').textContent = removed;
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', updateSummary);
+</script>
+{% endblock %}

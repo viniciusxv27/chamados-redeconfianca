@@ -20,7 +20,8 @@ from .forms import (
     AssetForm, ProductForm, ProductMediaForm, InventoryItemForm,
     StockEntryForm, StockExitForm, InventoryCategoryForm,
     InventoryManagerForm, BulkInventoryItemForm,
-    ItemRequestForm, ItemRequestItemForm, ItemRequestReviewForm, ItemRequestDeliveryForm
+    ItemRequestForm, ItemRequestItemForm, ItemRequestReviewForm, ItemRequestDeliveryForm,
+    ItemRequestCounterProposalForm, ItemRequestCounterProposalResponseForm
 )
 from users.models import User, Sector
 from core.middleware import log_action
@@ -1275,9 +1276,12 @@ def item_request_deliver(request, pk):
             # Registrar saída de cada item
             total_delivered = 0
             for req_item in request_items:
+                qty = req_item.effective_quantity
+                if qty == 0:
+                    continue  # Item removido na contraproposta
                 available_items = InventoryItem.objects.filter(
                     product=req_item.product, status='available'
-                ).order_by('created_at')[:req_item.quantity]
+                ).order_by('created_at')[:qty]
                 
                 for inv_item in available_items:
                     inv_item.status = 'in_use'
@@ -1293,7 +1297,7 @@ def item_request_deliver(request, pk):
                         notes=f'Solicitação #{item_request.pk}: {item_request.reason}',
                         created_by=request.user
                     )
-                total_delivered += req_item.quantity
+                total_delivered += qty
             
             # Atualizar a solicitação
             item_request.status = 'delivered'
@@ -1331,6 +1335,185 @@ def item_request_cancel(request, pk):
         item_request.save()
         messages.success(request, f'Solicitação #{item_request.pk} cancelada.')
         return redirect('assets:item_request_list')
+    
+    return redirect('assets:item_request_detail', pk=pk)
+
+
+# ============================================================================
+# CATÁLOGO / MERCADINHO DO ALMOXARIFADO
+# ============================================================================
+
+@login_required
+def store_catalog(request):
+    """Visão de catálogo estilo mercadinho para solicitar itens"""
+    categories = InventoryCategory.objects.filter(is_active=True).annotate(
+        product_count=Count('products', filter=Q(products__is_active=True))
+    ).order_by('name')
+    
+    # Filtros
+    category_filter = request.GET.get('category', '')
+    search_query = request.GET.get('q', '')
+    
+    products = Product.objects.filter(is_active=True).select_related('category').prefetch_related('media')
+    
+    if category_filter:
+        products = products.filter(category_id=category_filter)
+    
+    if search_query:
+        products = products.filter(
+            Q(name__icontains=search_query) | 
+            Q(description__icontains=search_query) |
+            Q(sku__icontains=search_query) |
+            Q(brand__icontains=search_query)
+        )
+    
+    products = products.order_by('name')
+    
+    # Paginação
+    paginator = Paginator(products, 12)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    
+    # Minhas solicitações recentes
+    my_recent_requests = ItemRequest.objects.filter(
+        requested_by=request.user
+    ).order_by('-requested_at')[:5]
+    
+    # Contagem de solicitações pendentes do usuário
+    my_pending_count = ItemRequest.objects.filter(
+        requested_by=request.user, 
+        status__in=['pending', 'counterproposal']
+    ).count()
+    
+    context = {
+        'categories': categories,
+        'page_obj': page_obj,
+        'category_filter': category_filter,
+        'search_query': search_query,
+        'my_recent_requests': my_recent_requests,
+        'my_pending_count': my_pending_count,
+    }
+    return render(request, 'assets/inventory/store_catalog.html', context)
+
+
+# ============================================================================
+# CONTRAPROPOSTA
+# ============================================================================
+
+@login_required
+def item_request_counterproposal(request, pk):
+    """Gestor faz contraproposta de quantidades"""
+    if not can_approve_requests(request.user):
+        messages.error(request, 'Você não tem permissão para fazer contrapropostas.')
+        return redirect('assets:item_request_list')
+    
+    item_request = get_object_or_404(
+        ItemRequest.objects.select_related(
+            'requested_by', 'reviewed_by'
+        ).prefetch_related(
+            'items', 'items__product'
+        ), pk=pk
+    )
+    
+    if not item_request.can_counterpropose:
+        messages.error(request, 'Esta solicitação não pode receber contraproposta.')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ItemRequestCounterProposalForm(request.POST)
+        if form.is_valid():
+            # Processar quantidades propostas para cada item
+            request_items = item_request.items.all()
+            has_changes = False
+            
+            for req_item in request_items:
+                proposed_qty_key = f'proposed_qty_{req_item.pk}'
+                proposed_qty = request.POST.get(proposed_qty_key)
+                
+                if proposed_qty is not None:
+                    try:
+                        proposed_qty = int(proposed_qty)
+                        if proposed_qty < 0:
+                            proposed_qty = 0
+                        req_item.proposed_quantity = proposed_qty
+                        req_item.save()
+                        if proposed_qty != req_item.quantity:
+                            has_changes = True
+                    except (ValueError, TypeError):
+                        pass
+            
+            if not has_changes:
+                messages.warning(request, 'Nenhuma quantidade foi alterada. Use "Aprovar" para manter as quantidades originais.')
+                return redirect('assets:item_request_detail', pk=pk)
+            
+            # Atualizar status da solicitação
+            item_request.status = 'counterproposal'
+            item_request.counterproposal_by = request.user
+            item_request.counterproposal_at = timezone.now()
+            item_request.counterproposal_notes = form.cleaned_data['counterproposal_notes']
+            item_request.save()
+            
+            messages.success(request, f'Contraproposta enviada para solicitação #{item_request.pk}.')
+            return redirect('assets:item_request_detail', pk=pk)
+    else:
+        form = ItemRequestCounterProposalForm()
+    
+    context = {
+        'item_request': item_request,
+        'form': form,
+    }
+    return render(request, 'assets/inventory/item_request_counterproposal.html', context)
+
+
+@login_required
+def item_request_accept_counterproposal(request, pk):
+    """Solicitante aceita a contraproposta"""
+    item_request = get_object_or_404(ItemRequest, pk=pk)
+    
+    if item_request.requested_by != request.user:
+        messages.error(request, 'Apenas o solicitante pode responder à contraproposta.')
+        return redirect('assets:item_request_list')
+    
+    if not item_request.can_respond_counterproposal:
+        messages.error(request, 'Esta solicitação não tem contraproposta pendente.')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ItemRequestCounterProposalResponseForm(request.POST)
+        if form.is_valid():
+            item_request.status = 'accepted'
+            item_request.counterproposal_response_notes = form.cleaned_data.get('response_notes', '')
+            item_request.counterproposal_responded_at = timezone.now()
+            item_request.save()
+            
+            messages.success(request, f'Você aceitou a contraproposta da solicitação #{item_request.pk}.')
+            return redirect('assets:item_request_detail', pk=pk)
+    
+    return redirect('assets:item_request_detail', pk=pk)
+
+
+@login_required
+def item_request_reject_counterproposal(request, pk):
+    """Solicitante recusa a contraproposta"""
+    item_request = get_object_or_404(ItemRequest, pk=pk)
+    
+    if item_request.requested_by != request.user:
+        messages.error(request, 'Apenas o solicitante pode responder à contraproposta.')
+        return redirect('assets:item_request_list')
+    
+    if not item_request.can_respond_counterproposal:
+        messages.error(request, 'Esta solicitação não tem contraproposta pendente.')
+        return redirect('assets:item_request_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ItemRequestCounterProposalResponseForm(request.POST)
+        if form.is_valid():
+            item_request.status = 'cancelled'
+            item_request.counterproposal_response_notes = form.cleaned_data.get('response_notes', '')
+            item_request.counterproposal_responded_at = timezone.now()
+            item_request.save()
+            
+            messages.success(request, f'Você recusou a contraproposta. A solicitação #{item_request.pk} foi cancelada.')
+            return redirect('assets:item_request_detail', pk=pk)
     
     return redirect('assets:item_request_detail', pk=pk)
 

@@ -5,10 +5,14 @@
 {% block extra_css %}
 <style>
     .status-pending { background-color: #fef3c7; color: #92400e; }
+    .status-counterproposal { background-color: #fde68a; color: #92400e; }
+    .status-accepted { background-color: #d1fae5; color: #065f46; }
     .status-approved { background-color: #d1fae5; color: #065f46; }
     .status-rejected { background-color: #fecaca; color: #991b1b; }
     .status-delivered { background-color: #dbeafe; color: #1e40af; }
     .status-cancelled { background-color: #e5e7eb; color: #4b5563; }
+    .qty-changed-row { background-color: #fffbeb; }
+    .qty-removed-row { background-color: #fef2f2; }
 </style>
 {% endblock %}
 
@@ -47,6 +51,10 @@
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium status-{{ item_request.status }}">
                         {% if item_request.status == 'pending' %}
                         <i class="fas fa-clock mr-1"></i>
+                        {% elif item_request.status == 'counterproposal' %}
+                        <i class="fas fa-exchange-alt mr-1"></i>
+                        {% elif item_request.status == 'accepted' %}
+                        <i class="fas fa-handshake mr-1"></i>
                         {% elif item_request.status == 'approved' %}
                         <i class="fas fa-check mr-1"></i>
                         {% elif item_request.status == 'rejected' %}
@@ -76,6 +84,79 @@
         </div>
     </div>
 
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="rounded-md {% if message.tags == 'error' %}bg-red-50{% elif message.tags == 'warning' %}bg-yellow-50{% elif message.tags == 'success' %}bg-green-50{% else %}bg-blue-50{% endif %} p-4 mb-2">
+            <div class="flex">
+                <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle text-red-400{% elif message.tags == 'warning' %}fa-exclamation-triangle text-yellow-400{% elif message.tags == 'success' %}fa-check-circle text-green-400{% else %}fa-info-circle text-blue-400{% endif %} mt-0.5"></i>
+                <p class="ml-3 text-sm {% if message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-yellow-700{% elif message.tags == 'success' %}text-green-700{% else %}text-blue-700{% endif %}">{{ message }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Alerta de Contraproposta para o Solicitante -->
+    {% if item_request.status == 'counterproposal' and item_request.requested_by == request.user %}
+    <div class="mb-6 bg-amber-50 border-2 border-amber-300 rounded-lg p-5">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exchange-alt text-amber-600 text-2xl"></i>
+            </div>
+            <div class="ml-4 flex-1">
+                <h3 class="text-lg font-bold text-amber-900">Contraproposta Recebida</h3>
+                <p class="mt-1 text-sm text-amber-800">
+                    O gestor <strong>{{ item_request.counterproposal_by.get_full_name|default:item_request.counterproposal_by.email }}</strong> 
+                    fez uma contraproposta nas quantidades da sua solicitação.
+                </p>
+                {% if item_request.counterproposal_notes %}
+                <p class="mt-2 text-sm text-amber-700 bg-amber-100 rounded p-3">
+                    <i class="fas fa-quote-left text-amber-400 mr-1"></i>
+                    {{ item_request.counterproposal_notes }}
+                </p>
+                {% endif %}
+                <p class="mt-2 text-xs text-amber-600">
+                    <i class="fas fa-calendar-alt mr-1"></i>
+                    {{ item_request.counterproposal_at|date:"d/m/Y H:i" }}
+                </p>
+                
+                <!-- Botões Aceitar / Recusar -->
+                <div class="mt-4 space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-amber-800 mb-1">Observações (opcional)</label>
+                        <textarea id="cp_response_notes" rows="2" 
+                                  class="block w-full px-3 py-2 border border-amber-300 rounded-md shadow-sm text-sm focus:ring-amber-500 focus:border-amber-500 bg-white"
+                                  placeholder="Alguma observação sobre sua decisão..."></textarea>
+                    </div>
+                    <div class="flex space-x-3">
+                        <form method="post" action="{% url 'assets:item_request_accept_counterproposal' item_request.pk %}" class="flex-1"
+                              onsubmit="document.getElementById('accept_cp_notes').value=document.getElementById('cp_response_notes').value">
+                            {% csrf_token %}
+                            <input type="hidden" name="response_notes" id="accept_cp_notes" value="">
+                            <button type="submit" 
+                                    class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                                <i class="fas fa-check mr-2"></i>
+                                Aceitar Contraproposta
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'assets:item_request_reject_counterproposal' item_request.pk %}" class="flex-1"
+                              onsubmit="document.getElementById('reject_cp_notes').value=document.getElementById('cp_response_notes').value; return confirm('Ao recusar, a solicitação será cancelada. Deseja continuar?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="response_notes" id="reject_cp_notes" value="">
+                            <button type="submit" 
+                                    class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700">
+                                <i class="fas fa-times mr-2"></i>
+                                Recusar (Cancelar Pedido)
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Informações Principais -->
         <div class="lg:col-span-2 space-y-6">
@@ -95,14 +176,17 @@
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
-                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Solicitado</th>
+                                {% if item_request.status in 'counterproposal,accepted,approved,delivered' and item_request.counterproposal_by %}
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Proposta</th>
+                                {% endif %}
                                 <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estoque</th>
                                 <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
                             {% for req_item in item_request.items.all %}
-                            <tr class="hover:bg-gray-50">
+                            <tr class="hover:bg-gray-50 {% if req_item.quantity_changed %}{% if req_item.proposed_quantity == 0 %}qty-removed-row{% else %}qty-changed-row{% endif %}{% endif %}">
                                 <td class="px-4 py-3">
                                     <div class="text-sm font-medium text-gray-900">
                                         <a href="{% url 'assets:product_detail' req_item.product.pk %}" class="text-indigo-600 hover:text-indigo-800">
@@ -114,17 +198,38 @@
                                         {% if req_item.product.category %} &middot; {{ req_item.product.category.name }}{% endif %}
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 text-center text-sm font-bold text-indigo-600">
+                                <td class="px-4 py-3 text-center text-sm font-bold {% if req_item.quantity_changed %}text-gray-400 line-through{% else %}text-indigo-600{% endif %}">
                                     {{ req_item.quantity }}
                                 </td>
-                                <td class="px-4 py-3 text-center text-sm font-semibold {% if req_item.product.current_stock < req_item.quantity %}text-red-600{% else %}text-green-600{% endif %}">
+                                {% if item_request.status in 'counterproposal,accepted,approved,delivered' and item_request.counterproposal_by %}
+                                <td class="px-4 py-3 text-center">
+                                    {% if req_item.proposed_quantity is not None %}
+                                        {% if req_item.proposed_quantity == 0 %}
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            <i class="fas fa-times mr-1"></i> Removido
+                                        </span>
+                                        {% elif req_item.proposed_quantity != req_item.quantity %}
+                                        <span class="text-sm font-bold text-amber-600">{{ req_item.proposed_quantity }}</span>
+                                        {% else %}
+                                        <span class="text-sm font-bold text-green-600">{{ req_item.proposed_quantity }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">—</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                                <td class="px-4 py-3 text-center text-sm font-semibold {% if req_item.product.current_stock < req_item.effective_quantity %}text-red-600{% else %}text-green-600{% endif %}">
                                     {{ req_item.product.current_stock }}
-                                    {% if req_item.product.current_stock < req_item.quantity %}
+                                    {% if req_item.product.current_stock < req_item.effective_quantity and req_item.effective_quantity > 0 %}
                                     <i class="fas fa-exclamation-triangle text-red-500 ml-1 text-xs"></i>
                                     {% endif %}
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    {% if req_item.has_enough_stock %}
+                                    {% if req_item.proposed_quantity == 0 %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                        <i class="fas fa-minus mr-1"></i> N/A
+                                    </span>
+                                    {% elif req_item.has_enough_stock %}
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                         <i class="fas fa-check mr-1"></i> OK
                                     </span>
@@ -141,6 +246,9 @@
                             <tr>
                                 <td class="px-4 py-3 text-sm font-semibold text-gray-700">Total</td>
                                 <td class="px-4 py-3 text-center text-sm font-bold text-indigo-700">{{ item_request.total_quantity }}</td>
+                                {% if item_request.status in 'counterproposal,accepted,approved,delivered' and item_request.counterproposal_by %}
+                                <td class="px-4 py-3"></td>
+                                {% endif %}
                                 <td colspan="2"></td>
                             </tr>
                         </tfoot>
@@ -160,6 +268,71 @@
                     <p class="text-sm text-gray-900 whitespace-pre-wrap">{{ item_request.reason }}</p>
                 </div>
             </div>
+
+            <!-- Histórico de Contraproposta -->
+            {% if item_request.counterproposal_by %}
+            <div class="bg-white shadow rounded-lg border-l-4 border-amber-400">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">
+                        <i class="fas fa-exchange-alt text-amber-600 mr-2"></i>
+                        Contraproposta
+                    </h3>
+                </div>
+                <div class="px-4 py-5 sm:px-6">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Enviada por</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.counterproposal_by.get_full_name|default:item_request.counterproposal_by.email }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Data</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ item_request.counterproposal_at|date:"d/m/Y H:i" }}</dd>
+                        </div>
+                        {% if item_request.counterproposal_notes %}
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm font-medium text-gray-500">Motivo</dt>
+                            <dd class="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{{ item_request.counterproposal_notes }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                    
+                    {% if item_request.counterproposal_responded_at %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-reply text-gray-400 mr-1"></i>
+                            Resposta do Solicitante
+                        </h4>
+                        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Decisão</dt>
+                                <dd class="mt-1">
+                                    {% if item_request.status == 'cancelled' and item_request.counterproposal_responded_at %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        <i class="fas fa-times mr-1"></i> Recusada
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <i class="fas fa-check mr-1"></i> Aceita
+                                    </span>
+                                    {% endif %}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Data</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ item_request.counterproposal_responded_at|date:"d/m/Y H:i" }}</dd>
+                            </div>
+                            {% if item_request.counterproposal_response_notes %}
+                            <div class="sm:col-span-2">
+                                <dt class="text-sm font-medium text-gray-500">Observações</dt>
+                                <dd class="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{{ item_request.counterproposal_response_notes }}</dd>
+                            </div>
+                            {% endif %}
+                        </dl>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Histórico de Revisão -->
             {% if item_request.reviewed_by %}
@@ -262,7 +435,7 @@
             <!-- Ações do Gestor -->
             {% if is_approver %}
             
-            <!-- Aprovar / Rejeitar -->
+            <!-- Aprovar / Rejeitar / Contraproposta -->
             {% if item_request.can_approve %}
             <div class="bg-white shadow rounded-lg">
                 <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
@@ -312,6 +485,35 @@
                             </button>
                         </form>
                     </div>
+
+                    {% if item_request.can_counterpropose %}
+                    <!-- Botão de Contraproposta -->
+                    <div class="pt-2 border-t border-gray-200">
+                        <a href="{% url 'assets:item_request_counterproposal' item_request.pk %}" 
+                           class="w-full inline-flex items-center justify-center px-4 py-2 border border-amber-300 rounded-md shadow-sm text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100">
+                            <i class="fas fa-exchange-alt mr-2"></i>
+                            Fazer Contraproposta
+                        </a>
+                        <p class="mt-1 text-xs text-gray-500 text-center">Alterar quantidades antes de aprovar</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Status: Contraproposta enviada (gestor aguardando resposta) -->
+            {% if item_request.status == 'counterproposal' %}
+            <div class="bg-amber-50 shadow rounded-lg border border-amber-200">
+                <div class="px-4 py-4 sm:px-6">
+                    <div class="flex items-start">
+                        <i class="fas fa-hourglass-half text-amber-500 mt-0.5 mr-2"></i>
+                        <div>
+                            <p class="text-sm font-medium text-amber-800">Aguardando Resposta</p>
+                            <p class="text-xs text-amber-600 mt-1">
+                                O solicitante ainda não respondeu à contraproposta.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
             {% endif %}
@@ -327,7 +529,7 @@
                 </div>
                 <div class="px-4 py-4 sm:px-6">
                     <form method="post" action="{% url 'assets:item_request_deliver' item_request.pk %}"
-                          onsubmit="return confirm('Confirmar entrega? Isso removerá {{ item_request.total_quantity }} item(ns) do estoque.')">
+                          onsubmit="return confirm('Confirmar entrega? Isso removerá itens do estoque.')">
                         {% csrf_token %}
                         <div class="mb-4">
                             <label class="block text-xs font-medium text-gray-500 mb-1">Observações da Entrega</label>

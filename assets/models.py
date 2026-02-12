@@ -531,6 +531,8 @@ class ItemRequest(models.Model):
     """Solicitação de itens do almoxarifado (pode conter múltiplos itens)"""
     STATUS_CHOICES = [
         ('pending', 'Pendente'),
+        ('counterproposal', 'Contraproposta'),
+        ('accepted', 'Aceita pelo Solicitante'),
         ('approved', 'Aprovada'),
         ('rejected', 'Rejeitada'),
         ('delivered', 'Entregue'),
@@ -579,6 +581,37 @@ class ItemRequest(models.Model):
         verbose_name='Observações da Revisão'
     )
     
+    # Contraproposta
+    counterproposal_notes = models.TextField(
+        blank=True,
+        verbose_name='Observações da Contraproposta',
+        help_text='Explicação do motivo da contraproposta'
+    )
+    counterproposal_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='item_requests_counterproposed',
+        verbose_name='Contraproposta por'
+    )
+    counterproposal_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Contraproposta'
+    )
+    
+    # Resposta à contraproposta
+    counterproposal_response_notes = models.TextField(
+        blank=True,
+        verbose_name='Observações da Resposta à Contraproposta'
+    )
+    counterproposal_responded_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Resposta à Contraproposta'
+    )
+    
     # Entrega
     delivered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -609,7 +642,15 @@ class ItemRequest(models.Model):
     
     @property
     def can_approve(self):
+        return self.status in ['pending', 'accepted']
+    
+    @property
+    def can_counterpropose(self):
         return self.status == 'pending'
+    
+    @property
+    def can_respond_counterproposal(self):
+        return self.status == 'counterproposal'
     
     @property
     def can_deliver(self):
@@ -617,13 +658,14 @@ class ItemRequest(models.Model):
     
     @property
     def can_cancel(self):
-        return self.status in ['pending', 'approved']
+        return self.status in ['pending', 'approved', 'counterproposal', 'accepted']
     
     @property
     def has_enough_stock(self):
         """Verifica se há estoque suficiente para todos os itens"""
         for item in self.items.select_related('product').all():
-            if item.product.current_stock < item.quantity:
+            qty = item.effective_quantity
+            if qty > 0 and item.product.current_stock < qty:
                 return False
         return True
     
@@ -656,7 +698,15 @@ class ItemRequestItem(models.Model):
     quantity = models.PositiveIntegerField(
         default=1,
         validators=[MinValueValidator(1)],
-        verbose_name='Quantidade'
+        verbose_name='Quantidade Solicitada'
+    )
+    # Contraproposta: quantidade proposta pelo gestor
+    proposed_quantity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        verbose_name='Quantidade Proposta',
+        help_text='Quantidade sugerida pelo gestor na contraproposta (0 = item removido)'
     )
     
     class Meta:
@@ -668,8 +718,20 @@ class ItemRequestItem(models.Model):
         return f"{self.product.name} x{self.quantity}"
     
     @property
+    def effective_quantity(self):
+        """Quantidade efetiva: proposta aceita ou quantidade original"""
+        if self.request.status in ['accepted', 'approved', 'delivered'] and self.proposed_quantity is not None:
+            return self.proposed_quantity
+        return self.quantity
+    
+    @property
     def has_enough_stock(self):
-        return self.product.current_stock >= self.quantity
+        return self.product.current_stock >= self.effective_quantity
+    
+    @property
+    def quantity_changed(self):
+        """Verifica se a quantidade foi alterada na contraproposta"""
+        return self.proposed_quantity is not None and self.proposed_quantity != self.quantity
 
 
 # ============================================================================

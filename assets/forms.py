@@ -539,6 +539,32 @@ class ItemRequestReviewForm(forms.Form):
     )
 
 
+class ItemRequestCounterProposalForm(forms.Form):
+    """Formulário para contraproposta do gestor"""
+    counterproposal_notes = forms.CharField(
+        required=True,
+        widget=forms.Textarea(attrs={
+            'class': TEXTAREA_CLASSES,
+            'rows': 3,
+            'placeholder': 'Explique o motivo da contraproposta...'
+        }),
+        label='Motivo da Contraproposta'
+    )
+
+
+class ItemRequestCounterProposalResponseForm(forms.Form):
+    """Formulário para resposta do solicitante à contraproposta"""
+    response_notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': TEXTAREA_CLASSES,
+            'rows': 3,
+            'placeholder': 'Observações sobre sua decisão...'
+        }),
+        label='Observações'
+    )
+
+
 class ItemRequestDeliveryForm(forms.Form):
     """Formulário para marcar entrega de solicitação"""
     delivery_notes = forms.CharField(
