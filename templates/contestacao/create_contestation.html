@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Contestar Exclusão{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <nav class="flex mb-4">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li><a href="{% url 'contestacao:exclusion_list' %}" class="text-sm text-gray-500 hover:text-red-600"><i class="fas fa-file-excel mr-1"></i> Exclusões</a></li>
+            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">Nova Contestação</span></div></li>
+        </ol>
+    </nav>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-5 py-4 border-b bg-red-50">
+            <h2 class="text-lg font-bold text-gray-900"><i class="fas fa-exclamation-triangle text-red-600 mr-2"></i> Contestar Exclusão</h2>
+        </div>
+
+        <!-- Dados do registro -->
+        <div class="px-5 py-4 bg-gray-50 border-b">
+            <h3 class="text-xs uppercase font-semibold text-gray-500 mb-2">Dados da Exclusão</h3>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div><span class="text-gray-500">Vendedor:</span> <span class="font-medium text-gray-900">{{ exclusion.vendedor }}</span></div>
+                <div><span class="text-gray-500">Filial:</span> <span class="font-medium text-gray-900">{{ exclusion.filial }}</span></div>
+                <div><span class="text-gray-500">Pilar:</span> <span class="font-medium text-gray-900">{{ exclusion.pilar }}</span></div>
+                <div><span class="text-gray-500">Receita:</span> <span class="font-mono font-semibold text-gray-900">R$ {{ exclusion.receita|floatformat:2 }}</span></div>
+                {% if exclusion.plano_produto %}<div class="col-span-2"><span class="text-gray-500">Produto:</span> <span class="text-gray-900">{{ exclusion.plano_produto }}</span></div>{% endif %}
+                {% if exclusion.nome_cliente %}<div><span class="text-gray-500">Cliente:</span> <span class="text-gray-900">{{ exclusion.nome_cliente }}</span></div>{% endif %}
+                {% if exclusion.cpf_cnpj %}<div><span class="text-gray-500">CPF/CNPJ:</span> <span class="text-gray-900">{{ exclusion.cpf_cnpj }}</span></div>{% endif %}
+            </div>
+        </div>
+
+        {% if messages %}
+        <div class="px-5 pt-4">
+            {% for message in messages %}
+            <div class="rounded-md {% if message.tags == 'error' %}bg-red-50{% elif message.tags == 'warning' %}bg-yellow-50{% else %}bg-green-50{% endif %} p-3 mb-2">
+                <p class="text-sm {% if message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-yellow-700{% else %}text-green-700{% endif %}">{{ message }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" class="p-5 space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Motivo da Contestação *</label>
+                <textarea name="reason" rows="4" required
+                          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
+                          placeholder="Descreva o motivo pelo qual esta exclusão deve ser revista...">{{ request.POST.reason|default:'' }}</textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Anexo / Evidência</label>
+                <input type="file" name="attachment"
+                       class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                <p class="text-xs text-gray-400 mt-1">Print, documento, planilha ou outro arquivo de evidência</p>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <a href="{% url 'contestacao:exclusion_list' %}"
+                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</a>
+                <button type="submit"
+                        class="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700">
+                    <i class="fas fa-paper-plane mr-2"></i> Enviar Contestação
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

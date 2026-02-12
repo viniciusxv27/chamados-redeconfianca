@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Solicitar Reunião com {{ target_user.full_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <nav class="flex mb-4">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li><a href="{% url 'agenda:calendar' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-calendar-alt mr-1"></i> Agenda</a></li>
+            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">Solicitar Reunião</span></div></li>
+        </ol>
+    </nav>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-5 py-4 border-b bg-indigo-50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center font-bold">
+                    {{ target_user.first_name|first }}{{ target_user.last_name|first }}
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900">Solicitar Reunião</h2>
+                    <p class="text-sm text-gray-600">com {{ target_user.full_name }}</p>
+                </div>
+            </div>
+        </div>
+
+        {% if messages %}
+        <div class="px-5 pt-4">
+            {% for message in messages %}
+            <div class="rounded-md {% if message.tags == 'error' %}bg-red-50{% else %}bg-green-50{% endif %} p-3 mb-2">
+                <p class="text-sm {% if message.tags == 'error' %}text-red-700{% else %}text-green-700{% endif %}">{{ message }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" class="p-5 space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
+                <input type="text" name="title" required value="{{ request.POST.title|default:'' }}"
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                       placeholder="Ex.: Alinhamento semanal">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                <select name="meeting_type" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="meeting">Reunião</option>
+                    <option value="call">Chamada</option>
+                    <option value="appointment">Horário</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Início *</label>
+                    <input type="datetime-local" name="proposed_start" required value="{{ prefill_start }}"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Fim *</label>
+                    <input type="datetime-local" name="proposed_end" required value="{{ prefill_end }}"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Local / Link</label>
+                <input type="text" name="location" value="{{ request.POST.location|default:'' }}"
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                       placeholder="Sala, link do Meet, etc.">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Motivo / Descrição</label>
+                <textarea name="description" rows="3"
+                          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                          placeholder="Descreva brevemente o motivo...">{{ request.POST.description|default:'' }}</textarea>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <a href="{% url 'agenda:user_availability' target_user.pk %}"
+                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</a>
+                <button type="submit"
+                        class="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                    <i class="fas fa-paper-plane mr-2"></i> Enviar Solicitação
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

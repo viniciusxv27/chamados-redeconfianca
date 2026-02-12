@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+
+{% block title %}Exclusões – Contestação{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-file-excel mr-2 text-green-600"></i> Base de Exclusão</h1>
+            <p class="text-sm text-gray-500 mt-1">{{ total_records }} registros &middot; R$ {{ total_receita|floatformat:2 }} total</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            {% if can_manage %}
+            <a href="{% url 'contestacao:manage_contestations' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+                <i class="fas fa-tasks mr-2"></i> Gerenciar
+            </a>
+            {% endif %}
+            <a href="{% url 'contestacao:my_contestations' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                <i class="fas fa-list mr-2"></i> Minhas Contestações
+            </a>
+            {% if can_sync %}
+            <form method="post" action="{% url 'contestacao:sync_exclusions' %}">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700" onclick="this.disabled=true;this.innerHTML='<i class=\'fas fa-spinner fa-spin mr-2\'></i> Sincronizando...';this.form.submit();">
+                    <i class="fas fa-sync-alt mr-2"></i> Sincronizar Planilha
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="bg-white border rounded-lg p-3 mb-4 flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[200px]">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Buscar</label>
+            <input type="text" name="q" value="{{ search }}" placeholder="Vendedor, cliente, CPF..."
+                   class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div class="w-40">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Pilar</label>
+            <select name="pilar" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="">Todos</option>
+                {% for p in pilares %}
+                <option value="{{ p }}" {% if pilar_filter == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">
+            <i class="fas fa-search mr-1"></i> Filtrar
+        </button>
+        {% if search or pilar_filter %}
+        <a href="{% url 'contestacao:exclusion_list' %}" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Limpar</a>
+        {% endif %}
+    </form>
+
+    {% if records %}
+    <!-- Tabela desktop -->
+    <div class="hidden sm:block bg-white border rounded-lg overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Vendedor</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Filial</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Pilar</th>
+                        <th class="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">Receita</th>
+                        <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                        <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Ação</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for r in records %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-2.5 text-sm text-gray-900 font-medium">{{ r.vendedor }}</td>
+                        <td class="px-4 py-2.5 text-sm text-gray-600">{{ r.filial }}</td>
+                        <td class="px-4 py-2.5">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                {% if r.pilar == 'MOVEL' %}bg-blue-100 text-blue-700
+                                {% elif r.pilar == 'FIXA' %}bg-green-100 text-green-700
+                                {% elif r.pilar == 'SMARTPHONE' %}bg-purple-100 text-purple-700
+                                {% elif r.pilar == 'ELETRONICOS' %}bg-orange-100 text-orange-700
+                                {% elif r.pilar == 'SVA' %}bg-pink-100 text-pink-700
+                                {% else %}bg-gray-100 text-gray-700{% endif %}">{{ r.pilar }}</span>
+                        </td>
+                        <td class="px-4 py-2.5 text-sm text-right font-mono text-gray-900">R$ {{ r.receita|floatformat:2 }}</td>
+                        <td class="px-4 py-2.5 text-sm text-gray-500 max-w-[200px] truncate" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
+                        <td class="px-4 py-2.5 text-center">
+                            {% if r.pk in contested_ids %}
+                            <span class="text-xs text-yellow-600 font-medium"><i class="fas fa-clock mr-1"></i>Pendente</span>
+                            {% else %}
+                            <a href="{% url 'contestacao:create_contestation' r.pk %}"
+                               class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100">
+                                <i class="fas fa-exclamation-triangle mr-1"></i> Contestar
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Cards mobile -->
+    <div class="sm:hidden space-y-3">
+        {% for r in records %}
+        <div class="bg-white border rounded-lg p-3 shadow-sm">
+            <div class="flex justify-between items-start mb-1">
+                <span class="font-semibold text-sm text-gray-900">{{ r.vendedor }}</span>
+                <span class="text-sm font-mono font-semibold text-gray-900">R$ {{ r.receita|floatformat:2 }}</span>
+            </div>
+            <div class="flex gap-2 mb-2">
+                <span class="text-xs text-gray-500">{{ r.filial }}</span>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{ r.pilar }}</span>
+            </div>
+            {% if r.plano_produto %}<p class="text-xs text-gray-400 truncate mb-2">{{ r.plano_produto }}</p>{% endif %}
+            {% if r.pk in contested_ids %}
+            <span class="text-xs text-yellow-600"><i class="fas fa-clock mr-1"></i>Contestação Pendente</span>
+            {% else %}
+            <a href="{% url 'contestacao:create_contestation' r.pk %}"
+               class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 w-full justify-center">
+                <i class="fas fa-exclamation-triangle mr-1"></i> Contestar
+            </a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-16 text-gray-400">
+        <i class="fas fa-database text-5xl mb-4"></i>
+        <p class="text-lg mb-2">Nenhum registro encontrado</p>
+        {% if can_sync %}
+        <p class="text-sm">Clique em "Sincronizar Planilha" para importar os dados.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}Contestação #{{ c.pk }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <nav class="flex mb-4">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li><a href="{% url 'contestacao:my_contestations' %}" class="text-sm text-gray-500 hover:text-red-600"><i class="fas fa-list-alt mr-1"></i> Contestações</a></li>
+            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">#{{ c.pk }}</span></div></li>
+        </ol>
+    </nav>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <!-- Header -->
+        <div class="px-5 py-4 border-b flex items-center justify-between
+            {% if c.status == 'pending' %}bg-yellow-50{% elif c.status == 'accepted' %}bg-green-50{% else %}bg-red-50{% endif %}">
+            <div>
+                <h1 class="text-lg font-bold text-gray-900">Contestação #{{ c.pk }}</h1>
+                <p class="text-sm text-gray-600">Criada em {{ c.created_at|date:"d/m/Y H:i" }} por {{ c.requester.full_name }}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                {% if c.status == 'pending' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-clock mr-1"></i> Pendente</span>
+                {% elif c.status == 'accepted' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i> Aceita</span>
+                {% elif c.status == 'rejected' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i> Rejeitada</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Dados da exclusão -->
+        <div class="px-5 py-4 bg-gray-50 border-b">
+            <h3 class="text-xs uppercase font-semibold text-gray-500 mb-3">Dados da Exclusão</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                <div><span class="text-gray-500 block text-xs">Vendedor</span><span class="font-semibold text-gray-900">{{ c.exclusion.vendedor }}</span></div>
+                <div><span class="text-gray-500 block text-xs">Filial</span><span class="font-medium text-gray-900">{{ c.exclusion.filial }}</span></div>
+                <div><span class="text-gray-500 block text-xs">Pilar</span><span class="font-medium text-gray-900">{{ c.exclusion.pilar }}</span></div>
+                <div><span class="text-gray-500 block text-xs">Receita</span><span class="font-mono font-bold text-gray-900">R$ {{ c.exclusion.receita|floatformat:2 }}</span></div>
+                {% if c.exclusion.plano_produto %}<div><span class="text-gray-500 block text-xs">Produto</span><span class="text-gray-900">{{ c.exclusion.plano_produto }}</span></div>{% endif %}
+                {% if c.exclusion.nome_cliente %}<div><span class="text-gray-500 block text-xs">Cliente</span><span class="text-gray-900">{{ c.exclusion.nome_cliente }}</span></div>{% endif %}
+                {% if c.exclusion.cpf_cnpj %}<div><span class="text-gray-500 block text-xs">CPF/CNPJ</span><span class="text-gray-900">{{ c.exclusion.cpf_cnpj }}</span></div>{% endif %}
+                {% if c.exclusion.numero_acesso %}<div><span class="text-gray-500 block text-xs">Nº Acesso</span><span class="text-gray-900">{{ c.exclusion.numero_acesso }}</span></div>{% endif %}
+            </div>
+        </div>
+
+        <!-- Motivo -->
+        <div class="px-5 py-4 border-b">
+            <h3 class="text-xs uppercase font-semibold text-gray-500 mb-2">Motivo da Contestação</h3>
+            <p class="text-sm text-gray-800 whitespace-pre-line">{{ c.reason }}</p>
+            {% if c.attachment %}
+            <a href="{{ c.attachment.url }}" target="_blank" class="inline-flex items-center mt-2 px-3 py-1.5 text-sm text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100">
+                <i class="fas fa-paperclip mr-2"></i> Ver Anexo
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Resposta -->
+        {% if c.reviewed_by %}
+        <div class="px-5 py-4 border-b bg-blue-50">
+            <h3 class="text-xs uppercase font-semibold text-blue-600 mb-2">Resposta da Análise</h3>
+            <p class="text-sm text-gray-500 mb-1">{{ c.reviewed_by.full_name }} em {{ c.reviewed_at|date:"d/m/Y H:i" }}</p>
+            {% if c.review_notes %}
+            <p class="text-sm text-blue-800">{{ c.review_notes }}</p>
+            {% else %}
+            <p class="text-sm text-gray-400 italic">Sem observações</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Pagamento -->
+        {% if c.status == 'accepted' %}
+        <div class="px-5 py-4 border-b">
+            <h3 class="text-xs uppercase font-semibold text-gray-500 mb-2">Status do Pagamento</h3>
+            {% if c.payment_status == 'paid' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i> Pago</span>
+            {% elif c.payment_status == 'pending_payment' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800"><i class="fas fa-hourglass-half mr-1"></i> Aguardando Pagamento</span>
+            {% if can_manage %}
+            <form method="post" action="{% url 'contestacao:mark_paid' c.pk %}" class="inline ml-2">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700">
+                    <i class="fas fa-dollar-sign mr-1"></i> Marcar Pago
+                </button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Ações admin -->
+        {% if c.status == 'pending' and can_manage %}
+        <div class="px-5 py-4 bg-gray-50 space-y-3">
+            <h3 class="text-xs uppercase font-semibold text-gray-500 mb-2">Ações</h3>
+            <input type="text" id="review-notes" placeholder="Observação (opcional)"
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <div class="flex gap-3">
+                <form method="post" action="{% url 'contestacao:accept_contestation' c.pk %}" onsubmit="this.querySelector('[name=review_notes]').value=document.getElementById('review-notes').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="review_notes" value="">
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+                        <i class="fas fa-check mr-2"></i> Aceitar Contestação
+                    </button>
+                </form>
+                <form method="post" action="{% url 'contestacao:reject_contestation' c.pk %}" onsubmit="this.querySelector('[name=review_notes]').value=document.getElementById('review-notes').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="review_notes" value="">
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">
+                        <i class="fas fa-times mr-2"></i> Rejeitar Contestação
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

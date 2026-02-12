@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}Disponibilidade de {{ target_user.full_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <!-- Header -->
+    <div class="mb-6">
+        <nav class="flex mb-2">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li><a href="{% url 'agenda:calendar' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-calendar-alt mr-1"></i> Agenda</a></li>
+                <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">Disponibilidade</span></div></li>
+            </ol>
+        </nav>
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold">
+                {{ target_user.first_name|first }}{{ target_user.last_name|first }}
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-gray-900">{{ target_user.full_name }}</h2>
+                <p class="text-sm text-gray-500">{{ target_user.primary_sector.name|default:"Sem setor" }} &middot; {{ target_user.get_hierarchy_display }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navegação por semana -->
+    <div class="bg-white shadow rounded-lg mb-6 p-4">
+        <div class="flex items-center justify-between mb-3">
+            <a href="?date={{ selected_date|date:'Y-m-d' }}&offset=-7"
+               class="text-sm text-indigo-600 hover:text-indigo-800"><i class="fas fa-chevron-left mr-1"></i> Semana anterior</a>
+            <h3 class="text-sm font-semibold text-gray-700">
+                {{ selected_date|date:"d/m/Y" }} — {{ selected_date|date:"l" }}
+            </h3>
+            <a href="?date={{ selected_date|date:'Y-m-d' }}&offset=7"
+               class="text-sm text-indigo-600 hover:text-indigo-800">Próxima semana <i class="fas fa-chevron-right ml-1"></i></a>
+        </div>
+        <div class="grid grid-cols-7 gap-1 sm:gap-2">
+            {% for d in week_dates %}
+            <a href="?date={{ d|date:'Y-m-d' }}"
+               class="text-center p-2 rounded-lg text-sm transition-colors {% if d == selected_date %}bg-indigo-600 text-white{% elif d == today %}bg-indigo-50 text-indigo-700 border border-indigo-200{% else %}hover:bg-gray-100 text-gray-700{% endif %}">
+                <div class="text-xs font-medium {% if d == selected_date %}text-indigo-100{% else %}text-gray-400{% endif %}">{{ d|date:"D" }}</div>
+                <div class="font-bold">{{ d|date:"d" }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Slots Disponíveis -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-4 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-clock text-green-500 mr-2"></i>
+                Horários Disponíveis em {{ selected_date|date:"d/m/Y" }}
+            </h3>
+            <p class="text-sm text-gray-500 mt-1">Selecione um horário para solicitar uma reunião</p>
+        </div>
+        <div class="p-4">
+            {% if available_slots %}
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {% for slot in available_slots %}
+                <a href="{% url 'agenda:request_meeting' target_user.pk %}?start={{ slot.start|date:'Y-m-d' }}T{{ slot.start|time:'H:i' }}&end={{ slot.end|date:'Y-m-d' }}T{{ slot.end|time:'H:i' }}"
+                   class="flex items-center justify-center p-3 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-400 transition-all text-sm font-medium text-green-800 group">
+                    <i class="fas fa-check-circle mr-2 text-green-500 group-hover:text-green-600"></i>
+                    {{ slot.start|time:"H:i" }} — {{ slot.end|time:"H:i" }}
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-calendar-times text-4xl text-gray-300 mb-3"></i>
+                <p class="text-gray-500">Nenhum horário disponível neste dia.</p>
+                <p class="text-xs text-gray-400 mt-1">Tente outro dia da semana.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if can_view_full %}
+    <div class="mt-4 text-center">
+        <a href="{% url 'agenda:view_user_calendar' target_user.pk %}"
+           class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+            <i class="fas fa-eye mr-1"></i> Ver agenda completa de {{ target_user.first_name }}
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}Solicitações de Reunião{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex items-center justify-between mb-5">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-handshake mr-2 text-indigo-600"></i> Solicitações de Reunião</h1>
+            <p class="text-sm text-gray-500 mt-1">Gerencie suas solicitações recebidas e enviadas</p>
+        </div>
+        <a href="{% url 'agenda:calendar' %}" class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800">
+            <i class="fas fa-calendar-alt mr-1"></i> Agenda
+        </a>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 mb-4">
+        <nav class="flex -mb-px space-x-4">
+            <button onclick="switchTab('received')" id="tab-received"
+                    class="tab-btn py-2 px-3 border-b-2 border-indigo-500 text-sm font-medium text-indigo-600">
+                Recebidas
+                {% if received_requests.count > 0 %}
+                <span class="ml-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs">{{ received_requests.count }}</span>
+                {% endif %}
+            </button>
+            <button onclick="switchTab('sent')" id="tab-sent"
+                    class="tab-btn py-2 px-3 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700">
+                Enviadas
+                {% if sent_requests.count > 0 %}
+                <span class="ml-1 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">{{ sent_requests.count }}</span>
+                {% endif %}
+            </button>
+        </nav>
+    </div>
+
+    <!-- Received -->
+    <div id="panel-received">
+        {% if received_requests %}
+        <div class="space-y-3">
+            {% for req in received_requests %}
+            <div class="bg-white border rounded-lg p-4 shadow-sm">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-semibold text-gray-900">{{ req.title }}</span>
+                            {% if req.status == 'pending' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pendente</span>
+                            {% elif req.status == 'accepted' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aceita</span>
+                            {% elif req.status == 'rejected' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Recusada</span>
+                            {% elif req.status == 'cancelled' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Cancelada</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-sm text-gray-500">
+                            <i class="fas fa-user mr-1"></i> {{ req.requester.full_name }}
+                            &middot;
+                            <i class="fas fa-tag mr-1"></i>
+                            {% if req.meeting_type == 'meeting' %}Reunião{% elif req.meeting_type == 'call' %}Chamada{% else %}Horário{% endif %}
+                        </p>
+                        <p class="text-sm text-gray-600 mt-1">
+                            <i class="far fa-clock mr-1"></i>
+                            {{ req.proposed_start|date:"d/m/Y H:i" }} – {{ req.proposed_end|date:"H:i" }}
+                        </p>
+                        {% if req.location %}
+                        <p class="text-sm text-gray-500 mt-0.5"><i class="fas fa-map-marker-alt mr-1"></i> {{ req.location }}</p>
+                        {% endif %}
+                        {% if req.description %}
+                        <p class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">{{ req.description }}</p>
+                        {% endif %}
+                        {% if req.response_notes %}
+                        <p class="text-sm text-indigo-700 mt-1 italic"><i class="fas fa-reply mr-1"></i> {{ req.response_notes }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if req.status == 'pending' %}
+                <div class="mt-3 flex gap-2 border-t pt-3">
+                    <form method="post" action="{% url 'agenda:meeting_request_accept' req.pk %}" class="flex gap-2 flex-1">
+                        {% csrf_token %}
+                        <input type="text" name="response_notes" placeholder="Observação (opcional)"
+                               class="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-green-500 focus:border-green-500">
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+                            <i class="fas fa-check mr-1"></i> Aceitar
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'agenda:meeting_request_reject' req.pk %}">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">
+                            <i class="fas fa-times mr-1"></i> Recusar
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12 text-gray-400">
+            <i class="fas fa-inbox text-4xl mb-3"></i>
+            <p>Nenhuma solicitação recebida</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sent -->
+    <div id="panel-sent" class="hidden">
+        {% if sent_requests %}
+        <div class="space-y-3">
+            {% for req in sent_requests %}
+            <div class="bg-white border rounded-lg p-4 shadow-sm">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-semibold text-gray-900">{{ req.title }}</span>
+                            {% if req.status == 'pending' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pendente</span>
+                            {% elif req.status == 'accepted' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aceita</span>
+                            {% elif req.status == 'rejected' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Recusada</span>
+                            {% elif req.status == 'cancelled' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Cancelada</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-sm text-gray-500">
+                            <i class="fas fa-user mr-1"></i> Para: {{ req.target.full_name }}
+                        </p>
+                        <p class="text-sm text-gray-600 mt-1">
+                            <i class="far fa-clock mr-1"></i>
+                            {{ req.proposed_start|date:"d/m/Y H:i" }} – {{ req.proposed_end|date:"H:i" }}
+                        </p>
+                        {% if req.location %}
+                        <p class="text-sm text-gray-500 mt-0.5"><i class="fas fa-map-marker-alt mr-1"></i> {{ req.location }}</p>
+                        {% endif %}
+                        {% if req.description %}
+                        <p class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">{{ req.description }}</p>
+                        {% endif %}
+                        {% if req.response_notes %}
+                        <p class="text-sm text-indigo-700 mt-1 italic"><i class="fas fa-reply mr-1"></i> {{ req.response_notes }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if req.status == 'pending' %}
+                <div class="mt-3 border-t pt-3">
+                    <form method="post" action="{% url 'agenda:meeting_request_cancel' req.pk %}">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-1.5 bg-gray-500 text-white text-sm font-medium rounded-md hover:bg-gray-600">
+                            <i class="fas fa-ban mr-1"></i> Cancelar Solicitação
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12 text-gray-400">
+            <i class="fas fa-paper-plane text-4xl mb-3"></i>
+            <p>Nenhuma solicitação enviada</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('border-indigo-500', 'text-indigo-600');
+        b.classList.add('border-transparent', 'text-gray-500');
+    });
+    document.getElementById('tab-' + tab).classList.remove('border-transparent', 'text-gray-500');
+    document.getElementById('tab-' + tab).classList.add('border-indigo-500', 'text-indigo-600');
+    document.getElementById('panel-received').classList.toggle('hidden', tab !== 'received');
+    document.getElementById('panel-sent').classList.toggle('hidden', tab !== 'sent');
+}
+</script>
+{% endblock %}
