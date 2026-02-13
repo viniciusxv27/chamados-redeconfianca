@@ -239,13 +239,12 @@
                 <div id="subtasks-list" class="space-y-2 mb-4">
                     {% for subtask in subtasks %}
                     <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group subtask-item" data-id="{{ subtask.id }}">
-                        <button onclick="toggleSubtask({{ subtask.id }})"
-                                class="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
-                                       {% if subtask.is_completed %}bg-purple-500 border-purple-500 text-white{% else %}border-gray-300 hover:border-purple-400{% endif %}">
-                            {% if subtask.is_completed %}
-                            <i class="fas fa-check text-xs"></i>
-                            {% endif %}
-                        </button>
+                        <label class="flex-shrink-0 cursor-pointer">
+                            <input type="checkbox" 
+                                   onchange="toggleSubtask({{ subtask.id }})"
+                                   {% if subtask.is_completed %}checked{% endif %}
+                                   class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer subtask-checkbox">
+                        </label>
                         <div class="flex-1 min-w-0">
                             <span class="{% if subtask.is_completed %}line-through text-gray-400{% else %}text-gray-700{% endif %}">
                                 {{ subtask.title }}
@@ -1255,9 +1254,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     const subtasksList = document.getElementById('subtasks-list');
                     const newSubtaskHtml = `
                         <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group subtask-item" data-id="${data.subtask.id}">
-                            <button onclick="toggleSubtask(${data.subtask.id})"
-                                    class="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors border-gray-300 hover:border-purple-400">
-                            </button>
+                            <label class="flex-shrink-0 cursor-pointer">
+                                <input type="checkbox" 
+                                       onchange="toggleSubtask(${data.subtask.id})"
+                                       class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer subtask-checkbox">
+                            </label>
                             <div class="flex-1 min-w-0">
                                 <span class="text-gray-700">${data.subtask.title}</span>
                             </div>
@@ -1303,15 +1304,13 @@ async function toggleSubtask(subtaskId) {
         if (data.success) {
             const subtaskItem = document.querySelector(`.subtask-item[data-id="${subtaskId}"]`);
             if (subtaskItem) {
-                const checkbox = subtaskItem.querySelector('button:first-child');
+                const checkbox = subtaskItem.querySelector('.subtask-checkbox');
                 const titleSpan = subtaskItem.querySelector('.flex-1 span');
                 const infoDiv = subtaskItem.querySelector('.flex-1');
                 
                 if (data.subtask.is_completed) {
                     // Marcar como concluída
-                    checkbox.classList.add('bg-purple-500', 'border-purple-500', 'text-white');
-                    checkbox.classList.remove('border-gray-300');
-                    checkbox.innerHTML = '<i class="fas fa-check text-xs"></i>';
+                    if (checkbox) checkbox.checked = true;
                     titleSpan.classList.add('line-through', 'text-gray-400');
                     titleSpan.classList.remove('text-gray-700');
                     
@@ -1325,9 +1324,7 @@ async function toggleSubtask(subtaskId) {
                     completedInfo.textContent = `Concluída por ${data.subtask.completed_by} em ${data.subtask.completed_at}`;
                 } else {
                     // Desmarcar
-                    checkbox.classList.remove('bg-purple-500', 'border-purple-500', 'text-white');
-                    checkbox.classList.add('border-gray-300');
-                    checkbox.innerHTML = '';
+                    if (checkbox) checkbox.checked = false;
                     titleSpan.classList.remove('line-through', 'text-gray-400');
                     titleSpan.classList.add('text-gray-700');
                     
@@ -1400,7 +1397,7 @@ async function deleteSubtask(subtaskId) {
 function updateSubtaskProgress() {
     const subtaskItems = document.querySelectorAll('.subtask-item');
     const total = subtaskItems.length;
-    const completed = document.querySelectorAll('.subtask-item .bg-purple-500').length;
+    const completed = document.querySelectorAll('.subtask-item .subtask-checkbox:checked').length;
     const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
     
     updateSubtaskProgressFromData(progress, completed, total);

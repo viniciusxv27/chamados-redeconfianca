@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 from django.utils import timezone
-from django.db.models import Sum
+from django.db.models import Sum, Max
 from django.db import transaction
 from decimal import Decimal
 from rest_framework import viewsets, status
@@ -4656,7 +4656,7 @@ def add_task_subtask(request, task_id):
         return JsonResponse({'success': False, 'error': 'Título da subtarefa é obrigatório'})
     
     # Obter próxima ordem
-    max_order = task.subtasks.aggregate(max_order=models.Max('order'))['max_order'] or 0
+    max_order = task.subtasks.aggregate(max_order=Max('order'))['max_order'] or 0
     
     subtask = TaskSubtask.objects.create(
         task=task,

@@ -92,10 +92,10 @@
                         <div id="editor" 
                              contenteditable="true" 
                              class="w-full px-3 py-2 min-h-[120px] max-h-[300px] overflow-y-auto focus:outline-none focus:ring-0"
-                             style="white-space: pre-wrap;">{{ category.default_description }}</div>
+                             style="white-space: pre-wrap;">{{ category.default_description|safe }}</div>
                         
                         <!-- Campo hidden para enviar o conteúdo -->
-                        <input type="hidden" id="default_description" name="default_description" value="{{ category.default_description }}">
+                        <input type="hidden" id="default_description" name="default_description">
                     </div>
                     <p class="text-sm text-gray-500">Esta descrição aparecerá automaticamente quando um usuário selecionar esta categoria</p>
                 </div>
