@@ -212,12 +212,15 @@ def exclusion_list(request):
     pilares = ExclusionRecord.objects.values_list('pilar', flat=True).distinct().order_by('pilar')
     filiais = ExclusionRecord.objects.values_list('filial', flat=True).distinct().order_by('filial')
 
-    # IDs que já têm contestação pendente/em andamento
-    contested_ids = set(
-        Contestation.objects.filter(
-            status__in=['pending', 'accepted', 'confirmed']
-        ).values_list('exclusion_id', flat=True)
-    )
+    # IDs que já têm contestação pendente/em andamento with their statuses
+    contestations_map = {}
+    for c in Contestation.objects.filter(
+        status__in=['pending', 'accepted', 'confirmed', 'rejected', 'denied']
+    ).values('exclusion_id', 'status', 'pk'):
+        contestations_map[c['exclusion_id']] = {'status': c['status'], 'pk': c['pk']}
+    
+    # Keep backwards compatibility
+    contested_ids = set(contestations_map.keys())
 
     total_records = qs.count()
     total_receita = qs.aggregate(total=Sum('receita'))['total'] or 0
@@ -232,6 +235,7 @@ def exclusion_list(request):
         'total_records': total_records,
         'total_receita': total_receita,
         'contested_ids': contested_ids,
+        'contestations_map': contestations_map,
         'can_manage': _can_manage_contestations(request.user),
         'can_sync': _can_create_contestations(request.user),
     }
@@ -334,9 +338,20 @@ def manage_contestations(request):
                 q |= Q(exclusion__filial__iexact=s)
             qs = qs.filter(q)
 
+    # Filtro de status
     status_filter = request.GET.get('status', 'pending')
     if status_filter:
         qs = qs.filter(status=status_filter)
+    
+    # Filtro de loja/filial
+    filial_filter = request.GET.get('filial', '').strip()
+    if filial_filter:
+        qs = qs.filter(exclusion__filial__iexact=filial_filter)
+    
+    # Get list of filiais for dropdown
+    filiais = Contestation.objects.select_related('exclusion').values_list(
+        'exclusion__filial', flat=True
+    ).distinct().order_by('exclusion__filial')
 
     pending_count = Contestation.objects.filter(status='pending').count()
     confirmed_count = Contestation.objects.filter(status='confirmed', payment_status='pending_payment').count()
@@ -344,6 +359,8 @@ def manage_contestations(request):
     context = {
         'contestations': qs[:100],
         'status_filter': status_filter,
+        'filial_filter': filial_filter,
+        'filiais': filiais,
         'pending_count': pending_count,
         'confirmed_count': confirmed_count,
     }

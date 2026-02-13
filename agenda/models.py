@@ -4,6 +4,57 @@ from django.utils import timezone
 from datetime import timedelta
 
 
+class EventParticipant(models.Model):
+    """Participante de um evento com status de aceite"""
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('accepted', 'Aceito'),
+        ('rejected', 'Recusado'),
+    ]
+
+    event = models.ForeignKey(
+        'CalendarEvent',
+        on_delete=models.CASCADE,
+        related_name='event_participants',
+        verbose_name='Evento',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='event_invitations',
+        verbose_name='Participante',
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='Status',
+    )
+    response_notes = models.TextField(blank=True, verbose_name='Observação')
+    invited_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Participante do Evento'
+        verbose_name_plural = 'Participantes do Evento'
+        unique_together = ['event', 'user']
+
+    def __str__(self):
+        return f'{self.user.full_name} - {self.event.title} ({self.get_status_display()})'
+
+    def accept(self, notes=''):
+        self.status = 'accepted'
+        self.response_notes = notes
+        self.responded_at = timezone.now()
+        self.save()
+
+    def reject(self, notes=''):
+        self.status = 'rejected'
+        self.response_notes = notes
+        self.responded_at = timezone.now()
+        self.save()
+
+
 class CalendarEvent(models.Model):
     """Evento na agenda do usuário (similar ao Google Calendar)"""
     TYPE_CHOICES = [

@@ -13,6 +13,10 @@ urlpatterns = [
     path('api/events/<int:pk>/update/', views.api_event_update, name='api_event_update'),
     path('api/events/<int:pk>/delete/', views.api_event_delete, name='api_event_delete'),
     path('api/events/<int:pk>/', views.api_event_detail, name='api_event_detail'),
+    
+    # API para convites de eventos
+    path('api/invitations/', views.api_event_invitations, name='api_event_invitations'),
+    path('api/invitations/<int:pk>/respond/', views.api_event_invitation_respond, name='api_event_invitation_respond'),
 
     # Horários disponíveis de outro usuário
     path('disponibilidade/<int:user_id>/', views.user_availability, name='user_availability'),

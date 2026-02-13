@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import User, Sector
-from .models import CalendarEvent, MeetingRequest
+from .models import CalendarEvent, MeetingRequest, EventParticipant
 
 
 # =========================================================================
@@ -93,6 +93,10 @@ def calendar_view(request):
         target=request.user, status='pending'
     ).count()
 
+    pending_invitations = EventParticipant.objects.filter(
+        user=request.user, status='pending'
+    ).count()
+
     users_list = User.objects.filter(
         is_active=True
     ).exclude(pk=request.user.pk).select_related('sector').order_by('first_name')
@@ -101,6 +105,7 @@ def calendar_view(request):
 
     context = {
         'pending_requests': pending_received,
+        'pending_invitations': pending_invitations,
         'users_list': users_list,
         'sectors': sectors,
     }
@@ -177,9 +182,21 @@ def api_event_detail(request, pk):
     """Detalhes de um evento"""
     event = get_object_or_404(CalendarEvent, pk=pk)
     if event.owner != request.user and not _can_view_full_calendar(request.user, event.owner):
-        return JsonResponse({'error': 'Sem permissão'}, status=403)
+        # Check if user is a participant
+        if not EventParticipant.objects.filter(event=event, user=request.user).exists():
+            return JsonResponse({'error': 'Sem permissão'}, status=403)
 
-    participants = list(event.participants.values('id', 'first_name', 'last_name', 'email'))
+    participants = []
+    for ep in event.event_participants.select_related('user'):
+        participants.append({
+            'id': ep.user.id,
+            'first_name': ep.user.first_name,
+            'last_name': ep.user.last_name,
+            'email': ep.user.email,
+            'status': ep.status,
+            'status_display': ep.get_status_display(),
+        })
+    
     return JsonResponse({
         'id': event.pk,
         'title': event.title,
@@ -233,11 +250,16 @@ def api_event_create(request):
         is_private=data.get('is_private', False),
     )
 
-    # Participantes
+    # Participantes - criar convites pendentes
     participant_ids = data.get('participants', [])
     if participant_ids:
-        participants = User.objects.filter(pk__in=participant_ids, is_active=True)
-        event.participants.set(participants)
+        participants = User.objects.filter(pk__in=participant_ids, is_active=True).exclude(pk=request.user.pk)
+        for user in participants:
+            EventParticipant.objects.create(
+                event=event,
+                user=user,
+                status='pending',
+            )
 
     return JsonResponse({
         'id': event.pk,
@@ -281,8 +303,27 @@ def api_event_update(request, pk):
     event.save()
 
     if 'participants' in data:
-        participants = User.objects.filter(pk__in=data['participants'], is_active=True)
-        event.participants.set(participants)
+        new_participant_ids = set(data['participants'])
+        # Exclude owner from participants
+        new_participant_ids.discard(request.user.pk)
+        
+        # Get existing participant user IDs
+        existing_participants = {ep.user_id: ep for ep in event.event_participants.all()}
+        existing_ids = set(existing_participants.keys())
+        
+        # Remove participants no longer in list
+        to_remove = existing_ids - new_participant_ids
+        event.event_participants.filter(user_id__in=to_remove).delete()
+        
+        # Add new participants
+        to_add = new_participant_ids - existing_ids
+        new_users = User.objects.filter(pk__in=to_add, is_active=True)
+        for user in new_users:
+            EventParticipant.objects.create(
+                event=event,
+                user=user,
+                status='pending',
+            )
 
     return JsonResponse({'ok': True})
 
@@ -294,6 +335,54 @@ def api_event_delete(request, pk):
     event = get_object_or_404(CalendarEvent, pk=pk, owner=request.user)
     event.delete()
     return JsonResponse({'ok': True})
+
+
+@login_required
+def api_event_invitations(request):
+    """Lista convites pendentes para eventos"""
+    invitations = EventParticipant.objects.filter(
+        user=request.user, status='pending'
+    ).select_related('event', 'event__owner').order_by('-invited_at')
+    
+    data = []
+    for inv in invitations:
+        data.append({
+            'id': inv.pk,
+            'event_id': inv.event.pk,
+            'event_title': inv.event.title,
+            'event_type': inv.event.event_type,
+            'event_type_display': inv.event.get_event_type_display(),
+            'start': inv.event.start.isoformat(),
+            'end': inv.event.end.isoformat(),
+            'location': inv.event.location,
+            'owner_name': inv.event.owner.full_name,
+            'invited_at': inv.invited_at.isoformat(),
+        })
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+@require_POST
+def api_event_invitation_respond(request, pk):
+    """Aceitar ou recusar convite para evento"""
+    invitation = get_object_or_404(EventParticipant, pk=pk, user=request.user, status='pending')
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        data = {}
+    
+    action = data.get('action', request.POST.get('action', ''))
+    notes = data.get('notes', request.POST.get('notes', ''))
+    
+    if action == 'accept':
+        invitation.accept(notes)
+        return JsonResponse({'ok': True, 'message': 'Convite aceito!'})
+    elif action == 'reject':
+        invitation.reject(notes)
+        return JsonResponse({'ok': True, 'message': 'Convite recusado.'})
+    else:
+        return JsonResponse({'error': 'Ação inválida'}, status=400)
 
 
 # =========================================================================

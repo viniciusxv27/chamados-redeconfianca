@@ -17,15 +17,15 @@
     <!-- Tabs -->
     <div class="border-b border-gray-200 mb-4">
         <nav class="flex -mb-px space-x-4">
-            <button onclick="switchTab('received')" id="tab-received"
-                    class="tab-btn py-2 px-3 border-b-2 border-indigo-500 text-sm font-medium text-indigo-600">
+            <button type="button" onclick="switchTab('received')" id="tab-received"
+                    class="tab-btn py-2 px-3 border-b-2 border-indigo-500 text-sm font-medium text-indigo-600 cursor-pointer">
                 Recebidas
                 {% if received_requests.count > 0 %}
                 <span class="ml-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs">{{ received_requests.count }}</span>
                 {% endif %}
             </button>
-            <button onclick="switchTab('sent')" id="tab-sent"
-                    class="tab-btn py-2 px-3 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700">
+            <button type="button" onclick="switchTab('sent')" id="tab-sent"
+                    class="tab-btn py-2 px-3 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 cursor-pointer">
                 Enviadas
                 {% if sent_requests.count > 0 %}
                 <span class="ml-1 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">{{ sent_requests.count }}</span>
@@ -177,6 +177,20 @@ function switchTab(tab) {
     document.getElementById('tab-' + tab).classList.add('border-indigo-500', 'text-indigo-600');
     document.getElementById('panel-received').classList.toggle('hidden', tab !== 'received');
     document.getElementById('panel-sent').classList.toggle('hidden', tab !== 'sent');
+    
+    // Update URL without reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url);
 }
+
+// Initialize tab from URL parameter
+document.addEventListener('DOMContentLoaded', function() {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'sent') {
+        switchTab('sent');
+    }
+});
 </script>
 {% endblock %}

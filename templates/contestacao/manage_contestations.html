@@ -19,24 +19,47 @@
     </div>
 
     <!-- Status filter -->
-    <div class="flex gap-2 mb-4 flex-wrap">
-        <a href="?status=pending"
+    <div class="flex gap-2 mb-4 flex-wrap items-end">
+        <a href="?status=pending{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'pending' %}bg-yellow-500 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">
             Pendentes{% if pending_count %} ({{ pending_count }}){% endif %}
         </a>
-        <a href="?status=accepted"
+        <a href="?status=accepted{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'accepted' %}bg-blue-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Aguardando Gerente</a>
-        <a href="?status=confirmed"
+        <a href="?status=confirmed{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'confirmed' %}bg-green-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">
             Para Pagamento{% if confirmed_count %} ({{ confirmed_count }}){% endif %}
         </a>
-        <a href="?status=rejected"
+        <a href="?status=rejected{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'rejected' %}bg-red-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Rejeitadas</a>
-        <a href="?status=denied"
+        <a href="?status=denied{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'denied' %}bg-gray-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Negadas</a>
-        <a href="?status="
+        <a href="?status={% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if not status_filter %}bg-gray-800 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Todas</a>
+        
+        <!-- Store filter -->
+        <div class="ml-auto flex items-center gap-2">
+            <label class="text-xs text-gray-500 font-medium">Loja:</label>
+            <select onchange="applyFilialFilter(this.value)" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="">Todas</option>
+                {% for f in filiais %}
+                <option value="{{ f }}" {% if filial_filter == f %}selected{% endif %}>{{ f }}</option>
+                {% endfor %}
+            </select>
+        </div>
     </div>
+    
+    <script>
+    function applyFilialFilter(filial) {
+        const url = new URL(window.location);
+        if (filial) {
+            url.searchParams.set('filial', filial);
+        } else {
+            url.searchParams.delete('filial');
+        }
+        window.location.href = url.toString();
+    }
+    </script>
 
     {% if contestations %}
     <div class="space-y-3">

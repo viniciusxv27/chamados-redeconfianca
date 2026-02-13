@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load dict_extras %}
 
 {% block title %}Exclusões – Contestação{% endblock %}
 
@@ -94,14 +95,38 @@
                         <td class="px-4 py-2.5 text-sm text-right font-mono text-gray-900">R$ {{ r.receita|floatformat:2 }}</td>
                         <td class="px-4 py-2.5 text-sm text-gray-500 max-w-[200px] truncate" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
                         <td class="px-4 py-2.5 text-center">
-                            {% if r.pk in contested_ids %}
-                            <span class="text-xs text-yellow-600 font-medium"><i class="fas fa-clock mr-1"></i>Em andamento</span>
+                            {% with info=contestations_map|get_item:r.pk %}
+                            {% if info %}
+                                {% if info.status == 'pending' %}
+                                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-yellow-600 font-medium hover:underline">
+                                    <i class="fas fa-clock mr-1"></i>Pendente
+                                </a>
+                                {% elif info.status == 'accepted' %}
+                                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-blue-600 font-medium hover:underline">
+                                    <i class="fas fa-user-check mr-1"></i>Aguard. Gerente
+                                </a>
+                                {% elif info.status == 'confirmed' %}
+                                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-green-600 font-medium hover:underline">
+                                    <i class="fas fa-check-double mr-1"></i>Confirmada
+                                </a>
+                                {% elif info.status == 'rejected' %}
+                                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-red-600 font-medium hover:underline">
+                                    <i class="fas fa-times mr-1"></i>Rejeitada
+                                </a>
+                                {% elif info.status == 'denied' %}
+                                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-gray-600 font-medium hover:underline">
+                                    <i class="fas fa-ban mr-1"></i>Negada
+                                </a>
+                                {% else %}
+                                <span class="text-xs text-yellow-600 font-medium"><i class="fas fa-clock mr-1"></i>Em andamento</span>
+                                {% endif %}
                             {% else %}
                             <a href="{% url 'contestacao:create_contestation' r.pk %}"
                                class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100">
                                 <i class="fas fa-exclamation-triangle mr-1"></i> Contestar
                             </a>
                             {% endif %}
+                            {% endwith %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -123,14 +148,38 @@
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{ r.pilar }}</span>
             </div>
             {% if r.plano_produto %}<p class="text-xs text-gray-400 truncate mb-2">{{ r.plano_produto }}</p>{% endif %}
-            {% if r.pk in contested_ids %}
-            <span class="text-xs text-yellow-600"><i class="fas fa-clock mr-1"></i>Em andamento</span>
+            {% with info=contestations_map|get_item:r.pk %}
+            {% if info %}
+                {% if info.status == 'pending' %}
+                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-yellow-600 hover:underline">
+                    <i class="fas fa-clock mr-1"></i>Pendente
+                </a>
+                {% elif info.status == 'accepted' %}
+                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-blue-600 hover:underline">
+                    <i class="fas fa-user-check mr-1"></i>Aguard. Gerente
+                </a>
+                {% elif info.status == 'confirmed' %}
+                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-green-600 hover:underline">
+                    <i class="fas fa-check-double mr-1"></i>Confirmada
+                </a>
+                {% elif info.status == 'rejected' %}
+                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-red-600 hover:underline">
+                    <i class="fas fa-times mr-1"></i>Rejeitada
+                </a>
+                {% elif info.status == 'denied' %}
+                <a href="{% url 'contestacao:contestation_detail' info.pk %}" class="text-xs text-gray-600 hover:underline">
+                    <i class="fas fa-ban mr-1"></i>Negada
+                </a>
+                {% else %}
+                <span class="text-xs text-yellow-600"><i class="fas fa-clock mr-1"></i>Em andamento</span>
+                {% endif %}
             {% else %}
             <a href="{% url 'contestacao:create_contestation' r.pk %}"
                class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 w-full justify-center">
                 <i class="fas fa-exclamation-triangle mr-1"></i> Contestar
             </a>
             {% endif %}
+            {% endwith %}
         </div>
         {% endfor %}
     </div>
