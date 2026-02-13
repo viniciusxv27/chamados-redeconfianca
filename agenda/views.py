@@ -407,8 +407,8 @@ def meeting_requests_list(request):
     ).select_related('target').order_by('-created_at')
 
     context = {
-        'received': received,
-        'sent': sent,
+        'received_requests': received,
+        'sent_requests': sent,
         'tab': tab,
         'pending_count': received.filter(status='pending').count(),
     }

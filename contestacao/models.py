@@ -35,8 +35,10 @@ class ExclusionRecord(models.Model):
 class Contestation(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pendente'),
-        ('accepted', 'Aceita'),
+        ('accepted', 'Aprovada pelo Gestor'),
         ('rejected', 'Rejeitada'),
+        ('confirmed', 'Confirmada pelo Gerente'),
+        ('denied', 'Negada pelo Gerente'),
     ]
     PAYMENT_CHOICES = [
         ('not_applicable', 'N/A'),
@@ -69,6 +71,13 @@ class Contestation(models.Model):
     )
     review_notes = models.TextField(blank=True, default='', verbose_name='Observações da Análise')
     reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da Análise')
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='contestations_confirmed',
+        verbose_name='Confirmado por'
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da Confirmação')
+    confirmation_notes = models.TextField(blank=True, default='', verbose_name='Observações da Confirmação')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
 
@@ -80,19 +89,37 @@ class Contestation(models.Model):
     def __str__(self):
         return f'Contestação #{self.pk} – {self.exclusion.vendedor} ({self.get_status_display()})'
 
-    def accept(self, reviewer, notes=''):
+    def approve(self, reviewer, notes=''):
+        """Gestor aprova — aguarda confirmação do gerente."""
         self.status = 'accepted'
-        self.payment_status = 'pending_payment'
         self.reviewed_by = reviewer
         self.review_notes = notes
         self.reviewed_at = timezone.now()
         self.save()
 
     def reject(self, reviewer, notes=''):
+        """Gestor rejeita — fim do fluxo."""
         self.status = 'rejected'
         self.reviewed_by = reviewer
         self.review_notes = notes
         self.reviewed_at = timezone.now()
+        self.save()
+
+    def confirm(self, requester, notes=''):
+        """Gerente confirma após aprovação do gestor."""
+        self.status = 'confirmed'
+        self.payment_status = 'pending_payment'
+        self.confirmed_by = requester
+        self.confirmation_notes = notes
+        self.confirmed_at = timezone.now()
+        self.save()
+
+    def deny_confirmation(self, requester, notes=''):
+        """Gerente nega após aprovação do gestor."""
+        self.status = 'denied'
+        self.confirmed_by = requester
+        self.confirmation_notes = notes
+        self.confirmed_at = timezone.now()
         self.save()
 
     def mark_paid(self, reviewer):

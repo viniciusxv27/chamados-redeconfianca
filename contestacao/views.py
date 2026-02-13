@@ -201,16 +201,22 @@ def exclusion_list(request):
     # Filtros da query string
     search = request.GET.get('q', '').strip()
     pilar = request.GET.get('pilar', '').strip()
+    filial_filter = request.GET.get('filial', '').strip()
     if search:
         qs = qs.filter(Q(vendedor__icontains=search) | Q(nome_cliente__icontains=search) | Q(cpf_cnpj__icontains=search))
     if pilar:
         qs = qs.filter(pilar__iexact=pilar)
+    if filial_filter:
+        qs = qs.filter(filial__iexact=filial_filter)
 
     pilares = ExclusionRecord.objects.values_list('pilar', flat=True).distinct().order_by('pilar')
+    filiais = ExclusionRecord.objects.values_list('filial', flat=True).distinct().order_by('filial')
 
-    # IDs que já têm contestação pendente
+    # IDs que já têm contestação pendente/em andamento
     contested_ids = set(
-        Contestation.objects.filter(status='pending').values_list('exclusion_id', flat=True)
+        Contestation.objects.filter(
+            status__in=['pending', 'accepted', 'confirmed']
+        ).values_list('exclusion_id', flat=True)
     )
 
     total_records = qs.count()
@@ -219,8 +225,10 @@ def exclusion_list(request):
     context = {
         'records': qs[:200],
         'pilares': pilares,
+        'filiais': filiais,
         'search': search,
         'pilar_filter': pilar,
+        'filial_filter': filial_filter,
         'total_records': total_records,
         'total_receita': total_receita,
         'contested_ids': contested_ids,
@@ -239,8 +247,10 @@ def create_contestation(request, exclusion_id):
 
     exclusion = get_object_or_404(ExclusionRecord, pk=exclusion_id)
 
-    # Verificar se já existe contestação pendente
-    existing = Contestation.objects.filter(exclusion=exclusion, status='pending').first()
+    # Verificar se já existe contestação em andamento
+    existing = Contestation.objects.filter(
+        exclusion=exclusion, status__in=['pending', 'accepted', 'confirmed']
+    ).first()
     if existing:
         messages.warning(request, 'Já existe uma contestação pendente para este registro.')
         return redirect('contestacao:exclusion_list')
@@ -329,11 +339,13 @@ def manage_contestations(request):
         qs = qs.filter(status=status_filter)
 
     pending_count = Contestation.objects.filter(status='pending').count()
+    confirmed_count = Contestation.objects.filter(status='confirmed', payment_status='pending_payment').count()
 
     context = {
         'contestations': qs[:100],
         'status_filter': status_filter,
         'pending_count': pending_count,
+        'confirmed_count': confirmed_count,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
 
@@ -359,19 +371,21 @@ def contestation_detail(request, pk):
 
 
 @login_required
-def accept_contestation(request, pk):
+def approve_contestation(request, pk):
+    """Gestor aprova a contestação — aguarda confirmação do gerente."""
     if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contestacao:manage_contestations')
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
-    c.accept(request.user, notes)
-    messages.success(request, f'Contestação #{c.pk} aceita!')
+    c.approve(request.user, notes)
+    messages.success(request, f'Contestação #{c.pk} aprovada! Aguardando confirmação do gerente.')
     return redirect('contestacao:manage_contestations')
 
 
 @login_required
 def reject_contestation(request, pk):
+    """Gestor rejeita a contestação."""
     if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contestacao:manage_contestations')
@@ -383,11 +397,39 @@ def reject_contestation(request, pk):
 
 
 @login_required
+def confirm_contestation(request, pk):
+    """Gerente confirma após aprovação do gestor."""
+    c = get_object_or_404(Contestation, pk=pk, status='accepted')
+    # Apenas o criador da contestação pode confirmar
+    if c.requester != request.user:
+        messages.error(request, 'Apenas o solicitante pode confirmar esta contestação.')
+        return redirect('contestacao:my_contestations')
+    notes = request.POST.get('confirmation_notes', '')
+    c.confirm(request.user, notes)
+    messages.success(request, f'Contestação #{c.pk} confirmada! Aguardando pagamento.')
+    return redirect('contestacao:my_contestations')
+
+
+@login_required
+def deny_contestation(request, pk):
+    """Gerente nega após aprovação do gestor."""
+    c = get_object_or_404(Contestation, pk=pk, status='accepted')
+    if c.requester != request.user:
+        messages.error(request, 'Apenas o solicitante pode negar esta contestação.')
+        return redirect('contestacao:my_contestations')
+    notes = request.POST.get('confirmation_notes', '')
+    c.deny_confirmation(request.user, notes)
+    messages.success(request, f'Contestação #{c.pk} negada.')
+    return redirect('contestacao:my_contestations')
+
+
+@login_required
 def mark_paid(request, pk):
+    """Gestor marca como pago (após confirmação do gerente)."""
     if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contestacao:manage_contestations')
-    c = get_object_or_404(Contestation, pk=pk, status='accepted')
+    c = get_object_or_404(Contestation, pk=pk, status='confirmed')
     c.mark_paid(request.user)
     messages.success(request, f'Contestação #{c.pk} marcada como paga!')
     return redirect('contestacao:manage_contestations')

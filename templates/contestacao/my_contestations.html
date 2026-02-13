@@ -21,13 +21,15 @@
     </div>
 
     <!-- Status filter -->
-    <div class="flex gap-2 mb-4">
+    <div class="flex gap-2 mb-4 flex-wrap">
         <a href="{% url 'contestacao:my_contestations' %}"
            class="px-3 py-1.5 text-sm rounded-md {% if not status_filter %}bg-gray-800 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Todas</a>
         <a href="?status=pending"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'pending' %}bg-yellow-500 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Pendentes</a>
         <a href="?status=accepted"
-           class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'accepted' %}bg-green-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Aceitas</a>
+           class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'accepted' %}bg-blue-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Aguardando Confirmação</a>
+        <a href="?status=confirmed"
+           class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'confirmed' %}bg-green-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Confirmadas</a>
         <a href="?status=rejected"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'rejected' %}bg-red-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Rejeitadas</a>
     </div>
@@ -35,32 +37,60 @@
     {% if contestations %}
     <div class="space-y-3">
         {% for c in contestations %}
-        <a href="{% url 'contestacao:contestation_detail' c.pk %}" class="block bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between">
-                <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1.5">
-                        <span class="text-sm font-bold text-gray-900">#{{ c.pk }}</span>
-                        {% if c.status == 'pending' %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-clock mr-1"></i> Pendente</span>
-                        {% elif c.status == 'accepted' %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i> Aceita</span>
-                        {% elif c.status == 'rejected' %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i> Rejeitada</span>
-                        {% endif %}
-                        {% if c.status == 'accepted' %}
+        <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
+            <a href="{% url 'contestacao:contestation_detail' c.pk %}" class="block p-4 hover:bg-gray-50 transition-colors">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span class="text-sm font-bold text-gray-900">#{{ c.pk }}</span>
+                            {% if c.status == 'pending' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-clock mr-1"></i> Pendente</span>
+                            {% elif c.status == 'accepted' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><i class="fas fa-user-check mr-1"></i> Aprovada – Confirme</span>
+                            {% elif c.status == 'confirmed' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check-double mr-1"></i> Confirmada</span>
+                            {% elif c.status == 'rejected' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i> Rejeitada</span>
+                            {% elif c.status == 'denied' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"><i class="fas fa-ban mr-1"></i> Negada</span>
+                            {% endif %}
                             {% if c.payment_status == 'paid' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-dollar-sign mr-1"></i> Pago</span>
                             {% elif c.payment_status == 'pending_payment' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"><i class="fas fa-hourglass-half mr-1"></i> Aguardando Pgto</span>
                             {% endif %}
+                        </div>
+                        <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> – {{ c.exclusion.pilar }} <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
+                        <p class="text-xs text-gray-500 mt-1">{{ c.exclusion.filial }} &middot; {{ c.created_at|date:"d/m/Y H:i" }}</p>
+                        {% if c.review_notes %}
+                        <p class="text-xs text-blue-600 mt-1"><i class="fas fa-reply mr-1"></i> Gestor: {{ c.review_notes }}</p>
                         {% endif %}
                     </div>
-                    <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> – {{ c.exclusion.pilar }} <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
-                    <p class="text-xs text-gray-500 mt-1">{{ c.exclusion.filial }} &middot; Por {{ c.requester.full_name }} &middot; {{ c.created_at|date:"d/m/Y H:i" }}</p>
+                    <i class="fas fa-chevron-right text-gray-300 mt-2"></i>
                 </div>
-                <i class="fas fa-chevron-right text-gray-300 mt-2"></i>
+            </a>
+            {% if c.status == 'accepted' and c.requester == request.user %}
+            <div class="px-4 py-3 border-t bg-blue-50 flex flex-wrap gap-2 items-center">
+                <p class="text-xs text-blue-700 font-semibold mr-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou. Confirme ou negue:</p>
+                <input type="text" id="conf-notes-{{ c.pk }}" placeholder="Observação (opcional)"
+                       class="flex-1 min-w-[150px] border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+                <form method="post" action="{% url 'contestacao:confirm_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes-{{ c.pk }}').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="confirmation_notes" value="">
+                    <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+                        <i class="fas fa-check-double mr-1"></i> Confirmar
+                    </button>
+                </form>
+                <form method="post" action="{% url 'contestacao:deny_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes-{{ c.pk }}').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="confirmation_notes" value="">
+                    <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-gray-500 text-white text-sm font-medium rounded-md hover:bg-gray-600">
+                        <i class="fas fa-times mr-1"></i> Negar
+                    </button>
+                </form>
             </div>
-        </a>
+            {% endif %}
+        </div>
         {% endfor %}
     </div>
     {% else %}
