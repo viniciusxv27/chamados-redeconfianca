@@ -197,8 +197,14 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Local</label>
                         <input type="text" id="eventLocation"
                                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                               placeholder="Sala, link, etc.">
+                               placeholder="Sala, endereço, etc.">
                     </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-link mr-1"></i> Link (opcional)</label>
+                    <input type="url" id="eventLink"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                           placeholder="https://meet.google.com/...">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
@@ -210,18 +216,20 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">
                         <i class="fas fa-users mr-1"></i> Convidar Participantes
                     </label>
-                    <select id="eventParticipants" multiple 
-                            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                            style="min-height: 80px;">
-                        {% for u in users_list %}
-                        <option value="{{ u.pk }}">{{ u.full_name }} ({{ u.primary_sector.name|default:"-" }})</option>
-                        {% endfor %}
-                    </select>
-                    <p class="text-xs text-gray-400 mt-1">Segure Ctrl/Cmd para selecionar múltiplos. Participantes precisam aceitar o convite.</p>
+                    <div class="relative">
+                        <input type="text" id="participantSearch" autocomplete="off"
+                               class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="Digite o nome para buscar..."
+                               oninput="filterParticipantSuggestions()" onfocus="showParticipantSuggestions()">
+                        <div id="participantSuggestions" class="hidden absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                        </div>
+                    </div>
+                    <div id="selectedParticipants" class="flex flex-wrap gap-1 mt-2"></div>
+                    <p class="text-xs text-gray-400 mt-1">Participantes precisam aceitar o convite.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Cor</label>
-                    <div class="flex gap-2" id="colorPicker">
+                    <div class="flex items-center gap-2" id="colorPicker">
                         <span class="color-option selected" data-color="#4f46e5" style="background:#4f46e5" onclick="selectColor(this)"></span>
                         <span class="color-option" data-color="#dc2626" style="background:#dc2626" onclick="selectColor(this)"></span>
                         <span class="color-option" data-color="#16a34a" style="background:#16a34a" onclick="selectColor(this)"></span>
@@ -231,6 +239,9 @@
                         <span class="color-option" data-color="#ea580c" style="background:#ea580c" onclick="selectColor(this)"></span>
                         <span class="color-option" data-color="#0d9488" style="background:#0d9488" onclick="selectColor(this)"></span>
                         <span class="color-option" data-color="#6b7280" style="background:#6b7280" onclick="selectColor(this)"></span>
+                        <input type="color" id="customColorInput" value="#4f46e5"
+                               class="w-7 h-7 p-0 border-0 rounded-full cursor-pointer" title="Cor personalizada"
+                               onchange="selectCustomColor(this.value)" oninput="selectCustomColor(this.value)">
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
@@ -381,6 +392,7 @@ function openCreateModal(start, end, allDay) {
     document.getElementById('eventTitleInput').value = '';
     document.getElementById('eventDescription').value = '';
     document.getElementById('eventLocation').value = '';
+    document.getElementById('eventLink').value = '';
     document.getElementById('eventType').value = 'event';
     document.getElementById('eventAllDay').checked = allDay || false;
     document.getElementById('eventPrivate').checked = false;
@@ -388,10 +400,9 @@ function openCreateModal(start, end, allDay) {
     document.getElementById('deleteEventBtn').classList.add('hidden');
     
     // Clear participants
-    const participantsSelect = document.getElementById('eventParticipants');
-    if (participantsSelect) {
-        for (let opt of participantsSelect.options) opt.selected = false;
-    }
+    selectedParticipantIds = [];
+    renderSelectedParticipants();
+    document.getElementById('participantSearch').value = '';
 
     if (start) {
         document.getElementById('eventStart').value = toLocalInput(start);
@@ -414,6 +425,7 @@ function openEditModal(eventData) {
     document.getElementById('eventTitleInput').value = eventData.title;
     document.getElementById('eventDescription').value = eventData.description || '';
     document.getElementById('eventLocation').value = eventData.location || '';
+    document.getElementById('eventLink').value = eventData.link || '';
     document.getElementById('eventType').value = eventData.event_type || 'event';
     document.getElementById('eventAllDay').checked = eventData.all_day || false;
     document.getElementById('eventPrivate').checked = eventData.is_private || false;
@@ -422,14 +434,20 @@ function openEditModal(eventData) {
     document.getElementById('modalTitle').textContent = 'Editar Evento';
     document.getElementById('deleteEventBtn').classList.remove('hidden');
 
-    // Set selected participants
-    const participantsSelect = document.getElementById('eventParticipants');
-    if (participantsSelect && eventData.participants) {
-        const participantIds = eventData.participants.map(p => String(p.id));
-        for (let opt of participantsSelect.options) {
-            opt.selected = participantIds.includes(opt.value);
+    // Set selected participants from data
+    selectedParticipantIds = [];
+    document.getElementById('participantSearch').value = '';
+    if (eventData.participants) {
+        for (const p of eventData.participants) {
+            const existing = ALL_USERS.find(u => u.id === p.id);
+            if (existing) {
+                selectedParticipantIds.push({ id: p.id, name: existing.name, sector: existing.sector });
+            } else {
+                selectedParticipantIds.push({ id: p.id, name: p.first_name + ' ' + p.last_name, sector: '' });
+            }
         }
     }
+    renderSelectedParticipants();
 
     selectColorByValue(eventData.color || '#4f46e5');
     document.getElementById('eventModal').classList.remove('hidden');
@@ -443,26 +461,107 @@ function selectColor(el) {
     document.querySelectorAll('.color-option').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
     selectedColor = el.dataset.color;
+    document.getElementById('customColorInput').value = selectedColor;
 }
 
 function selectColorByValue(color) {
     selectedColor = color;
-    document.querySelectorAll('.color-option').forEach(c => {
-        c.classList.toggle('selected', c.dataset.color === color);
-    });
+    const matched = document.querySelector(`.color-option[data-color="${color}"]`);
+    document.querySelectorAll('.color-option').forEach(c => c.classList.remove('selected'));
+    if (matched) {
+        matched.classList.add('selected');
+    }
+    document.getElementById('customColorInput').value = color;
 }
+
+function selectCustomColor(color) {
+    document.querySelectorAll('.color-option').forEach(c => c.classList.remove('selected'));
+    selectedColor = color;
+}
+
+// =====================================================================
+// AUTOCOMPLETE PARTICIPANTES
+// =====================================================================
+const ALL_USERS = [
+    {% for u in users_list %}
+    { id: {{ u.pk }}, name: "{{ u.full_name|escapejs }}", sector: "{{ u.primary_sector.name|default:'-'|escapejs }}", initials: "{{ u.first_name|first|escapejs }}{{ u.last_name|first|escapejs }}" },
+    {% endfor %}
+];
+
+let selectedParticipantIds = [];
+
+function filterParticipantSuggestions() {
+    const q = document.getElementById('participantSearch').value.toLowerCase().trim();
+    const container = document.getElementById('participantSuggestions');
+    if (!q) { container.classList.add('hidden'); return; }
+    
+    const selectedIds = selectedParticipantIds.map(p => p.id);
+    const filtered = ALL_USERS.filter(u => !selectedIds.includes(u.id) && u.name.toLowerCase().includes(q));
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">Nenhum resultado</div>';
+    } else {
+        container.innerHTML = filtered.slice(0, 8).map(u => `
+            <div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 flex items-center gap-2" onclick="addParticipant(${u.id})">
+                <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold flex-shrink-0">${u.initials}</div>
+                <div class="flex-1 min-w-0">
+                    <span class="text-gray-800 font-medium">${escapeHtml(u.name)}</span>
+                    <span class="text-xs text-gray-400 ml-1">${escapeHtml(u.sector)}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    container.classList.remove('hidden');
+}
+
+function showParticipantSuggestions() {
+    const q = document.getElementById('participantSearch').value.trim();
+    if (q) filterParticipantSuggestions();
+}
+
+function addParticipant(userId) {
+    if (selectedParticipantIds.find(p => p.id === userId)) return;
+    const user = ALL_USERS.find(u => u.id === userId);
+    if (!user) return;
+    selectedParticipantIds.push({ id: user.id, name: user.name, sector: user.sector });
+    renderSelectedParticipants();
+    document.getElementById('participantSearch').value = '';
+    document.getElementById('participantSuggestions').classList.add('hidden');
+}
+
+function removeParticipant(userId) {
+    selectedParticipantIds = selectedParticipantIds.filter(p => p.id !== userId);
+    renderSelectedParticipants();
+}
+
+function renderSelectedParticipants() {
+    const container = document.getElementById('selectedParticipants');
+    if (selectedParticipantIds.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = selectedParticipantIds.map(p => `
+        <span class="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
+            ${escapeHtml(p.name)}
+            <button type="button" onclick="removeParticipant(${p.id})" class="text-indigo-500 hover:text-indigo-700 ml-1">&times;</button>
+        </span>
+    `).join('');
+}
+
+// Hide suggestions when clicking outside
+document.addEventListener('click', function(e) {
+    const search = document.getElementById('participantSearch');
+    const suggestions = document.getElementById('participantSuggestions');
+    if (search && suggestions && !search.contains(e.target) && !suggestions.contains(e.target)) {
+        suggestions.classList.add('hidden');
+    }
+});
 
 async function saveEvent() {
     const id = document.getElementById('eventId').value;
     
-    // Get selected participants
-    const participantsSelect = document.getElementById('eventParticipants');
-    const selectedParticipants = [];
-    if (participantsSelect) {
-        for (let opt of participantsSelect.selectedOptions) {
-            selectedParticipants.push(parseInt(opt.value));
-        }
-    }
+    // Get selected participants from autocomplete
+    const participantIdsList = selectedParticipantIds.map(p => p.id);
     
     const payload = {
         title: document.getElementById('eventTitleInput').value.trim(),
@@ -471,10 +570,11 @@ async function saveEvent() {
         end: new Date(document.getElementById('eventEnd').value).toISOString(),
         event_type: document.getElementById('eventType').value,
         location: document.getElementById('eventLocation').value,
+        link: document.getElementById('eventLink').value,
         color: selectedColor,
         all_day: document.getElementById('eventAllDay').checked,
         is_private: document.getElementById('eventPrivate').checked,
-        participants: selectedParticipants,
+        participants: participantIdsList,
     };
 
     if (!payload.title) { alert('Título é obrigatório'); return; }
@@ -549,6 +649,7 @@ async function showEventDetail(fcEvent) {
         </div>
     `;
     if (ev.location) html += `<div class="text-sm text-gray-600"><i class="fas fa-map-marker-alt text-gray-400 mr-1"></i> ${escapeHtml(ev.location)}</div>`;
+    if (ev.link) html += `<div class="text-sm text-gray-600"><i class="fas fa-link text-gray-400 mr-1"></i> <a href="${escapeHtml(ev.link)}" target="_blank" class="text-indigo-600 hover:underline">${escapeHtml(ev.link)}</a></div>`;
     if (ev.description) html += `<div class="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">${escapeHtml(ev.description)}</div>`;
     if (!ev.is_owner) html += `<div class="text-sm text-gray-500"><i class="fas fa-user text-gray-400 mr-1"></i> Criado por ${escapeHtml(ev.owner_name)}</div>`;
     if (ev.participants && ev.participants.length) {

@@ -11,6 +11,11 @@ from django.views.decorators.http import require_POST
 from users.models import User, Sector
 from .models import CalendarEvent, MeetingRequest, EventParticipant
 
+try:
+    from notifications.push_utils import send_push_notification_to_user
+except ImportError:
+    send_push_notification_to_user = None
+
 
 # =========================================================================
 # HELPERS
@@ -168,6 +173,7 @@ def api_events(request):
             'extendedProps': {
                 'description': ev.description,
                 'location': ev.location,
+                'link': ev.link,
                 'event_type': ev.event_type,
                 'type_display': ev.get_event_type_display(),
                 'is_owner': ev.owner_id == request.user.pk,
@@ -208,6 +214,7 @@ def api_event_detail(request, pk):
         'end': event.end.isoformat(),
         'all_day': event.all_day,
         'location': event.location,
+        'link': event.link,
         'is_private': event.is_private,
         'is_owner': event.owner_id == request.user.pk,
         'owner_name': event.owner.full_name,
@@ -247,6 +254,7 @@ def api_event_create(request):
         end=end,
         all_day=data.get('all_day', False),
         location=data.get('location', ''),
+        link=data.get('link', ''),
         is_private=data.get('is_private', False),
     )
 
@@ -260,6 +268,17 @@ def api_event_create(request):
                 user=user,
                 status='pending',
             )
+            # Enviar notificação push
+            if send_push_notification_to_user:
+                try:
+                    send_push_notification_to_user(
+                        user,
+                        'Convite para evento',
+                        f'{request.user.full_name} convidou você para: {event.title}',
+                        action_url='/agenda/',
+                    )
+                except Exception:
+                    pass
 
     return JsonResponse({
         'id': event.pk,
@@ -297,6 +316,8 @@ def api_event_update(request, pk):
         event.event_type = data['event_type']
     if 'location' in data:
         event.location = data['location']
+    if 'link' in data:
+        event.link = data['link']
     if 'is_private' in data:
         event.is_private = data['is_private']
 
@@ -324,6 +345,17 @@ def api_event_update(request, pk):
                 user=user,
                 status='pending',
             )
+            # Enviar notificação push
+            if send_push_notification_to_user:
+                try:
+                    send_push_notification_to_user(
+                        user,
+                        'Convite para evento',
+                        f'{request.user.full_name} convidou você para: {event.title}',
+                        action_url='/agenda/',
+                    )
+                except Exception:
+                    pass
 
     return JsonResponse({'ok': True})
 
@@ -355,6 +387,7 @@ def api_event_invitations(request):
             'start': inv.event.start.isoformat(),
             'end': inv.event.end.isoformat(),
             'location': inv.event.location,
+            'link': inv.event.link,
             'owner_name': inv.event.owner.full_name,
             'invited_at': inv.invited_at.isoformat(),
         })

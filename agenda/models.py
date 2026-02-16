@@ -47,12 +47,16 @@ class EventParticipant(models.Model):
         self.response_notes = notes
         self.responded_at = timezone.now()
         self.save()
+        # Adicionar o evento ao calendário do participante (via M2M)
+        self.event.participants.add(self.user)
 
     def reject(self, notes=''):
         self.status = 'rejected'
         self.response_notes = notes
         self.responded_at = timezone.now()
         self.save()
+        # Remover do calendário caso existia
+        self.event.participants.remove(self.user)
 
 
 class CalendarEvent(models.Model):
@@ -102,6 +106,7 @@ class CalendarEvent(models.Model):
     end = models.DateTimeField(verbose_name='Fim')
     all_day = models.BooleanField(default=False, verbose_name='Dia inteiro')
     location = models.CharField(max_length=255, blank=True, verbose_name='Local')
+    link = models.URLField(max_length=500, blank=True, verbose_name='Link', help_text='Link da reunião, videoconferência, etc.')
 
     # Participantes convidados
     participants = models.ManyToManyField(
