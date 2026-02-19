@@ -48,7 +48,9 @@ def is_inventory_manager(user):
 
 
 def inventory_permission_required(permission=None):
-    """Decorator para verificar permissões de inventário"""
+    """Decorator para verificar permissões de inventário.
+    Gestores ativos têm acesso total (mesma visão do superadmin).
+    """
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
@@ -58,23 +60,16 @@ def inventory_permission_required(permission=None):
             if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
                 return view_func(request, *args, **kwargs)
             
-            # Verificar se é gestor de inventário
+            # Gestores ativos têm acesso total (mesma visão do superadmin)
             manager = _get_inventory_manager(user)
-            if manager is None:
-                messages.error(request, 'Você não tem permissão para acessar esta área.')
-                return redirect('assets:inventory_dashboard')
+            if manager is not None and manager.is_active:
+                return view_func(request, *args, **kwargs)
             
-            if not manager.is_active:
+            if manager is not None and not manager.is_active:
                 messages.error(request, 'Seu acesso ao inventário está desativado.')
-                return redirect('assets:inventory_dashboard')
-            
-            # Verificar permissão específica
-            if permission:
-                if not getattr(manager, permission, False):
-                    messages.error(request, 'Você não tem permissão para esta ação.')
-                    return redirect('assets:inventory_dashboard')
-            
-            return view_func(request, *args, **kwargs)
+            else:
+                messages.error(request, 'Você não tem permissão para acessar esta área.')
+            return redirect('assets:inventory_dashboard')
         return _wrapped_view
     return decorator
 
@@ -1573,6 +1568,7 @@ def asset_list(request):
         assets = assets.filter(
             Q(patrimonio_numero__icontains=query) |
             Q(nome__icontains=query) |
+            Q(imei_serial__icontains=query) |
             Q(localizado__icontains=query) |
             Q(setor__icontains=query) |
             Q(pdv__icontains=query)
@@ -1691,7 +1687,7 @@ def export_assets_excel(request):
     
     # Definir cabeçalhos
     headers = [
-        'Nº Patrimônio', 'Nome', 'Localizado', 'Setor', 'PDV', 
+        'Nº Patrimônio', 'Nome', 'IMEI/Serial', 'Localizado', 'Setor', 'PDV', 
         'Estado Físico', 'Observações', 'Criado por', 'Data Criação', 'Última Atualização'
     ]
     
@@ -1713,14 +1709,15 @@ def export_assets_excel(request):
     for row, asset in enumerate(assets, 2):
         ws.cell(row=row, column=1, value=asset.patrimonio_numero)
         ws.cell(row=row, column=2, value=asset.nome)
-        ws.cell(row=row, column=3, value=asset.localizado)
-        ws.cell(row=row, column=4, value=asset.setor)
-        ws.cell(row=row, column=5, value=asset.pdv)
-        ws.cell(row=row, column=6, value=asset.get_estado_fisico_display())
-        ws.cell(row=row, column=7, value=asset.observacoes or "")
-        ws.cell(row=row, column=8, value=asset.created_by.get_full_name() if asset.created_by else "")
-        ws.cell(row=row, column=9, value=asset.created_at.strftime("%Y-%m-%d %H:%M:%S"))
-        ws.cell(row=row, column=10, value=asset.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
+        ws.cell(row=row, column=3, value=asset.imei_serial or "")
+        ws.cell(row=row, column=4, value=asset.localizado)
+        ws.cell(row=row, column=5, value=asset.setor)
+        ws.cell(row=row, column=6, value=asset.pdv)
+        ws.cell(row=row, column=7, value=asset.get_estado_fisico_display())
+        ws.cell(row=row, column=8, value=asset.observacoes or "")
+        ws.cell(row=row, column=9, value=asset.created_by.get_full_name() if asset.created_by else "")
+        ws.cell(row=row, column=10, value=asset.created_at.strftime("%Y-%m-%d %H:%M:%S"))
+        ws.cell(row=row, column=11, value=asset.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
     
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
@@ -1778,7 +1775,25 @@ def import_assets_excel(request):
             # Processar cada linha (pular cabeçalho)
             for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
                 try:
-                    patrimonio_numero, nome, localizado, setor, pdv, estado_fisico, observacoes, created_by, date_created, last_updated = row
+                    # Suportar planilhas com ou sem coluna IMEI/Serial
+                    row = list(row)
+                    if len(row) >= 11:
+                        patrimonio_numero, nome, imei_serial, localizado, setor, pdv, estado_fisico, observacoes, created_by, date_created, last_updated = row[:11]
+                    elif len(row) >= 10:
+                        patrimonio_numero, nome, localizado, setor, pdv, estado_fisico, observacoes, created_by, date_created, last_updated = row[:10]
+                        imei_serial = ''
+                    else:
+                        patrimonio_numero = row[0] if len(row) > 0 else None
+                        nome = row[1] if len(row) > 1 else ''
+                        localizado = row[2] if len(row) > 2 else ''
+                        setor = row[3] if len(row) > 3 else ''
+                        pdv = row[4] if len(row) > 4 else ''
+                        estado_fisico = row[5] if len(row) > 5 else 'bom'
+                        observacoes = row[6] if len(row) > 6 else ''
+                        imei_serial = ''
+                        created_by = None
+                        date_created = None
+                        last_updated = None
                     
                     if not patrimonio_numero:  # Nº Patrimônio é obrigatório
                         continue
@@ -1787,7 +1802,7 @@ def import_assets_excel(request):
                     estado_fisico_value = estado_fisico
                     if estado_fisico:
                         for value, display in Asset.ESTADO_FISICO_CHOICES:
-                            if display.lower() == estado_fisico.lower():
+                            if display.lower() == str(estado_fisico).lower():
                                 estado_fisico_value = value
                                 break
                     
@@ -1796,12 +1811,13 @@ def import_assets_excel(request):
                         patrimonio_numero=patrimonio_numero,
                         defaults={
                             'nome': nome or '',
+                            'imei_serial': imei_serial or '',
                             'localizado': localizado or '',
                             'setor': setor or '',
                             'pdv': pdv or '',
                             'estado_fisico': estado_fisico_value or 'bom',
                             'observacoes': observacoes or '',
-                            'created_by': request.user,  # Sempre o usuário que está importando
+                            'created_by': request.user,
                         }
                     )
                     
@@ -1811,6 +1827,8 @@ def import_assets_excel(request):
                         # Atualizar ativo existente
                         if nome:
                             asset.nome = nome
+                        if imei_serial is not None:
+                            asset.imei_serial = imei_serial or ''
                         if localizado:
                             asset.localizado = localizado
                         if setor:
