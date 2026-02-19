@@ -35,7 +35,7 @@ def _get_inventory_manager(user):
     """Retorna o perfil de gestor de inventário do usuário, ou None"""
     try:
         return user.inventory_manager_profile
-    except InventoryManager.DoesNotExist:
+    except (InventoryManager.DoesNotExist, AttributeError, Exception):
         return None
 
 
@@ -944,13 +944,9 @@ def export_movements_excel(request):
 @login_required
 def manager_list(request):
     """Lista gestores de inventário"""
-    # Apenas superadmin e admin podem ver esta página
-    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        # Ou gestores com permissão
-        manager = _get_inventory_manager(request.user)
-        if not manager or not manager.can_manage_managers:
-            messages.error(request, 'Você não tem permissão para acessar esta área.')
-            return redirect('assets:inventory_dashboard')
+    if not is_inventory_manager(request.user):
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('assets:inventory_dashboard')
     
     managers = InventoryManager.objects.select_related('user', 'created_by').order_by(
         '-is_active', 'user__first_name'
@@ -965,11 +961,9 @@ def manager_list(request):
 @login_required
 def manager_create(request):
     """Criar novo gestor de inventário"""
-    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        manager = _get_inventory_manager(request.user)
-        if not manager or not manager.can_manage_managers:
-            messages.error(request, 'Você não tem permissão para esta ação.')
-            return redirect('assets:inventory_dashboard')
+    if not is_inventory_manager(request.user):
+        messages.error(request, 'Você não tem permissão para esta ação.')
+        return redirect('assets:inventory_dashboard')
     
     if request.method == 'POST':
         form = InventoryManagerForm(request.POST)
@@ -992,11 +986,9 @@ def manager_create(request):
 @login_required
 def manager_edit(request, pk):
     """Editar gestor de inventário"""
-    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        manager = _get_inventory_manager(request.user)
-        if not manager or not manager.can_manage_managers:
-            messages.error(request, 'Você não tem permissão para esta ação.')
-            return redirect('assets:inventory_dashboard')
+    if not is_inventory_manager(request.user):
+        messages.error(request, 'Você não tem permissão para esta ação.')
+        return redirect('assets:inventory_dashboard')
     
     manager = get_object_or_404(InventoryManager, pk=pk)
     
@@ -1020,11 +1012,9 @@ def manager_edit(request, pk):
 @login_required
 def manager_delete(request, pk):
     """Remover gestor de inventário"""
-    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        manager = _get_inventory_manager(request.user)
-        if not manager or not manager.can_manage_managers:
-            messages.error(request, 'Você não tem permissão para esta ação.')
-            return redirect('assets:inventory_dashboard')
+    if not is_inventory_manager(request.user):
+        messages.error(request, 'Você não tem permissão para esta ação.')
+        return redirect('assets:inventory_dashboard')
     
     manager = get_object_or_404(InventoryManager, pk=pk)
     
@@ -1045,10 +1035,8 @@ def manager_delete(request, pk):
 @require_POST
 def manager_toggle(request, pk):
     """Ativar/desativar gestor de inventário"""
-    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        manager = _get_inventory_manager(request.user)
-        if not manager or not manager.can_manage_managers:
-            return JsonResponse({'error': 'Sem permissão'}, status=403)
+    if not is_inventory_manager(request.user):
+        return JsonResponse({'error': 'Sem permissão'}, status=403)
     
     manager = get_object_or_404(InventoryManager, pk=pk)
     manager.is_active = not manager.is_active
