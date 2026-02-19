@@ -69,7 +69,7 @@
                     </a>
                 </div>
             </div>
-            {% if is_manager %}
+            {% if is_inventory_manager %}
             <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
                 {% if item.status == 'available' %}
                 <a href="{% url 'assets:stock_exit' %}?item={{ item.pk }}" 
@@ -334,7 +334,7 @@
             </div>
 
             <!-- Ações Rápidas -->
-            {% if is_manager %}
+            {% if is_inventory_manager %}
             <div class="bg-white shadow rounded-lg">
                 <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
                     <h3 class="text-lg font-medium text-gray-900">

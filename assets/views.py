@@ -129,10 +129,8 @@ def inventory_dashboard(request):
         'recent_movements': recent_movements,
         'categories_stats': categories_stats,
         'status_stats': status_stats,
-        'is_manager': is_manager,
         'pending_requests_count': pending_requests_count,
         'my_recent_requests': my_recent_requests,
-        'is_approver': can_approve_requests(request.user),
     }
     
     return render(request, 'assets/inventory/dashboard.html', context)
@@ -264,7 +262,6 @@ def product_list(request):
         'status_filter': status_filter,
         'categories': categories,
         'total_products': len(products) if isinstance(products, list) else products.count(),
-        'is_manager': is_inventory_manager(request.user),
     }
     
     return render(request, 'assets/inventory/product_list.html', context)
@@ -289,7 +286,6 @@ def product_detail(request, pk):
         'items': items,
         'items_by_status': items_by_status,
         'media_items': media_items,
-        'is_manager': is_inventory_manager(request.user),
     }
     
     return render(request, 'assets/inventory/product_detail.html', context)
@@ -452,7 +448,6 @@ def item_list(request):
         'sectors': sectors,
         'status_choices': InventoryItem.STATUS_CHOICES,
         'total_items': items.count(),
-        'is_manager': is_inventory_manager(request.user),
     }
     
     return render(request, 'assets/inventory/item_list.html', context)
@@ -477,7 +472,6 @@ def item_detail(request, pk):
     context = {
         'item': item,
         'movements': movements,
-        'is_manager': is_inventory_manager(request.user),
     }
     
     return render(request, 'assets/inventory/item_detail.html', context)
@@ -1181,7 +1175,6 @@ def item_request_list(request):
         'page_obj': page_obj,
         'status_filter': status_filter,
         'view_mode': view_mode,
-        'is_approver': is_approver,
         'pending_count': pending_count,
         'status_choices': ItemRequest.STATUS_CHOICES,
         'total_requests': requests_qs.count(),
@@ -1210,7 +1203,6 @@ def item_request_detail(request, pk):
     
     context = {
         'item_request': item_request,
-        'is_approver': is_approver,
     }
     return render(request, 'assets/inventory/item_request_detail.html', context)
 

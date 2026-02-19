@@ -30,7 +30,7 @@
                 Todas as entradas, saídas e transferências de estoque
             </p>
         </div>
-        {% if is_manager %}
+        {% if is_inventory_manager %}
         <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
             <a href="{% url 'assets:stock_entry' %}" 
                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">

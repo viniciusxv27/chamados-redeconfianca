@@ -32,7 +32,7 @@
                 Gestão completa de estoque e inventário
             </p>
         </div>
-        {% if is_manager %}
+        {% if is_inventory_manager %}
         <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
             <a href="{% url 'assets:product_create' %}" 
                class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
@@ -108,7 +108,7 @@
         <a href="{% url 'assets:item_request_list' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors relative">
             <i class="fas fa-clipboard-list text-2xl text-yellow-600 mb-2"></i>
             <p class="text-sm font-medium text-gray-900">Solicitações</p>
-            {% if pending_requests_count > 0 and is_approver %}
+            {% if pending_requests_count > 0 and is_inventory_approver %}
             <span class="absolute top-2 right-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">{{ pending_requests_count }}</span>
             {% endif %}
         </a>
@@ -120,7 +120,7 @@
             <i class="fas fa-barcode text-2xl text-green-600 mb-2"></i>
             <p class="text-sm font-medium text-gray-900">Itens</p>
         </a>
-        {% if is_manager %}
+        {% if is_inventory_manager %}
         <a href="{% url 'assets:stock_entry' %}" class="bg-white rounded-lg shadow p-4 text-center hover:bg-gray-50 transition-colors">
             <i class="fas fa-arrow-down text-2xl text-blue-600 mb-2"></i>
             <p class="text-sm font-medium text-gray-900">Entrada</p>
@@ -142,7 +142,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Pending Requests for Approvers -->
-        {% if is_approver and pending_requests_count > 0 %}
+        {% if is_inventory_approver and pending_requests_count > 0 %}
         <div class="bg-white rounded-lg shadow border-l-4 border-yellow-400">
             <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
                 <h3 class="text-lg font-medium text-gray-900">
