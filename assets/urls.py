@@ -50,6 +50,7 @@ urlpatterns = [
     path('gestores/', views.manager_list, name='manager_list'),
     path('gestores/novo/', views.manager_create, name='manager_create'),
     path('gestores/<int:pk>/editar/', views.manager_edit, name='manager_edit'),
+    path('gestores/<int:pk>/excluir/', views.manager_delete, name='manager_delete'),
     path('gestores/<int:pk>/toggle/', views.manager_toggle, name='manager_toggle'),
     
     # Catálogo / Mercadinho (visão do solicitante)

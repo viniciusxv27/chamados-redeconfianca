@@ -1017,6 +1017,29 @@ def manager_edit(request, pk):
 
 
 @login_required
+def manager_delete(request, pk):
+    """Remover gestor de inventário"""
+    if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
+        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+            messages.error(request, 'Você não tem permissão para esta ação.')
+            return redirect('assets:inventory_dashboard')
+    
+    manager = get_object_or_404(InventoryManager, pk=pk)
+    
+    if request.method == 'POST':
+        name = manager.user.get_full_name()
+        manager.delete()
+        messages.success(request, f'Gestor "{name}" removido com sucesso!')
+        return redirect('assets:manager_list')
+    
+    context = {
+        'manager': manager,
+        'title': f'Remover Gestor - {manager.user.get_full_name()}',
+    }
+    return render(request, 'assets/inventory/manager_delete.html', context)
+
+
+@login_required
 @require_POST
 def manager_toggle(request, pk):
     """Ativar/desativar gestor de inventário"""

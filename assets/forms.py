@@ -587,6 +587,7 @@ class AssetForm(forms.ModelForm):
         fields = [
             'patrimonio_numero', 
             'nome', 
+            'imei_serial',
             'localizado', 
             'setor', 
             'pdv', 
@@ -602,6 +603,10 @@ class AssetForm(forms.ModelForm):
             'nome': forms.TextInput(attrs={
                 'class': INPUT_CLASSES,
                 'placeholder': 'Nome do ativo'
+            }),
+            'imei_serial': forms.TextInput(attrs={
+                'class': INPUT_CLASSES,
+                'placeholder': 'IMEI ou Número de Série'
             }),
             'localizado': forms.TextInput(attrs={
                 'class': INPUT_CLASSES,

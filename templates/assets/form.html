@@ -86,6 +86,23 @@
                             </div>
                         {% endif %}
                     </div>
+
+                    <!-- IMEI/Serial -->
+                    <div class="sm:col-span-2">
+                        <label for="{{ form.imei_serial.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.imei_serial.label }}
+                        </label>
+                        {{ form.imei_serial }}
+                        {% if form.imei_serial.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.imei_serial.errors.0 }}
+                            </div>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-gray-500">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Informe o IMEI do dispositivo ou o número de série do equipamento
+                        </p>
+                    </div>
                 </div>
             </div>
 
