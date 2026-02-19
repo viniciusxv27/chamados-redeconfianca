@@ -344,7 +344,7 @@
     {% endif %}
 
     <!-- Admin Section -->
-    {% if request.user.hierarchy == 'SUPERADMIN' or request.user.hierarchy == 'ADMIN' %}
+    {% if is_inventory_manager %}
     <div class="mt-6 bg-white rounded-lg shadow">
         <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">
