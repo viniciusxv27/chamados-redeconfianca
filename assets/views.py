@@ -31,11 +31,20 @@ from core.middleware import log_action
 # DECORADORES E PERMISSÕES
 # ============================================================================
 
+def _get_inventory_manager(user):
+    """Retorna o perfil de gestor de inventário do usuário, ou None"""
+    try:
+        return user.inventory_manager_profile
+    except InventoryManager.DoesNotExist:
+        return None
+
+
 def is_inventory_manager(user):
     """Verifica se o usuário é gestor de inventário ou superadmin"""
     if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
         return True
-    return hasattr(user, 'inventory_manager_profile') and user.inventory_manager_profile.is_active
+    manager = _get_inventory_manager(user)
+    return manager is not None and manager.is_active
 
 
 def inventory_permission_required(permission=None):
@@ -50,11 +59,11 @@ def inventory_permission_required(permission=None):
                 return view_func(request, *args, **kwargs)
             
             # Verificar se é gestor de inventário
-            if not hasattr(user, 'inventory_manager_profile'):
+            manager = _get_inventory_manager(user)
+            if manager is None:
                 messages.error(request, 'Você não tem permissão para acessar esta área.')
                 return redirect('assets:inventory_dashboard')
             
-            manager = user.inventory_manager_profile
             if not manager.is_active:
                 messages.error(request, 'Seu acesso ao inventário está desativado.')
                 return redirect('assets:inventory_dashboard')
@@ -949,7 +958,8 @@ def manager_list(request):
     # Apenas superadmin e admin podem ver esta página
     if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
         # Ou gestores com permissão
-        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+        manager = _get_inventory_manager(request.user)
+        if not manager or not manager.can_manage_managers:
             messages.error(request, 'Você não tem permissão para acessar esta área.')
             return redirect('assets:inventory_dashboard')
     
@@ -967,7 +977,8 @@ def manager_list(request):
 def manager_create(request):
     """Criar novo gestor de inventário"""
     if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+        manager = _get_inventory_manager(request.user)
+        if not manager or not manager.can_manage_managers:
             messages.error(request, 'Você não tem permissão para esta ação.')
             return redirect('assets:inventory_dashboard')
     
@@ -993,7 +1004,8 @@ def manager_create(request):
 def manager_edit(request, pk):
     """Editar gestor de inventário"""
     if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+        manager = _get_inventory_manager(request.user)
+        if not manager or not manager.can_manage_managers:
             messages.error(request, 'Você não tem permissão para esta ação.')
             return redirect('assets:inventory_dashboard')
     
@@ -1020,7 +1032,8 @@ def manager_edit(request, pk):
 def manager_delete(request, pk):
     """Remover gestor de inventário"""
     if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+        manager = _get_inventory_manager(request.user)
+        if not manager or not manager.can_manage_managers:
             messages.error(request, 'Você não tem permissão para esta ação.')
             return redirect('assets:inventory_dashboard')
     
@@ -1044,7 +1057,8 @@ def manager_delete(request, pk):
 def manager_toggle(request, pk):
     """Ativar/desativar gestor de inventário"""
     if request.user.hierarchy not in ['SUPERADMIN', 'ADMIN']:
-        if not hasattr(request.user, 'inventory_manager_profile') or not request.user.inventory_manager_profile.can_manage_managers:
+        manager = _get_inventory_manager(request.user)
+        if not manager or not manager.can_manage_managers:
             return JsonResponse({'error': 'Sem permissão'}, status=403)
     
     manager = get_object_or_404(InventoryManager, pk=pk)
@@ -1064,8 +1078,8 @@ def can_approve_requests(user):
     """Verifica se o usuário pode aprovar/reprovar solicitações"""
     if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
         return True
-    if hasattr(user, 'inventory_manager_profile'):
-        manager = user.inventory_manager_profile
+    manager = _get_inventory_manager(user)
+    if manager:
         return manager.is_active and manager.can_approve_requests
     return False
 
