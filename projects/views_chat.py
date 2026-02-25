@@ -1427,6 +1427,45 @@ def export_metrics_report(request):
     for col in range(1, 5):
         ws_dia.column_dimensions[get_column_letter(col)].width = 20
     
+    # ========== ABA 7: Por Setor do Usuário ==========
+    ws_user_setor = wb.create_sheet('Por Setor do Usuário')
+    
+    # Headers
+    headers_user_setor = ['Setor do Usuário', 'Total', 'Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']
+    for col, header in enumerate(headers_user_setor, start=1):
+        cell = ws_user_setor.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    # Dados por setor do usuário que abriu
+    from django.db.models import Count as CountExport
+    user_sector_data = SupportChat.objects.filter(
+        created_at__gte=start_date
+    ).values(
+        'user__sector__id', 'user__sector__name'
+    ).annotate(
+        total=CountExport('id')
+    ).filter(user__sector__isnull=False).order_by('-total')
+    
+    row_us = 2
+    for item in user_sector_data:
+        sector_id = item['user__sector__id']
+        sector_name = item['user__sector__name']
+        us_tickets = SupportChat.objects.filter(created_at__gte=start_date, user__sector_id=sector_id)
+        total_us = item['total']
+        if total_us > 0:
+            ws_user_setor.cell(row=row_us, column=1, value=sector_name).border = border
+            ws_user_setor.cell(row=row_us, column=2, value=total_us).border = border
+            ws_user_setor.cell(row=row_us, column=3, value=us_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count()).border = border
+            ws_user_setor.cell(row=row_us, column=4, value=us_tickets.filter(status='EM_ANDAMENTO').count()).border = border
+            ws_user_setor.cell(row=row_us, column=5, value=us_tickets.filter(status='RESOLVIDO').count()).border = border
+            ws_user_setor.cell(row=row_us, column=6, value=us_tickets.filter(status='FECHADO').count()).border = border
+            row_us += 1
+    
+    for col in range(1, 7):
+        ws_user_setor.column_dimensions[get_column_letter(col)].width = 22
+    
     # Atualizar aba Resumo com novas métricas
     next_row = 5 + len(metricas) + 1
     ws_resumo[f'A{next_row}'] = 'Média de Chamados por Dia'
@@ -2092,6 +2131,29 @@ def support_metrics(request):
         
         sectors_stats.sort(key=lambda x: x['total'], reverse=True)
         
+        # Métricas por setor do usuário que abriu o chamado
+        from django.db.models import Count
+        user_sector_stats = []
+        # Agrupar tickets pelo setor principal do usuário que abriu
+        user_sector_counts = tickets.values(
+            'user__sector__id', 'user__sector__name'
+        ).annotate(
+            total=Count('id')
+        ).filter(user__sector__isnull=False).order_by('-total')
+        
+        for item in user_sector_counts:
+            sector_id = item['user__sector__id']
+            sector_name = item['user__sector__name']
+            sector_tickets_qs = tickets.filter(user__sector_id=sector_id)
+            user_sector_stats.append({
+                'name': sector_name,
+                'total': item['total'],
+                'open': sector_tickets_qs.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
+                'in_progress': sector_tickets_qs.filter(status='EM_ANDAMENTO').count(),
+                'resolved': sector_tickets_qs.filter(status='RESOLVIDO').count(),
+                'closed': sector_tickets_qs.filter(status='FECHADO').count()
+            })
+        
         # Média de chamados por dia
         if start and end:
             total_days = (end - start).days
@@ -2111,7 +2173,8 @@ def support_metrics(request):
                 'avg_per_day': avg_per_day,
                 'by_agent': agents_stats,
                 'by_category': categories_stats,
-                'by_sector': sectors_stats
+                'by_sector': sectors_stats,
+                'by_user_sector': user_sector_stats
             }
         })
         
