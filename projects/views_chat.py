@@ -1179,9 +1179,19 @@ def export_metrics_report(request):
     if not (request.user.is_superuser or request.user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']):
         return JsonResponse({'error': 'Acesso negado'}, status=403)
     
-    # Período selecionado (padrão: 30 dias)
-    period_days = int(request.GET.get('period', 30))
-    start_date = datetime.now() - timedelta(days=period_days)
+    # Suportar tanto period (dias) quanto start_date/end_date
+    start_date_param = request.GET.get('start_date')
+    end_date_param = request.GET.get('end_date')
+    
+    if start_date_param and end_date_param:
+        start_date = datetime.strptime(start_date_param, '%Y-%m-%d')
+        end_date_dt = datetime.strptime(end_date_param, '%Y-%m-%d')
+        period_days = (end_date_dt - start_date).days or 30
+        period_label = f'{start_date.strftime("%d/%m/%Y")} a {end_date_dt.strftime("%d/%m/%Y")}'
+    else:
+        period_days = int(request.GET.get('period', 30))
+        start_date = datetime.now() - timedelta(days=period_days)
+        period_label = f'Últimos {period_days} dias'
     
     # Criar workbook
     wb = Workbook()
@@ -1202,7 +1212,7 @@ def export_metrics_report(request):
     )
     
     # Título
-    ws_resumo['A1'] = f'Relatório de Métricas de Suporte - Últimos {period_days} dias'
+    ws_resumo['A1'] = f'Relatório de Métricas de Suporte - {period_label}'
     ws_resumo['A1'].font = title_font
     ws_resumo.merge_cells('A1:E1')
     ws_resumo['A2'] = f'Gerado em: {datetime.now().strftime("%d/%m/%Y %H:%M")}'
@@ -1344,6 +1354,85 @@ def export_metrics_report(request):
     widths = [8, 18, 40, 25, 20, 25, 15, 25, 18, 18]
     for col, width in enumerate(widths, start=1):
         ws_chats.column_dimensions[get_column_letter(col)].width = width
+    
+    # ========== ABA 5: Por Setor ==========
+    ws_setor = wb.create_sheet('Por Setor')
+    
+    # Headers
+    headers_setor = ['Setor', 'Total', 'Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']
+    for col, header in enumerate(headers_setor, start=1):
+        cell = ws_setor.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    # Dados por setor
+    from users.models import Sector as SectorModel
+    all_sectors = SectorModel.objects.all()
+    row_setor = 2
+    for sector in all_sectors:
+        sector_tickets = SupportChat.objects.filter(sector=sector, created_at__gte=start_date)
+        total = sector_tickets.count()
+        if total > 0:
+            ws_setor.cell(row=row_setor, column=1, value=sector.name).border = border
+            ws_setor.cell(row=row_setor, column=2, value=total).border = border
+            ws_setor.cell(row=row_setor, column=3, value=sector_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count()).border = border
+            ws_setor.cell(row=row_setor, column=4, value=sector_tickets.filter(status='EM_ANDAMENTO').count()).border = border
+            ws_setor.cell(row=row_setor, column=5, value=sector_tickets.filter(status='RESOLVIDO').count()).border = border
+            ws_setor.cell(row=row_setor, column=6, value=sector_tickets.filter(status='FECHADO').count()).border = border
+            row_setor += 1
+    
+    for col in range(1, 7):
+        ws_setor.column_dimensions[get_column_letter(col)].width = 20
+    
+    # ========== ABA 6: Média por Dia ==========
+    ws_dia = wb.create_sheet('Média por Dia')
+    
+    # Headers
+    headers_dia = ['Data', 'Tickets Criados', 'Tickets Resolvidos', 'Tickets Fechados']
+    for col, header in enumerate(headers_dia, start=1):
+        cell = ws_dia.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    # Dados diários
+    from datetime import timedelta as td_alias
+    current_date = start_date
+    row_dia = 2
+    total_days_count = 0
+    total_created_count = 0
+    while current_date.date() <= datetime.now().date():
+        day_created = SupportChat.objects.filter(created_at__date=current_date.date()).count()
+        day_resolved = SupportChat.objects.filter(created_at__date=current_date.date(), status='RESOLVIDO').count()
+        day_closed = SupportChat.objects.filter(created_at__date=current_date.date(), status='FECHADO').count()
+        
+        ws_dia.cell(row=row_dia, column=1, value=current_date.strftime('%d/%m/%Y')).border = border
+        ws_dia.cell(row=row_dia, column=2, value=day_created).border = border
+        ws_dia.cell(row=row_dia, column=3, value=day_resolved).border = border
+        ws_dia.cell(row=row_dia, column=4, value=day_closed).border = border
+        
+        total_days_count += 1
+        total_created_count += day_created
+        row_dia += 1
+        current_date += td_alias(days=1)
+    
+    # Linha de média
+    avg_per_day = round(total_created_count / total_days_count, 2) if total_days_count > 0 else 0
+    ws_dia.cell(row=row_dia + 1, column=1, value='MÉDIA POR DIA').font = Font(bold=True)
+    ws_dia.cell(row=row_dia + 1, column=1, value='MÉDIA POR DIA').border = border
+    ws_dia.cell(row=row_dia + 1, column=2, value=avg_per_day).border = border
+    ws_dia.cell(row=row_dia + 1, column=2, value=avg_per_day).font = Font(bold=True)
+    
+    for col in range(1, 5):
+        ws_dia.column_dimensions[get_column_letter(col)].width = 20
+    
+    # Atualizar aba Resumo com novas métricas
+    next_row = 5 + len(metricas) + 1
+    ws_resumo[f'A{next_row}'] = 'Média de Chamados por Dia'
+    ws_resumo[f'B{next_row}'] = avg_per_day
+    ws_resumo[f'A{next_row}'].border = border
+    ws_resumo[f'B{next_row}'].border = border
     
     # Preparar resposta
     response = HttpResponse(
@@ -1969,13 +2058,48 @@ def support_metrics(request):
             if total > 0:  # Só incluir categorias com tickets
                 categories_stats.append({
                     'name': category.name,
+                    'sector_name': category.sector.name if category.sector else 'N/A',
                     'total': total,
                     'open': cat_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
-                    'resolved': cat_tickets.filter(status='RESOLVIDO').count()
+                    'in_progress': cat_tickets.filter(status='EM_ANDAMENTO').count(),
+                    'resolved': cat_tickets.filter(status='RESOLVIDO').count(),
+                    'closed': cat_tickets.filter(status='FECHADO').count()
                 })
         
         # Ordenar por total
         categories_stats.sort(key=lambda x: x['total'], reverse=True)
+        
+        # Métricas por setor (abertura por setor)
+        from users.models import Sector as SectorModel
+        sectors_stats = []
+        if request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN':
+            all_sectors = SectorModel.objects.all()
+        else:
+            all_sectors = user_sectors
+        
+        for sector in all_sectors:
+            sector_tickets = tickets.filter(sector=sector)
+            total = sector_tickets.count()
+            if total > 0:
+                sectors_stats.append({
+                    'name': sector.name,
+                    'total': total,
+                    'open': sector_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
+                    'in_progress': sector_tickets.filter(status='EM_ANDAMENTO').count(),
+                    'resolved': sector_tickets.filter(status='RESOLVIDO').count(),
+                    'closed': sector_tickets.filter(status='FECHADO').count()
+                })
+        
+        sectors_stats.sort(key=lambda x: x['total'], reverse=True)
+        
+        # Média de chamados por dia
+        if start and end:
+            total_days = (end - start).days
+            if total_days <= 0:
+                total_days = 1
+            avg_per_day = round(total_tickets / total_days, 1)
+        else:
+            avg_per_day = 0
         
         return JsonResponse({
             'success': True,
@@ -1984,8 +2108,10 @@ def support_metrics(request):
                 'resolved_tickets': resolved_tickets,
                 'avg_resolution_time': avg_time_str,
                 'satisfaction_rate': satisfaction_rate,
+                'avg_per_day': avg_per_day,
                 'by_agent': agents_stats,
-                'by_category': categories_stats
+                'by_category': categories_stats,
+                'by_sector': sectors_stats
             }
         })
         

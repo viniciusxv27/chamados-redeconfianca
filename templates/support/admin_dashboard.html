@@ -381,7 +381,7 @@
             </div>
             
             <!-- Estatísticas Gerais -->
-            <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-5 gap-4 mb-6">
                 <div class="bg-blue-50 p-4 rounded-lg text-center">
                     <div class="text-3xl font-bold text-blue-600" id="metricTotalTickets">0</div>
                     <div class="text-sm text-gray-600 mt-1">Total de Tickets</div>
@@ -398,13 +398,64 @@
                     <div class="text-3xl font-bold text-purple-600" id="metricSatisfaction">0%</div>
                     <div class="text-sm text-gray-600 mt-1">Satisfação</div>
                 </div>
+                <div class="bg-indigo-50 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-indigo-600" id="metricAvgPerDay">0</div>
+                    <div class="text-sm text-gray-600 mt-1">Média/Dia</div>
+                </div>
             </div>
             
             <!-- Tabelas de Métricas -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <!-- Por Setor -->
+                <div class="bg-white border rounded-lg p-4">
+                    <h4 class="font-semibold mb-3"><i class="fas fa-building mr-2 text-blue-500"></i>Abertura por Setor</h4>
+                    <div class="overflow-x-auto" style="max-height: 300px; overflow-y: auto;">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Setor</th>
+                                    <th class="px-3 py-2 text-center">Total</th>
+                                    <th class="px-3 py-2 text-center">Abertos</th>
+                                    <th class="px-3 py-2 text-center">Em Andamento</th>
+                                    <th class="px-3 py-2 text-center">Resolvidos</th>
+                                    <th class="px-3 py-2 text-center">Fechados</th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricSectorsTable">
+                                <tr><td colspan="6" class="text-center text-gray-500 py-4">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Por Categoria -->
+                <div class="bg-white border rounded-lg p-4">
+                    <h4 class="font-semibold mb-3"><i class="fas fa-tags mr-2 text-green-500"></i>Abertura por Categoria</h4>
+                    <div class="overflow-x-auto" style="max-height: 300px; overflow-y: auto;">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Categoria</th>
+                                    <th class="px-3 py-2 text-left">Setor</th>
+                                    <th class="px-3 py-2 text-center">Total</th>
+                                    <th class="px-3 py-2 text-center">Abertos</th>
+                                    <th class="px-3 py-2 text-center">Em Andamento</th>
+                                    <th class="px-3 py-2 text-center">Resolvidos</th>
+                                    <th class="px-3 py-2 text-center">Fechados</th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricCategoriesTable">
+                                <tr><td colspan="7" class="text-center text-gray-500 py-4">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
             <div class="grid grid-cols-2 gap-4">
                 <!-- Por Agente -->
                 <div class="bg-white border rounded-lg p-4">
-                    <h4 class="font-semibold mb-3">Desempenho por Agente</h4>
+                    <h4 class="font-semibold mb-3"><i class="fas fa-user-tie mr-2 text-purple-500"></i>Desempenho por Agente</h4>
                     <div class="overflow-x-auto">
                         <table class="min-w-full text-sm">
                             <thead class="bg-gray-50">
@@ -422,26 +473,80 @@
                     </div>
                 </div>
                 
-                <!-- Por Categoria -->
+                <!-- Placeholder para futuras métricas -->
                 <div class="bg-white border rounded-lg p-4">
-                    <h4 class="font-semibold mb-3">Tickets por Categoria</h4>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full text-sm">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-3 py-2 text-left">Categoria</th>
-                                    <th class="px-3 py-2 text-center">Total</th>
-                                    <th class="px-3 py-2 text-center">Abertos</th>
-                                    <th class="px-3 py-2 text-center">Resolvidos</th>
-                                </tr>
-                            </thead>
-                            <tbody id="metricCategoriesTable">
-                                <tr><td colspan="4" class="text-center text-gray-500 py-4">Carregando...</td></tr>
-                            </tbody>
-                        </table>
+                    <h4 class="font-semibold mb-3"><i class="fas fa-chart-line mr-2 text-indigo-500"></i>Média de Chamados por Dia</h4>
+                    <div class="flex items-center justify-center h-40">
+                        <div class="text-center">
+                            <div class="text-5xl font-bold text-indigo-600" id="metricAvgPerDayLarge">0</div>
+                            <div class="text-gray-500 mt-2">chamados/dia no período</div>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Pesquisa de Satisfação (antes de finalizar/fechar) -->
+<div id="satisfactionSurveyModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-lg mx-4 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-star text-yellow-500 mr-2"></i>Pesquisa de Satisfação
+            </h3>
+            <button onclick="closeSatisfactionSurveyModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <p class="text-gray-600 mb-4">Antes de finalizar, como você avalia este atendimento?</p>
+        
+        <input type="hidden" id="surveyTicketId" value="">
+        <input type="hidden" id="surveyAction" value="">
+        
+        <!-- Estrelas de avaliação -->
+        <div class="flex justify-center mb-4">
+            <div class="flex space-x-2" id="surveyStars">
+                <button onclick="setSurveyRating(1)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="1">
+                    <i class="fas fa-star"></i>
+                </button>
+                <button onclick="setSurveyRating(2)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="2">
+                    <i class="fas fa-star"></i>
+                </button>
+                <button onclick="setSurveyRating(3)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="3">
+                    <i class="fas fa-star"></i>
+                </button>
+                <button onclick="setSurveyRating(4)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="4">
+                    <i class="fas fa-star"></i>
+                </button>
+                <button onclick="setSurveyRating(5)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="5">
+                    <i class="fas fa-star"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="text-center mb-4">
+            <span id="surveyRatingLabel" class="text-sm text-gray-500">Selecione uma avaliação</span>
+        </div>
+        
+        <!-- Feedback -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Comentário (opcional)</label>
+            <textarea id="surveyFeedback" rows="3" placeholder="Deixe um comentário sobre o atendimento..."
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+        
+        <!-- Botões -->
+        <div class="flex space-x-3">
+            <button onclick="submitSatisfactionSurvey()" id="submitSurveyBtn"
+                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <i class="fas fa-check mr-2"></i>Enviar Avaliação e Finalizar
+            </button>
+            <button onclick="skipSatisfactionSurvey()" 
+                    class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md transition-colors">
+                <i class="fas fa-forward mr-2"></i>Pular e Finalizar
+            </button>
         </div>
     </div>
 </div>
@@ -1517,51 +1622,13 @@ function startChat(chatId) {
 }
 
 function resolveChat(chatId) {
-    if (!confirm('Marcar este ticket como resolvido?')) return;
-    
-    fetch(`/projects/support/chat/${chatId}/resolve/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCsrfToken(),
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Ticket marcado como resolvido!', 'success');
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            alert('Erro: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao marcar como resolvido');
-    });
+    // Abrir modal de pesquisa de satisfação antes de resolver
+    openSatisfactionSurveyModal(chatId, 'resolve');
 }
 
 function closeChat(chatId) {
-    if (!confirm('Deseja fechar definitivamente este ticket? Esta ação não pode ser desfeita.')) return;
-    
-    fetch(`/projects/support/chat/${chatId}/close/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCsrfToken(),
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Ticket fechado com sucesso!', 'success');
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            alert('Erro: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao fechar ticket');
-    });
+    // Abrir modal de pesquisa de satisfação antes de fechar
+    openSatisfactionSurveyModal(chatId, 'close');
 }
 
 // Funções para os modais de administração
@@ -2205,31 +2272,70 @@ function updateMetricsDisplay(metrics) {
     document.getElementById('metricTotalTickets').textContent = metrics.total_tickets || 0;
     document.getElementById('metricResolved').textContent = metrics.resolved_tickets || 0;
     document.getElementById('metricAvgTime').textContent = metrics.avg_resolution_time || '0h';
-    document.getElementById('metricSatisfaction').textContent = (metrics.satisfaction_rate || 0) + '%';
+    document.getElementById('metricSatisfaction').textContent = (metrics.satisfaction_rate || 0) + (String(metrics.satisfaction_rate || '').includes('%') ? '' : '%');
+    document.getElementById('metricAvgPerDay').textContent = metrics.avg_per_day || 0;
+    document.getElementById('metricAvgPerDayLarge').textContent = metrics.avg_per_day || 0;
     
     // Atualizar tabela de agentes
     const agentTableBody = document.getElementById('metricAgentsTable');
     if (agentTableBody && metrics.by_agent) {
-        agentTableBody.innerHTML = metrics.by_agent.map(agent => `
-            <tr class="border-b">
-                <td class="py-2">${agent.name}</td>
-                <td class="text-center">${agent.total}</td>
-                <td class="text-center">${agent.resolved}</td>
-            </tr>
-        `).join('');
+        if (metrics.by_agent.length > 0) {
+            agentTableBody.innerHTML = metrics.by_agent.map(agent => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2">${agent.name}</td>
+                    <td class="px-3 py-2 text-center">${agent.total}</td>
+                    <td class="px-3 py-2 text-center">${agent.resolved}</td>
+                    <td class="px-3 py-2 text-center">
+                        <span class="px-2 py-1 rounded-full text-xs font-medium ${
+                            agent.rate >= 80 ? 'bg-green-100 text-green-800' : 
+                            agent.rate >= 60 ? 'bg-yellow-100 text-yellow-800' : 
+                            'bg-red-100 text-red-800'
+                        }">${agent.rate}%</span>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            agentTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+        }
     }
     
     // Atualizar tabela de categorias
     const categoryTableBody = document.getElementById('metricCategoriesTable');
     if (categoryTableBody && metrics.by_category) {
-        categoryTableBody.innerHTML = metrics.by_category.map(cat => `
-            <tr class="border-b">
-                <td class="py-2">${cat.name}</td>
-                <td class="text-center">${cat.total}</td>
-                <td class="text-center">${cat.open}</td>
-                <td class="text-center">${cat.resolved}</td>
-            </tr>
-        `).join('');
+        if (metrics.by_category.length > 0) {
+            categoryTableBody.innerHTML = metrics.by_category.map(cat => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2">${cat.name}</td>
+                    <td class="px-3 py-2">${cat.sector_name || 'N/A'}</td>
+                    <td class="px-3 py-2 text-center font-semibold">${cat.total}</td>
+                    <td class="px-3 py-2 text-center">${cat.open}</td>
+                    <td class="px-3 py-2 text-center">${cat.in_progress || 0}</td>
+                    <td class="px-3 py-2 text-center">${cat.resolved}</td>
+                    <td class="px-3 py-2 text-center">${cat.closed || 0}</td>
+                </tr>
+            `).join('');
+        } else {
+            categoryTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+        }
+    }
+    
+    // Atualizar tabela de setores
+    const sectorTableBody = document.getElementById('metricSectorsTable');
+    if (sectorTableBody && metrics.by_sector) {
+        if (metrics.by_sector.length > 0) {
+            sectorTableBody.innerHTML = metrics.by_sector.map(sector => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2 font-medium">${sector.name}</td>
+                    <td class="px-3 py-2 text-center font-semibold">${sector.total}</td>
+                    <td class="px-3 py-2 text-center">${sector.open}</td>
+                    <td class="px-3 py-2 text-center">${sector.in_progress}</td>
+                    <td class="px-3 py-2 text-center">${sector.resolved}</td>
+                    <td class="px-3 py-2 text-center">${sector.closed}</td>
+                </tr>
+            `).join('');
+        } else {
+            sectorTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+        }
     }
 }
 
@@ -2239,10 +2345,12 @@ function renderMetrics(metrics) {
     document.getElementById('metricResolved').textContent = metrics.resolved_tickets || 0;
     document.getElementById('metricAvgTime').textContent = metrics.avg_resolution_time || '0h';
     document.getElementById('metricSatisfaction').textContent = metrics.satisfaction_rate || '0%';
+    document.getElementById('metricAvgPerDay').textContent = metrics.avg_per_day || 0;
+    document.getElementById('metricAvgPerDayLarge').textContent = metrics.avg_per_day || 0;
     
     // Tabela por Agente
     const agentTable = document.getElementById('metricsAgentTable');
-    if (metrics.by_agent && metrics.by_agent.length > 0) {
+    if (agentTable && metrics.by_agent && metrics.by_agent.length > 0) {
         agentTable.innerHTML = metrics.by_agent.map(agent => `
             <tr class="border-b hover:bg-gray-50">
                 <td class="px-3 py-2">${agent.name}</td>
@@ -2259,23 +2367,43 @@ function renderMetrics(metrics) {
                 </td>
             </tr>
         `).join('');
-    } else {
+    } else if (agentTable) {
         agentTable.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
     }
     
     // Tabela por Categoria
     const categoryTable = document.getElementById('metricsCategoryTable');
-    if (metrics.by_category && metrics.by_category.length > 0) {
+    if (categoryTable && metrics.by_category && metrics.by_category.length > 0) {
         categoryTable.innerHTML = metrics.by_category.map(category => `
             <tr class="border-b hover:bg-gray-50">
                 <td class="px-3 py-2">${category.name}</td>
-                <td class="px-3 py-2 text-center">${category.total}</td>
+                <td class="px-3 py-2">${category.sector_name || 'N/A'}</td>
+                <td class="px-3 py-2 text-center font-semibold">${category.total}</td>
                 <td class="px-3 py-2 text-center">${category.open}</td>
+                <td class="px-3 py-2 text-center">${category.in_progress || 0}</td>
                 <td class="px-3 py-2 text-center">${category.resolved}</td>
+                <td class="px-3 py-2 text-center">${category.closed || 0}</td>
             </tr>
         `).join('');
-    } else {
-        categoryTable.innerHTML = '<tr><td colspan="4" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+    } else if (categoryTable) {
+        categoryTable.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
+    }
+    
+    // Tabela por Setor
+    const sectorTable = document.getElementById('metricSectorsTable');
+    if (sectorTable && metrics.by_sector && metrics.by_sector.length > 0) {
+        sectorTable.innerHTML = metrics.by_sector.map(sector => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-3 py-2 font-medium">${sector.name}</td>
+                <td class="px-3 py-2 text-center font-semibold">${sector.total}</td>
+                <td class="px-3 py-2 text-center">${sector.open}</td>
+                <td class="px-3 py-2 text-center">${sector.in_progress}</td>
+                <td class="px-3 py-2 text-center">${sector.resolved}</td>
+                <td class="px-3 py-2 text-center">${sector.closed}</td>
+            </tr>
+        `).join('');
+    } else if (sectorTable) {
+        sectorTable.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4">Nenhum dado disponível</td></tr>';
     }
 }
 
@@ -2292,6 +2420,135 @@ function showToast(message, type = 'info') {
         toast.style.transform = 'translateY(100%)';
         setTimeout(() => document.body.removeChild(toast), 300);
     }, 3000);
+}
+
+// ===== PESQUISA DE SATISFAÇÃO =====
+let currentSurveyRating = 0;
+
+function openSatisfactionSurveyModal(chatId, action) {
+    currentSurveyRating = 0;
+    document.getElementById('surveyTicketId').value = chatId;
+    document.getElementById('surveyAction').value = action;
+    document.getElementById('surveyFeedback').value = '';
+    document.getElementById('surveyRatingLabel').textContent = 'Selecione uma avaliação';
+    document.getElementById('submitSurveyBtn').disabled = true;
+    
+    // Reset estrelas
+    document.querySelectorAll('.survey-star').forEach(star => {
+        star.classList.remove('text-yellow-400');
+        star.classList.add('text-gray-300');
+    });
+    
+    document.getElementById('satisfactionSurveyModal').classList.remove('hidden');
+}
+
+function closeSatisfactionSurveyModal() {
+    document.getElementById('satisfactionSurveyModal').classList.add('hidden');
+    currentSurveyRating = 0;
+}
+
+function setSurveyRating(rating) {
+    currentSurveyRating = rating;
+    const labels = {
+        1: 'Muito Insatisfeito',
+        2: 'Insatisfeito', 
+        3: 'Neutro',
+        4: 'Satisfeito',
+        5: 'Muito Satisfeito'
+    };
+    
+    document.getElementById('surveyRatingLabel').textContent = labels[rating];
+    document.getElementById('submitSurveyBtn').disabled = false;
+    
+    // Atualizar estrelas
+    document.querySelectorAll('.survey-star').forEach(star => {
+        const starRating = parseInt(star.getAttribute('data-rating'));
+        if (starRating <= rating) {
+            star.classList.remove('text-gray-300');
+            star.classList.add('text-yellow-400');
+        } else {
+            star.classList.remove('text-yellow-400');
+            star.classList.add('text-gray-300');
+        }
+    });
+}
+
+function submitSatisfactionSurvey() {
+    const chatId = document.getElementById('surveyTicketId').value;
+    const action = document.getElementById('surveyAction').value;
+    const feedback = document.getElementById('surveyFeedback').value;
+    
+    if (!currentSurveyRating) {
+        alert('Por favor, selecione uma avaliação');
+        return;
+    }
+    
+    // Primeiro enviar a avaliação
+    fetch(`/projects/support/chat/${chatId}/rate/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({
+            rating: currentSurveyRating,
+            feedback: feedback
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Agora executar a ação (resolve ou close)
+            executeTicketAction(chatId, action);
+        } else {
+            // Se a avaliação falhou, tentar a ação mesmo assim
+            console.warn('Avaliação não foi salva, mas prosseguindo com a ação:', data.error);
+            executeTicketAction(chatId, action);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao registrar avaliação:', error);
+        // Prosseguir com a ação mesmo se a avaliação falhar
+        executeTicketAction(chatId, action);
+    });
+    
+    closeSatisfactionSurveyModal();
+}
+
+function skipSatisfactionSurvey() {
+    const chatId = document.getElementById('surveyTicketId').value;
+    const action = document.getElementById('surveyAction').value;
+    closeSatisfactionSurveyModal();
+    executeTicketAction(chatId, action);
+}
+
+function executeTicketAction(chatId, action) {
+    const url = action === 'resolve' 
+        ? `/projects/support/chat/${chatId}/resolve/`
+        : `/projects/support/chat/${chatId}/close/`;
+    const successMsg = action === 'resolve'
+        ? 'Ticket marcado como resolvido!'
+        : 'Ticket fechado com sucesso!';
+    
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(successMsg, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao processar ação');
+    });
 }
 </script>
 {% endblock %}
