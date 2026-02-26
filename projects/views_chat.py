@@ -661,6 +661,7 @@ def support_admin_dashboard(request):
     open_chats = SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count()
     in_progress_chats = SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count()
     resolved_chats = SupportChat.objects.filter(base_filter, status='RESOLVIDO').count()
+    closed_chats = SupportChat.objects.filter(base_filter, status='FECHADO').count()
     
     # Chats por prioridade (filtrados)
     priority_stats = SupportChat.objects.filter(base_filter).values('priority').annotate(count=Count('id'))
@@ -668,8 +669,11 @@ def support_admin_dashboard(request):
     # Avaliação média (filtrada)
     avg_rating = SupportChatRating.objects.filter(chat__in=SupportChat.objects.filter(base_filter)).aggregate(avg=Avg('rating'))['avg'] or 0
     
-    # Chats recentes (filtrados por setor)
-    recent_chats = SupportChat.objects.filter(base_filter).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')[:20]
+    # Chats (filtrados por setor) - excluir fechados antigos para performance
+    from datetime import timedelta
+    recent_chats = SupportChat.objects.filter(base_filter).exclude(
+        status='FECHADO', closed_at__lt=timezone.now() - timedelta(days=30)
+    ).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')
     
     # Agentes de suporte (filtrados por setor)
     if request.user.is_superuser:
@@ -747,6 +751,7 @@ def support_admin_dashboard(request):
             'open': open_chats,
             'in_progress': in_progress_chats,
             'resolved': resolved_chats,
+            'closed': closed_chats,
             'avg_rating': round(avg_rating, 1)
         },
         'priority_stats': list(priority_stats),
@@ -1003,6 +1008,7 @@ def support_admin_template(request):
         'open': SupportChat.objects.filter(chats_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(chats_filter, status='EM_ANDAMENTO').count(),
         'resolved': SupportChat.objects.filter(chats_filter, status='RESOLVIDO').count(),
+        'closed': SupportChat.objects.filter(chats_filter, status='FECHADO').count(),
         'avg_rating': round(SupportChatRating.objects.filter(
             chat__in=SupportChat.objects.filter(chats_filter)
         ).aggregate(avg_rating=models.Avg('rating'))['avg_rating'] or 0, 1)
@@ -2198,6 +2204,7 @@ def poll_dashboard_updates(request):
         'open': SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count(),
         'resolved': SupportChat.objects.filter(base_filter, status='RESOLVIDO').count(),
+        'closed': SupportChat.objects.filter(base_filter, status='FECHADO').count(),
     }
     
     logger.info(f'[Polling] Stats: {stats}')

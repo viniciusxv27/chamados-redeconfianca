@@ -760,34 +760,40 @@ function stopTitleBlink() {
 
 function updateStatCounters(stats) {
     // Atualizar os contadores no topo do dashboard
-    const containers = document.querySelectorAll('.grid > div');
+    const containers = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-5 > div');
+    if (containers.length >= 1) {
+        // Total
+        const totalCounter = containers[0].querySelector('.text-3xl');
+        if (totalCounter) totalCounter.textContent = stats.total;
+    }
     if (containers.length >= 2) {
         // Abertos
         const openCounter = containers[1].querySelector('.text-3xl');
         if (openCounter) openCounter.textContent = stats.open;
-        
+    }
+    if (containers.length >= 3) {
         // Em Andamento
-        if (containers.length >= 3) {
-            const progressCounter = containers[2].querySelector('.text-3xl');
-            if (progressCounter) progressCounter.textContent = stats.in_progress;
-        }
-        
+        const progressCounter = containers[2].querySelector('.text-3xl');
+        if (progressCounter) progressCounter.textContent = stats.in_progress;
+    }
+    if (containers.length >= 4) {
         // Resolvidos
-        if (containers.length >= 4) {
-            const resolvedCounter = containers[3].querySelector('.text-3xl');
-            if (resolvedCounter) resolvedCounter.textContent = stats.resolved;
-        }
+        const resolvedCounter = containers[3].querySelector('.text-3xl');
+        if (resolvedCounter) resolvedCounter.textContent = stats.resolved;
     }
     
-    // Atualizar badges nas colunas
-    const openBadge = document.querySelector('#open-tickets').previousElementSibling?.querySelector('.bg-red-200');
+    // Atualizar badges nas colunas do kanban
+    const openBadge = document.querySelector('#open-tickets').parentElement.querySelector('.bg-red-200');
     if (openBadge) openBadge.textContent = stats.open;
     
-    const progressBadge = document.querySelector('#progress-tickets').previousElementSibling?.querySelector('.bg-yellow-200');
+    const progressBadge = document.querySelector('#progress-tickets').parentElement.querySelector('.bg-yellow-200');
     if (progressBadge) progressBadge.textContent = stats.in_progress;
     
-    const resolvedBadge = document.querySelector('#resolved-tickets').previousElementSibling?.querySelector('.bg-blue-200');
-    if (resolvedBadge) resolvedBadge.textContent = stats.resolved;
+    const resolvedCount = document.getElementById('resolved-count');
+    if (resolvedCount) resolvedCount.textContent = stats.resolved;
+    
+    const closedCount = document.getElementById('closed-count');
+    if (closedCount) closedCount.textContent = stats.closed !== undefined ? stats.closed : 0;
 }
 
 function loadSupportTickets() {
@@ -816,6 +822,11 @@ function loadSupportTickets() {
                         console.log('[LoadTickets] Container', id, 'limpo');
                     }
                 });
+            }
+            // Atualizar contadores com stats do backend (valores corretos do banco)
+            if (data.stats) {
+                console.log('[LoadTickets] Atualizando contadores com stats do backend:', data.stats);
+                updateStatCounters(data.stats);
             }
         })
         .catch(error => {

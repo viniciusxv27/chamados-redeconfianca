@@ -17,14 +17,22 @@ def unread_notifications_count(request):
 
 def user_support_sectors(request):
     """
-    Context processor para disponibilizar TODOS os setores para o chat de suporte.
-    Qualquer usuário autenticado pode abrir chat de suporte para qualquer setor.
-    Exclui setores que contêm "loja" no nome.
+    Context processor para disponibilizar setores que possuem categorias cadastradas
+    para o chat de suporte. Exclui setores que contêm "loja" no nome e setores sem
+    categorias ativas.
     """
     if request.user.is_authenticated:
         from users.models import Sector
-        # Retornar TODOS os setores, excluindo os que contêm "loja" no nome
-        all_sectors = Sector.objects.exclude(name__icontains='loja').order_by('name')
+        from django.db.models import Count, Q
+        # Retornar apenas setores que possuem ao menos uma categoria ativa, excluindo "loja"
+        all_sectors = Sector.objects.exclude(
+            name__icontains='loja'
+        ).annotate(
+            active_categories_count=Count(
+                'support_categories',
+                filter=Q(support_categories__is_active=True)
+            )
+        ).filter(active_categories_count__gt=0).order_by('name')
         sectors_data = [{'id': sector.id, 'name': sector.name} for sector in all_sectors]
         return {
             'user_support_sectors': sectors_data,
