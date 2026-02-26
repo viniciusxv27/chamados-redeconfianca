@@ -127,7 +127,7 @@
     </div>
 
     <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
             <div class="text-3xl font-bold text-blue-600">{{ stats.total }}</div>
             <div class="text-gray-600 text-sm mt-1">Total de Tickets</div>
@@ -143,6 +143,10 @@
         <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
             <div class="text-3xl font-bold text-green-600">{{ stats.resolved }}</div>
             <div class="text-gray-600 text-sm mt-1">Resolvidos</div>
+        </div>
+        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
+            <div class="text-3xl font-bold text-gray-600">{{ stats.closed }}</div>
+            <div class="text-gray-600 text-sm mt-1">Fechados</div>
         </div>
         <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
             <div class="text-3xl font-bold text-purple-600">{{ stats.avg_rating }}</div>
@@ -760,7 +764,7 @@ function stopTitleBlink() {
 
 function updateStatCounters(stats) {
     // Atualizar os contadores no topo do dashboard
-    const containers = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-5 > div');
+    const containers = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-6 > div');
     if (containers.length >= 1) {
         // Total
         const totalCounter = containers[0].querySelector('.text-3xl');
@@ -780,6 +784,11 @@ function updateStatCounters(stats) {
         // Resolvidos
         const resolvedCounter = containers[3].querySelector('.text-3xl');
         if (resolvedCounter) resolvedCounter.textContent = stats.resolved;
+    }
+    if (containers.length >= 5) {
+        // Fechados
+        const closedCounter = containers[4].querySelector('.text-3xl');
+        if (closedCounter) closedCounter.textContent = stats.closed !== undefined ? stats.closed : 0;
     }
     
     // Atualizar badges nas colunas do kanban
