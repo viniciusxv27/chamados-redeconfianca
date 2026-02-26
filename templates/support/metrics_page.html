@@ -1,0 +1,638 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Métricas de Suporte{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kpi-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .chart-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .table-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .table-card table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    .table-scroll {
+        max-height: 350px;
+        overflow-y: auto;
+    }
+    @media (max-width: 640px) {
+        .kpi-value { font-size: 1.75rem !important; }
+        .chart-container { height: 220px !important; }
+    }
+    @media print {
+        .no-print { display: none !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="/projects/support/admin/template/" class="text-gray-400 hover:text-gray-600 transition-colors no-print">
+                    <i class="fas fa-arrow-left text-lg"></i>
+                </a>
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">
+                        <i class="fas fa-chart-bar text-purple-500 mr-2"></i>Métricas e Relatórios
+                    </h1>
+                    <p class="text-gray-500 text-sm mt-1">Visão completa dos atendimentos de suporte</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mb-6 shadow-sm no-print">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <i class="fas fa-calendar-alt mr-1 text-gray-400"></i>Data Inicial
+                </label>
+                <input type="date" id="metricsStartDate" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <i class="fas fa-calendar-alt mr-1 text-gray-400"></i>Data Final
+                </label>
+                <input type="date" id="metricsEndDate" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition">
+            </div>
+            <div class="flex items-end">
+                <button onclick="loadMetrics()" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-2.5 px-4 rounded-lg transition-colors font-medium">
+                    <i class="fas fa-search mr-2"></i>Buscar
+                </button>
+            </div>
+            <div class="flex items-end">
+                <button onclick="exportMetricsToExcel()" class="w-full bg-green-500 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg transition-colors font-medium">
+                    <i class="fas fa-file-excel mr-2"></i>Exportar Excel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="metricsLoading" class="hidden">
+        <div class="flex items-center justify-center py-12">
+            <div class="text-center">
+                <i class="fas fa-spinner fa-spin text-4xl text-purple-500 mb-3"></i>
+                <p class="text-gray-500">Carregando métricas...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteúdo das métricas -->
+    <div id="metricsContent">
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
+            <div class="kpi-card bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 p-4 sm:p-5 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-blue-600" id="metricTotalTickets">0</div>
+                <div class="text-xs sm:text-sm text-blue-800/70 mt-1 font-medium">Total de Tickets</div>
+                <div class="mt-2"><i class="fas fa-ticket-alt text-blue-400"></i></div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-green-50 to-green-100 border border-green-200 p-4 sm:p-5 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-green-600" id="metricResolved">0</div>
+                <div class="text-xs sm:text-sm text-green-800/70 mt-1 font-medium">Resolvidos</div>
+                <div class="mt-2"><i class="fas fa-check-circle text-green-400"></i></div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200 p-4 sm:p-5 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-yellow-600" id="metricAvgTime">0h</div>
+                <div class="text-xs sm:text-sm text-yellow-800/70 mt-1 font-medium">Tempo Médio</div>
+                <div class="mt-2"><i class="fas fa-clock text-yellow-400"></i></div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 p-4 sm:p-5 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-purple-600" id="metricSatisfaction">N/A</div>
+                <div class="text-xs sm:text-sm text-purple-800/70 mt-1 font-medium">Satisfação</div>
+                <div class="mt-2"><i class="fas fa-star text-purple-400"></i></div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 p-4 sm:p-5 rounded-xl text-center col-span-2 sm:col-span-1">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-indigo-600" id="metricAvgPerDay">0</div>
+                <div class="text-xs sm:text-sm text-indigo-800/70 mt-1 font-medium">Média/Dia</div>
+                <div class="mt-2"><i class="fas fa-chart-line text-indigo-400"></i></div>
+            </div>
+        </div>
+
+        <!-- Gráficos - Linha 1 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-chart-bar text-blue-500 text-sm"></i>
+                    </span>
+                    Chamados por Setor (Destino)
+                </h4>
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <canvas id="chartBySector"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-chart-pie text-orange-500 text-sm"></i>
+                    </span>
+                    Chamados por Setor do Usuário
+                </h4>
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <canvas id="chartByUserSector"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráficos - Linha 2 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-chart-bar text-green-500 text-sm"></i>
+                    </span>
+                    Chamados por Categoria
+                </h4>
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <canvas id="chartByCategory"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-chart-bar text-purple-500 text-sm"></i>
+                    </span>
+                    Desempenho dos Agentes
+                </h4>
+                <div class="chart-container" style="position: relative; height: 300px;">
+                    <canvas id="chartByAgent"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabelas - Linha 1 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <!-- Por Setor -->
+            <div class="table-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-building text-blue-500 text-sm"></i>
+                    </span>
+                    Abertura por Setor (Destino)
+                </h4>
+                <div class="table-scroll overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Setor</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Abertos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Andamento</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Resolvidos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Fechados</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metricSectorsTable">
+                            <tr><td colspan="6" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Por Setor do Usuário -->
+            <div class="table-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-users text-orange-500 text-sm"></i>
+                    </span>
+                    Chamados por Setor do Usuário
+                </h4>
+                <div class="table-scroll overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Setor</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Abertos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Andamento</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Resolvidos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Fechados</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metricUserSectorsTable">
+                            <tr><td colspan="6" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabelas - Linha 2 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <!-- Por Categoria -->
+            <div class="table-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-tags text-green-500 text-sm"></i>
+                    </span>
+                    Abertura por Categoria
+                </h4>
+                <div class="table-scroll overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Categoria</th>
+                                <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Setor</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Abertos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Andamento</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Resolvidos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Fechados</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metricCategoriesTable">
+                            <tr><td colspan="7" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Média por Dia + Agentes -->
+            <div class="table-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-chart-line text-indigo-500 text-sm"></i>
+                    </span>
+                    Média de Chamados por Dia
+                </h4>
+                <div class="flex items-center justify-center py-8">
+                    <div class="text-center">
+                        <div class="text-5xl sm:text-6xl font-bold text-indigo-600" id="metricAvgPerDayLarge">0</div>
+                        <div class="text-gray-500 mt-2 text-sm">chamados/dia no período</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela Agentes -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <div class="table-card">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-user-tie text-purple-500 text-sm"></i>
+                    </span>
+                    Desempenho por Agente
+                </h4>
+                <div class="table-scroll overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Agente</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Tickets</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Resolvidos</th>
+                                <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Taxa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metricAgentsTable">
+                            <tr><td colspan="4" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// ===== REFERÊNCIAS DOS GRÁFICOS =====
+let chartBySector = null;
+let chartByUserSector = null;
+let chartByCategory = null;
+let chartByAgent = null;
+
+const CHART_COLORS = [
+    'rgba(59, 130, 246, 0.8)',
+    'rgba(16, 185, 129, 0.8)',
+    'rgba(245, 158, 11, 0.8)',
+    'rgba(239, 68, 68, 0.8)',
+    'rgba(139, 92, 246, 0.8)',
+    'rgba(236, 72, 153, 0.8)',
+    'rgba(20, 184, 166, 0.8)',
+    'rgba(249, 115, 22, 0.8)',
+    'rgba(99, 102, 241, 0.8)',
+    'rgba(168, 85, 247, 0.8)',
+    'rgba(34, 197, 94, 0.8)',
+    'rgba(234, 179, 8, 0.8)',
+];
+const CHART_BORDERS = CHART_COLORS.map(c => c.replace('0.8)', '1)'));
+
+// ===== INICIALIZAÇÃO =====
+document.addEventListener('DOMContentLoaded', function() {
+    // Definir datas padrão (últimos 30 dias)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+
+    document.getElementById('metricsEndDate').valueAsDate = endDate;
+    document.getElementById('metricsStartDate').valueAsDate = startDate;
+
+    // Carregar métricas automaticamente
+    loadMetrics();
+});
+
+// ===== CSRF TOKEN =====
+function getCsrfToken() {
+    const token = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (token) return token.value;
+    // Fallback: buscar do cookie
+    const cookies = document.cookie.split(';');
+    for (let c of cookies) {
+        c = c.trim();
+        if (c.startsWith('csrftoken=')) return c.substring(10);
+    }
+    return '';
+}
+
+// ===== CARREGAR MÉTRICAS =====
+function loadMetrics() {
+    const startDate = document.getElementById('metricsStartDate').value;
+    const endDate = document.getElementById('metricsEndDate').value;
+
+    if (!startDate || !endDate) {
+        showToast('Por favor, selecione o período', 'error');
+        return;
+    }
+
+    // Mostrar loading
+    document.getElementById('metricsLoading').classList.remove('hidden');
+    document.getElementById('metricsContent').classList.add('opacity-50');
+
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+
+    fetch(`/projects/support/metrics/api/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('metricsLoading').classList.add('hidden');
+            document.getElementById('metricsContent').classList.remove('opacity-50');
+
+            if (data.success) {
+                updateMetricsDisplay(data.metrics);
+                showToast('Métricas carregadas com sucesso', 'success');
+            } else {
+                showToast('Erro ao carregar métricas: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            document.getElementById('metricsLoading').classList.add('hidden');
+            document.getElementById('metricsContent').classList.remove('opacity-50');
+            console.error('Erro:', error);
+            showToast('Erro ao carregar métricas', 'error');
+        });
+}
+
+// ===== EXPORTAR EXCEL =====
+function exportMetricsToExcel() {
+    const startDate = document.getElementById('metricsStartDate').value;
+    const endDate = document.getElementById('metricsEndDate').value;
+
+    if (!startDate || !endDate) {
+        showToast('Selecione o período antes de exportar', 'error');
+        return;
+    }
+
+    showToast('Gerando relatório em Excel...', 'info');
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+    window.open(`/projects/support/metrics/export/?${params}`, '_blank');
+
+    setTimeout(() => showToast('Download iniciado!', 'success'), 1000);
+}
+
+// ===== ATUALIZAR DISPLAY =====
+function updateMetricsDisplay(metrics) {
+    // KPIs
+    document.getElementById('metricTotalTickets').textContent = metrics.total_tickets || 0;
+    document.getElementById('metricResolved').textContent = metrics.resolved_tickets || 0;
+    document.getElementById('metricAvgTime').textContent = metrics.avg_resolution_time || '0h';
+    const satVal = metrics.satisfaction_rate || 'N/A';
+    document.getElementById('metricSatisfaction').textContent = satVal + (String(satVal).includes('%') || satVal === 'N/A' ? '' : '%');
+    document.getElementById('metricAvgPerDay').textContent = metrics.avg_per_day || 0;
+    document.getElementById('metricAvgPerDayLarge').textContent = metrics.avg_per_day || 0;
+
+    // Tabela: Agentes
+    renderTable('metricAgentsTable', metrics.by_agent, [
+        { key: 'name', align: 'left' },
+        { key: 'total', align: 'center' },
+        { key: 'resolved', align: 'center' },
+        { key: 'rate', align: 'center', render: (v) => `<span class="px-2 py-1 rounded-full text-xs font-medium ${v >= 80 ? 'bg-green-100 text-green-800' : v >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}">${v}%</span>` }
+    ], 4);
+
+    // Tabela: Categorias
+    renderTable('metricCategoriesTable', metrics.by_category, [
+        { key: 'name', align: 'left' },
+        { key: 'sector_name', align: 'left', fallback: 'N/A' },
+        { key: 'total', align: 'center', bold: true },
+        { key: 'open', align: 'center' },
+        { key: 'in_progress', align: 'center', fallback: 0 },
+        { key: 'resolved', align: 'center' },
+        { key: 'closed', align: 'center', fallback: 0 }
+    ], 7);
+
+    // Tabela: Setores
+    renderTable('metricSectorsTable', metrics.by_sector, [
+        { key: 'name', align: 'left', bold: true },
+        { key: 'total', align: 'center', bold: true },
+        { key: 'open', align: 'center' },
+        { key: 'in_progress', align: 'center' },
+        { key: 'resolved', align: 'center' },
+        { key: 'closed', align: 'center' }
+    ], 6);
+
+    // Tabela: Setor do Usuário
+    renderTable('metricUserSectorsTable', metrics.by_user_sector, [
+        { key: 'name', align: 'left', bold: true },
+        { key: 'total', align: 'center', bold: true },
+        { key: 'open', align: 'center' },
+        { key: 'in_progress', align: 'center' },
+        { key: 'resolved', align: 'center' },
+        { key: 'closed', align: 'center' }
+    ], 6);
+
+    // Gráficos
+    renderCharts(metrics);
+}
+
+function renderTable(tbodyId, data, columns, colspan) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-gray-400 py-6">Nenhum dado disponível</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = data.map(item => {
+        const cells = columns.map(col => {
+            let val = item[col.key];
+            if (val === undefined || val === null) val = col.fallback !== undefined ? col.fallback : '';
+            if (col.render) val = col.render(val);
+            const boldClass = col.bold ? ' font-semibold' : '';
+            return `<td class="px-3 py-2.5 text-${col.align}${boldClass}">${val}</td>`;
+        }).join('');
+        return `<tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">${cells}</tr>`;
+    }).join('');
+}
+
+// ===== GRÁFICOS =====
+function destroyCharts() {
+    if (chartBySector) { chartBySector.destroy(); chartBySector = null; }
+    if (chartByUserSector) { chartByUserSector.destroy(); chartByUserSector = null; }
+    if (chartByCategory) { chartByCategory.destroy(); chartByCategory = null; }
+    if (chartByAgent) { chartByAgent.destroy(); chartByAgent = null; }
+}
+
+function renderCharts(metrics) {
+    destroyCharts();
+
+    // Por Setor (destino) - Barra horizontal
+    if (metrics.by_sector && metrics.by_sector.length > 0) {
+        const ctx1 = document.getElementById('chartBySector');
+        if (ctx1) {
+            chartBySector = new Chart(ctx1.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: metrics.by_sector.map(s => s.name),
+                    datasets: [{
+                        label: 'Total',
+                        data: metrics.by_sector.map(s => s.total),
+                        backgroundColor: CHART_COLORS.slice(0, metrics.by_sector.length),
+                        borderColor: CHART_BORDERS.slice(0, metrics.by_sector.length),
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+        }
+    }
+
+    // Por Setor do Usuário - Doughnut
+    if (metrics.by_user_sector && metrics.by_user_sector.length > 0) {
+        const ctx2 = document.getElementById('chartByUserSector');
+        if (ctx2) {
+            chartByUserSector = new Chart(ctx2.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: metrics.by_user_sector.map(s => s.name),
+                    datasets: [{
+                        data: metrics.by_user_sector.map(s => s.total),
+                        backgroundColor: CHART_COLORS.slice(0, metrics.by_user_sector.length),
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+    }
+
+    // Por Categoria - Barra empilhada
+    if (metrics.by_category && metrics.by_category.length > 0) {
+        const ctx3 = document.getElementById('chartByCategory');
+        if (ctx3) {
+            chartByCategory = new Chart(ctx3.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: metrics.by_category.map(c => c.name),
+                    datasets: [
+                        { label: 'Abertos', data: metrics.by_category.map(c => c.open), backgroundColor: 'rgba(239, 68, 68, 0.7)', borderRadius: 2 },
+                        { label: 'Em Andamento', data: metrics.by_category.map(c => c.in_progress || 0), backgroundColor: 'rgba(245, 158, 11, 0.7)', borderRadius: 2 },
+                        { label: 'Resolvidos', data: metrics.by_category.map(c => c.resolved), backgroundColor: 'rgba(59, 130, 246, 0.7)', borderRadius: 2 },
+                        { label: 'Fechados', data: metrics.by_category.map(c => c.closed || 0), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 2 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        }
+    }
+
+    // Agentes - Barra horizontal
+    if (metrics.by_agent && metrics.by_agent.length > 0) {
+        const ctx4 = document.getElementById('chartByAgent');
+        if (ctx4) {
+            chartByAgent = new Chart(ctx4.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: metrics.by_agent.map(a => a.name),
+                    datasets: [
+                        { label: 'Total', data: metrics.by_agent.map(a => a.total), backgroundColor: 'rgba(139, 92, 246, 0.7)', borderRadius: 3 },
+                        { label: 'Resolvidos', data: metrics.by_agent.map(a => a.resolved), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 3 }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                    scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+        }
+    }
+}
+
+// ===== TOAST =====
+function showToast(message, type = 'info') {
+    const colors = { error: 'bg-red-500', success: 'bg-green-500', info: 'bg-blue-500' };
+    const icons = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle' };
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg text-white shadow-lg transition-all duration-300 ${colors[type] || colors.info}`;
+    toast.innerHTML = `<i class="fas fa-${icons[type] || icons.info} mr-2"></i>${message}`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(100%)';
+        setTimeout(() => { if (toast.parentNode) document.body.removeChild(toast); }, 300);
+    }, 3000);
+}
+</script>
+{% endblock %}

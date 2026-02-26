@@ -452,18 +452,19 @@ def send_support_message(request, chat_id):
 
 @login_required
 def get_sectors(request):
-    """Buscar TODOS os setores para o formulário de suporte - qualquer usuário pode abrir chat para qualquer setor"""
+    """Buscar setores que tenham categorias cadastradas para o formulário de suporte"""
     from users.models import Sector
+    from django.db.models import Count, Q
     
-    # Retornar todos os setores - usuários devem poder abrir chat de suporte para qualquer setor
-    sectors = Sector.objects.all().order_by('name')
+    # Retornar apenas setores que possuem ao menos uma categoria ativa
+    sectors = Sector.objects.annotate(
+        active_categories_count=Count(
+            'support_categories',
+            filter=Q(support_categories__is_active=True)
+        )
+    ).filter(active_categories_count__gt=0).order_by('name')
     
-    sectors_data = []
-    for s in sectors:
-        sectors_data.append({'id': s.id, 'name': s.name})
-    
-    # Ordenar por nome
-    sectors_data.sort(key=lambda x: x['name'])
+    sectors_data = [{'id': s.id, 'name': s.name} for s in sectors]
     
     return JsonResponse({'success': True, 'sectors': sectors_data})
 
@@ -1039,131 +1040,18 @@ def assign_chat_to_agent(request, chat_id):
     return JsonResponse({'error': 'Método inválido'}, status=405)
 
 
-def support_metrics(request):
-    """Métricas de suporte para supervisores"""
-    # Permitir acesso para SUPERVISOR ou hierarquia maior
-    if not (request.user.is_superuser or request.user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']):
+@login_required
+def support_metrics_page(request):
+    """Página completa de métricas de suporte"""
+    # Permitir acesso para SUPERVISOR ou hierarquia maior, ou agentes
+    is_supervisor_or_higher = request.user.is_superuser or request.user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']
+    is_support_agent = SupportAgent.objects.filter(user=request.user, is_active=True).exists()
+    
+    if not (is_supervisor_or_higher or is_support_agent):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('core:home')
     
-    from datetime import datetime, timedelta
-    from django.db.models import Count, Avg, Q
-    import json
-    
-    # Período selecionado (padrão: 30 dias)
-    period_days = int(request.GET.get('period', 30))
-    start_date = datetime.now() - timedelta(days=period_days)
-    
-    # Estatísticas principais
-    total_tickets = SupportChat.objects.filter(created_at__gte=start_date).count()
-    resolved_tickets = SupportChat.objects.filter(
-        created_at__gte=start_date, 
-        status='FECHADO'
-    ).count()
-    
-    resolution_rate = round((resolved_tickets / total_tickets * 100) if total_tickets > 0 else 0, 1)
-    
-    # Tempo médio de resposta (simulado - seria calculado com base nas mensagens)
-    avg_response_time = round(4.5, 1)  # Em horas
-    
-    # Avaliação média
-    avg_rating = round(SupportChatRating.objects.filter(
-        chat__created_at__gte=start_date
-    ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0, 1)
-    
-    # Dados para gráficos (simulados para demonstração)
-    daily_labels = []
-    daily_tickets = []
-    daily_resolved = []
-    
-    for i in range(7):  # Últimos 7 dias
-        date = datetime.now() - timedelta(days=i)
-        daily_labels.insert(0, date.strftime('%d/%m'))
-        daily_tickets.insert(0, SupportChat.objects.filter(
-            created_at__date=date.date()
-        ).count())
-        daily_resolved.insert(0, SupportChat.objects.filter(
-            created_at__date=date.date(),
-            status='FECHADO'
-        ).count())
-    
-    # Distribuição por status
-    status_data = [
-        SupportChat.objects.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
-        SupportChat.objects.filter(status='EM_ANDAMENTO').count(),
-        SupportChat.objects.filter(status='RESOLVIDO').count(),
-        SupportChat.objects.filter(status='FECHADO').count(),
-    ]
-    
-    # Top categorias
-    top_categories = SupportCategory.objects.annotate(
-        count=Count('supportchat')
-    ).order_by('-count')[:5]
-    
-    categories_data = []
-    total_cats = sum(cat.count for cat in top_categories)
-    for cat in top_categories:
-        percentage = round((cat.count / total_cats * 100) if total_cats > 0 else 0, 1)
-        categories_data.append({
-            'name': cat.name,
-            'count': cat.count,
-            'percentage': percentage
-        })
-    
-    # Performance dos agentes (simulado)
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-    
-    agents = User.objects.filter(is_staff=True)[:5]
-    agent_performance = []
-    for agent in agents:
-        tickets_resolved = SupportChat.objects.filter(
-            assigned_to=agent,
-            status='FECHADO',
-            created_at__gte=start_date
-        ).count()
-        
-        avg_agent_rating = SupportChatRating.objects.filter(
-            chat__assigned_to=agent,
-            chat__created_at__gte=start_date
-        ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
-        
-        agent_performance.append({
-            'name': agent.get_full_name(),
-            'tickets_resolved': tickets_resolved,
-            'avg_rating': round(avg_agent_rating, 1),
-            'avg_time': round(3.2 + (agent.id % 3), 1)  # Simulado
-        })
-    
-    # Tickets recentes
-    recent_tickets = SupportChat.objects.select_related(
-        'user', 'assigned_to'
-    ).order_by('-created_at')[:10]
-    
-    metrics = {
-        'total_tickets': total_tickets,
-        'tickets_growth': 15,  # Simulado
-        'avg_response_time': avg_response_time,
-        'time_improvement': 8,  # Simulado
-        'resolution_rate': resolution_rate,
-        'resolution_improvement': 12,  # Simulado
-        'avg_rating': avg_rating,
-        'daily_labels': json.dumps(daily_labels),
-        'daily_tickets': json.dumps(daily_tickets),
-        'daily_resolved': json.dumps(daily_resolved),
-        'status_labels': json.dumps(['Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']),
-        'status_data': json.dumps(status_data),
-        'top_categories': categories_data,
-        'agent_performance': agent_performance,
-        'recent_tickets': recent_tickets
-    }
-    
-    if request.headers.get('Accept') == 'application/json':
-        return JsonResponse(metrics)
-    
-    return render(request, 'support/metrics_dashboard.html', {
-        'metrics': metrics
-    })
+    return render(request, 'support/metrics_page.html')
 
 
 def export_metrics_report(request):
@@ -1997,9 +1885,9 @@ def delete_support_chat(request, chat_id):
 
 
 @login_required
-def support_metrics(request):
+def support_metrics_api(request):
     """
-    Retorna métricas e estatísticas do suporte
+    Retorna métricas e estatísticas do suporte (JSON API)
     """
     # Verificar permissão: SUPERVISOR ou maior, ou agente de suporte
     is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
