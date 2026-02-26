@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'knowledge_trails',  # Trilhas de Conhecimento
     'agenda',  # Agenda / Calendário
     'contestacao',  # Contestação de Exclusões
+    'contracheque',  # Contracheques / Recibos de Pagamento
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -295,3 +296,6 @@ TRUEPUSH_PROJECT_ID = config('TRUEPUSH_PROJECT_ID', default='')
 
 # URL base do sistema (usado para URLs em notificações)
 BASE_URL = config('BASE_URL', default='https://chamados.redeconfianca.com.br')
+
+# OpenAI Configuration (para transcrição de reuniões e IA)
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')

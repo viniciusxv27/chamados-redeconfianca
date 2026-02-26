@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Meus Contracheques{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-file-invoice-dollar text-green-600 mr-2"></i> Meus Contracheques
+        </h2>
+        <div class="flex gap-2 items-center">
+            {% if user.hierarchy == 'SUPERADMIN' %}
+            <a href="{% url 'contracheque:admin_payslips' %}"
+               class="inline-flex items-center px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                <i class="fas fa-cog mr-2"></i> Administrar
+            </a>
+            {% endif %}
+            <form method="get" class="flex items-center gap-2">
+                <select name="year" onchange="this.form.submit()" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+                    <option value="">Todos os anos</option>
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if selected_year == y|stringformat:"d" %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+    </div>
+
+    {% if payslips %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for ps in payslips %}
+        <a href="{% url 'contracheque:payslip_detail' ps.pk %}" class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition group">
+            <div class="px-4 py-3 border-b bg-green-50 flex items-center justify-between">
+                <span class="text-sm font-bold text-green-800">{{ ps.month_name }}/{{ ps.year }}</span>
+                <i class="fas fa-chevron-right text-green-400 group-hover:translate-x-1 transition-transform"></i>
+            </div>
+            <div class="px-4 py-4 space-y-2">
+                {% if ps.net_pay %}
+                <div>
+                    <p class="text-xs text-gray-400">Líquido</p>
+                    <p class="text-xl font-bold text-green-700">R$ {{ ps.net_pay|floatformat:2 }}</p>
+                </div>
+                {% endif %}
+                <div class="flex justify-between text-xs text-gray-500">
+                    {% if ps.total_earnings %}
+                    <span><i class="fas fa-plus-circle text-green-400 mr-1"></i>Proventos: R$ {{ ps.total_earnings|floatformat:2 }}</span>
+                    {% endif %}
+                    {% if ps.total_deductions %}
+                    <span><i class="fas fa-minus-circle text-red-400 mr-1"></i>Descontos: R$ {{ ps.total_deductions|floatformat:2 }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white shadow rounded-lg p-8 text-center">
+        <i class="fas fa-file-invoice text-4xl text-gray-300 mb-3"></i>
+        <p class="text-gray-500">Nenhum contracheque encontrado.</p>
+        {% if selected_year %}
+        <a href="{% url 'contracheque:my_payslips' %}" class="text-sm text-green-600 hover:underline mt-2 inline-block">Ver todos os anos</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

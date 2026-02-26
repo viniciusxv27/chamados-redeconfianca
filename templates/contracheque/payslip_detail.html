@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block title %}Contracheque – {{ payslip.period_display }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <nav class="flex mb-4">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li><a href="{% url 'contracheque:my_payslips' %}" class="text-sm text-gray-500 hover:text-green-600"><i class="fas fa-file-invoice-dollar mr-1"></i> Contracheques</a></li>
+            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">{{ payslip.period_display }}</span></div></li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="bg-white shadow rounded-lg overflow-hidden mb-4">
+        <div class="px-5 py-4 border-b bg-green-50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div>
+                <h1 class="text-lg font-bold text-gray-900">Contracheque – {{ payslip.period_display }}</h1>
+                {% if payslip.user != request.user %}
+                <p class="text-sm text-gray-500">{{ payslip.user.full_name }}</p>
+                {% endif %}
+            </div>
+            <a href="{% url 'contracheque:payslip_pdf' payslip.pk %}" target="_blank"
+               class="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+                <i class="fas fa-file-pdf mr-2"></i> Ver PDF
+            </a>
+        </div>
+
+        <!-- Dados do funcionário -->
+        <div class="px-5 py-4 border-b">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3">Dados do Funcionário</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                {% if payslip.employee_name %}
+                <div>
+                    <p class="text-xs text-gray-400">Nome</p>
+                    <p class="font-medium text-gray-800">{{ payslip.employee_name }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.cpf %}
+                <div>
+                    <p class="text-xs text-gray-400">CPF</p>
+                    <p class="font-medium text-gray-800">{{ payslip.cpf }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.job_title %}
+                <div>
+                    <p class="text-xs text-gray-400">Cargo</p>
+                    <p class="font-medium text-gray-800">{{ payslip.job_title }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.admission_date %}
+                <div>
+                    <p class="text-xs text-gray-400">Admissão</p>
+                    <p class="font-medium text-gray-800">{{ payslip.admission_date }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.department %}
+                <div>
+                    <p class="text-xs text-gray-400">Departamento</p>
+                    <p class="font-medium text-gray-800">{{ payslip.department }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Resumo de valores -->
+        <div class="px-5 py-4 border-b">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="bg-green-50 rounded-lg p-3 text-center">
+                    <p class="text-xs text-green-600 font-medium">Proventos</p>
+                    <p class="text-lg font-bold text-green-700">R$ {{ payslip.total_earnings|floatformat:2 }}</p>
+                </div>
+                <div class="bg-red-50 rounded-lg p-3 text-center">
+                    <p class="text-xs text-red-600 font-medium">Descontos</p>
+                    <p class="text-lg font-bold text-red-700">R$ {{ payslip.total_deductions|floatformat:2 }}</p>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <p class="text-xs text-blue-600 font-medium">Salário Base</p>
+                    <p class="text-lg font-bold text-blue-700">R$ {{ payslip.base_salary|floatformat:2 }}</p>
+                </div>
+                <div class="bg-indigo-50 rounded-lg p-3 text-center">
+                    <p class="text-xs text-indigo-600 font-medium">Líquido</p>
+                    <p class="text-lg font-bold text-indigo-700">R$ {{ payslip.net_pay|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Proventos -->
+        {% if payslip.earnings_detail %}
+        <div class="px-5 py-4 border-b">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3"><i class="fas fa-plus-circle text-green-400 mr-1"></i>Proventos</h3>
+            <div class="space-y-1">
+                {% for item in payslip.earnings_detail %}
+                <div class="flex justify-between text-sm py-1 border-b border-gray-100 last:border-0">
+                    <span class="text-gray-700">{{ item.description }}</span>
+                    <span class="font-medium text-green-700">R$ {{ item.value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Descontos -->
+        {% if payslip.deductions_detail %}
+        <div class="px-5 py-4 border-b">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3"><i class="fas fa-minus-circle text-red-400 mr-1"></i>Descontos</h3>
+            <div class="space-y-1">
+                {% for item in payslip.deductions_detail %}
+                <div class="flex justify-between text-sm py-1 border-b border-gray-100 last:border-0">
+                    <span class="text-gray-700">{{ item.description }}</span>
+                    <span class="font-medium text-red-700">R$ {{ item.value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Bases de cálculo -->
+        <div class="px-5 py-4">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3">Bases de Cálculo</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                {% if payslip.fgts_base %}
+                <div>
+                    <p class="text-xs text-gray-400">Base FGTS</p>
+                    <p class="font-medium">R$ {{ payslip.fgts_base|floatformat:2 }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.fgts_deposit %}
+                <div>
+                    <p class="text-xs text-gray-400">Depósito FGTS</p>
+                    <p class="font-medium">R$ {{ payslip.fgts_deposit|floatformat:2 }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.irrf_base %}
+                <div>
+                    <p class="text-xs text-gray-400">Base IRRF</p>
+                    <p class="font-medium">R$ {{ payslip.irrf_base|floatformat:2 }}</p>
+                </div>
+                {% endif %}
+                {% if payslip.inss_base %}
+                <div>
+                    <p class="text-xs text-gray-400">Base INSS</p>
+                    <p class="font-medium">R$ {{ payslip.inss_base|floatformat:2 }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

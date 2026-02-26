@@ -24,9 +24,11 @@
                 <div><span class="text-gray-500">Filial:</span> <span class="font-medium text-gray-900">{{ exclusion.filial }}</span></div>
                 <div><span class="text-gray-500">Pilar:</span> <span class="font-medium text-gray-900">{{ exclusion.pilar }}</span></div>
                 <div><span class="text-gray-500">Receita:</span> <span class="font-mono font-semibold text-gray-900">R$ {{ exclusion.receita|floatformat:2 }}</span></div>
+                {% if exclusion.cpf_cnpj %}<div><span class="text-gray-500">CPF:</span> <span class="font-medium text-gray-900">{{ exclusion.cpf_cnpj }}</span></div>{% endif %}
+                {% if exclusion.numero_acesso %}<div><span class="text-gray-500">Numero:</span> <span class="font-medium text-gray-900">{{ exclusion.numero_acesso }}</span></div>{% endif %}
                 {% if exclusion.plano_produto %}<div class="col-span-2"><span class="text-gray-500">Produto:</span> <span class="text-gray-900">{{ exclusion.plano_produto }}</span></div>{% endif %}
                 {% if exclusion.nome_cliente %}<div><span class="text-gray-500">Cliente:</span> <span class="text-gray-900">{{ exclusion.nome_cliente }}</span></div>{% endif %}
-                {% if exclusion.cpf_cnpj %}<div><span class="text-gray-500">CPF/CNPJ:</span> <span class="text-gray-900">{{ exclusion.cpf_cnpj }}</span></div>{% endif %}
+                {% if exclusion.observacao %}<div class="col-span-2"><span class="text-gray-500">Motivo:</span> <span class="text-orange-700 font-medium">{{ exclusion.observacao }}</span></div>{% endif %}
             </div>
         </div>
 

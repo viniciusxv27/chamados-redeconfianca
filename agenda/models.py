@@ -258,3 +258,54 @@ class MeetingRequest(models.Model):
     def cancel(self):
         self.status = 'cancelled'
         self.save()
+
+
+class MeetingTranscription(models.Model):
+    """Transcrição de reunião usando IA (similar ao Notion AI)"""
+    event = models.ForeignKey(
+        CalendarEvent,
+        on_delete=models.CASCADE,
+        related_name='transcriptions',
+        verbose_name='Evento',
+        null=True, blank=True,
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='transcriptions',
+        verbose_name='Proprietário',
+    )
+    title = models.CharField(max_length=255, verbose_name='Título da Reunião')
+    audio_file = models.FileField(
+        upload_to='transcriptions/audio/%Y/%m/',
+        blank=True, null=True,
+        verbose_name='Arquivo de Áudio',
+    )
+    raw_transcription = models.TextField(blank=True, verbose_name='Transcrição Bruta')
+    formatted_transcription = models.TextField(blank=True, verbose_name='Transcrição Formatada')
+    summary = models.TextField(blank=True, verbose_name='Resumo')
+    action_items = models.JSONField(blank=True, default=list, verbose_name='Itens de Ação')
+    suggested_events = models.JSONField(blank=True, default=list, verbose_name='Eventos Sugeridos')
+    duration_seconds = models.IntegerField(default=0, verbose_name='Duração (segundos)')
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('recording', 'Gravando'),
+            ('processing', 'Processando'),
+            ('completed', 'Concluída'),
+            ('error', 'Erro'),
+        ],
+        default='recording',
+        verbose_name='Status',
+    )
+    error_message = models.TextField(blank=True, verbose_name='Mensagem de Erro')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Transcrição de Reunião'
+        verbose_name_plural = 'Transcrições de Reunião'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} ({self.created_at:%d/%m/%Y %H:%M})'

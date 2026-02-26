@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+
+{% block title %}Nova Transcrição{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <nav class="flex mb-4">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li><a href="{% url 'agenda:transcription_list' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-microphone-alt mr-1"></i> Transcrições</a></li>
+            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">Nova Transcrição</span></div></li>
+        </ol>
+    </nav>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-5 py-4 border-b bg-indigo-50">
+            <h2 class="text-lg font-bold text-gray-900"><i class="fas fa-microphone-alt text-indigo-600 mr-2"></i> Transcrever Reunião</h2>
+            <p class="text-sm text-gray-500 mt-1">Grave áudio ou faça upload de um arquivo para transcrever com IA</p>
+        </div>
+
+        {% if event %}
+        <div class="px-5 py-3 bg-gray-50 border-b">
+            <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-1 text-indigo-500"></i> Evento: <strong>{{ event.title }}</strong> – {{ event.start|date:"d/m/Y H:i" }}</p>
+        </div>
+        {% endif %}
+
+        <div class="p-5 space-y-5">
+            <!-- Título -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Título da Reunião *</label>
+                <input type="text" id="transcription-title" value="{% if event %}{{ event.title }}{% endif %}"
+                       placeholder="Ex: Reunião de alinhamento semanal"
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <!-- Modo de entrada -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Método de Entrada</label>
+                <div class="flex gap-3">
+                    <button onclick="showRecorder()" id="btn-record" class="flex-1 px-4 py-3 border-2 border-indigo-500 bg-indigo-50 rounded-lg text-center cursor-pointer hover:bg-indigo-100 transition">
+                        <i class="fas fa-microphone text-2xl text-indigo-600 mb-1"></i>
+                        <p class="text-sm font-medium text-indigo-700">Gravar Áudio</p>
+                    </button>
+                    <button onclick="showUpload()" id="btn-upload" class="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg text-center cursor-pointer hover:bg-gray-50 transition">
+                        <i class="fas fa-upload text-2xl text-gray-500 mb-1"></i>
+                        <p class="text-sm font-medium text-gray-600">Upload de Arquivo</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gravador -->
+            <div id="recorder-section">
+                <div class="bg-gray-50 border rounded-lg p-6 text-center">
+                    <div id="recording-indicator" class="hidden mb-4">
+                        <div class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 rounded-full">
+                            <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                            <span class="text-sm font-medium text-red-700">Gravando...</span>
+                            <span id="recording-time" class="text-sm font-mono text-red-600">00:00</span>
+                        </div>
+                    </div>
+                    <div id="not-recording" class="mb-4">
+                        <i class="fas fa-microphone text-4xl text-gray-300 mb-2"></i>
+                        <p class="text-sm text-gray-500">Clique para iniciar a gravação</p>
+                    </div>
+                    <div class="flex gap-3 justify-center">
+                        <button onclick="startRecording()" id="btn-start-rec"
+                                class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">
+                            <i class="fas fa-circle mr-2"></i> Iniciar Gravação
+                        </button>
+                        <button onclick="stopRecording()" id="btn-stop-rec" class="hidden inline-flex items-center px-4 py-2 bg-gray-700 text-white text-sm font-medium rounded-md hover:bg-gray-800">
+                            <i class="fas fa-stop mr-2"></i> Parar
+                        </button>
+                    </div>
+                    <div id="audio-preview" class="hidden mt-4">
+                        <audio id="audio-player" controls class="w-full"></audio>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload -->
+            <div id="upload-section" class="hidden">
+                <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <i class="fas fa-cloud-upload-alt text-4xl text-gray-300 mb-2"></i>
+                    <p class="text-sm text-gray-500 mb-3">Arraste um arquivo de áudio ou clique para selecionar</p>
+                    <input type="file" id="audio-file-input" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm"
+                           class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                    <p class="text-xs text-gray-400 mt-2">Formatos aceitos: MP3, WAV, M4A, OGG, WebM (máx. 25MB)</p>
+                </div>
+            </div>
+
+            <!-- Botão de envio -->
+            <div class="flex gap-3 pt-2">
+                <a href="{% url 'agenda:transcription_list' %}"
+                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</a>
+                <button onclick="submitTranscription()" id="btn-submit"
+                        class="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <i class="fas fa-magic mr-2"></i> Transcrever com IA
+                </button>
+            </div>
+
+            <!-- Status de processamento -->
+            <div id="processing-status" class="hidden">
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-center">
+                    <i class="fas fa-spinner fa-spin text-2xl text-indigo-600 mb-2"></i>
+                    <p class="text-sm font-medium text-indigo-700">Processando transcrição...</p>
+                    <p class="text-xs text-indigo-500 mt-1">Isso pode levar alguns minutos dependendo da duração do áudio</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let mediaRecorder = null;
+let audioChunks = [];
+let recordedBlob = null;
+let recordingTimer = null;
+let recordingSeconds = 0;
+
+function showRecorder() {
+    document.getElementById('recorder-section').classList.remove('hidden');
+    document.getElementById('upload-section').classList.add('hidden');
+    document.getElementById('btn-record').classList.add('border-indigo-500', 'bg-indigo-50');
+    document.getElementById('btn-record').classList.remove('border-gray-300');
+    document.getElementById('btn-upload').classList.remove('border-indigo-500', 'bg-indigo-50');
+    document.getElementById('btn-upload').classList.add('border-gray-300');
+}
+
+function showUpload() {
+    document.getElementById('recorder-section').classList.add('hidden');
+    document.getElementById('upload-section').classList.remove('hidden');
+    document.getElementById('btn-upload').classList.add('border-indigo-500', 'bg-indigo-50');
+    document.getElementById('btn-upload').classList.remove('border-gray-300');
+    document.getElementById('btn-record').classList.remove('border-indigo-500', 'bg-indigo-50');
+    document.getElementById('btn-record').classList.add('border-gray-300');
+}
+
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const url = URL.createObjectURL(recordedBlob);
+            document.getElementById('audio-player').src = url;
+            document.getElementById('audio-preview').classList.remove('hidden');
+            document.getElementById('btn-submit').disabled = false;
+            stream.getTracks().forEach(t => t.stop());
+        };
+
+        mediaRecorder.start(1000);
+        recordingSeconds = 0;
+        document.getElementById('recording-indicator').classList.remove('hidden');
+        document.getElementById('not-recording').classList.add('hidden');
+        document.getElementById('btn-start-rec').classList.add('hidden');
+        document.getElementById('btn-stop-rec').classList.remove('hidden');
+
+        recordingTimer = setInterval(() => {
+            recordingSeconds++;
+            const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+            const secs = String(recordingSeconds % 60).padStart(2, '0');
+            document.getElementById('recording-time').textContent = `${mins}:${secs}`;
+        }, 1000);
+
+    } catch (err) {
+        alert('Erro ao acessar microfone: ' + err.message);
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    clearInterval(recordingTimer);
+    document.getElementById('recording-indicator').classList.add('hidden');
+    document.getElementById('not-recording').classList.remove('hidden');
+    document.getElementById('btn-start-rec').classList.remove('hidden');
+    document.getElementById('btn-stop-rec').classList.add('hidden');
+}
+
+// Enable submit when file is selected in upload mode
+document.getElementById('audio-file-input').addEventListener('change', function() {
+    document.getElementById('btn-submit').disabled = !this.files.length;
+});
+
+async function submitTranscription() {
+    const title = document.getElementById('transcription-title').value.trim();
+    if (!title) {
+        alert('Informe o título da reunião.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('title', title);
+    {% if event %}
+    formData.append('event_id', '{{ event.pk }}');
+    {% endif %}
+
+    // Get audio from recording or upload
+    const uploadInput = document.getElementById('audio-file-input');
+    if (recordedBlob) {
+        formData.append('audio', recordedBlob, 'recording.webm');
+    } else if (uploadInput.files.length) {
+        formData.append('audio', uploadInput.files[0]);
+    } else {
+        alert('Grave ou faça upload de um áudio primeiro.');
+        return;
+    }
+
+    document.getElementById('btn-submit').disabled = true;
+    document.getElementById('processing-status').classList.remove('hidden');
+
+    try {
+        const resp = await fetch('{% url "agenda:api_transcription_upload" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            body: formData,
+        });
+        const data = await resp.json();
+
+        if (resp.ok && data.redirect) {
+            window.location.href = data.redirect;
+        } else {
+            alert(data.error || 'Erro ao processar transcrição.');
+            document.getElementById('btn-submit').disabled = false;
+            document.getElementById('processing-status').classList.add('hidden');
+        }
+    } catch (err) {
+        alert('Erro de conexão: ' + err.message);
+        document.getElementById('btn-submit').disabled = false;
+        document.getElementById('processing-status').classList.add('hidden');
+    }
+}
+</script>
+{% endblock %}

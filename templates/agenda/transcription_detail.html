@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ transcription.title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <nav class="flex mb-4">
+        <ol class="inline-flex items-center space-x-1 md:space-x-3">
+            <li><a href="{% url 'agenda:transcription_list' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-microphone-alt mr-1"></i> Transcrições</a></li>
+            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700 truncate max-w-[200px]">{{ transcription.title }}</span></div></li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="bg-white shadow rounded-lg overflow-hidden mb-4">
+        <div class="px-5 py-4 border-b flex justify-between items-start flex-wrap gap-2">
+            <div>
+                <h1 class="text-lg font-bold text-gray-900">{{ transcription.title }}</h1>
+                <div class="flex flex-wrap gap-3 mt-1 text-sm text-gray-500">
+                    <span><i class="fas fa-calendar-alt mr-1"></i> {{ transcription.created_at|date:"d/m/Y H:i" }}</span>
+                    {% if transcription.duration_seconds %}
+                    <span><i class="fas fa-clock mr-1"></i> {{ transcription.duration_seconds|floatformat:0 }}s</span>
+                    {% endif %}
+                    {% if transcription.event %}
+                    <span><i class="fas fa-link mr-1 text-indigo-500"></i> {{ transcription.event.title }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-medium
+                {% if transcription.status == 'completed' %}bg-green-100 text-green-800
+                {% elif transcription.status == 'processing' %}bg-yellow-100 text-yellow-800
+                {% elif transcription.status == 'error' %}bg-red-100 text-red-800
+                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                {% if transcription.status == 'completed' %}Concluída
+                {% elif transcription.status == 'processing' %}Processando
+                {% elif transcription.status == 'error' %}Erro
+                {% else %}{{ transcription.status }}{% endif %}
+            </span>
+        </div>
+
+        {% if transcription.status == 'error' %}
+        <div class="px-5 py-3 bg-red-50 border-b">
+            <p class="text-sm text-red-700"><i class="fas fa-exclamation-circle mr-1"></i> {{ transcription.error_message }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if transcription.status == 'completed' %}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Main content -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- Resumo -->
+            {% if transcription.summary %}
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-5 py-3 border-b bg-indigo-50">
+                    <h3 class="text-sm font-bold text-indigo-800"><i class="fas fa-align-left mr-2"></i>Resumo</h3>
+                </div>
+                <div class="px-5 py-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ transcription.summary }}</div>
+            </div>
+            {% endif %}
+
+            <!-- Transcrição formatada -->
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-5 py-3 border-b bg-gray-50 flex justify-between items-center">
+                    <h3 class="text-sm font-bold text-gray-800"><i class="fas fa-file-alt mr-2"></i>Transcrição</h3>
+                    <button onclick="toggleRaw()" class="text-xs text-indigo-600 hover:underline" id="btn-toggle-raw">Ver texto bruto</button>
+                </div>
+                <div id="formatted-transcription" class="px-5 py-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ transcription.formatted_transcription }}</div>
+                <div id="raw-transcription" class="hidden px-5 py-4 text-sm text-gray-500 leading-relaxed whitespace-pre-wrap font-mono text-xs">{{ transcription.raw_transcription }}</div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-4">
+            <!-- Itens de Ação -->
+            {% if transcription.action_items %}
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-5 py-3 border-b bg-amber-50">
+                    <h3 class="text-sm font-bold text-amber-800"><i class="fas fa-tasks mr-2"></i>Itens de Ação ({{ transcription.action_items|length }})</h3>
+                </div>
+                <div class="divide-y">
+                    {% for item in transcription.action_items %}
+                    <div class="px-5 py-3 flex gap-2 items-start">
+                        <i class="fas fa-check-circle text-amber-400 mt-0.5"></i>
+                        <div class="text-sm">
+                            <p class="text-gray-700">{{ item.task }}</p>
+                            {% if item.responsible %}
+                            <p class="text-xs text-gray-400 mt-1"><i class="fas fa-user mr-1"></i>{{ item.responsible }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Eventos Sugeridos -->
+            {% if transcription.suggested_events %}
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-5 py-3 border-b bg-green-50">
+                    <h3 class="text-sm font-bold text-green-800"><i class="fas fa-calendar-plus mr-2"></i>Eventos Sugeridos</h3>
+                </div>
+                <div class="divide-y">
+                    {% for evt in transcription.suggested_events %}
+                    <div class="px-5 py-3" id="suggested-event-{{ forloop.counter0 }}">
+                        <p class="text-sm font-medium text-gray-800">{{ evt.title }}</p>
+                        {% if evt.description %}
+                        <p class="text-xs text-gray-500 mt-1">{{ evt.description }}</p>
+                        {% endif %}
+                        <div class="mt-2 flex gap-2 flex-wrap">
+                            <input type="datetime-local" id="evt-datetime-{{ forloop.counter0 }}"
+                                   class="border border-gray-300 rounded px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                            <button onclick="scheduleEvent({{ transcription.pk }}, {{ forloop.counter0 }}, this)"
+                                    class="inline-flex items-center px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700">
+                                <i class="fas fa-plus mr-1"></i> Agendar
+                            </button>
+                        </div>
+                        <p class="text-xs text-green-600 mt-1 hidden" id="evt-success-{{ forloop.counter0 }}"><i class="fas fa-check mr-1"></i>Agendado!</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Áudio -->
+            {% if transcription.audio_file %}
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-5 py-3 border-b bg-gray-50">
+                    <h3 class="text-sm font-bold text-gray-800"><i class="fas fa-headphones mr-2"></i>Áudio Original</h3>
+                </div>
+                <div class="px-5 py-4">
+                    <audio controls class="w-full" src="{{ transcription.audio_file.url }}"></audio>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% elif transcription.status == 'processing' %}
+    <div class="bg-white shadow rounded-lg p-8 text-center">
+        <i class="fas fa-spinner fa-spin text-3xl text-indigo-500 mb-3"></i>
+        <p class="text-gray-600">Transcrição em processamento...</p>
+        <p class="text-sm text-gray-400 mt-1">Atualize a página em alguns instantes.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleRaw() {
+    const fmt = document.getElementById('formatted-transcription');
+    const raw = document.getElementById('raw-transcription');
+    const btn = document.getElementById('btn-toggle-raw');
+    if (raw.classList.contains('hidden')) {
+        raw.classList.remove('hidden');
+        fmt.classList.add('hidden');
+        btn.textContent = 'Ver formatada';
+    } else {
+        raw.classList.add('hidden');
+        fmt.classList.remove('hidden');
+        btn.textContent = 'Ver texto bruto';
+    }
+}
+
+async function scheduleEvent(transcriptionId, eventIndex, btn) {
+    const dtInput = document.getElementById(`evt-datetime-${eventIndex}`);
+    if (!dtInput.value) {
+        alert('Selecione uma data e hora para agendar.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Agendando...';
+
+    try {
+        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/agendar/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+            body: JSON.stringify({
+                event_index: eventIndex,
+                start: dtInput.value,
+            }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            const successEl = document.getElementById(`evt-success-${eventIndex}`);
+            successEl.classList.remove('hidden');
+            btn.classList.add('hidden');
+            dtInput.classList.add('hidden');
+        } else {
+            alert(data.error || 'Erro ao agendar.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus mr-1"></i> Agendar';
+        }
+    } catch (err) {
+        alert('Erro: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus mr-1"></i> Agendar';
+    }
+}
+</script>
+{% endblock %}

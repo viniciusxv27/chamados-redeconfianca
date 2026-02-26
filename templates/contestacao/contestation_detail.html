@@ -42,10 +42,11 @@
                 <div><span class="text-gray-500 block text-xs">Filial</span><span class="font-medium text-gray-900">{{ c.exclusion.filial }}</span></div>
                 <div><span class="text-gray-500 block text-xs">Pilar</span><span class="font-medium text-gray-900">{{ c.exclusion.pilar }}</span></div>
                 <div><span class="text-gray-500 block text-xs">Receita</span><span class="font-mono font-bold text-gray-900">R$ {{ c.exclusion.receita|floatformat:2 }}</span></div>
+                {% if c.exclusion.cpf_cnpj %}<div><span class="text-gray-500 block text-xs">CPF</span><span class="font-medium text-gray-900">{{ c.exclusion.cpf_cnpj }}</span></div>{% endif %}
+                {% if c.exclusion.numero_acesso %}<div><span class="text-gray-500 block text-xs">Numero</span><span class="font-medium text-gray-900">{{ c.exclusion.numero_acesso }}</span></div>{% endif %}
                 {% if c.exclusion.plano_produto %}<div><span class="text-gray-500 block text-xs">Produto</span><span class="text-gray-900">{{ c.exclusion.plano_produto }}</span></div>{% endif %}
                 {% if c.exclusion.nome_cliente %}<div><span class="text-gray-500 block text-xs">Cliente</span><span class="text-gray-900">{{ c.exclusion.nome_cliente }}</span></div>{% endif %}
-                {% if c.exclusion.cpf_cnpj %}<div><span class="text-gray-500 block text-xs">CPF/CNPJ</span><span class="text-gray-900">{{ c.exclusion.cpf_cnpj }}</span></div>{% endif %}
-                {% if c.exclusion.numero_acesso %}<div><span class="text-gray-500 block text-xs">Nº Acesso</span><span class="text-gray-900">{{ c.exclusion.numero_acesso }}</span></div>{% endif %}
+                {% if c.exclusion.observacao %}<div class="sm:col-span-3"><span class="text-gray-500 block text-xs">Motivo da Exclusão</span><span class="text-orange-700 font-medium">{{ c.exclusion.observacao }}</span></div>{% endif %}
             </div>
         </div>
 

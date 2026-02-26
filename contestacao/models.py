@@ -16,6 +16,7 @@ class ExclusionRecord(models.Model):
     cpf_cnpj = models.CharField(max_length=30, blank=True, default='', verbose_name='CPF/CNPJ')
     plano_produto = models.CharField(max_length=300, blank=True, default='', verbose_name='Plano/Produto')
     numero_acesso = models.CharField(max_length=100, blank=True, default='', verbose_name='Número Acesso')
+    observacao = models.TextField(blank=True, default='', verbose_name='Observação')
     imported_at = models.DateTimeField(auto_now_add=True, verbose_name='Importado em')
 
     class Meta:
@@ -127,3 +128,39 @@ class Contestation(models.Model):
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
         self.save()
+
+
+class ContestationHistory(models.Model):
+    """Histórico de ações realizadas em contestações."""
+    ACTION_CHOICES = [
+        ('created', 'Contestação Criada'),
+        ('approved', 'Aprovada pelo Gestor'),
+        ('rejected', 'Rejeitada pelo Gestor'),
+        ('confirmed', 'Confirmada pelo Gerente'),
+        ('denied', 'Negada pelo Gerente'),
+        ('paid', 'Marcada como Paga'),
+        ('synced', 'Planilha Sincronizada'),
+    ]
+
+    contestation = models.ForeignKey(
+        Contestation, on_delete=models.CASCADE,
+        related_name='history', verbose_name='Contestação',
+        null=True, blank=True,
+    )
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, verbose_name='Ação')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='contestation_actions',
+        verbose_name='Usuário'
+    )
+    notes = models.TextField(blank=True, default='', verbose_name='Observações')
+    extra_data = models.JSONField(blank=True, default=dict, verbose_name='Dados Extras')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Data')
+
+    class Meta:
+        verbose_name = 'Histórico de Contestação'
+        verbose_name_plural = 'Históricos de Contestações'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.get_action_display()} – {self.user} ({self.created_at:%d/%m/%Y %H:%M})'

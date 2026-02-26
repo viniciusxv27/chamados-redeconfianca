@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from .models import ExclusionRecord, Contestation
+from .models import ExclusionRecord, Contestation, ContestationHistory
 from users.models import SystemConfig
 
 
@@ -136,6 +136,7 @@ def sync_exclusions(request):
     cpf_col = _find_column(df, 'CPF/CNPJ') or _find_column(df, 'CPF')
     plano_col = _find_column(df, 'PLANO/PRODUTO') or _find_column(df, 'PLANO') or _find_column(df, 'PRODUTO')
     acesso_col = _find_column(df, 'NUMERO ACESSO') or _find_column(df, 'NUMERO_ACESSO')
+    obs_col = _find_column(df, 'OBSERVAÇÃO') or _find_column(df, 'OBSERVACAO') or _find_column(df, 'OBS')
 
     if not filial_col or not vendedor_col or not receita_col or not pilar_col:
         messages.error(request, 'Colunas obrigatórias não encontradas na planilha (FILIAL, VENDEDOR, RECEITA, PILAR).')
@@ -167,9 +168,15 @@ def sync_exclusions(request):
             cpf_cnpj=str(row.get(cpf_col, '')).strip() if cpf_col else '',
             plano_produto=str(row.get(plano_col, '')).strip() if plano_col else '',
             numero_acesso=str(row.get(acesso_col, '')).strip() if acesso_col else '',
+            observacao=str(row.get(obs_col, '')).strip() if obs_col else '',
         ))
 
     ExclusionRecord.objects.bulk_create(records, batch_size=500)
+    ContestationHistory.objects.create(
+        action='synced',
+        user=request.user,
+        notes=f'{len(records)} registros importados',
+    )
     messages.success(request, f'{len(records)} registros de exclusão importados com sucesso!')
     return redirect('contestacao:exclusion_list')
 
@@ -238,6 +245,7 @@ def exclusion_list(request):
         'contestations_map': contestations_map,
         'can_manage': _can_manage_contestations(request.user),
         'can_sync': _can_create_contestations(request.user),
+        'is_superadmin': rank >= HIERARCHY_RANK['SUPERADMIN'],
     }
     return render(request, 'contestacao/exclusion_list.html', context)
 
@@ -270,6 +278,13 @@ def create_contestation(request, exclusion_id):
                 requester=request.user,
                 reason=reason,
                 attachment=attachment,
+            )
+            ContestationHistory.objects.create(
+                contestation=c,
+                action='created',
+                user=request.user,
+                notes=reason,
+                extra_data={'exclusion_id': exclusion.pk, 'vendedor': exclusion.vendedor},
             )
             messages.success(request, f'Contestação #{c.pk} criada com sucesso!')
             return redirect('contestacao:my_contestations')
@@ -396,6 +411,9 @@ def approve_contestation(request, pk):
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
     c.approve(request.user, notes)
+    ContestationHistory.objects.create(
+        contestation=c, action='approved', user=request.user, notes=notes,
+    )
     messages.success(request, f'Contestação #{c.pk} aprovada! Aguardando confirmação do gerente.')
     return redirect('contestacao:manage_contestations')
 
@@ -409,6 +427,9 @@ def reject_contestation(request, pk):
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
     c.reject(request.user, notes)
+    ContestationHistory.objects.create(
+        contestation=c, action='rejected', user=request.user, notes=notes,
+    )
     messages.success(request, f'Contestação #{c.pk} rejeitada.')
     return redirect('contestacao:manage_contestations')
 
@@ -423,6 +444,9 @@ def confirm_contestation(request, pk):
         return redirect('contestacao:my_contestations')
     notes = request.POST.get('confirmation_notes', '')
     c.confirm(request.user, notes)
+    ContestationHistory.objects.create(
+        contestation=c, action='confirmed', user=request.user, notes=notes,
+    )
     messages.success(request, f'Contestação #{c.pk} confirmada! Aguardando pagamento.')
     return redirect('contestacao:my_contestations')
 
@@ -436,6 +460,9 @@ def deny_contestation(request, pk):
         return redirect('contestacao:my_contestations')
     notes = request.POST.get('confirmation_notes', '')
     c.deny_confirmation(request.user, notes)
+    ContestationHistory.objects.create(
+        contestation=c, action='denied', user=request.user, notes=notes,
+    )
     messages.success(request, f'Contestação #{c.pk} negada.')
     return redirect('contestacao:my_contestations')
 
@@ -448,5 +475,40 @@ def mark_paid(request, pk):
         return redirect('contestacao:manage_contestations')
     c = get_object_or_404(Contestation, pk=pk, status='confirmed')
     c.mark_paid(request.user)
+    ContestationHistory.objects.create(
+        contestation=c, action='paid', user=request.user,
+    )
     messages.success(request, f'Contestação #{c.pk} marcada como paga!')
     return redirect('contestacao:manage_contestations')
+
+
+@login_required
+def contestation_history(request):
+    """Histórico de todas as ações em contestações (apenas SUPERADMIN)."""
+    rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
+    if rank < HIERARCHY_RANK['SUPERADMIN']:
+        messages.error(request, 'Sem permissão para ver o histórico.')
+        return redirect('contestacao:exclusion_list')
+
+    qs = ContestationHistory.objects.select_related('contestation', 'contestation__exclusion', 'user')
+
+    action_filter = request.GET.get('action', '').strip()
+    if action_filter:
+        qs = qs.filter(action=action_filter)
+
+    search = request.GET.get('q', '').strip()
+    if search:
+        qs = qs.filter(
+            Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) |
+            Q(contestation__exclusion__vendedor__icontains=search) |
+            Q(notes__icontains=search)
+        )
+
+    context = {
+        'history': qs[:200],
+        'action_filter': action_filter,
+        'search': search,
+        'action_choices': ContestationHistory.ACTION_CHOICES,
+    }
+    return render(request, 'contestacao/contestation_history.html', context)

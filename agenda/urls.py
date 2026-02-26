@@ -32,4 +32,11 @@ urlpatterns = [
 
     # Superadmin: ver agenda de qualquer um
     path('usuario/<int:user_id>/', views.view_user_calendar, name='view_user_calendar'),
+
+    # Transcrição de reuniões
+    path('transcricoes/', views.transcription_list, name='transcription_list'),
+    path('transcricoes/nova/', views.transcription_new, name='transcription_new'),
+    path('transcricoes/<int:pk>/', views.transcription_detail, name='transcription_detail'),
+    path('api/transcricoes/upload/', views.api_transcription_upload, name='api_transcription_upload'),
+    path('api/transcricoes/<int:pk>/agendar/', views.api_transcription_schedule, name='api_transcription_schedule'),
 ]

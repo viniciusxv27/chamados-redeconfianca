@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Transcrições de Reunião{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-microphone-alt mr-2 text-indigo-600"></i> Transcrições de Reunião</h1>
+            <p class="text-sm text-gray-500 mt-1">Grave e transcreva suas reuniões com IA</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'agenda:calendar' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                <i class="fas fa-calendar mr-2"></i> Agenda
+            </a>
+            <a href="{% url 'agenda:transcription_new' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+                <i class="fas fa-plus mr-2"></i> Nova Transcrição
+            </a>
+        </div>
+    </div>
+
+    {% if transcriptions %}
+    <div class="space-y-3">
+        {% for t in transcriptions %}
+        <a href="{% url 'agenda:transcription_detail' t.pk %}" class="block bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+            <div class="p-4">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-bold text-gray-900">{{ t.title }}</span>
+                            {% if t.status == 'completed' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i> Concluída</span>
+                            {% elif t.status == 'processing' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-spinner fa-spin mr-1"></i> Processando</span>
+                            {% elif t.status == 'recording' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-circle mr-1"></i> Gravando</span>
+                            {% elif t.status == 'error' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-exclamation-triangle mr-1"></i> Erro</span>
+                            {% endif %}
+                        </div>
+                        {% if t.event %}<p class="text-xs text-gray-500"><i class="fas fa-calendar mr-1"></i> {{ t.event.title }} - {{ t.event.start|date:"d/m/Y H:i" }}</p>{% endif %}
+                        {% if t.summary %}<p class="text-sm text-gray-600 mt-1 line-clamp-2">{{ t.summary|truncatewords:30 }}</p>{% endif %}
+                        {% if t.action_items %}<p class="text-xs text-indigo-600 mt-1"><i class="fas fa-tasks mr-1"></i> {{ t.action_items|length }} item(ns) de ação</p>{% endif %}
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="text-xs text-gray-400">{{ t.created_at|date:"d/m/Y H:i" }}</span>
+                        <i class="fas fa-chevron-right text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-16 text-gray-400">
+        <i class="fas fa-microphone-alt text-5xl mb-4"></i>
+        <p class="text-lg mb-2">Nenhuma transcrição ainda</p>
+        <p class="text-sm mb-4">Grave ou faça upload de áudio de reuniões para transcrever com IA</p>
+        <a href="{% url 'agenda:transcription_new' %}" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium">
+            <i class="fas fa-plus mr-2"></i> Nova Transcrição
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

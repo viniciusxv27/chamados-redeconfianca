@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import User, Sector
-from .models import CalendarEvent, MeetingRequest, EventParticipant
+from .models import CalendarEvent, MeetingRequest, EventParticipant, MeetingTranscription
 
 try:
     from notifications.push_utils import send_push_notification_to_user
@@ -587,3 +587,193 @@ def view_user_calendar(request, user_id):
         'viewing_other': True,
     }
     return render(request, 'agenda/calendar.html', context)
+
+
+# =========================================================================
+# TRANSCRIÇÃO DE REUNIÕES (IA)
+# =========================================================================
+
+@login_required
+def transcription_list(request):
+    """Lista de transcrições do usuário"""
+    transcriptions = MeetingTranscription.objects.filter(
+        owner=request.user
+    ).select_related('event').order_by('-created_at')
+
+    context = {
+        'transcriptions': transcriptions,
+    }
+    return render(request, 'agenda/transcription_list.html', context)
+
+
+@login_required
+def transcription_new(request):
+    """Página para iniciar nova transcrição (gravar áudio ou upload)"""
+    event_id = request.GET.get('event_id')
+    event = None
+    if event_id:
+        try:
+            event = CalendarEvent.objects.get(pk=event_id, owner=request.user)
+        except CalendarEvent.DoesNotExist:
+            pass
+
+    context = {
+        'event': event,
+    }
+    return render(request, 'agenda/transcription_new.html', context)
+
+
+@login_required
+@require_POST
+def api_transcription_upload(request):
+    """Recebe áudio e transcreve usando OpenAI Whisper + GPT"""
+    import openai
+    from django.conf import settings as django_settings
+
+    audio_file = request.FILES.get('audio')
+    title = request.POST.get('title', '').strip() or 'Reunião sem título'
+    event_id = request.POST.get('event_id')
+
+    if not audio_file:
+        return JsonResponse({'error': 'Nenhum arquivo de áudio enviado.'}, status=400)
+
+    api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        return JsonResponse({'error': 'Chave da API OpenAI não configurada. Configure OPENAI_API_KEY no .env'}, status=500)
+
+    event = None
+    if event_id:
+        try:
+            event = CalendarEvent.objects.get(pk=event_id)
+        except CalendarEvent.DoesNotExist:
+            pass
+
+    # Criar registro de transcrição
+    transcription = MeetingTranscription.objects.create(
+        owner=request.user,
+        event=event,
+        title=title,
+        audio_file=audio_file,
+        status='processing',
+    )
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+
+        # 1. Transcrever áudio com Whisper
+        audio_file.seek(0)
+        whisper_response = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="pt",
+            response_format="text",
+        )
+        raw_text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
+        transcription.raw_transcription = raw_text
+
+        # 2. Formatar e resumir com GPT
+        gpt_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Você é um assistente que formata transcrições de reuniões. "
+                        "Receba a transcrição bruta e retorne um JSON com:\n"
+                        '- "formatted": texto formatado com parágrafos e pontuação correta\n'
+                        '- "summary": resumo de 2-3 parágrafos da reunião\n'
+                        '- "action_items": lista de strings com itens de ação identificados\n'
+                        '- "suggested_events": lista de objetos com "title", "description" e "suggested_date" '
+                        '(formato ISO) para qualquer menção de marcar reunião/agendar/compromisso futuro. '
+                        'Se não houver menção, retorne lista vazia.\n'
+                        "Responda APENAS com JSON válido, sem markdown."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Transcrição da reunião '{title}':\n\n{raw_text}"
+                }
+            ],
+            temperature=0.3,
+        )
+
+        import json as json_module
+        gpt_text = gpt_response.choices[0].message.content.strip()
+        # Try to parse as JSON, handle markdown code blocks
+        if gpt_text.startswith('```'):
+            gpt_text = gpt_text.split('```')[1]
+            if gpt_text.startswith('json'):
+                gpt_text = gpt_text[4:]
+        parsed = json_module.loads(gpt_text)
+
+        transcription.formatted_transcription = parsed.get('formatted', raw_text)
+        transcription.summary = parsed.get('summary', '')
+        transcription.action_items = parsed.get('action_items', [])
+        transcription.suggested_events = parsed.get('suggested_events', [])
+        transcription.status = 'completed'
+        transcription.save()
+
+        return JsonResponse({
+            'id': transcription.pk,
+            'status': 'completed',
+            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        })
+
+    except Exception as e:
+        transcription.status = 'error'
+        transcription.error_message = str(e)
+        transcription.save()
+        return JsonResponse({'error': f'Erro ao processar: {str(e)}'}, status=500)
+
+
+@login_required
+def transcription_detail(request, pk):
+    """Visualizar uma transcrição"""
+    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+
+    context = {
+        'transcription': transcription,
+    }
+    return render(request, 'agenda/transcription_detail.html', context)
+
+
+@login_required
+@require_POST
+def api_transcription_schedule(request, pk):
+    """Criar evento na agenda a partir de item sugerido da transcrição"""
+    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    title = data.get('title', '').strip()
+    description = data.get('description', '').strip()
+    start_str = data.get('start', '')
+    end_str = data.get('end', '')
+
+    if not title or not start_str or not end_str:
+        return JsonResponse({'error': 'Título, data de início e fim são obrigatórios.'}, status=400)
+
+    try:
+        start = datetime.fromisoformat(start_str)
+        end = datetime.fromisoformat(end_str)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Datas inválidas.'}, status=400)
+
+    event = CalendarEvent.objects.create(
+        owner=request.user,
+        title=title,
+        description=f"{description}\n\n(Agendado a partir da transcrição: {transcription.title})",
+        event_type='meeting',
+        start=start,
+        end=end,
+        color='#16a34a',
+    )
+
+    return JsonResponse({
+        'ok': True,
+        'event_id': event.pk,
+        'message': f'Evento "{title}" agendado com sucesso!'
+    })

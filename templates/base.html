@@ -549,6 +549,15 @@
                         </li>
                         {% endif %}
 
+                        <!-- Menu Contracheque - Para todos os usuários -->
+                        <li>
+                            <a href="{% url 'contracheque:my_payslips' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contracheque">
+                                <i class="fas fa-file-invoice-dollar text-green-400 flex-shrink-0"></i>
+                                <span class="text-sm flex-1">Contracheque</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+
                         <!-- Menu GESTÃO - Para usuários autorizados -->
                         {% if user.can_manage_users or user.groups.all %}
                         <li class="border-t border-gray-800 pt-2 mt-2">

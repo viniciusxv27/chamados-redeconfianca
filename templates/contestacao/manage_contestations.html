@@ -88,9 +88,16 @@
                             {% endif %}
                         </div>
                         <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> &middot; {{ c.exclusion.filial }} &middot; {{ c.exclusion.pilar }} &middot; <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
+                        {% if c.exclusion.cpf_cnpj %}<p class="text-xs text-gray-500">CPF: {{ c.exclusion.cpf_cnpj }}{% if c.exclusion.numero_acesso %} &middot; Nº: {{ c.exclusion.numero_acesso }}{% endif %}</p>{% endif %}
                         {% if c.exclusion.plano_produto %}<p class="text-xs text-gray-400">{{ c.exclusion.plano_produto }}</p>{% endif %}
+                        {% if c.exclusion.observacao %}<p class="text-xs text-orange-500"><i class="fas fa-info-circle mr-1"></i>Motivo: {{ c.exclusion.observacao|truncatewords:15 }}</p>{% endif %}
                     </div>
-                    <span class="text-xs text-gray-400">{{ c.created_at|date:"d/m/Y H:i" }}</span>
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="text-xs text-gray-400">{{ c.created_at|date:"d/m/Y H:i" }}</span>
+                        <a href="{% url 'contestacao:contestation_detail' c.pk %}" class="inline-flex items-center px-2 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100">
+                            <i class="fas fa-eye mr-1"></i> Visualizar
+                        </a>
+                    </div>
                 </div>
 
                 <div class="mt-2 bg-amber-50 border border-amber-200 rounded p-3">
