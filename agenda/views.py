@@ -662,9 +662,10 @@ def api_transcription_upload(request):
 
         # 1. Transcrever áudio com Whisper
         audio_file.seek(0)
+        file_tuple = (audio_file.name, audio_file.read(), audio_file.content_type)
         whisper_response = client.audio.transcriptions.create(
             model="whisper-1",
-            file=audio_file,
+            file=file_tuple,
             language="pt",
             response_format="text",
         )
