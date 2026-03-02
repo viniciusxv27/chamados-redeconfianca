@@ -751,7 +751,7 @@ def support_admin_dashboard(request):
             'open': open_chats,
             'in_progress': in_progress_chats,
             'resolved': resolved_chats,
-            'closed': closed_chats,
+            'closed': resolved_chats + closed_chats,
             'avg_rating': round(avg_rating, 1)
         },
         'priority_stats': list(priority_stats),

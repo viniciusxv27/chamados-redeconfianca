@@ -127,7 +127,7 @@
     </div>
 
     <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
             <div class="text-3xl font-bold text-blue-600">{{ stats.total }}</div>
             <div class="text-gray-600 text-sm mt-1">Total de Tickets</div>
@@ -141,11 +141,7 @@
             <div class="text-gray-600 text-sm mt-1">Em Andamento</div>
         </div>
         <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-green-600">{{ stats.resolved }}</div>
-            <div class="text-gray-600 text-sm mt-1">Resolvidos</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-gray-600">{{ stats.closed }}</div>
+            <div class="text-3xl font-bold text-green-600" id="stat-closed">{{ stats.closed }}</div>
             <div class="text-gray-600 text-sm mt-1">Fechados</div>
         </div>
         <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
@@ -155,7 +151,7 @@
     </div>
 
     <!-- Kanban Board -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 h-[70vh] overflow-hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[70vh] overflow-hidden">
         <!-- Abertos -->
         <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
             <div class="p-4 font-semibold border-b border-gray-200 bg-red-100 text-red-800 flex justify-between items-center">
@@ -178,18 +174,7 @@
             </div>
         </div>
 
-        <!-- Resolvidos -->
-        <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-            <div class="p-4 font-semibold border-b border-gray-200 bg-blue-100 text-blue-800 flex justify-between items-center">
-                <span>Resolvidos</span>
-                <span class="bg-blue-200 px-2 py-1 rounded-full text-xs" id="resolved-count">0</span>
-            </div>
-            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="resolved-tickets" data-status="RESOLVIDO">
-                <!-- Tickets resolvidos serão carregados aqui -->
-            </div>
-        </div>
-
-        <!-- Fechados -->
+        <!-- Fechados (inclui Resolvidos + Fechados) -->
         <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
             <div class="p-4 font-semibold border-b border-gray-200 bg-green-100 text-green-800 flex justify-between items-center">
                 <span>Fechados</span>
@@ -531,7 +516,7 @@ function getStatusLabel(status) {
     const labels = {
         'ABERTO': 'Abertos',
         'EM_ANDAMENTO': 'Em Andamento',
-        'RESOLVIDO': 'Resolvidos',
+        'RESOLVIDO': 'Fechados',
         'FECHADO': 'Fechados'
     };
     return labels[status] || status;
@@ -764,7 +749,7 @@ function stopTitleBlink() {
 
 function updateStatCounters(stats) {
     // Atualizar os contadores no topo do dashboard
-    const containers = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-6 > div');
+    const containers = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-5 > div');
     if (containers.length >= 1) {
         // Total
         const totalCounter = containers[0].querySelector('.text-3xl');
@@ -781,14 +766,10 @@ function updateStatCounters(stats) {
         if (progressCounter) progressCounter.textContent = stats.in_progress;
     }
     if (containers.length >= 4) {
-        // Resolvidos
-        const resolvedCounter = containers[3].querySelector('.text-3xl');
-        if (resolvedCounter) resolvedCounter.textContent = stats.resolved;
-    }
-    if (containers.length >= 5) {
-        // Fechados
-        const closedCounter = containers[4].querySelector('.text-3xl');
-        if (closedCounter) closedCounter.textContent = stats.closed !== undefined ? stats.closed : 0;
+        // Fechados (Resolvidos + Fechados somados)
+        const closedCounter = containers[3].querySelector('.text-3xl');
+        const closedTotal = (stats.resolved || 0) + (stats.closed !== undefined ? stats.closed : 0);
+        if (closedCounter) closedCounter.textContent = closedTotal;
     }
     
     // Atualizar badges nas colunas do kanban
@@ -798,11 +779,9 @@ function updateStatCounters(stats) {
     const progressBadge = document.querySelector('#progress-tickets').parentElement.querySelector('.bg-yellow-200');
     if (progressBadge) progressBadge.textContent = stats.in_progress;
     
-    const resolvedCount = document.getElementById('resolved-count');
-    if (resolvedCount) resolvedCount.textContent = stats.resolved;
-    
     const closedCount = document.getElementById('closed-count');
-    if (closedCount) closedCount.textContent = stats.closed !== undefined ? stats.closed : 0;
+    const closedTotal = (stats.resolved || 0) + (stats.closed !== undefined ? stats.closed : 0);
+    if (closedCount) closedCount.textContent = closedTotal;
 }
 
 function loadSupportTickets() {
@@ -824,7 +803,7 @@ function loadSupportTickets() {
             } else {
                 console.warn('[LoadTickets] Nenhum ticket encontrado');
                 // Limpar containers
-                ['open-tickets', 'progress-tickets', 'resolved-tickets', 'closed-tickets'].forEach(id => {
+                ['open-tickets', 'progress-tickets', 'closed-tickets'].forEach(id => {
                     const container = document.getElementById(id);
                     if (container) {
                         container.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Nenhum ticket</div>';
@@ -851,7 +830,7 @@ function renderTickets(tickets) {
         'AGUARDANDO': document.getElementById('open-tickets'),
         'ABERTO': document.getElementById('open-tickets'),
         'EM_ANDAMENTO': document.getElementById('progress-tickets'),
-        'RESOLVIDO': document.getElementById('resolved-tickets'),
+        'RESOLVIDO': document.getElementById('closed-tickets'),
         'FECHADO': document.getElementById('closed-tickets')
     };
     
@@ -988,22 +967,16 @@ function escapeHtml(text) {
 }
 
 function updateTicketCounts(tickets) {
-    const counts = {
-        'RESOLVIDO': 0,
-        'FECHADO': 0
-    };
+    let closedTotal = 0;
     
     tickets.forEach(ticket => {
-        if (counts.hasOwnProperty(ticket.status)) {
-            counts[ticket.status]++;
+        if (ticket.status === 'RESOLVIDO' || ticket.status === 'FECHADO') {
+            closedTotal++;
         }
     });
     
-    const resolvedCountEl = document.getElementById('resolved-count');
     const closedCountEl = document.getElementById('closed-count');
-    
-    if (resolvedCountEl) resolvedCountEl.textContent = counts.RESOLVIDO;
-    if (closedCountEl) closedCountEl.textContent = counts.FECHADO;
+    if (closedCountEl) closedCountEl.textContent = closedTotal;
 }
 
 function openTicketModal(ticketId) {
