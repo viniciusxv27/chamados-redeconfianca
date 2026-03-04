@@ -75,13 +75,21 @@ def payslip_pdf(request, pk):
 
     from django.http import HttpResponse
 
+    # Verificar se o arquivo existe / pode ser lido
+    if not payslip.pdf_file:
+        messages.error(request, 'PDF não disponível para este contracheque.')
+        return redirect('contracheque:payslip_detail', pk=payslip.pk)
+
+    try:
+        pdf_content = payslip.pdf_file.read()
+        payslip.pdf_file.seek(0)
+    except Exception:
+        messages.error(request, 'Não foi possível acessar o arquivo PDF.')
+        return redirect('contracheque:payslip_detail', pk=payslip.pk)
+
     # Se o PDF armazenado tem pdf_page_number, é porque pode ser um PDF multi-página antigo
     # Novos imports já salvam a página individual. Mas por segurança, verificamos:
     if payslip.pdf_page_number is not None:
-        pdf_content = payslip.pdf_file.read()
-        payslip.pdf_file.seek(0)
-
-        # Verificar se o PDF tem mais de 1 página (import antigo sem extração)
         try:
             import pypdfium2 as pdfium
             doc = pdfium.PdfDocument(pdf_content)
@@ -98,7 +106,10 @@ def payslip_pdf(request, pk):
         except Exception:
             pass
 
-    return FileResponse(payslip.pdf_file.open('rb'), content_type='application/pdf')
+    # Retornar o PDF inteiro (já é página individual ou fallback)
+    response = HttpResponse(pdf_content, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="contracheque_{payslip.user.pk}_{payslip.year}_{payslip.month:02d}.pdf"'
+    return response
 
 
 # ─── Área Administrativa (SUPERADMIN) ────────────────────────────────────────
