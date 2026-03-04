@@ -234,8 +234,8 @@ def api_bulk_import(request):
         if not target_user:
             results.append({
                 'file': pdf_file.name,
-                'status': 'error',
-                'message': f'Funcionário não encontrado: {employee_name or "Nome não identificado"} (CPF: {cpf or "N/A"})',
+                'status': 'skip',
+                'message': f'Funcionário não encontrado (pulado): {employee_name or "Nome não identificado"} (CPF: {cpf or "N/A"})',
             })
             continue
 
