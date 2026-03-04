@@ -5,8 +5,11 @@ from django.http import JsonResponse, FileResponse
 from django.utils import timezone
 from django.db.models import Q
 
+import unicodedata
+from io import BytesIO
+
 from .models import Payslip
-from .pdf_parser import extract_payslip_data
+from .pdf_parser import extract_payslip_data, extract_all_payslips, normalize_name
 from users.models import User
 
 HIERARCHY_RANK = {
@@ -189,9 +192,66 @@ def api_import_payslip(request):
     })
 
 
+def _find_user_by_name(employee_name, users_cache):
+    """
+    Busca um usuário da plataforma que corresponda ao nome extraído do PDF.
+    Usa múltiplas estratégias de matching (exact, contains, first+last word).
+    """
+    if not employee_name:
+        return None
+
+    emp_normalized = normalize_name(employee_name)
+    emp_words = emp_normalized.split()
+
+    if not emp_words:
+        return None
+
+    # Estratégia 1: Nome completo exato (normalizado)
+    for user in users_cache:
+        user_full = normalize_name(f"{user.first_name} {user.last_name}")
+        if user_full == emp_normalized:
+            return user
+
+    # Estratégia 2: Nome completo do usuário contido no nome do PDF ou vice-versa
+    for user in users_cache:
+        user_full = normalize_name(f"{user.first_name} {user.last_name}")
+        if user_full and (user_full in emp_normalized or emp_normalized in user_full):
+            return user
+
+    # Estratégia 3: Primeiro nome + último nome do PDF coincidem com first_name + last_name
+    for user in users_cache:
+        first = normalize_name(user.first_name)
+        last = normalize_name(user.last_name)
+        if first and last and len(emp_words) >= 2:
+            if first == emp_words[0] and last == emp_words[-1]:
+                return user
+
+    # Estratégia 4: Primeiro nome coincide e último nome do user está entre as palavras do PDF
+    for user in users_cache:
+        first = normalize_name(user.first_name)
+        last = normalize_name(user.last_name)
+        if first and last:
+            last_words = last.split()
+            if first in emp_words and all(lw in emp_words for lw in last_words):
+                return user
+
+    # Estratégia 5: Todas as palavras do first_name + last_name estão no nome do PDF
+    for user in users_cache:
+        user_full = normalize_name(f"{user.first_name} {user.last_name}")
+        user_words = user_full.split()
+        if len(user_words) >= 2 and all(uw in emp_words for uw in user_words):
+            return user
+
+    return None
+
+
 @login_required
 def api_bulk_import(request):
-    """API para importar múltiplos PDFs de uma vez."""
+    """API para importar múltiplos PDFs de uma vez.
+    Suporta:
+    - PDF único com múltiplos contracheques (1 por página)
+    - Múltiplos PDFs individuais
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
@@ -209,66 +269,95 @@ def api_bulk_import(request):
     year = int(year)
     results = []
 
+    # Pré-carregar todos os usuários ativos para matching eficiente
+    users_cache = list(User.objects.filter(is_active=True))
+
     for pdf_file in files:
-        # Tentar encontrar usuário pelo nome do arquivo ou conteúdo do PDF
-        pdf_data = extract_payslip_data(pdf_file)
-        employee_name = pdf_data.get('employee_name', '')
-        cpf = pdf_data.get('cpf', '')
+        # Extrair TODOS os contracheques do PDF (suporta multi-funcionário)
+        pdf_bytes = pdf_file.read()
+        pdf_file.seek(0)
+        all_payslips = extract_all_payslips(BytesIO(pdf_bytes))
 
-        target_user = None
-
-        # Tentar match por CPF
-        if cpf:
-            cpf_clean = cpf.replace('.', '').replace('-', '').replace('/', '')
-            target_user = User.objects.filter(cpf__icontains=cpf_clean).first()
-
-        # Tentar match por nome
-        if not target_user and employee_name:
-            name_parts = employee_name.split()
-            if len(name_parts) >= 2:
-                target_user = User.objects.filter(
-                    first_name__icontains=name_parts[0],
-                    last_name__icontains=name_parts[-1],
-                ).first()
-
-        if not target_user:
+        # Se retornou erro global
+        if len(all_payslips) == 1 and 'error' in all_payslips[0] and not all_payslips[0].get('employee_name'):
             results.append({
                 'file': pdf_file.name,
-                'status': 'skip',
-                'message': f'Funcionário não encontrado (pulado): {employee_name or "Nome não identificado"} (CPF: {cpf or "N/A"})',
+                'status': 'error',
+                'message': f'Erro ao processar PDF: {all_payslips[0]["error"]}',
             })
             continue
 
-        # Verificar duplicidade
-        if Payslip.objects.filter(user=target_user, month=month, year=year).exists():
+        # Se não encontrou nenhum contracheque, tentar com parser individual
+        if not all_payslips:
             results.append({
                 'file': pdf_file.name,
                 'status': 'skip',
-                'message': f'Já existe para {target_user.full_name}',
+                'message': 'Nenhum contracheque encontrado no PDF.',
             })
             continue
 
-        pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in ('error',)}
-        payslip = Payslip(
-            user=target_user,
-            month=month,
-            year=year,
-            pdf_file=pdf_file,
-            uploaded_by=request.user,
-            **pdf_data_clean,
-        )
-        payslip.save()
+        # Para cada contracheque encontrado no PDF
+        for pdf_data in all_payslips:
+            employee_name = pdf_data.get('employee_name', '')
+            cpf = pdf_data.get('cpf', '')
 
-        results.append({
-            'file': pdf_file.name,
-            'status': 'success',
-            'message': f'Importado para {target_user.full_name}',
-        })
+            target_user = None
+
+            # Tentar match por CPF primeiro
+            if cpf:
+                cpf_clean = cpf.replace('.', '').replace('-', '').replace('/', '').replace(' ', '')
+                if cpf_clean:
+                    target_user = User.objects.filter(cpf__icontains=cpf_clean).first()
+
+            # Tentar match por nome usando múltiplas estratégias
+            if not target_user and employee_name:
+                target_user = _find_user_by_name(employee_name, users_cache)
+
+            if not target_user:
+                results.append({
+                    'file': pdf_file.name,
+                    'status': 'skip',
+                    'message': f'Funcionário não encontrado (pulado): {employee_name or "Nome não identificado"}',
+                })
+                continue
+
+            # Verificar duplicidade
+            if Payslip.objects.filter(user=target_user, month=month, year=year).exists():
+                results.append({
+                    'file': pdf_file.name,
+                    'status': 'skip',
+                    'message': f'Já existe para {target_user.full_name}',
+                })
+                continue
+
+            # Limpar dados para salvar
+            pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in ('error',)}
+
+            # Criar arquivo PDF individual para este funcionário
+            from django.core.files.base import ContentFile
+            individual_pdf_name = f"contracheque_{target_user.pk}_{year}_{month:02d}.pdf"
+
+            payslip = Payslip(
+                user=target_user,
+                month=month,
+                year=year,
+                pdf_file=pdf_file if len(all_payslips) == 1 else ContentFile(pdf_bytes, name=individual_pdf_name),
+                uploaded_by=request.user,
+                **pdf_data_clean,
+            )
+            payslip.save()
+
+            results.append({
+                'file': pdf_file.name,
+                'status': 'success',
+                'message': f'Importado para {target_user.full_name}',
+            })
 
     success_count = sum(1 for r in results if r['status'] == 'success')
+    total_processed = sum(1 for r in results)
     return JsonResponse({
         'results': results,
-        'total': len(files),
+        'total': total_processed,
         'success_count': success_count,
     })
 

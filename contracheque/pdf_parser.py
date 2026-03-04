@@ -1,5 +1,6 @@
 import re
 import io
+import unicodedata
 from decimal import Decimal, InvalidOperation
 
 try:
@@ -19,15 +20,18 @@ def parse_currency(value_str):
         return Decimal('0')
 
 
-def extract_payslip_data(pdf_file):
-    """
-    Extrai dados de um PDF de contracheque.
-    Retorna dict com campos preenchidos.
-    """
-    if pdfplumber is None:
-        return {'error': 'pdfplumber não está instalado. Execute: pip install pdfplumber'}
+def normalize_name(name):
+    """Remove acentos, converte para maiúsculo, remove espaços extras."""
+    if not name:
+        return ''
+    nfkd = unicodedata.normalize('NFKD', name)
+    ascii_text = ''.join(c for c in nfkd if not unicodedata.combining(c))
+    return ' '.join(ascii_text.upper().split())
 
-    data = {
+
+def _default_payslip_data():
+    """Retorna dict padrão com todos os campos de um contracheque."""
+    return {
         'employee_name': '',
         'cpf': '',
         'job_title': '',
@@ -45,6 +49,297 @@ def extract_payslip_data(pdf_file):
         'deductions_detail': [],
     }
 
+
+def _extract_employee_info_from_text(lines, data):
+    """
+    Extrai nome do funcionário, cargo e data de admissão do texto da página.
+
+    Padrão esperado no PDF:
+        Código Nome do Funcionário CBO Departamento Filial
+        9 ANA GABRIELLE DIAS 521110 2 1
+        VENDEDORA Admissão: 16/01/2025
+    """
+    found = False
+    for i, line in enumerate(lines):
+        if 'Nome do Funcion' in line and 'CBO' in line:
+            # Próxima linha: "CÓDIGO NOME_COMPLETO CBO_4a6DIGITOS DEPTO FILIAL"
+            if i + 1 < len(lines):
+                emp_line = lines[i + 1].strip()
+                match = re.match(r'^\d+\s+(.+?)\s+\d{4,6}\s+\d+\s+\d+\s*$', emp_line)
+                if match:
+                    data['employee_name'] = match.group(1).strip()[:200]
+                    found = True
+
+            # Linha seguinte: "CARGO Admissão: DD/MM/AAAA"
+            if i + 2 < len(lines):
+                job_line = lines[i + 2].strip()
+                job_match = re.match(r'^(.+?)\s+Admissão\s*:\s*([\d/.\-]+)', job_line)
+                if job_match:
+                    data['job_title'] = job_match.group(1).strip()[:150]
+                    data['admission_date'] = job_match.group(2).strip()
+
+            if found:
+                break  # Só primeira ocorrência (página tem 2 cópias)
+
+    return found
+
+
+def _extract_base_values_from_text(lines, data):
+    """
+    Extrai valores de base do rodapé do contracheque.
+
+    Padrão:
+        Salário Base Sal. Contr. INSS Base Cálc. FGTS F.G.T.S do Mês Base Cálc. IRRF Faixa IRRF
+        1.650,00 2.140,55 2.140,55 171,24 1.533,35 0,00
+    """
+    for i, line in enumerate(lines):
+        if 'Salário Base' in line and ('INSS' in line or 'FGTS' in line):
+            for j in range(i + 1, min(i + 4, len(lines))):
+                values = re.findall(r'[\d]+[.,][\d]+', lines[j])
+                if len(values) >= 3:
+                    data['base_salary'] = parse_currency(values[0])
+                    data['inss_base'] = parse_currency(values[1])
+                    data['fgts_base'] = parse_currency(values[2])
+                    if len(values) >= 4:
+                        data['fgts_deposit'] = parse_currency(values[3])
+                    if len(values) >= 5:
+                        data['irrf_base'] = parse_currency(values[4])
+                    break
+            break
+
+
+def _extract_net_pay_from_text(lines, data):
+    """
+    Extrai Valor Líquido do texto.
+    Padrão: "Valor Líquido 2.344,99"
+    """
+    for i, line in enumerate(lines):
+        if 'Valor' in line and ('Líquido' in line or 'Liquido' in line):
+            match = re.search(r'(?:Valor\s+L[íi]quido)\s+([\d.,]+)', line)
+            if match:
+                data['net_pay'] = parse_currency(match.group(1))
+                return
+            if i + 1 < len(lines):
+                val_match = re.match(r'^\s*([\d.,]+)\s*$', lines[i + 1])
+                if val_match:
+                    data['net_pay'] = parse_currency(val_match.group(1))
+                    return
+            break
+
+
+def _extract_totals_from_tables(tables, data):
+    """
+    Extrai Total de Vencimentos, Total de Descontos e Valor Líquido das tabelas.
+
+    Formato nas cells da tabela:
+        "Total de Vencimentos\\n2.841,56"
+        "Total de Descontos\\n496,57"
+        Cell "Valor Líquido" → próxima cell tem o valor
+    """
+    found_totals = False
+
+    for table in tables:
+        if found_totals:
+            break
+        for row in table:
+            if not row:
+                continue
+            cells = [str(c).strip() if c else '' for c in row]
+
+            for cell_idx, cell in enumerate(cells):
+                if not cell:
+                    continue
+
+                if 'Total de Vencimentos' in cell:
+                    parts = cell.split('\n')
+                    for part in parts:
+                        part = part.strip()
+                        if part and 'Total' not in part and 'Vencimento' not in part:
+                            val = parse_currency(part)
+                            if val > 0:
+                                data['total_earnings'] = val
+                    found_totals = True
+
+                if 'Total de Descontos' in cell:
+                    parts = cell.split('\n')
+                    for part in parts:
+                        part = part.strip()
+                        if part and 'Total' not in part and 'Desconto' not in part:
+                            val = parse_currency(part)
+                            if val > 0:
+                                data['total_deductions'] = val
+                    found_totals = True
+
+                if 'Valor' in cell and ('Líquido' in cell or 'Liquido' in cell):
+                    # Valor na mesma cell (multiline)
+                    parts = cell.split('\n')
+                    for part in parts:
+                        part = part.strip()
+                        if part and 'Valor' not in part and 'quido' not in part and re.match(r'^[\d.,]+$', part):
+                            data['net_pay'] = parse_currency(part)
+                            break
+                    else:
+                        # Procurar na próxima cell
+                        if cell_idx + 1 < len(cells) and cells[cell_idx + 1]:
+                            val_str = cells[cell_idx + 1].strip()
+                            if re.match(r'^[\d.,]+$', val_str):
+                                data['net_pay'] = parse_currency(val_str)
+
+
+def _extract_line_items_from_tables(tables, data):
+    """
+    Extrai proventos e descontos detalhados das tabelas.
+
+    Na tabela, a row de dados tem cells com valores separados por \\n:
+        - Cell de descrições: "DIAS NORMAIS\\nPREMIO.\\nCOMISSÃO\\n..."
+        - Cell de vencimentos: "1.650,00\\n701,01\\n..."
+        - Cell de descontos: "168,32\\n266,82\\n..."
+
+    Os primeiros N itens das descrições são vencimentos (N = qtd vencimentos),
+    os últimos M itens são descontos (M = qtd descontos).
+    """
+    for table in tables:
+        header_idx = None
+        for i, row in enumerate(table):
+            if not row:
+                continue
+            row_text = ' '.join(str(c) for c in row if c).lower()
+            if ('código' in row_text or 'codigo' in row_text) and \
+               ('vencimentos' in row_text or 'vencimento' in row_text) and \
+               ('descontos' in row_text or 'desconto' in row_text):
+                header_idx = i
+                break
+
+        if header_idx is None:
+            continue
+
+        data_row_idx = header_idx + 1
+        if data_row_idx >= len(table):
+            continue
+
+        row = table[data_row_idx]
+        if not row:
+            continue
+
+        cells = [str(c).strip() if c else '' for c in row]
+
+        # Identificar cells com conteúdo
+        description_cell = ''
+        value_cells = []
+
+        for cell in cells:
+            if not cell:
+                continue
+            parts = [p.strip() for p in cell.split('\n') if p.strip()]
+            if not parts:
+                continue
+
+            text_parts = [p for p in parts if not re.match(r'^[\d.,:\s]+$', p)]
+            num_parts = [p for p in parts if re.match(r'^[\d.,]+$', p)]
+
+            if len(text_parts) > len(num_parts) and len(text_parts) >= 2:
+                if len(cell) > len(description_cell):
+                    description_cell = cell
+            elif num_parts:
+                value_cells.append([parse_currency(p) for p in num_parts])
+
+        if not description_cell:
+            continue
+
+        descriptions = [d.strip() for d in description_cell.split('\n') if d.strip()]
+
+        venc_values = []
+        desc_values = []
+
+        if len(value_cells) >= 3:
+            venc_values = value_cells[-2]
+            desc_values = value_cells[-1]
+        elif len(value_cells) == 2:
+            venc_values = value_cells[0]
+            desc_values = value_cells[1]
+        elif len(value_cells) == 1:
+            venc_values = value_cells[0]
+
+        n_venc = len(venc_values)
+        n_desc = len(desc_values)
+
+        for i in range(min(n_venc, len(descriptions))):
+            if venc_values[i] > 0:
+                data['earnings_detail'].append({
+                    'description': descriptions[i],
+                    'value': str(venc_values[i]),
+                })
+
+        for i in range(n_desc):
+            desc_idx = len(descriptions) - n_desc + i
+            if 0 <= desc_idx < len(descriptions) and i < len(desc_values) and desc_values[i] > 0:
+                data['deductions_detail'].append({
+                    'description': descriptions[desc_idx],
+                    'value': str(desc_values[i]),
+                })
+
+        if data['earnings_detail'] or data['deductions_detail']:
+            break
+
+
+def _parse_single_page(page):
+    """
+    Extrai os dados de contracheque de uma única página do PDF.
+    Retorna dict com os dados ou None se não encontrar funcionário.
+    """
+    data = _default_payslip_data()
+
+    try:
+        text = page.extract_text() or ''
+        lines = text.split('\n')
+
+        # 1. Info do funcionário (nome, cargo, admissão)
+        if not _extract_employee_info_from_text(lines, data):
+            return None
+
+        if not data['employee_name']:
+            return None
+
+        # 2. Valores base (Salário Base, INSS, FGTS, IRRF)
+        _extract_base_values_from_text(lines, data)
+
+        # 3. Valor Líquido do texto
+        _extract_net_pay_from_text(lines, data)
+
+        # 4. Totais das tabelas (Total Vencimentos, Total Descontos, Valor Líquido)
+        tables = page.extract_tables()
+        _extract_totals_from_tables(tables, data)
+
+        # 5. Itens detalhados (proventos e descontos)
+        _extract_line_items_from_tables(tables, data)
+
+        # 6. CPF se presente
+        cpf_match = re.search(r'CPF\s*:?\s*(\d{3}[.\s]?\d{3}[.\s]?\d{3}[.\s/-]?\d{2})', text)
+        if cpf_match:
+            data['cpf'] = cpf_match.group(1).strip()
+
+        # 7. Fallback: calcular totais faltantes
+        if data['total_earnings'] == 0 and data['net_pay'] > 0 and data['total_deductions'] > 0:
+            data['total_earnings'] = data['net_pay'] + data['total_deductions']
+        elif data['total_deductions'] == 0 and data['total_earnings'] > 0 and data['net_pay'] >= 0:
+            data['total_deductions'] = data['total_earnings'] - data['net_pay']
+
+    except Exception as e:
+        data['error'] = str(e)
+
+    return data
+
+
+def extract_all_payslips(pdf_file):
+    """
+    Extrai TODOS os contracheques de um PDF com múltiplos funcionários.
+    Cada página é o contracheque de um funcionário (com 2 cópias na página).
+
+    Retorna lista de dicts, um por funcionário encontrado.
+    """
+    if pdfplumber is None:
+        return [{'error': 'pdfplumber não está instalado. Execute: pip install pdfplumber'}]
+
     try:
         if hasattr(pdf_file, 'read'):
             pdf_bytes = pdf_file.read()
@@ -53,126 +348,41 @@ def extract_payslip_data(pdf_file):
         else:
             pdf_obj = pdfplumber.open(pdf_file)
 
-        full_text = ''
+        payslips = []
+        seen_names = set()
+
         for page in pdf_obj.pages:
-            text = page.extract_text() or ''
-            full_text += text + '\n'
+            page_data = _parse_single_page(page)
 
-        lines = full_text.split('\n')
+            if not page_data or not page_data.get('employee_name'):
+                continue
 
-        # Tentar extrair nome do funcionário
-        for line in lines:
-            if 'nome:' in line.lower() or 'funcionário' in line.lower() or 'funcionario' in line.lower():
-                parts = re.split(r'nome\s*:?\s*', line, flags=re.IGNORECASE)
-                if len(parts) > 1:
-                    data['employee_name'] = parts[1].strip()[:200]
-                    break
+            # Deduplicar por nome normalizado
+            name_key = normalize_name(page_data['employee_name'])
+            if name_key in seen_names:
+                continue
+            seen_names.add(name_key)
 
-        # CPF
-        cpf_match = re.search(r'CPF\s*:?\s*([\d.\-/]+)', full_text, re.IGNORECASE)
-        if cpf_match:
-            data['cpf'] = cpf_match.group(1).strip()
-
-        # Cargo / Função
-        func_match = re.search(r'(?:cargo|função|funcao)\s*:?\s*(.+)', full_text, re.IGNORECASE)
-        if func_match:
-            data['job_title'] = func_match.group(1).strip()[:150]
-
-        # Data de admissão
-        adm_match = re.search(r'(?:admissão|admissao|adm\.?)\s*:?\s*([\d/.\-]+)', full_text, re.IGNORECASE)
-        if adm_match:
-            data['admission_date'] = adm_match.group(1).strip()
-
-        # Departamento
-        dep_match = re.search(r'(?:depart(?:amento)?|setor|lotação|lotacao)\s*:?\s*(.+)', full_text, re.IGNORECASE)
-        if dep_match:
-            data['department'] = dep_match.group(1).strip()[:200]
-
-        # Salário base
-        sal_match = re.search(r'(?:sal[áa]rio\s*base|salario\s*base)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if sal_match:
-            data['base_salary'] = parse_currency(sal_match.group(1))
-
-        # Total de proventos
-        prov_match = re.search(r'(?:total\s*(?:de\s*)?proventos?|total\s*vencimentos?)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if prov_match:
-            data['total_earnings'] = parse_currency(prov_match.group(1))
-
-        # Total de descontos
-        desc_match = re.search(r'(?:total\s*(?:de\s*)?descontos?)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if desc_match:
-            data['total_deductions'] = parse_currency(desc_match.group(1))
-
-        # Líquido
-        liq_match = re.search(r'(?:l[íi]quido|valor\s*l[íi]quido|a\s*receber)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if liq_match:
-            data['net_pay'] = parse_currency(liq_match.group(1))
-
-        # FGTS
-        fgts_base_match = re.search(r'(?:base\s*(?:de\s*)?fgts|fgts\s*base)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if fgts_base_match:
-            data['fgts_base'] = parse_currency(fgts_base_match.group(1))
-
-        fgts_dep_match = re.search(r'(?:dep[óo]sito\s*fgts|fgts\s*dep[óo]sito|fgts\s*[\d.,]+\s*([\d.,]+))', full_text, re.IGNORECASE)
-        if fgts_dep_match:
-            val = fgts_dep_match.group(1) if fgts_dep_match.group(1) else ''
-            if val:
-                data['fgts_deposit'] = parse_currency(val)
-
-        # IRRF base
-        irrf_match = re.search(r'(?:base\s*(?:de\s*)?irrf|irrf\s*base)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if irrf_match:
-            data['irrf_base'] = parse_currency(irrf_match.group(1))
-
-        # INSS base
-        inss_match = re.search(r'(?:base\s*(?:de\s*)?inss|inss\s*base)\s*[:\s]*([\d.,]+)', full_text, re.IGNORECASE)
-        if inss_match:
-            data['inss_base'] = parse_currency(inss_match.group(1))
-
-        # --- Tentar extrair table de proventos e descontos ---
-        for page in pdf_obj.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                for row in table:
-                    if not row or not any(row):
-                        continue
-                    cells = [str(c).strip() if c else '' for c in row]
-                    # Procurar linhas com código/descrição/referência/proventos/descontos
-                    # Formato típico: [cod, descricao, ref, proventos, descontos]
-                    if len(cells) >= 4:
-                        desc = cells[1] if len(cells) > 1 else ''
-                        # Valor provento (penúltima ou coluna de proventos)
-                        prov_val = cells[-2] if len(cells) >= 5 else ''
-                        desc_val = cells[-1] if len(cells) >= 5 else ''
-
-                        if not desc or desc.lower() in ('descrição', 'descricao', 'evento', ''):
-                            continue
-
-                        prov_parsed = parse_currency(prov_val)
-                        desc_parsed = parse_currency(desc_val)
-
-                        if prov_parsed > 0:
-                            data['earnings_detail'].append({
-                                'description': desc,
-                                'value': str(prov_parsed),
-                            })
-                        if desc_parsed > 0:
-                            data['deductions_detail'].append({
-                                'description': desc,
-                                'value': str(desc_parsed),
-                            })
+            payslips.append(page_data)
 
         pdf_obj.close()
-
-        # Se não encontrou nome, tentar pegar da primeira linha com texto útil
-        if not data['employee_name']:
-            for line in lines:
-                line_clean = line.strip()
-                if line_clean and len(line_clean) > 5 and not any(k in line_clean.lower() for k in ['recibo', 'pagamento', 'empresa', 'cnpj', 'código', 'codigo']):
-                    data['employee_name'] = line_clean[:200]
-                    break
+        return payslips
 
     except Exception as e:
-        data['error'] = str(e)
+        return [{'error': f'Erro ao processar PDF: {str(e)}'}]
 
-    return data
+
+def extract_payslip_data(pdf_file):
+    """
+    Extrai dados de um PDF de contracheque (compatibilidade com importação individual).
+    Se o PDF tiver múltiplos funcionários, retorna os dados do primeiro.
+    """
+    results = extract_all_payslips(pdf_file)
+
+    if not results:
+        return _default_payslip_data()
+
+    if len(results) == 1 and 'error' in results[0] and not results[0].get('employee_name'):
+        return results[0]
+
+    return results[0]
