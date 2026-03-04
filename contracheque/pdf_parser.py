@@ -95,7 +95,7 @@ def _extract_base_values_from_text(lines, data):
     for i, line in enumerate(lines):
         if 'Salário Base' in line and ('INSS' in line or 'FGTS' in line):
             for j in range(i + 1, min(i + 4, len(lines))):
-                values = re.findall(r'[\d]+[.,][\d]+', lines[j])
+                values = re.findall(r'\d[\d.]*,\d+', lines[j])
                 if len(values) >= 3:
                     data['base_salary'] = parse_currency(values[0])
                     data['inss_base'] = parse_currency(values[1])

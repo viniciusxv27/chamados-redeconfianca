@@ -5,7 +5,6 @@ from django.http import JsonResponse, FileResponse
 from django.utils import timezone
 from django.db.models import Q
 
-import unicodedata
 from io import BytesIO
 
 from .models import Payslip
