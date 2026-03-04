@@ -8,6 +8,11 @@ try:
 except ImportError:
     pdfplumber = None
 
+try:
+    import pypdfium2 as pdfium
+except ImportError:
+    pdfium = None
+
 
 def parse_currency(value_str):
     """Converte string monetária BR para Decimal. Ex: '1.234,56' -> Decimal('1234.56')"""
@@ -351,7 +356,7 @@ def extract_all_payslips(pdf_file):
         payslips = []
         seen_names = set()
 
-        for page in pdf_obj.pages:
+        for page_idx, page in enumerate(pdf_obj.pages):
             page_data = _parse_single_page(page)
 
             if not page_data or not page_data.get('employee_name'):
@@ -362,6 +367,9 @@ def extract_all_payslips(pdf_file):
             if name_key in seen_names:
                 continue
             seen_names.add(name_key)
+
+            # Guardar o número da página para extração individual
+            page_data['_page_number'] = page_idx
 
             payslips.append(page_data)
 
@@ -386,3 +394,97 @@ def extract_payslip_data(pdf_file):
         return results[0]
 
     return results[0]
+
+
+def extract_single_page_pdf(pdf_file, page_number):
+    """
+    Extrai uma única página de um PDF multi-página e retorna os bytes de um novo PDF
+    contendo apenas essa página.
+
+    Args:
+        pdf_file: arquivo PDF (path string, bytes ou file-like object)
+        page_number: índice da página (0-based)
+
+    Returns:
+        bytes do PDF de página única, ou None em caso de erro
+    """
+    if pdfium is None:
+        return None
+
+    try:
+        if isinstance(pdf_file, bytes):
+            pdf_bytes = pdf_file
+        elif hasattr(pdf_file, 'read'):
+            pdf_bytes = pdf_file.read()
+            pdf_file.seek(0)
+        else:
+            with open(pdf_file, 'rb') as f:
+                pdf_bytes = f.read()
+
+        src_pdf = pdfium.PdfDocument(pdf_bytes)
+
+        if page_number < 0 or page_number >= len(src_pdf):
+            src_pdf.close()
+            return None
+
+        # Criar novo PDF com apenas a página desejada
+        new_pdf = pdfium.PdfDocument.new()
+        new_pdf.import_pages(src_pdf, [page_number])
+
+        output = io.BytesIO()
+        new_pdf.save(output)
+        new_pdf.close()
+        src_pdf.close()
+
+        return output.getvalue()
+
+    except Exception:
+        return None
+
+
+def find_employee_page_number(pdf_file, employee_name):
+    """
+    Encontra o número da página de um funcionário no PDF, buscando pelo nome.
+
+    Args:
+        pdf_file: arquivo PDF
+        employee_name: nome do funcionário a buscar
+
+    Returns:
+        int (0-based page number) ou None se não encontrado
+    """
+    if pdfplumber is None or not employee_name:
+        return None
+
+    try:
+        if isinstance(pdf_file, bytes):
+            pdf_bytes = pdf_file
+        elif hasattr(pdf_file, 'read'):
+            pdf_bytes = pdf_file.read()
+            pdf_file.seek(0)
+        else:
+            with open(pdf_file, 'rb') as f:
+                pdf_bytes = f.read()
+
+        pdf_obj = pdfplumber.open(io.BytesIO(pdf_bytes))
+        target = normalize_name(employee_name)
+
+        for i, page in enumerate(pdf_obj.pages):
+            text = page.extract_text() or ''
+            lines = text.split('\n')
+            for li, line in enumerate(lines):
+                if 'Nome do Funcion' in line and 'CBO' in line and li + 1 < len(lines):
+                    emp_line = lines[li + 1].strip()
+                    match = re.match(r'^\d+\s+(.+?)\s+\d{4,6}\s+\d+\s+\d+\s*$', emp_line)
+                    if match:
+                        page_name = normalize_name(match.group(1).strip())
+                        if page_name == target:
+                            pdf_obj.close()
+                            return i
+                    break  # Only check first occurrence per page
+
+        pdf_obj.close()
+        return None
+
+    except Exception:
+        return None

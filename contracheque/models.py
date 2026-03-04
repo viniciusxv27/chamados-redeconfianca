@@ -50,6 +50,19 @@ class Payslip(models.Model):
     earnings_detail = models.JSONField(default=list, blank=True, verbose_name='Proventos (detalhado)')
     deductions_detail = models.JSONField(default=list, blank=True, verbose_name='Descontos (detalhado)')
 
+    # Página no PDF original (para extração de página individual)
+    pdf_page_number = models.PositiveIntegerField(null=True, blank=True, verbose_name='Página no PDF original',
+        help_text='Número da página (0-indexed) do funcionário no PDF original')
+
+    # Assinatura digital
+    signed_at = models.DateTimeField(null=True, blank=True, verbose_name='Assinado em')
+    signature_image = models.TextField(blank=True, verbose_name='Assinatura (base64)',
+        help_text='Imagem da assinatura em base64 (PNG)')
+    signature_ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP da assinatura')
+    signature_user_agent = models.TextField(blank=True, verbose_name='User-Agent da assinatura')
+    signature_hash = models.CharField(max_length=64, blank=True, verbose_name='Hash de verificação',
+        help_text='SHA-256 do conteúdo assinado para garantir integridade')
+
     # Metadados
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -70,6 +83,10 @@ class Payslip(models.Model):
     def __str__(self):
         month_name = dict(self.MONTH_CHOICES).get(self.month, self.month)
         return f"{self.user.full_name} – {month_name}/{self.year}"
+
+    @property
+    def is_signed(self):
+        return bool(self.signed_at)
 
     @property
     def month_name(self):

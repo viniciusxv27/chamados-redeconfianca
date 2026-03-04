@@ -17,4 +17,5 @@ urlpatterns = [
     # APIs
     path('api/importar/', views.api_import_payslip, name='api_import_payslip'),
     path('api/importar-lote/', views.api_bulk_import, name='api_bulk_import'),
+    path('api/assinar/<int:pk>/', views.api_sign_payslip, name='api_sign_payslip'),
 ]

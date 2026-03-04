@@ -8,7 +8,7 @@ from django.db.models import Q
 from io import BytesIO
 
 from .models import Payslip
-from .pdf_parser import extract_payslip_data, extract_all_payslips, normalize_name
+from .pdf_parser import extract_payslip_data, extract_all_payslips, normalize_name, extract_single_page_pdf
 from users.models import User
 
 HIERARCHY_RANK = {
@@ -66,12 +66,37 @@ def payslip_detail(request, pk):
 
 @login_required
 def payslip_pdf(request, pk):
-    """Download/visualização do PDF do contracheque."""
+    """Download/visualização do PDF do contracheque (somente a página do funcionário)."""
     payslip = get_object_or_404(Payslip, pk=pk)
 
     if payslip.user != request.user and not is_superadmin(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contracheque:my_payslips')
+
+    from django.http import HttpResponse
+
+    # Se o PDF armazenado tem pdf_page_number, é porque pode ser um PDF multi-página antigo
+    # Novos imports já salvam a página individual. Mas por segurança, verificamos:
+    if payslip.pdf_page_number is not None:
+        pdf_content = payslip.pdf_file.read()
+        payslip.pdf_file.seek(0)
+
+        # Verificar se o PDF tem mais de 1 página (import antigo sem extração)
+        try:
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(pdf_content)
+            num_pages = len(doc)
+            doc.close()
+
+            if num_pages > 1:
+                # O PDF é multi-página — extrair apenas a página do funcionário
+                single_page = extract_single_page_pdf(pdf_content, payslip.pdf_page_number)
+                if single_page:
+                    response = HttpResponse(single_page, content_type='application/pdf')
+                    response['Content-Disposition'] = f'inline; filename="contracheque_{payslip.user.pk}_{payslip.year}_{payslip.month:02d}.pdf"'
+                    return response
+        except Exception:
+            pass
 
     return FileResponse(payslip.pdf_file.open('rb'), content_type='application/pdf')
 
@@ -329,18 +354,38 @@ def api_bulk_import(request):
                 })
                 continue
 
-            # Limpar dados para salvar
+            # Limpar dados para salvar (remover campos internos)
+            page_num = pdf_data.pop('_page_number', None)
             pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in ('error',)}
 
-            # Criar arquivo PDF individual para este funcionário
+            # Extrair página individual do PDF para este funcionário
             from django.core.files.base import ContentFile
             individual_pdf_name = f"contracheque_{target_user.pk}_{year}_{month:02d}.pdf"
+
+            if len(all_payslips) == 1:
+                # PDF individual, usar direto
+                pdf_content = pdf_file
+                saved_page_number = None
+            elif page_num is not None:
+                # Extrair apenas a página do funcionário
+                single_page_bytes = extract_single_page_pdf(pdf_bytes, page_num)
+                if single_page_bytes:
+                    pdf_content = ContentFile(single_page_bytes, name=individual_pdf_name)
+                    saved_page_number = page_num
+                else:
+                    # Fallback: salvar o PDF inteiro + número da página
+                    pdf_content = ContentFile(pdf_bytes, name=individual_pdf_name)
+                    saved_page_number = page_num
+            else:
+                pdf_content = ContentFile(pdf_bytes, name=individual_pdf_name)
+                saved_page_number = None
 
             payslip = Payslip(
                 user=target_user,
                 month=month,
                 year=year,
-                pdf_file=pdf_file if len(all_payslips) == 1 else ContentFile(pdf_bytes, name=individual_pdf_name),
+                pdf_file=pdf_content,
+                pdf_page_number=saved_page_number,
                 uploaded_by=request.user,
                 **pdf_data_clean,
             )
@@ -358,6 +403,70 @@ def api_bulk_import(request):
         'results': results,
         'total': total_processed,
         'success_count': success_count,
+    })
+
+
+@login_required
+def api_sign_payslip(request, pk):
+    """API para assinar digitalmente um contracheque."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    payslip = get_object_or_404(Payslip, pk=pk)
+
+    # Somente o dono pode assinar
+    if payslip.user != request.user:
+        return JsonResponse({'error': 'Sem permissão para assinar este contracheque.'}, status=403)
+
+    if payslip.is_signed:
+        return JsonResponse({'error': 'Este contracheque já foi assinado.'}, status=409)
+
+    import json
+    import hashlib
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Dados inválidos.'}, status=400)
+
+    signature_data = body.get('signature', '')
+    if not signature_data:
+        return JsonResponse({'error': 'Assinatura não fornecida.'}, status=400)
+
+    # Validar que é uma imagem base64 válida (PNG)
+    if not signature_data.startswith('data:image/png;base64,'):
+        return JsonResponse({'error': 'Formato de assinatura inválido.'}, status=400)
+
+    # Gerar hash de verificação (SHA-256 dos dados do contracheque + assinatura)
+    hash_content = (
+        f"{payslip.pk}|{payslip.user.pk}|{payslip.month}|{payslip.year}|"
+        f"{payslip.net_pay}|{payslip.total_earnings}|{payslip.total_deductions}|"
+        f"{signature_data[:100]}"
+    )
+    signature_hash = hashlib.sha256(hash_content.encode('utf-8')).hexdigest()
+
+    # Capturar IP do cliente
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        client_ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        client_ip = request.META.get('REMOTE_ADDR', '')
+
+    user_agent = request.META.get('HTTP_USER_AGENT', '')
+
+    # Salvar assinatura
+    payslip.signed_at = timezone.now()
+    payslip.signature_image = signature_data
+    payslip.signature_ip = client_ip
+    payslip.signature_user_agent = user_agent[:500]
+    payslip.signature_hash = signature_hash
+    payslip.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Contracheque assinado com sucesso.',
+        'signed_at': payslip.signed_at.strftime('%d/%m/%Y às %H:%M'),
+        'hash': signature_hash[:16] + '...',
     })
 
 

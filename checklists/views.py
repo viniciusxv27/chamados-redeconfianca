@@ -2148,7 +2148,8 @@ def export_checklists(request):
     executions = ChecklistExecution.objects.select_related(
         'assignment__template',
         'assignment__template__sector',
-        'assignment__assigned_to'
+        'assignment__assigned_to',
+        'assignment__assigned_to__sector'
     ).prefetch_related(
         'task_executions__task'
     ).filter(
@@ -2197,6 +2198,7 @@ def export_checklists(request):
         'Setor',
         'Usuário',
         'Email',
+        'Loja (Setor)',
         'Status',
         'Tarefa',
         'Tipo de Tarefa',
@@ -2252,13 +2254,21 @@ def export_checklists(request):
             }
             tipo_tarefa = tipo_map.get(task_exec.task.task_type, task_exec.task.task_type)
             
+            user_obj = execution.assignment.assigned_to
+            loja_setor = ''
+            if hasattr(user_obj, 'primary_sector') and user_obj.primary_sector:
+                loja_setor = user_obj.primary_sector.name
+            elif hasattr(user_obj, 'sector') and user_obj.sector:
+                loja_setor = user_obj.sector.name
+
             writer.writerow([
                 execution.execution_date.strftime('%d/%m/%Y'),
                 periodo,
                 execution.assignment.template.name,
                 execution.assignment.template.sector.name,
-                execution.assignment.assigned_to.get_full_name(),
-                execution.assignment.assigned_to.email,
+                user_obj.get_full_name(),
+                user_obj.email,
+                loja_setor,
                 status,
                 task_exec.task.title,
                 tipo_tarefa,
