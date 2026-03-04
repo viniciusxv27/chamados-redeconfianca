@@ -75,19 +75,30 @@ def payslip_pdf(request, pk):
 
     from django.http import HttpResponse
 
-    # Verificar se o arquivo existe / pode ser lido
+    # Verificar se há arquivo vinculado
     if not payslip.pdf_file:
         messages.error(request, 'PDF não disponível para este contracheque.')
         return redirect('contracheque:payslip_detail', pk=payslip.pk)
 
+    # Tentar ler o conteúdo do PDF (funciona tanto com S3 quanto filesystem local)
+    pdf_content = None
     try:
+        payslip.pdf_file.open('rb')
         pdf_content = payslip.pdf_file.read()
-        payslip.pdf_file.seek(0)
+        payslip.pdf_file.close()
     except Exception:
-        messages.error(request, 'Não foi possível acessar o arquivo PDF.')
-        return redirect('contracheque:payslip_detail', pk=payslip.pk)
+        pass
 
-    # Se o PDF armazenado tem pdf_page_number, é porque pode ser um PDF multi-página antigo
+    # Se não conseguiu ler o conteúdo, tentar redirecionar para a URL do arquivo
+    if not pdf_content:
+        try:
+            file_url = payslip.pdf_file.url
+            return redirect(file_url)
+        except Exception:
+            messages.error(request, 'Não foi possível acessar o arquivo PDF. O arquivo pode precisar ser reimportado.')
+            return redirect('contracheque:payslip_detail', pk=payslip.pk)
+
+    # Se o PDF armazenado tem pdf_page_number, pode ser um PDF multi-página antigo
     # Novos imports já salvam a página individual. Mas por segurança, verificamos:
     if payslip.pdf_page_number is not None:
         try:
@@ -97,7 +108,6 @@ def payslip_pdf(request, pk):
             doc.close()
 
             if num_pages > 1:
-                # O PDF é multi-página — extrair apenas a página do funcionário
                 single_page = extract_single_page_pdf(pdf_content, payslip.pdf_page_number)
                 if single_page:
                     response = HttpResponse(single_page, content_type='application/pdf')
