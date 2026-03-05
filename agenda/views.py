@@ -678,14 +678,15 @@ def api_transcription_upload(request):
         if hasattr(whisper_response, 'text'):
             raw_text = whisper_response.text
             segments = []
-            if hasattr(whisper_response, 'segments'):
-                segments = [
-                    {'start': s.get('start', s.start if hasattr(s, 'start') else 0),
-                     'end': s.get('end', s.end if hasattr(s, 'end') else 0),
-                     'text': s.get('text', s.text if hasattr(s, 'text') else '')}
-                    for s in (whisper_response.segments if hasattr(whisper_response, 'segments') else [])
-                ]
-            if hasattr(whisper_response, 'duration'):
+            if hasattr(whisper_response, 'segments') and whisper_response.segments:
+                for s in whisper_response.segments:
+                    seg = {
+                        'start': getattr(s, 'start', 0),
+                        'end': getattr(s, 'end', 0),
+                        'text': getattr(s, 'text', ''),
+                    }
+                    segments.append(seg)
+            if hasattr(whisper_response, 'duration') and whisper_response.duration:
                 transcription.duration_seconds = int(whisper_response.duration)
         else:
             raw_text = str(whisper_response)
