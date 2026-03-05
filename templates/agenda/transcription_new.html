@@ -12,9 +12,9 @@
     </nav>
 
     <div class="bg-white shadow rounded-lg overflow-hidden">
-        <div class="px-5 py-4 border-b bg-indigo-50">
+        <div class="px-5 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
             <h2 class="text-lg font-bold text-gray-900"><i class="fas fa-microphone-alt text-indigo-600 mr-2"></i> Transcrever Reunião</h2>
-            <p class="text-sm text-gray-500 mt-1">Grave áudio ou faça upload de um arquivo para transcrever com IA</p>
+            <p class="text-sm text-gray-500 mt-1">Grave áudio ou faça upload de um arquivo para transcrever com IA avançada (GPT-4o)</p>
         </div>
 
         {% if event %}
@@ -99,10 +99,17 @@
 
             <!-- Status de processamento -->
             <div id="processing-status" class="hidden">
-                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-center">
-                    <i class="fas fa-spinner fa-spin text-2xl text-indigo-600 mb-2"></i>
-                    <p class="text-sm font-medium text-indigo-700">Processando transcrição...</p>
-                    <p class="text-xs text-indigo-500 mt-1">Isso pode levar alguns minutos dependendo da duração do áudio</p>
+                <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-5 text-center">
+                    <i class="fas fa-spinner fa-spin text-3xl text-indigo-600 mb-3"></i>
+                    <p class="text-sm font-bold text-indigo-700">Processando com IA avançada...</p>
+                    <div class="mt-3 space-y-1.5 text-xs text-indigo-500">
+                        <p id="step-transcribe"><i class="fas fa-circle-notch fa-spin mr-1"></i> Transcrevendo áudio com Whisper...</p>
+                        <p id="step-analyze" class="opacity-40"><i class="fas fa-circle mr-1"></i> Análise avançada com GPT-4o</p>
+                        <p id="step-sections" class="opacity-40"><i class="fas fa-circle mr-1"></i> Dividindo em seções e tópicos</p>
+                        <p id="step-actions" class="opacity-40"><i class="fas fa-circle mr-1"></i> Identificando decisões e ações</p>
+                        <p id="step-calendar" class="opacity-40"><i class="fas fa-circle mr-1"></i> Registrando na sua agenda</p>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">Isso pode levar 1-3 minutos dependendo da duração do áudio</p>
                 </div>
             </div>
         </div>
@@ -199,6 +206,7 @@ async function submitTranscription() {
 
     const formData = new FormData();
     formData.append('title', title);
+    formData.append('duration_seconds', recordingSeconds.toString());
     {% if event %}
     formData.append('event_id', '{{ event.pk }}');
     {% endif %}
@@ -217,6 +225,27 @@ async function submitTranscription() {
     document.getElementById('btn-submit').disabled = true;
     document.getElementById('processing-status').classList.remove('hidden');
 
+    // Animate processing steps
+    const steps = ['step-transcribe', 'step-analyze', 'step-sections', 'step-actions', 'step-calendar'];
+    let currentStep = 0;
+    const stepInterval = setInterval(() => {
+        currentStep++;
+        if (currentStep < steps.length) {
+            // Mark previous as done
+            const prev = document.getElementById(steps[currentStep - 1]);
+            if (prev) {
+                prev.innerHTML = '<i class="fas fa-check-circle mr-1 text-green-500"></i> ' + prev.textContent.trim();
+                prev.classList.remove('opacity-40');
+            }
+            // Activate current
+            const curr = document.getElementById(steps[currentStep]);
+            if (curr) {
+                curr.classList.remove('opacity-40');
+                curr.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1"></i> ' + curr.textContent.trim();
+            }
+        }
+    }, 4000);
+
     try {
         const resp = await fetch('{% url "agenda:api_transcription_upload" %}', {
             method: 'POST',
@@ -225,6 +254,7 @@ async function submitTranscription() {
         });
         const data = await resp.json();
 
+        clearInterval(stepInterval);
         if (resp.ok && data.redirect) {
             window.location.href = data.redirect;
         } else {
@@ -233,6 +263,7 @@ async function submitTranscription() {
             document.getElementById('processing-status').classList.add('hidden');
         }
     } catch (err) {
+        clearInterval(stepInterval);
         alert('Erro de conexão: ' + err.message);
         document.getElementById('btn-submit').disabled = false;
         document.getElementById('processing-status').classList.add('hidden');

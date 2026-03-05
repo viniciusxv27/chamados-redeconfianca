@@ -261,7 +261,27 @@ class MeetingRequest(models.Model):
 
 
 class MeetingTranscription(models.Model):
-    """Transcrição de reunião usando IA (similar ao Notion AI)"""
+    """Transcrição de reunião usando IA avançada com divisão em seções"""
+
+    SENTIMENT_CHOICES = [
+        ('positive', 'Positivo'),
+        ('neutral', 'Neutro'),
+        ('negative', 'Negativo'),
+        ('mixed', 'Misto'),
+    ]
+
+    DETECTED_TYPE_CHOICES = [
+        ('standup', 'Daily/Standup'),
+        ('planning', 'Planejamento'),
+        ('review', 'Review/Retrospectiva'),
+        ('brainstorm', 'Brainstorm'),
+        ('oneonone', '1:1'),
+        ('kickoff', 'Kickoff'),
+        ('status', 'Status Update'),
+        ('decision', 'Tomada de Decisão'),
+        ('general', 'Reunião Geral'),
+    ]
+
     event = models.ForeignKey(
         CalendarEvent,
         on_delete=models.CASCADE,
@@ -283,7 +303,33 @@ class MeetingTranscription(models.Model):
     )
     raw_transcription = models.TextField(blank=True, verbose_name='Transcrição Bruta')
     formatted_transcription = models.TextField(blank=True, verbose_name='Transcrição Formatada')
-    summary = models.TextField(blank=True, verbose_name='Resumo')
+    summary = models.TextField(blank=True, verbose_name='Resumo Executivo')
+
+    # Campos avançados de IA
+    sections = models.JSONField(
+        blank=True, default=list, verbose_name='Seções da Reunião',
+        help_text='Lista de seções/tópicos da reunião com título, conteúdo e tempo',
+    )
+    key_decisions = models.JSONField(
+        blank=True, default=list, verbose_name='Decisões-Chave',
+        help_text='Decisões tomadas durante a reunião',
+    )
+    participants_identified = models.JSONField(
+        blank=True, default=list, verbose_name='Participantes Identificados',
+        help_text='Nomes de participantes detectados na conversa',
+    )
+    sentiment = models.CharField(
+        max_length=20, choices=SENTIMENT_CHOICES, default='neutral',
+        verbose_name='Sentimento Geral',
+    )
+    meeting_type_detected = models.CharField(
+        max_length=20, choices=DETECTED_TYPE_CHOICES, default='general',
+        verbose_name='Tipo Detectado',
+    )
+    tags = models.JSONField(
+        blank=True, default=list, verbose_name='Tags/Palavras-chave',
+    )
+
     action_items = models.JSONField(blank=True, default=list, verbose_name='Itens de Ação')
     suggested_events = models.JSONField(blank=True, default=list, verbose_name='Eventos Sugeridos')
     duration_seconds = models.IntegerField(default=0, verbose_name='Duração (segundos)')
@@ -299,6 +345,13 @@ class MeetingTranscription(models.Model):
         verbose_name='Status',
     )
     error_message = models.TextField(blank=True, verbose_name='Mensagem de Erro')
+    calendar_event_created = models.ForeignKey(
+        CalendarEvent,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='transcription_source',
+        verbose_name='Evento criado na agenda',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

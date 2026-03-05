@@ -626,13 +626,15 @@ def transcription_new(request):
 @login_required
 @require_POST
 def api_transcription_upload(request):
-    """Recebe áudio e transcreve usando OpenAI Whisper + GPT"""
+    """Recebe áudio e transcreve usando OpenAI Whisper + GPT-4o com análise avançada"""
     import openai
+    import json as json_module
     from django.conf import settings as django_settings
 
     audio_file = request.FILES.get('audio')
     title = request.POST.get('title', '').strip() or 'Reunião sem título'
     event_id = request.POST.get('event_id')
+    duration_seconds = int(request.POST.get('duration_seconds', 0) or 0)
 
     if not audio_file:
         return JsonResponse({'error': 'Nenhum arquivo de áudio enviado.'}, status=400)
@@ -654,65 +656,137 @@ def api_transcription_upload(request):
         event=event,
         title=title,
         audio_file=audio_file,
+        duration_seconds=duration_seconds,
         status='processing',
     )
 
     try:
         client = openai.OpenAI(api_key=api_key)
 
-        # 1. Transcrever áudio com Whisper
+        # 1. Transcrever áudio com Whisper (com timestamps)
         audio_file.seek(0)
         file_tuple = (audio_file.name, audio_file.read(), audio_file.content_type)
         whisper_response = client.audio.transcriptions.create(
             model="whisper-1",
             file=file_tuple,
             language="pt",
-            response_format="text",
+            response_format="verbose_json",
+            timestamp_granularities=["segment"],
         )
-        raw_text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
+
+        # Extrair texto e segmentos com timestamps
+        if hasattr(whisper_response, 'text'):
+            raw_text = whisper_response.text
+            segments = []
+            if hasattr(whisper_response, 'segments'):
+                segments = [
+                    {'start': s.get('start', s.start if hasattr(s, 'start') else 0),
+                     'end': s.get('end', s.end if hasattr(s, 'end') else 0),
+                     'text': s.get('text', s.text if hasattr(s, 'text') else '')}
+                    for s in (whisper_response.segments if hasattr(whisper_response, 'segments') else [])
+                ]
+            if hasattr(whisper_response, 'duration'):
+                transcription.duration_seconds = int(whisper_response.duration)
+        else:
+            raw_text = str(whisper_response)
+            segments = []
+
         transcription.raw_transcription = raw_text
 
-        # 2. Formatar e resumir com GPT
-        gpt_response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Você é um assistente que formata transcrições de reuniões. "
-                        "Receba a transcrição bruta e retorne um JSON com:\n"
-                        '- "formatted": texto formatado com parágrafos e pontuação correta\n'
-                        '- "summary": resumo de 2-3 parágrafos da reunião\n'
-                        '- "action_items": lista de strings com itens de ação identificados\n'
-                        '- "suggested_events": lista de objetos com "title", "description" e "suggested_date" '
-                        '(formato ISO) para qualquer menção de marcar reunião/agendar/compromisso futuro. '
-                        'Se não houver menção, retorne lista vazia.\n'
-                        "Responda APENAS com JSON válido, sem markdown."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": f"Transcrição da reunião '{title}':\n\n{raw_text}"
-                }
-            ],
-            temperature=0.3,
+        # 2. Análise avançada com GPT-4o
+        today_str = timezone.now().strftime('%Y-%m-%d')
+        system_prompt = (
+            "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
+            "Analise a transcrição da reunião e retorne um JSON estruturado com a seguinte análise completa:\n\n"
+            "RETORNE UM JSON com estas chaves:\n\n"
+            '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
+            '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
+            '   - "title": Título descritivo do tópico (ex: "Abertura e Contexto", "Discussão sobre Vendas")\n'
+            '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line", "fa-users")\n'
+            '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
+            '   - "highlights": Lista de frases-chave ou citações importantes dessa seção\n'
+            '   - "duration_estimate": Estimativa de duração em minutos dessa seção\n\n'
+            '3. "key_decisions": Lista de decisões tomadas na reunião. Cada uma com:\n'
+            '   - "decision": Texto da decisão\n'
+            '   - "context": Breve contexto de por que foi decidido\n'
+            '   - "impact": "high", "medium" ou "low"\n\n'
+            '4. "action_items": Lista de itens de ação. Cada um com:\n'
+            '   - "task": Descrição da tarefa\n'
+            '   - "responsible": Nome do responsável (se mencionado, senão "A definir")\n'
+            '   - "deadline": Prazo mencionado ou sugerido (ISO date ou null)\n'
+            '   - "priority": "high", "medium" ou "low"\n\n'
+            '5. "participants_identified": Lista de nomes de pessoas mencionadas/participantes detectados na conversa.\n\n'
+            '6. "sentiment": Sentimento geral da reunião: "positive", "neutral", "negative" ou "mixed".\n\n'
+            '7. "meeting_type_detected": Tipo detectado: "standup", "planning", "review", "brainstorm", '
+            '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
+            '8. "tags": Lista de 3-8 palavras-chave/tags relevantes da reunião.\n\n'
+            '9. "formatted": Transcrição completa formatada com parágrafos, pontuação, e identificação de '
+            'falantes quando possível. Use marcadores como "**Participante:**" quando detectar troca de falante.\n\n'
+            '10. "suggested_events": Lista de compromissos futuros mencionados. Cada um com:\n'
+            '    - "title": Título do evento sugerido\n'
+            '    - "description": Descrição\n'
+            f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
+            "IMPORTANTE: Divida a reunião em pelo menos 3 seções se possível (abertura, desenvolvimento, encerramento). "
+            "Se a reunião tiver diversos assuntos, crie uma seção para cada. "
+            "Responda APENAS com JSON válido, sem markdown, sem ```."
         )
 
-        import json as json_module
+        gpt_response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Transcrição da reunião '{title}':\n\n{raw_text}"}
+            ],
+            temperature=0.2,
+            max_tokens=4096,
+        )
+
         gpt_text = gpt_response.choices[0].message.content.strip()
-        # Try to parse as JSON, handle markdown code blocks
+        # Limpar markdown code blocks se houver
         if gpt_text.startswith('```'):
-            gpt_text = gpt_text.split('```')[1]
-            if gpt_text.startswith('json'):
-                gpt_text = gpt_text[4:]
+            lines = gpt_text.split('\n')
+            # Remove first and last ``` lines
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            gpt_text = '\n'.join(lines)
+
         parsed = json_module.loads(gpt_text)
 
         transcription.formatted_transcription = parsed.get('formatted', raw_text)
         transcription.summary = parsed.get('summary', '')
+        transcription.sections = parsed.get('sections', [])
+        transcription.key_decisions = parsed.get('key_decisions', [])
         transcription.action_items = parsed.get('action_items', [])
+        transcription.participants_identified = parsed.get('participants_identified', [])
+        transcription.sentiment = parsed.get('sentiment', 'neutral')
+        transcription.meeting_type_detected = parsed.get('meeting_type_detected', 'general')
+        transcription.tags = parsed.get('tags', [])
         transcription.suggested_events = parsed.get('suggested_events', [])
         transcription.status = 'completed'
         transcription.save()
+
+        # 3. Criar evento na agenda do usuário marcando que fez uma transcrição
+        now = timezone.now()
+        cal_event = CalendarEvent.objects.create(
+            owner=request.user,
+            title=f"📝 Transcrição: {title}",
+            description=(
+                f"Transcrição de reunião processada com IA.\n\n"
+                f"📋 Resumo: {transcription.summary[:200]}...\n"
+                f"✅ Itens de ação: {len(transcription.action_items)}\n"
+                f"🎯 Decisões: {len(transcription.key_decisions)}\n\n"
+                f"Ver transcrição completa: /agenda/transcricoes/{transcription.pk}/"
+            ),
+            event_type='task',
+            color='#9333ea',
+            start=now - timedelta(seconds=max(duration_seconds, 60)),
+            end=now,
+            all_day=False,
+        )
+        transcription.calendar_event_created = cal_event
+        transcription.save(update_fields=['calendar_event_created'])
 
         return JsonResponse({
             'id': transcription.pk,
@@ -720,6 +794,17 @@ def api_transcription_upload(request):
             'redirect': f'/agenda/transcricoes/{transcription.pk}/',
         })
 
+    except json_module.JSONDecodeError:
+        # Se falhar o parse do JSON, tentar salvar o que conseguiu
+        transcription.formatted_transcription = transcription.raw_transcription
+        transcription.summary = 'Erro ao processar análise avançada. Transcrição bruta disponível.'
+        transcription.status = 'completed'
+        transcription.save()
+        return JsonResponse({
+            'id': transcription.pk,
+            'status': 'completed',
+            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        })
     except Exception as e:
         transcription.status = 'error'
         transcription.error_message = str(e)
@@ -753,20 +838,24 @@ def api_transcription_schedule(request, pk):
     description = data.get('description', '').strip()
     start_str = data.get('start', '')
     end_str = data.get('end', '')
+    duration_min = int(data.get('duration_minutes', 60) or 60)
 
-    if not title or not start_str or not end_str:
-        return JsonResponse({'error': 'Título, data de início e fim são obrigatórios.'}, status=400)
+    if not title or not start_str:
+        return JsonResponse({'error': 'Título e data de início são obrigatórios.'}, status=400)
 
     try:
         start = datetime.fromisoformat(start_str)
-        end = datetime.fromisoformat(end_str)
+        if end_str:
+            end = datetime.fromisoformat(end_str)
+        else:
+            end = start + timedelta(minutes=duration_min)
     except (ValueError, TypeError):
         return JsonResponse({'error': 'Datas inválidas.'}, status=400)
 
     event = CalendarEvent.objects.create(
         owner=request.user,
         title=title,
-        description=f"{description}\n\n(Agendado a partir da transcrição: {transcription.title})",
+        description=f"{description}\n\n📝 Agendado a partir da transcrição: {transcription.title}",
         event_type='meeting',
         start=start,
         end=end,

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CalendarEvent, MeetingRequest
+from .models import CalendarEvent, MeetingRequest, MeetingTranscription
 
 
 @admin.register(CalendarEvent)
@@ -18,3 +18,13 @@ class MeetingRequestAdmin(admin.ModelAdmin):
     list_filter = ['status', 'meeting_type', 'created_at']
     search_fields = ['title', 'requester__first_name', 'target__first_name']
     raw_id_fields = ['requester', 'target', 'created_event']
+
+
+@admin.register(MeetingTranscription)
+class MeetingTranscriptionAdmin(admin.ModelAdmin):
+    list_display = ['title', 'owner', 'status', 'meeting_type_detected', 'sentiment', 'created_at']
+    list_filter = ['status', 'meeting_type_detected', 'sentiment', 'created_at']
+    search_fields = ['title', 'summary', 'owner__first_name', 'owner__email']
+    raw_id_fields = ['owner', 'event', 'calendar_event_created']
+    readonly_fields = ['raw_transcription', 'formatted_transcription', 'sections', 'key_decisions',
+                       'action_items', 'suggested_events', 'participants_identified', 'tags']
