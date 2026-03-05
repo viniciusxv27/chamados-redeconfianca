@@ -558,6 +558,18 @@
                             </a>
                         </li>
 
+                        <!-- Menu Experiência Vivo - Gerentes e Superadmins -->
+                        {% load experiencia_tags %}
+                        {% if user.hierarchy == 'SUPERADMIN' or user.is_superuser or user|in_group:"Gerentes" %}
+                        <li>
+                            <a href="{% url 'experiencia:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Experiência Vivo">
+                                <i class="fas fa-star text-purple-400 flex-shrink-0"></i>
+                                <span class="text-sm flex-1">Experiência Vivo</span>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+
                         <!-- Menu GESTÃO - Para usuários autorizados -->
                         {% if user.can_manage_users or user.groups.all %}
                         <li class="border-t border-gray-800 pt-2 mt-2">

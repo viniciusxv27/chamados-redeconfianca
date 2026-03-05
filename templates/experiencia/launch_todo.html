@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Lançar To-Do - Experiência Vivo{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-rocket text-green-500 mr-2"></i>Lançar To-Do Mensal
+        </h1>
+        <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
+    </div>
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <div class="bg-white rounded-xl shadow p-5 space-y-4">
+            <!-- Template -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Template de Perguntas *</label>
+                <select name="template_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                    <option value="">Selecione um template...</option>
+                    {% for tmpl in templates %}
+                        <option value="{{ tmpl.id }}">{{ tmpl.name }} ({{ tmpl.questions.count }} perguntas - {{ tmpl.total_points }} pts)</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Mês e Ano -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mês *</label>
+                    <select name="month" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500">
+                        <option value="1" {% if current_month == 1 %}selected{% endif %}>Janeiro</option>
+                        <option value="2" {% if current_month == 2 %}selected{% endif %}>Fevereiro</option>
+                        <option value="3" {% if current_month == 3 %}selected{% endif %}>Março</option>
+                        <option value="4" {% if current_month == 4 %}selected{% endif %}>Abril</option>
+                        <option value="5" {% if current_month == 5 %}selected{% endif %}>Maio</option>
+                        <option value="6" {% if current_month == 6 %}selected{% endif %}>Junho</option>
+                        <option value="7" {% if current_month == 7 %}selected{% endif %}>Julho</option>
+                        <option value="8" {% if current_month == 8 %}selected{% endif %}>Agosto</option>
+                        <option value="9" {% if current_month == 9 %}selected{% endif %}>Setembro</option>
+                        <option value="10" {% if current_month == 10 %}selected{% endif %}>Outubro</option>
+                        <option value="11" {% if current_month == 11 %}selected{% endif %}>Novembro</option>
+                        <option value="12" {% if current_month == 12 %}selected{% endif %}>Dezembro</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ano *</label>
+                    <input type="number" name="year" value="{{ current_year }}" min="2024" max="2030" required
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500">
+                </div>
+            </div>
+
+            <!-- Setores -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Setores *</label>
+                <div class="mb-2">
+                    <label class="inline-flex items-center text-sm text-blue-600 cursor-pointer">
+                        <input type="checkbox" id="selectAllSectors" onclick="toggleAllSectors()" class="mr-1.5">
+                        Selecionar todos
+                    </label>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                    {% for sector in sectors %}
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 rounded p-1">
+                        <input type="checkbox" name="sector_ids" value="{{ sector.id }}" class="sector-checkbox rounded">
+                        {{ sector.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3">
+            <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg hover:bg-gray-300 transition">Cancelar</a>
+            <button type="submit" class="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition font-medium">
+                <i class="fas fa-rocket mr-1"></i>Lançar To-Do
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleAllSectors() {
+    const checked = document.getElementById('selectAllSectors').checked;
+    document.querySelectorAll('.sector-checkbox').forEach(cb => cb.checked = checked);
+}
+</script>
+{% endblock %}

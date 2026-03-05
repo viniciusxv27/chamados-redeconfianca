@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Templates de Experiência{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-file-alt text-blue-500 mr-2"></i>Templates de Perguntas
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">Gerencie os templates de perguntas para os to-dos</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+                <i class="fas fa-arrow-left mr-1"></i> Voltar
+            </a>
+            <a href="{% url 'experiencia:template_create' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">
+                <i class="fas fa-plus mr-1"></i> Novo Template
+            </a>
+        </div>
+    </div>
+
+    {% if templates %}
+    <div class="grid gap-4">
+        {% for template in templates %}
+        <div class="bg-white rounded-xl shadow p-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start gap-3">
+                <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-gray-900">{{ template.name }}</h3>
+                    {% if template.description %}
+                        <p class="text-gray-500 text-sm mt-1">{{ template.description }}</p>
+                    {% endif %}
+                    <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
+                        <span><i class="fas fa-question-circle mr-1"></i>{{ template.questions.count }} perguntas</span>
+                        <span><i class="fas fa-star mr-1"></i>{{ template.total_points }} pontos</span>
+                        <span><i class="fas fa-user mr-1"></i>{{ template.created_by.get_full_name }}</span>
+                        <span><i class="fas fa-clock mr-1"></i>{{ template.created_at|date:"d/m/Y" }}</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <a href="{% url 'experiencia:template_edit' template.id %}" class="bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg text-sm hover:bg-yellow-200 transition">
+                        <i class="fas fa-edit mr-1"></i>Editar
+                    </a>
+                    <form method="post" action="{% url 'experiencia:template_delete' template.id %}" onsubmit="return confirm('Remover este template?')">
+                        {% csrf_token %}
+                        <button type="submit" class="bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-200 transition">
+                            <i class="fas fa-trash mr-1"></i>Excluir
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl shadow p-12 text-center">
+        <i class="fas fa-file-alt text-gray-300 text-5xl mb-4"></i>
+        <p class="text-gray-500">Nenhum template criado ainda.</p>
+        <a href="{% url 'experiencia:template_create' %}" class="inline-block mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">
+            <i class="fas fa-plus mr-1"></i> Criar Primeiro Template
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

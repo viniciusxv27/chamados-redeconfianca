@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Experiência Vivo - Dashboard{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-star text-purple-500 mr-2"></i>Experiência Vivo
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">Gerencie os to-dos mensais de experiência por setor</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            {% if is_superadmin or is_evaluator %}
+            <a href="{% url 'experiencia:manage_evaluators' %}" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">
+                <i class="fas fa-user-check mr-1"></i> Avaliadores
+            </a>
+            {% endif %}
+            <a href="{% url 'experiencia:template_list' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">
+                <i class="fas fa-file-alt mr-1"></i> Templates
+            </a>
+            <a href="{% url 'experiencia:launch_todo' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">
+                <i class="fas fa-rocket mr-1"></i> Lançar To-Do
+            </a>
+            <a href="{% url 'experiencia:reports' %}" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition">
+                <i class="fas fa-chart-bar mr-1"></i> Relatórios
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Total To-Dos</div>
+            <div class="text-2xl font-bold text-gray-900">{{ total_todos }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Aprovados</div>
+            <div class="text-2xl font-bold text-green-600">{{ approved_todos }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Aguardando Avaliação</div>
+            <div class="text-2xl font-bold text-yellow-600">{{ pending_evaluation|length }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Mês Atual</div>
+            <div class="text-2xl font-bold text-blue-600">{{ current_todos|length }}</div>
+        </div>
+    </div>
+
+    <!-- To-Dos do Mês Atual -->
+    <div class="bg-white rounded-xl shadow mb-6">
+        <div class="p-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-calendar-check text-blue-500 mr-2"></i>To-Dos do Mês Atual
+            </h2>
+        </div>
+        <div class="p-4">
+            {% if current_todos %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full">
+                    <thead>
+                        <tr class="text-left text-xs text-gray-500 uppercase border-b">
+                            <th class="pb-2 pr-4">Setor</th>
+                            <th class="pb-2 pr-4">Template</th>
+                            <th class="pb-2 pr-4">Status</th>
+                            <th class="pb-2 pr-4">Pontuação</th>
+                            <th class="pb-2">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for todo in current_todos %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="py-3 pr-4 font-medium text-gray-900">{{ todo.sector.name }}</td>
+                            <td class="py-3 pr-4 text-sm text-gray-600">{{ todo.template.name }}</td>
+                            <td class="py-3 pr-4">
+                                {% if todo.status == 'aberto' %}
+                                    <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Aberto</span>
+                                {% elif todo.status == 'enviado' %}
+                                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Aguardando Avaliação</span>
+                                {% elif todo.status == 'aprovado' or todo.status == 'finalizado' %}
+                                    <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Finalizado</span>
+                                {% elif todo.status == 'recusado' %}
+                                    <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Recusado Parcialmente</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 pr-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-24 bg-gray-200 rounded-full h-2">
+                                        <div class="bg-purple-500 h-2 rounded-full" style="width: {{ todo.score_percentage }}%"></div>
+                                    </div>
+                                    <span class="text-sm font-medium">{{ todo.score_percentage }}%</span>
+                                </div>
+                            </td>
+                            <td class="py-3">
+                                <div class="flex gap-2">
+                                    {% if todo.status == 'aberto' or todo.status == 'recusado' %}
+                                        <a href="{% url 'experiencia:fill_todo' todo.id %}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                            <i class="fas fa-edit mr-1"></i>Preencher
+                                        </a>
+                                    {% endif %}
+                                    {% if todo.status == 'enviado' and is_evaluator %}
+                                        <a href="{% url 'experiencia:evaluate_todo' todo.id %}" class="text-yellow-600 hover:text-yellow-800 text-sm font-medium">
+                                            <i class="fas fa-check-double mr-1"></i>Avaliar
+                                        </a>
+                                    {% endif %}
+                                    <a href="{% url 'experiencia:view_todo' todo.id %}" class="text-gray-600 hover:text-gray-800 text-sm font-medium">
+                                        <i class="fas fa-eye mr-1"></i>Ver
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">Nenhum to-do lançado para o mês atual.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Aguardando Avaliação -->
+    {% if is_evaluator and pending_evaluation %}
+    <div class="bg-white rounded-xl shadow mb-6">
+        <div class="p-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-hourglass-half text-yellow-500 mr-2"></i>Aguardando Sua Avaliação
+            </h2>
+        </div>
+        <div class="p-4">
+            <div class="space-y-3">
+                {% for todo in pending_evaluation %}
+                <div class="flex items-center justify-between bg-yellow-50 rounded-lg p-3">
+                    <div>
+                        <span class="font-medium text-gray-900">{{ todo.sector.name }}</span>
+                        <span class="text-gray-500 text-sm ml-2">{{ todo.template.name }}</span>
+                        <span class="text-gray-400 text-xs ml-2">{{ todo.month_year_display }}</span>
+                    </div>
+                    <a href="{% url 'experiencia:evaluate_todo' todo.id %}" class="bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-yellow-600 transition">
+                        <i class="fas fa-check-double mr-1"></i>Avaliar
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

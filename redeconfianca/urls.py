@@ -112,6 +112,7 @@ urlpatterns = [
     path('agenda/', include('agenda.urls')),  # Agenda / Calendário
     path('contestacao/', include('contestacao.urls')),  # Contestação de Exclusões
     path('contracheque/', include('contracheque.urls')),  # Contracheques
+    path('experiencia/', include('experiencia.urls')),  # Experiência Vivo
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training

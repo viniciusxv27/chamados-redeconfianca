@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatórios - Experiência Vivo{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <h1 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-chart-bar text-purple-500 mr-2"></i>Relatórios - Experiência Vivo
+        </h1>
+        <div class="flex gap-2">
+            <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+                <i class="fas fa-arrow-left mr-1"></i> Voltar
+            </a>
+            <a href="{% url 'experiencia:export_report' %}?month={{ filter_month }}&year={{ filter_year }}&sector={{ filter_sector }}&status={{ filter_status }}"
+               class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">
+                <i class="fas fa-file-csv mr-1"></i> Exportar CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Total de To-Dos</div>
+            <div class="text-3xl font-bold text-gray-900">{{ total }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Finalizados</div>
+            <div class="text-3xl font-bold text-green-600">{{ finalized }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Média de Pontuação</div>
+            <div class="text-3xl font-bold text-purple-600">{{ avg_score }}%</div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white rounded-xl shadow p-4 mb-6">
+        <form method="get" class="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Mês</label>
+                <select name="month" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Todos</option>
+                    <option value="1" {% if filter_month == '1' %}selected{% endif %}>Janeiro</option>
+                    <option value="2" {% if filter_month == '2' %}selected{% endif %}>Fevereiro</option>
+                    <option value="3" {% if filter_month == '3' %}selected{% endif %}>Março</option>
+                    <option value="4" {% if filter_month == '4' %}selected{% endif %}>Abril</option>
+                    <option value="5" {% if filter_month == '5' %}selected{% endif %}>Maio</option>
+                    <option value="6" {% if filter_month == '6' %}selected{% endif %}>Junho</option>
+                    <option value="7" {% if filter_month == '7' %}selected{% endif %}>Julho</option>
+                    <option value="8" {% if filter_month == '8' %}selected{% endif %}>Agosto</option>
+                    <option value="9" {% if filter_month == '9' %}selected{% endif %}>Setembro</option>
+                    <option value="10" {% if filter_month == '10' %}selected{% endif %}>Outubro</option>
+                    <option value="11" {% if filter_month == '11' %}selected{% endif %}>Novembro</option>
+                    <option value="12" {% if filter_month == '12' %}selected{% endif %}>Dezembro</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Ano</label>
+                <input type="number" name="year" value="{{ filter_year }}" placeholder="Todos" min="2024" max="2030"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Setor</label>
+                <select name="sector" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Todos</option>
+                    {% for sector in sectors %}
+                        <option value="{{ sector.id }}" {% if filter_sector == sector.id|stringformat:"d" %}selected{% endif %}>{{ sector.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Status</label>
+                <select name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Todos</option>
+                    <option value="aberto" {% if filter_status == 'aberto' %}selected{% endif %}>Aberto</option>
+                    <option value="enviado" {% if filter_status == 'enviado' %}selected{% endif %}>Enviado</option>
+                    <option value="recusado" {% if filter_status == 'recusado' %}selected{% endif %}>Recusado</option>
+                    <option value="finalizado" {% if filter_status == 'finalizado' %}selected{% endif %}>Finalizado</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="w-full bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition">
+                    <i class="fas fa-filter mr-1"></i>Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tabela -->
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr class="text-left text-xs text-gray-500 uppercase">
+                        <th class="px-4 py-3">Setor</th>
+                        <th class="px-4 py-3">Mês/Ano</th>
+                        <th class="px-4 py-3">Template</th>
+                        <th class="px-4 py-3">Status</th>
+                        <th class="px-4 py-3">Pontuação</th>
+                        <th class="px-4 py-3">Lançado por</th>
+                        <th class="px-4 py-3">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for todo in todos %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 font-medium text-gray-900 text-sm">{{ todo.sector.name }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ todo.month_year_display }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ todo.template.name }}</td>
+                        <td class="px-4 py-3">
+                            {% if todo.status == 'aberto' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Aberto</span>
+                            {% elif todo.status == 'enviado' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Enviado</span>
+                            {% elif todo.status == 'finalizado' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Finalizado</span>
+                            {% elif todo.status == 'recusado' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Recusado</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-16 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-purple-500 h-2 rounded-full" style="width: {{ todo.score_percentage }}%"></div>
+                                </div>
+                                <span class="text-xs font-medium">{{ todo.score_percentage }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ todo.launched_by.get_full_name }}</td>
+                        <td class="px-4 py-3">
+                            <a href="{% url 'experiencia:view_todo' todo.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
+                                <i class="fas fa-eye mr-1"></i>Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                            Nenhum to-do encontrado com os filtros aplicados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

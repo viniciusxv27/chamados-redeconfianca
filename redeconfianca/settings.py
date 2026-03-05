@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'agenda',  # Agenda / Calendário
     'contestacao',  # Contestação de Exclusões
     'contracheque',  # Contracheques / Recibos de Pagamento
+    'experiencia',  # Experiência Vivo
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Arquivo - Experiência Vivo{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-archive text-gray-500 mr-2"></i>Arquivo - Experiência Vivo
+        </h1>
+        <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
+    </div>
+
+    {% if todos %}
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr class="text-left text-xs text-gray-500 uppercase">
+                        <th class="px-4 py-3">Setor</th>
+                        <th class="px-4 py-3">Mês/Ano</th>
+                        <th class="px-4 py-3">Template</th>
+                        <th class="px-4 py-3">Status</th>
+                        <th class="px-4 py-3">Pontuação</th>
+                        <th class="px-4 py-3">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for todo in todos %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 font-medium text-gray-900 text-sm">{{ todo.sector.name }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ todo.month_year_display }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ todo.template.name }}</td>
+                        <td class="px-4 py-3">
+                            {% if todo.status == 'aberto' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Aberto</span>
+                            {% elif todo.status == 'enviado' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Enviado</span>
+                            {% elif todo.status == 'finalizado' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Finalizado</span>
+                            {% elif todo.status == 'recusado' %}
+                                <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Recusado</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-16 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-purple-500 h-2 rounded-full" style="width: {{ todo.score_percentage }}%"></div>
+                                </div>
+                                <span class="text-xs font-medium">{{ todo.score_percentage }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <a href="{% url 'experiencia:view_todo' todo.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
+                                <i class="fas fa-eye mr-1"></i>Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl shadow p-12 text-center">
+        <i class="fas fa-archive text-gray-300 text-5xl mb-4"></i>
+        <p class="text-gray-500">Nenhum registro no arquivo.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

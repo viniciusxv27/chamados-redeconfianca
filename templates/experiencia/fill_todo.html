@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+
+{% block title %}Preencher To-Do - {{ todo.sector.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-edit text-blue-500 mr-2"></i>Preencher To-Do
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                {{ todo.sector.name }} - {{ todo.month_year_display }} - {{ todo.template.name }}
+            </p>
+        </div>
+        <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
+    </div>
+
+    {% if todo.status == 'recusado' %}
+    <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+        <div class="flex items-center gap-2 text-red-700 font-medium">
+            <i class="fas fa-exclamation-triangle"></i>
+            Alguns itens foram recusados. Corrija e reenvie apenas os itens abaixo.
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+        <div class="text-sm text-blue-700">
+            <i class="fas fa-info-circle mr-1"></i>
+            Total de pontos: <strong>{{ total_points }}</strong>. Preencha cada pergunta com uma 
+            observação/resposta e, se necessário, envie uma foto como evidência.
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="space-y-4">
+        {% csrf_token %}
+
+        {% for item in questions_with_answers %}
+        <div class="bg-white rounded-xl shadow p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex-1">
+                    <h3 class="font-medium text-gray-900">
+                        <span class="text-purple-600 font-bold mr-2">#{{ forloop.counter }}</span>
+                        {{ item.question.text }}
+                    </h3>
+                </div>
+                <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ml-2">
+                    {{ item.question.points }} pts
+                </span>
+            </div>
+
+            {% if item.answer.rejection_reason %}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-sm text-red-700">
+                <i class="fas fa-times-circle mr-1"></i>
+                <strong>Motivo da recusa:</strong> {{ item.answer.rejection_reason }}
+            </div>
+            {% endif %}
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">Observação / Resposta</label>
+                    <textarea name="observation_{{ item.question.id }}" rows="3"
+                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                              placeholder="Descreva sua resposta...">{{ item.answer.observation|default:'' }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">Foto (evidência)</label>
+                    <div class="flex flex-col sm:flex-row items-start gap-3">
+                        <div class="flex-1 w-full">
+                            <input type="file" name="photo_{{ item.question.id }}" accept="image/*" capture="environment"
+                                   class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 file:text-sm"
+                                   onchange="previewPhoto(this, 'preview_{{ item.question.id }}')">
+                        </div>
+                        {% if item.answer.photo %}
+                        <div class="flex-shrink-0">
+                            <img src="{{ item.answer.photo.url }}" alt="Foto atual" 
+                                 class="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer"
+                                 onclick="openImageModal(this.src)">
+                            <span class="text-xs text-gray-400 mt-1 block">Foto atual</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <img id="preview_{{ item.question.id }}" class="hidden mt-2 w-32 h-32 object-cover rounded-lg border border-gray-200 cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="flex justify-end gap-3 pt-4">
+            <a href="{% url 'experiencia:dashboard' %}" class="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg hover:bg-gray-300 transition">Cancelar</a>
+            <button type="submit" class="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium"
+                    onclick="return confirm('Tem certeza que deseja enviar? Após o envio, não será possível alterar até a avaliação.')">
+                <i class="fas fa-paper-plane mr-1"></i>Enviar para Avaliação
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Imagem -->
+<div id="imageModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" onclick="closeImageModal()">
+    <img id="modalImage" class="max-w-full max-h-full rounded-lg">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewPhoto(input, previewId) {
+    const preview = document.getElementById(previewId);
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function openImageModal(src) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('imageModal').classList.remove('hidden');
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').classList.add('hidden');
+}
+</script>
+{% endblock %}
