@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Meus Informes de Rendimentos{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-receipt text-indigo-600 mr-2"></i> Meus Informes de Rendimentos
+        </h2>
+        <div class="flex gap-2 items-center">
+            <a href="{% url 'contracheque:my_payslips' %}"
+               class="inline-flex items-center px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
+                <i class="fas fa-file-invoice-dollar mr-2"></i> Contracheques
+            </a>
+            {% if user.hierarchy == 'SUPERADMIN' %}
+            <a href="{% url 'contracheque:admin_income_reports' %}"
+               class="inline-flex items-center px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                <i class="fas fa-cog mr-2"></i> Administrar
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if reports %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for r in reports %}
+        <a href="{% url 'contracheque:income_report_detail' r.pk %}" class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition group">
+            <div class="px-4 py-3 border-b bg-indigo-50 flex items-center justify-between">
+                <span class="text-sm font-bold text-indigo-800">Ano-Calendário {{ r.base_year }}</span>
+                <i class="fas fa-chevron-right text-indigo-400 group-hover:translate-x-1 transition-transform"></i>
+            </div>
+            <div class="px-4 py-4 space-y-2">
+                <div>
+                    <p class="text-xs text-gray-400">Total de Rendimentos</p>
+                    <p class="text-xl font-bold text-indigo-700">R$ {{ r.total_rendimentos|floatformat:2 }}</p>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span><i class="fas fa-landmark text-blue-400 mr-1"></i>IRRF: R$ {{ r.irrf|floatformat:2 }}</span>
+                    <span><i class="fas fa-gift text-green-400 mr-1"></i>13º: R$ {{ r.decimo_terceiro|floatformat:2 }}</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white shadow rounded-lg p-8 text-center">
+        <i class="fas fa-receipt text-4xl text-gray-300 mb-3"></i>
+        <p class="text-gray-500">Nenhum informe de rendimentos encontrado.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

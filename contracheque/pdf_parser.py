@@ -488,3 +488,150 @@ def find_employee_page_number(pdf_file, employee_name):
 
     except Exception:
         return None
+
+
+# ─── Parser de Informe de Rendimentos ─────────────────────────────────────────
+
+def _parse_income_report_page(page):
+    """
+    Extrai dados de um informe de rendimentos de uma única página.
+    Tabelas esperadas:
+      Table 0: Cabeçalho (Ministério/Exercício)
+      Table 1: Fonte Pagadora (CNPJ)
+      Table 2: Beneficiário (CPF / Nome)
+      Table 3: Rendimentos Tributáveis (5 linhas)
+      Table 4: Rendimentos Isentos (9 linhas)
+      Table 5: Tributação Exclusiva (3 linhas)
+      Table 6: Assinatura
+    """
+    tables = page.extract_tables()
+    if not tables or len(tables) < 5:
+        return None
+
+    data = {}
+
+    # Exercício / Ano-Calendário do texto
+    text = page.extract_text() or ''
+    ex_match = re.search(r'EXERC[ÍI]CIO\s*:\s*(\d{4})', text)
+    ac_match = re.search(r'ANO[- ]CALEND[ÁA]RIO\s*:\s*(\d{4})', text)
+    data['exercise_year'] = int(ex_match.group(1)) if ex_match else 0
+    data['base_year'] = int(ac_match.group(1)) if ac_match else 0
+
+    # Table 2: CPF e Nome do beneficiário (skip Table 1 which has CNPJ)
+    for t in tables:
+        if not t or not t[0]:
+            continue
+        cell0 = str(t[0][0]) if t[0][0] else ''
+        # Table 1 has "CNPJ/CPF", Table 2 has just "CPF" — skip CNPJ tables
+        if 'CNPJ' in cell0:
+            continue
+        if 'CPF' in cell0 and 'Nome' in (str(t[0][1]) if len(t[0]) > 1 and t[0][1] else cell0):
+            # CPF\n057.150.647-08
+            cpf_match = re.search(r'(\d{3}[.\s]?\d{3}[.\s]?\d{3}[.\s/-]?\d{2})', cell0)
+            data['cpf'] = cpf_match.group(1).strip() if cpf_match else ''
+            # Nome\nFULANO DE TAL - 000001
+            name_cell = str(t[0][1]) if len(t[0]) > 1 and t[0][1] else ''
+            name_lines = [l.strip() for l in name_cell.split('\n') if l.strip()]
+            raw_name = name_lines[-1] if name_lines else ''
+            # Remove trailing " - 000001"
+            raw_name = re.sub(r'\s*-\s*\d+\s*$', '', raw_name).strip()
+            if raw_name.startswith('Nome'):
+                raw_name = ''
+            data['employee_name'] = raw_name
+            break
+
+    if not data.get('employee_name'):
+        return None
+
+    # Helper to get value from table row
+    def _val(table, row_idx):
+        try:
+            row = table[row_idx]
+            val_str = str(row[-1]).strip() if row[-1] else '0'
+            return parse_currency(val_str)
+        except (IndexError, TypeError):
+            return Decimal('0')
+
+    # Identify tables by content
+    trib_table = None
+    isento_table = None
+    excl_table = None
+
+    for t in tables:
+        if not t:
+            continue
+        first_cell = str(t[0][0]) if t[0] and t[0][0] else ''
+        if 'Total dos rendimentos' in first_cell:
+            trib_table = t
+        elif 'Parcela isenta' in first_cell:
+            isento_table = t
+        elif '13' in first_cell and ('salário' in first_cell.lower() or 'salario' in first_cell.lower()):
+            excl_table = t
+
+    # 3. Rendimentos Tributáveis (Table 3)
+    if trib_table:
+        data['total_rendimentos'] = _val(trib_table, 0)
+        data['contribuicao_previdenciaria'] = _val(trib_table, 1)
+        data['contribuicao_previdencia_privada'] = _val(trib_table, 2)
+        data['pensao_alimenticia'] = _val(trib_table, 3)
+        data['irrf'] = _val(trib_table, 4)
+
+    # 4. Rendimentos Isentos (Table 4)
+    if isento_table:
+        data['parcela_isenta_aposentadoria'] = _val(isento_table, 0)
+        data['parcela_isenta_13_aposentadoria'] = _val(isento_table, 1)
+        data['diarias_ajuda_custo'] = _val(isento_table, 2)
+        data['pensao_moletia_grave'] = _val(isento_table, 3)
+        data['lucros_dividendos'] = _val(isento_table, 4)
+        data['valores_titular_socio'] = _val(isento_table, 5)
+        data['indenizacao_rescisao'] = _val(isento_table, 6)
+        data['juros_mora'] = _val(isento_table, 7)
+        data['outros_isentos'] = _val(isento_table, 8)
+
+    # 5. Tributação Exclusiva (Table 5)
+    if excl_table:
+        data['decimo_terceiro'] = _val(excl_table, 0)
+        data['irrf_13'] = _val(excl_table, 1)
+        data['outros_exclusivos'] = _val(excl_table, 2)
+
+    return data
+
+
+def extract_all_income_reports(pdf_file):
+    """
+    Extrai todos os informes de rendimentos de um PDF multi-página.
+    Uma página por beneficiário.
+    Retorna lista de dicts.
+    """
+    if pdfplumber is None:
+        return [{'error': 'pdfplumber não está instalado.'}]
+
+    try:
+        if hasattr(pdf_file, 'read'):
+            pdf_bytes = pdf_file.read()
+            pdf_file.seek(0)
+            pdf_obj = pdfplumber.open(io.BytesIO(pdf_bytes))
+        else:
+            pdf_obj = pdfplumber.open(pdf_file)
+
+        reports = []
+        seen = set()
+
+        for page_idx, page in enumerate(pdf_obj.pages):
+            report = _parse_income_report_page(page)
+            if not report or not report.get('employee_name'):
+                continue
+
+            key = normalize_name(report['employee_name'])
+            if key in seen:
+                continue
+            seen.add(key)
+
+            report['_page_number'] = page_idx
+            reports.append(report)
+
+        pdf_obj.close()
+        return reports
+
+    except Exception as e:
+        return [{'error': f'Erro ao processar PDF: {str(e)}'}]

@@ -95,3 +95,101 @@ class Payslip(models.Model):
     @property
     def period_display(self):
         return f"{self.month_name}/{self.year}"
+
+
+# ─── Informe de Rendimentos ──────────────────────────────────────────────────
+
+def upload_income_report_pdf(instance, filename):
+    ext = filename.rsplit('.', 1)[-1].lower()
+    new_name = f"informe_{instance.user_id}_{instance.base_year}.{ext}"
+    return os.path.join('informes', str(instance.base_year), new_name)
+
+
+class IncomeReport(models.Model):
+    """Informe de Rendimentos (Comprovante de Rendimentos Pagos e IRRF)"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='income_reports',
+        verbose_name='Funcionário',
+    )
+    base_year = models.PositiveIntegerField(verbose_name='Ano-Calendário')
+    exercise_year = models.PositiveIntegerField(verbose_name='Exercício')
+    pdf_file = models.FileField(upload_to=upload_income_report_pdf, verbose_name='Arquivo PDF')
+
+    # Dados do beneficiário
+    employee_name = models.CharField(max_length=200, blank=True, verbose_name='Nome no Informe')
+    cpf = models.CharField(max_length=20, blank=True, verbose_name='CPF')
+
+    # 3. Rendimentos Tributáveis
+    total_rendimentos = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Total dos rendimentos')
+    contribuicao_previdenciaria = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Contribuição previdenciária oficial')
+    contribuicao_previdencia_privada = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Contribuição previdência privada/FAPI')
+    pensao_alimenticia = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Pensão alimentícia')
+    irrf = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='IRRF')
+
+    # 4. Rendimentos Isentos
+    parcela_isenta_aposentadoria = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Parcela isenta aposentadoria')
+    parcela_isenta_13_aposentadoria = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Parcela isenta 13º aposentadoria')
+    diarias_ajuda_custo = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Diárias e ajuda de custo')
+    pensao_moletia_grave = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Pensão por moléstia grave')
+    lucros_dividendos = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Lucros e dividendos')
+    valores_titular_socio = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Valores pagos titular/sócio')
+    indenizacao_rescisao = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Indenizações rescisão')
+    juros_mora = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Juros de mora')
+    outros_isentos = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Outros isentos')
+
+    # 5. Rendimentos sujeitos a tributação exclusiva
+    decimo_terceiro = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='13º salário')
+    irrf_13 = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='IRRF sobre 13º')
+    outros_exclusivos = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+        verbose_name='Outros exclusivos')
+
+    # Página no PDF original
+    pdf_page_number = models.PositiveIntegerField(null=True, blank=True, verbose_name='Página no PDF original')
+
+    # Metadados
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='income_reports_uploaded',
+        verbose_name='Importado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Informe de Rendimentos'
+        verbose_name_plural = 'Informes de Rendimentos'
+        ordering = ['-base_year']
+        unique_together = ['user', 'base_year']
+
+    def __str__(self):
+        return f"{self.user.full_name} – {self.base_year}"
+
+    @property
+    def total_isentos(self):
+        return (
+            self.parcela_isenta_aposentadoria + self.parcela_isenta_13_aposentadoria +
+            self.diarias_ajuda_custo + self.pensao_moletia_grave +
+            self.lucros_dividendos + self.valores_titular_socio +
+            self.indenizacao_rescisao + self.juros_mora + self.outros_isentos
+        )

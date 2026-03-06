@@ -7,8 +7,8 @@ from django.db.models import Q
 
 from io import BytesIO
 
-from .models import Payslip
-from .pdf_parser import extract_payslip_data, extract_all_payslips, normalize_name, extract_single_page_pdf
+from .models import Payslip, IncomeReport
+from .pdf_parser import extract_payslip_data, extract_all_payslips, normalize_name, extract_single_page_pdf, extract_all_income_reports
 from users.models import User
 
 HIERARCHY_RANK = {
@@ -507,3 +507,417 @@ def admin_delete_payslip(request, pk):
 
     messages.success(request, f'Contracheque excluído: {info}')
     return redirect('contracheque:admin_payslips')
+
+
+# ─── Excluir em lote por mês ─────────────────────────────────────────────────
+
+@login_required
+def api_bulk_delete(request):
+    """Excluir todos os contracheques de um determinado mês/ano."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    month = request.POST.get('month')
+    year = request.POST.get('year')
+
+    if not month or not year:
+        return JsonResponse({'error': 'Mês e ano são obrigatórios.'}, status=400)
+
+    try:
+        month = int(month)
+        year = int(year)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Mês e ano inválidos.'}, status=400)
+
+    payslips = Payslip.objects.filter(month=month, year=year)
+    count = payslips.count()
+
+    if count == 0:
+        return JsonResponse({'error': f'Nenhum contracheque encontrado para {month:02d}/{year}.'}, status=404)
+
+    # Excluir arquivos PDF
+    for ps in payslips:
+        try:
+            ps.pdf_file.delete(save=False)
+        except Exception:
+            pass
+    payslips.delete()
+
+    month_name = dict(Payslip.MONTH_CHOICES).get(month, str(month))
+    messages.success(request, f'{count} contracheques de {month_name}/{year} excluídos com sucesso.')
+    return JsonResponse({'success': True, 'deleted': count, 'message': f'{count} contracheques excluídos.'})
+
+
+# ─── Relatório de assinaturas ─────────────────────────────────────────────────
+
+@login_required
+def export_signature_report(request):
+    """Exportar relatório CSV de assinaturas de contracheques para um mês/ano."""
+    if not is_superadmin(request.user):
+        messages.error(request, 'Acesso restrito.')
+        return redirect('contracheque:admin_payslips')
+
+    import csv
+    from django.http import HttpResponse
+
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+
+    if not month or not year:
+        messages.error(request, 'Selecione mês e ano para exportar.')
+        return redirect('contracheque:admin_payslips')
+
+    try:
+        month = int(month)
+        year = int(year)
+    except (ValueError, TypeError):
+        messages.error(request, 'Mês e ano inválidos.')
+        return redirect('contracheque:admin_payslips')
+
+    month_name = dict(Payslip.MONTH_CHOICES).get(month, str(month))
+
+    payslips = Payslip.objects.filter(month=month, year=year).select_related('user', 'user__sector')
+
+    # Obter todos os usuários ativos para encontrar quem NÃO recebeu
+    all_users = User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name')
+    users_with_payslip = set(payslips.values_list('user_id', flat=True))
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="relatorio_assinaturas_{year}_{month:02d}.csv"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response, delimiter=';')
+
+    # Resumo
+    total_payslips = payslips.count()
+    signed_count = payslips.filter(signed_at__isnull=False).count()
+    unsigned_count = total_payslips - signed_count
+    without_payslip = all_users.count() - len(users_with_payslip)
+
+    writer.writerow([f'Relatório de Assinaturas – {month_name}/{year}'])
+    writer.writerow([])
+    writer.writerow(['Total de contracheques', total_payslips])
+    writer.writerow(['Assinados', signed_count])
+    writer.writerow(['Não assinados', unsigned_count])
+    writer.writerow(['Usuários sem contracheque', without_payslip])
+    writer.writerow([])
+
+    # Setores faltantes (com pelo menos 1 não assinado)
+    unsigned_payslips = payslips.filter(signed_at__isnull=True).select_related('user__sector')
+    sectors_missing = set()
+    for ps in unsigned_payslips:
+        sector = ps.user.sector
+        if sector:
+            sectors_missing.add(sector.name)
+    if sectors_missing:
+        writer.writerow(['Setores com assinaturas pendentes', ', '.join(sorted(sectors_missing))])
+    writer.writerow([])
+
+    # Detalhes
+    writer.writerow(['Funcionário', 'CPF', 'Setor', 'Status', 'Data Assinatura', 'IP', 'Hash'])
+
+    for ps in payslips.order_by('user__first_name', 'user__last_name'):
+        sector_name = ps.user.sector.name if ps.user.sector else ''
+        if ps.is_signed:
+            status = 'Assinado'
+            signed_date = ps.signed_at.strftime('%d/%m/%Y %H:%M') if ps.signed_at else ''
+        else:
+            status = 'Não assinado'
+            signed_date = ''
+
+        writer.writerow([
+            ps.user.full_name,
+            ps.user.cpf or ps.cpf,
+            sector_name,
+            status,
+            signed_date,
+            ps.signature_ip or '',
+            ps.signature_hash[:16] if ps.signature_hash else '',
+        ])
+
+    # Seção de usuários SEM contracheque
+    users_without = all_users.exclude(id__in=users_with_payslip)
+    if users_without.exists():
+        writer.writerow([])
+        writer.writerow(['--- Usuários ativos SEM contracheque ---'])
+        writer.writerow(['Funcionário', 'CPF', 'Setor'])
+        for u in users_without:
+            sector_name = u.sector.name if u.sector else ''
+            writer.writerow([u.full_name, u.cpf or '', sector_name])
+
+    return response
+
+
+# ─── Informe de Rendimentos ──────────────────────────────────────────────────
+
+@login_required
+def my_income_reports(request):
+    """Lista de informes de rendimentos do usuário logado."""
+    reports = IncomeReport.objects.filter(user=request.user)
+    return render(request, 'contracheque/my_income_reports.html', {
+        'reports': reports,
+    })
+
+
+@login_required
+def income_report_detail(request, pk):
+    """Detalhe de um informe de rendimentos."""
+    report = get_object_or_404(IncomeReport, pk=pk)
+
+    if report.user != request.user and not is_superadmin(request.user):
+        messages.error(request, 'Sem permissão para visualizar este informe.')
+        return redirect('contracheque:my_income_reports')
+
+    return render(request, 'contracheque/income_report_detail.html', {
+        'report': report,
+    })
+
+
+@login_required
+def income_report_pdf(request, pk):
+    """Download/visualização do PDF do informe de rendimentos."""
+    report = get_object_or_404(IncomeReport, pk=pk)
+
+    if report.user != request.user and not is_superadmin(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('contracheque:my_income_reports')
+
+    from django.http import HttpResponse
+
+    if not report.pdf_file:
+        messages.error(request, 'PDF não disponível para este informe.')
+        return redirect('contracheque:income_report_detail', pk=report.pk)
+
+    pdf_content = None
+    try:
+        report.pdf_file.open('rb')
+        pdf_content = report.pdf_file.read()
+        report.pdf_file.close()
+    except Exception:
+        pass
+
+    if not pdf_content:
+        try:
+            return redirect(report.pdf_file.url)
+        except Exception:
+            messages.error(request, 'Não foi possível acessar o arquivo PDF.')
+            return redirect('contracheque:income_report_detail', pk=report.pk)
+
+    # Se é multi-página, extrair apenas a página do funcionário
+    if report.pdf_page_number is not None:
+        try:
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(pdf_content)
+            if len(doc) > 1:
+                single = extract_single_page_pdf(pdf_content, report.pdf_page_number)
+                if single:
+                    pdf_content = single
+            doc.close()
+        except Exception:
+            pass
+
+    response = HttpResponse(pdf_content, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="informe_{report.user.pk}_{report.base_year}.pdf"'
+    return response
+
+
+@login_required
+def admin_income_reports(request):
+    """Painel administrativo de informes de rendimentos."""
+    if not is_superadmin(request.user):
+        messages.error(request, 'Acesso restrito.')
+        return redirect('contracheque:my_income_reports')
+
+    reports = IncomeReport.objects.select_related('user', 'uploaded_by').all()
+
+    search = request.GET.get('q', '').strip()
+    year_filter = request.GET.get('year')
+
+    if search:
+        reports = reports.filter(
+            Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) |
+            Q(employee_name__icontains=search) |
+            Q(cpf__icontains=search)
+        )
+    if year_filter:
+        reports = reports.filter(base_year=year_filter)
+
+    years = IncomeReport.objects.values_list('base_year', flat=True).distinct().order_by('-base_year')
+
+    return render(request, 'contracheque/admin_income_reports.html', {
+        'reports': reports,
+        'years': years,
+        'search': search,
+        'selected_year': year_filter,
+    })
+
+
+@login_required
+def admin_income_import(request):
+    """Página de importação de informes de rendimentos."""
+    if not is_superadmin(request.user):
+        messages.error(request, 'Acesso restrito.')
+        return redirect('contracheque:my_income_reports')
+
+    return render(request, 'contracheque/admin_income_import.html', {
+        'current_year': timezone.now().year,
+    })
+
+
+@login_required
+def api_bulk_import_income(request):
+    """API para importar informes de rendimentos em lote (PDF multi-página)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    files = request.FILES.getlist('pdf_files')
+    if not files:
+        return JsonResponse({'error': 'Nenhum arquivo enviado.'}, status=400)
+
+    users_cache = list(User.objects.filter(is_active=True))
+    results = []
+
+    for pdf_file in files:
+        pdf_bytes = pdf_file.read()
+        pdf_file.seek(0)
+
+        all_reports = extract_all_income_reports(pdf_file)
+
+        if not all_reports:
+            results.append({'file': pdf_file.name, 'status': 'error', 'message': 'Nenhum informe encontrado no PDF.'})
+            continue
+
+        if len(all_reports) == 1 and 'error' in all_reports[0] and not all_reports[0].get('employee_name'):
+            results.append({'file': pdf_file.name, 'status': 'error', 'message': all_reports[0].get('error', 'Erro ao processar')})
+            continue
+
+        for report_data in all_reports:
+            if 'error' in report_data and not report_data.get('employee_name'):
+                results.append({'file': pdf_file.name, 'status': 'error', 'message': report_data.get('error', 'Erro')})
+                continue
+
+            emp_name = report_data.get('employee_name', '')
+            target_user = _find_user_by_name(emp_name, users_cache)
+
+            if not target_user:
+                results.append({
+                    'file': pdf_file.name,
+                    'status': 'skip',
+                    'message': f'Funcionário não encontrado: {emp_name}',
+                })
+                continue
+
+            base_year = report_data.get('base_year', timezone.now().year - 1)
+            exercise_year = report_data.get('exercise_year', base_year + 1)
+
+            existing = IncomeReport.objects.filter(user=target_user, base_year=base_year).first()
+            if existing:
+                results.append({
+                    'file': pdf_file.name,
+                    'status': 'skip',
+                    'message': f'Informe {base_year} já existe para {target_user.full_name}',
+                })
+                continue
+
+            page_num = report_data.get('_page_number')
+            fields_to_save = {k: v for k, v in report_data.items() if not k.startswith('_') and k not in ('error',)}
+
+            # Extrair página individual
+            from django.core.files.base import ContentFile
+            individual_pdf_name = f"informe_{target_user.pk}_{base_year}.pdf"
+
+            if page_num is not None:
+                single_page_bytes = extract_single_page_pdf(pdf_bytes, page_num)
+                if single_page_bytes:
+                    pdf_content = ContentFile(single_page_bytes, name=individual_pdf_name)
+                else:
+                    pdf_content = ContentFile(pdf_bytes, name=individual_pdf_name)
+            else:
+                pdf_content = ContentFile(pdf_bytes, name=individual_pdf_name)
+
+            income_report = IncomeReport(
+                user=target_user,
+                base_year=base_year,
+                exercise_year=exercise_year,
+                pdf_file=pdf_content,
+                pdf_page_number=page_num,
+                uploaded_by=request.user,
+                **fields_to_save,
+            )
+            income_report.save()
+
+            results.append({
+                'file': pdf_file.name,
+                'status': 'success',
+                'message': f'Importado para {target_user.full_name} (Ano {base_year})',
+            })
+
+    success_count = sum(1 for r in results if r['status'] == 'success')
+    return JsonResponse({
+        'results': results,
+        'total': len(results),
+        'success_count': success_count,
+    })
+
+
+@login_required
+def admin_delete_income_report(request, pk):
+    """Excluir um informe de rendimentos."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    report = get_object_or_404(IncomeReport, pk=pk)
+    info = str(report)
+    try:
+        report.pdf_file.delete(save=False)
+    except Exception:
+        pass
+    report.delete()
+
+    messages.success(request, f'Informe excluído: {info}')
+    return redirect('contracheque:admin_income_reports')
+
+
+@login_required
+def api_bulk_delete_income(request):
+    """Excluir todos os informes de um determinado ano."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    year = request.POST.get('year')
+    if not year:
+        return JsonResponse({'error': 'Ano é obrigatório.'}, status=400)
+
+    try:
+        year = int(year)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Ano inválido.'}, status=400)
+
+    reports = IncomeReport.objects.filter(base_year=year)
+    count = reports.count()
+
+    if count == 0:
+        return JsonResponse({'error': f'Nenhum informe encontrado para {year}.'}, status=404)
+
+    for r in reports:
+        try:
+            r.pdf_file.delete(save=False)
+        except Exception:
+            pass
+    reports.delete()
+
+    messages.success(request, f'{count} informes de {year} excluídos com sucesso.')
+    return JsonResponse({'success': True, 'deleted': count})
