@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse, FileResponse
+from django.http import JsonResponse, FileResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Q
 
@@ -313,6 +313,7 @@ def api_bulk_import(request):
     month = int(month)
     year = int(year)
     results = []
+    unmatched_names = []
 
     # Pré-carregar todos os usuários ativos para matching eficiente
     users_cache = list(User.objects.filter(is_active=True))
@@ -364,6 +365,7 @@ def api_bulk_import(request):
                     'status': 'skip',
                     'message': f'Funcionário não encontrado (pulado): {employee_name or "Nome não identificado"}',
                 })
+                unmatched_names.append({'nome_pdf': employee_name or 'Nome não identificado', 'cpf': cpf})
                 continue
 
             # Verificar duplicidade
@@ -424,6 +426,7 @@ def api_bulk_import(request):
         'results': results,
         'total': total_processed,
         'success_count': success_count,
+        'unmatched': unmatched_names,
     })
 
 
@@ -783,6 +786,7 @@ def api_bulk_import_income(request):
 
     users_cache = list(User.objects.filter(is_active=True))
     results = []
+    unmatched_names = []
 
     for pdf_file in files:
         pdf_bytes = pdf_file.read()
@@ -812,6 +816,7 @@ def api_bulk_import_income(request):
                     'status': 'skip',
                     'message': f'Funcionário não encontrado: {emp_name}',
                 })
+                unmatched_names.append({'nome_pdf': emp_name, 'cpf': report_data.get('cpf', '')})
                 continue
 
             base_year = report_data.get('base_year', timezone.now().year - 1)
@@ -827,7 +832,7 @@ def api_bulk_import_income(request):
                 continue
 
             page_num = report_data.get('_page_number')
-            fields_to_save = {k: v for k, v in report_data.items() if not k.startswith('_') and k not in ('error',)}
+            fields_to_save = {k: v for k, v in report_data.items() if not k.startswith('_') and k not in ('error', 'base_year', 'exercise_year')}
 
             # Extrair página individual
             from django.core.files.base import ContentFile
@@ -864,7 +869,76 @@ def api_bulk_import_income(request):
         'results': results,
         'total': len(results),
         'success_count': success_count,
+        'unmatched': unmatched_names,
     })
+
+
+@login_required
+def api_download_unmatched_excel(request):
+    """Gera e retorna um Excel com os nomes não encontrados no portal."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    import json
+    try:
+        body = json.loads(request.body)
+        unmatched = body.get('unmatched', [])
+        report_type = body.get('type', 'contracheque')
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'error': 'Dados inválidos'}, status=400)
+
+    if not unmatched:
+        return JsonResponse({'error': 'Nenhum nome para exportar'}, status=400)
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    if report_type == 'informe':
+        ws.title = 'Não Encontrados - Informes'
+        title = 'Funcionários do Informe sem cadastro no portal'
+    else:
+        ws.title = 'Não Encontrados - Contracheques'
+        title = 'Funcionários do Contracheque sem cadastro no portal'
+
+    # Header styling
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='4F46E5', end_color='4F46E5', fill_type='solid')
+
+    ws.append([title])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
+    ws['A1'].font = Font(bold=True, size=14)
+    ws.append([])
+
+    headers = ['Nome no PDF', 'CPF']
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+
+    for item in unmatched:
+        ws.append([item.get('nome_pdf', ''), item.get('cpf', '')])
+
+    ws.column_dimensions['A'].width = 45
+    ws.column_dimensions['B'].width = 20
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="nao_encontrados_{report_type}.xlsx"'
+    return response
 
 
 @login_required

@@ -77,6 +77,18 @@ async function importIncome() {
                 </div>`;
             }
             html += '</div>';
+
+            // Botão para baixar Excel dos não encontrados
+            if (data.unmatched && data.unmatched.length > 0) {
+                html += `<div class="mt-3 pt-3 border-t border-gray-200">
+                    <p class="text-sm text-orange-700 font-medium mb-2"><i class="fas fa-exclamation-triangle mr-1"></i> ${data.unmatched.length} funcionário(s) do PDF não encontrado(s) no portal</p>
+                    <button onclick='downloadUnmatched(${JSON.stringify(data.unmatched).replace(/'/g, "&#39;")}, "informe")'
+                            class="inline-flex items-center px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-md hover:bg-orange-600">
+                        <i class="fas fa-file-excel mr-1"></i> Baixar Excel - Não Encontrados
+                    </button>
+                </div>`;
+            }
+
             detailsEl.innerHTML = html;
             detailsEl.classList.remove('hidden');
         } else {
@@ -87,12 +99,35 @@ async function importIncome() {
     } catch (err) {
         const resultEl = document.getElementById('import-result');
         resultEl.className = 'bg-red-50 border border-red-200 rounded-lg p-3';
-        resultEl.innerHTML = '<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> Erro de conexão.</p>';
+        resultEl.innerHTML = `<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> Erro de conexão: ${err.message}</p>`;
         resultEl.classList.remove('hidden');
     }
 
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-upload mr-2"></i> Importar';
+}
+
+async function downloadUnmatched(unmatchedList, type) {
+    try {
+        const resp = await fetch('{% url "contracheque:api_download_unmatched_excel" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ unmatched: unmatchedList, type: type }),
+        });
+        if (!resp.ok) { alert('Erro ao gerar Excel.'); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nao_encontrados_${type}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        alert('Erro ao baixar: ' + err.message);
+    }
 }
 </script>
 {% endblock %}

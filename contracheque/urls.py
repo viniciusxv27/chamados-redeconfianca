@@ -32,4 +32,5 @@ urlpatterns = [
     path('api/assinar/<int:pk>/', views.api_sign_payslip, name='api_sign_payslip'),
     path('api/informes/importar-lote/', views.api_bulk_import_income, name='api_bulk_import_income'),
     path('api/informes/excluir-lote/', views.api_bulk_delete_income, name='api_bulk_delete_income'),
+    path('api/download-nao-encontrados/', views.api_download_unmatched_excel, name='api_download_unmatched_excel'),
 ]
