@@ -424,7 +424,7 @@
         
         <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">Selecione o novo agente:</label>
-            <select id="transferAgentSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            <select id="transferAgentSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white">
                 <option value="">Carregando agentes...</option>
             </select>
         </div>
@@ -456,7 +456,7 @@
         
         <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">Selecione a nova categoria:</label>
-            <select id="changeCategorySelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+            <select id="changeCategorySelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white">
                 <option value="">Carregando categorias...</option>
             </select>
         </div>
@@ -1040,7 +1040,7 @@ function createTicketElement(ticket) {
     const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
     
     // Calcular tempo decorrido
-    const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at);
+    const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at, ticket.started_at);
     
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
@@ -1083,8 +1083,10 @@ function createTicketElement(ticket) {
 }
 
 // Função para calcular tempo decorrido e retornar HTML do cronômetro
-function getTimerHtml(createdAt, closedAt) {
-    const start = new Date(createdAt);
+// Usa started_at (início do atendimento) se disponível, senão usa created_at
+function getTimerHtml(createdAt, closedAt, startedAt) {
+    // Prioriza started_at (quando o ticket foi aberto) sobre created_at
+    const start = startedAt ? new Date(startedAt) : new Date(createdAt);
     const end = closedAt ? new Date(closedAt) : new Date();
     const diff = end - start;
     
@@ -1096,7 +1098,7 @@ function getTimerHtml(createdAt, closedAt) {
     else if (hours >= 4) timerClass = 'warning';
     
     const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-    return `<span class="timer-badge ${timerClass}" data-created="${createdAt}" data-closed="${closedAt || ''}">
+    return `<span class="timer-badge ${timerClass}" data-created="${createdAt}" data-closed="${closedAt || ''}" data-started="${startedAt || ''}">
         <i class="fas fa-clock"></i>${timeStr}
     </span>`;
 }
@@ -1106,9 +1108,11 @@ function updateTimers() {
     document.querySelectorAll('.timer-badge').forEach(badge => {
         const created = badge.dataset.created;
         const closed = badge.dataset.closed;
+        const started = badge.dataset.started;
         if (!created) return;
         
-        const start = new Date(created);
+        // Usa started (início do atendimento) se disponível, senão usa created
+        const start = started ? new Date(started) : new Date(created);
         const end = closed ? new Date(closed) : new Date();
         const diff = end - start;
         
@@ -1175,7 +1179,7 @@ function renderListView(tickets) {
     };
     
     listContainer.innerHTML = tickets.map(ticket => {
-        const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at);
+        const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at, ticket.started_at);
         const statusClass = statusColors[ticket.status] || 'bg-gray-100 text-gray-800';
         const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
         
