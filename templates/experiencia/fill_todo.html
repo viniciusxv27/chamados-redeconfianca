@@ -60,12 +60,40 @@
             {% endif %}
 
             <div class="space-y-3">
+                <!-- Radio Buttons: Sim / Não / Não se aplica -->
                 <div>
-                    <label class="block text-sm text-gray-600 mb-1">Observação / Resposta</label>
-                    <textarea name="observation_{{ item.question.id }}" rows="3"
-                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                              placeholder="Descreva sua resposta...">{{ item.answer.observation|default:'' }}</textarea>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Resposta *</label>
+                    <div class="flex flex-wrap gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 hover:bg-green-100 transition has-[:checked]:ring-2 has-[:checked]:ring-green-500">
+                            <input type="radio" name="response_{{ item.question.id }}" value="sim" required
+                                   class="text-green-600 focus:ring-green-500"
+                                   {% if item.answer.response == 'sim' %}checked{% endif %}>
+                            <span class="text-sm font-medium text-green-700"><i class="fas fa-check mr-1"></i>Sim</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 hover:bg-red-100 transition has-[:checked]:ring-2 has-[:checked]:ring-red-500">
+                            <input type="radio" name="response_{{ item.question.id }}" value="nao"
+                                   class="text-red-600 focus:ring-red-500"
+                                   {% if item.answer.response == 'nao' %}checked{% endif %}>
+                            <span class="text-sm font-medium text-red-700"><i class="fas fa-times mr-1"></i>Não</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 hover:bg-gray-100 transition has-[:checked]:ring-2 has-[:checked]:ring-gray-400">
+                            <input type="radio" name="response_{{ item.question.id }}" value="nao_se_aplica"
+                                   class="text-gray-500 focus:ring-gray-400"
+                                   {% if item.answer.response == 'nao_se_aplica' %}checked{% endif %}>
+                            <span class="text-sm font-medium text-gray-600"><i class="fas fa-minus-circle mr-1"></i>Não se aplica</span>
+                        </label>
+                    </div>
                 </div>
+
+                <!-- Observação (opcional) -->
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">Observação (opcional)</label>
+                    <textarea name="observation_{{ item.question.id }}" rows="2"
+                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                              placeholder="Observação adicional...">{{ item.answer.observation|default:'' }}</textarea>
+                </div>
+
+                <!-- Foto -->
                 <div>
                     <label class="block text-sm text-gray-600 mb-1">Foto (evidência)</label>
                     <div class="flex flex-col sm:flex-row items-start gap-3">

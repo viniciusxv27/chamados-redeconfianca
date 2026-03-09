@@ -152,15 +152,21 @@ class ExperienciaTodo(models.Model):
         return f"{months[self.month]}/{self.year}"
 
     def calculate_score(self):
-        """Calcula a porcentagem de pontos aprovados."""
-        answers = self.answers.all()
-        total_points = sum(a.question.points for a in answers)
+        """Calcula a porcentagem de pontos.
+        - Sim + aprovado = soma pontos
+        - Não = não soma pontos
+        - Não se aplica = retira a pergunta do total
+        """
+        answers = self.answers.select_related('question').all()
+        applicable = [a for a in answers if a.response != 'nao_se_aplica']
+        total_points = sum(a.question.points for a in applicable)
         if total_points == 0:
             return 0
-        approved_points = sum(
-            a.question.points for a in answers if a.status == 'aprovado'
+        earned_points = sum(
+            a.question.points for a in applicable
+            if a.response == 'sim' and a.status == 'aprovado'
         )
-        return round((approved_points / total_points) * 100, 2)
+        return round((earned_points / total_points) * 100, 2)
 
     def update_score(self):
         self.score_percentage = self.calculate_score()
@@ -184,6 +190,12 @@ class ExperienciaAnswer(models.Model):
         ('recusado', 'Recusado'),
     ]
 
+    RESPONSE_CHOICES = [
+        ('sim', 'Sim'),
+        ('nao', 'Não'),
+        ('nao_se_aplica', 'Não se aplica'),
+    ]
+
     todo = models.ForeignKey(
         ExperienciaTodo,
         on_delete=models.CASCADE,
@@ -196,7 +208,13 @@ class ExperienciaAnswer(models.Model):
         related_name='answers',
         verbose_name='Pergunta',
     )
-    observation = models.TextField(blank=True, verbose_name='Observação/Resposta')
+    response = models.CharField(
+        max_length=20,
+        choices=RESPONSE_CHOICES,
+        default='nao',
+        verbose_name='Resposta',
+    )
+    observation = models.TextField(blank=True, verbose_name='Observação')
     photo = models.ImageField(
         upload_to=upload_experiencia_photo,
         storage=get_media_storage(),

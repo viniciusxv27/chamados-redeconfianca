@@ -328,6 +328,9 @@ def fill_todo(request, todo_id):
 
     if request.method == 'POST':
         for question in questions:
+            response = request.POST.get(f'response_{question.id}', 'nao')
+            if response not in ('sim', 'nao', 'nao_se_aplica'):
+                response = 'nao'
             observation = request.POST.get(f'observation_{question.id}', '').strip()
             photo = request.FILES.get(f'photo_{question.id}')
 
@@ -335,6 +338,7 @@ def fill_todo(request, todo_id):
                 todo=todo,
                 question=question,
                 defaults={
+                    'response': response,
                     'observation': observation,
                     'answered_by': user,
                     'answered_at': timezone.now(),
@@ -342,6 +346,7 @@ def fill_todo(request, todo_id):
                 },
             )
             if not created:
+                answer.response = response
                 answer.observation = observation
                 answer.answered_by = user
                 answer.answered_at = timezone.now()
@@ -391,8 +396,12 @@ def view_todo(request, todo_id):
         return redirect('experiencia:dashboard')
 
     answers = todo.answers.select_related('question', 'answered_by').all()
-    total_points = todo.template.total_points()
-    approved_points = sum(a.question.points for a in answers if a.status == 'aprovado')
+    applicable = [a for a in answers if a.response != 'nao_se_aplica']
+    total_points = sum(a.question.points for a in applicable)
+    approved_points = sum(
+        a.question.points for a in applicable
+        if a.response == 'sim' and a.status == 'aprovado'
+    )
 
     return render(request, 'experiencia/view_todo.html', {
         'todo': todo,

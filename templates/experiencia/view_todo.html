@@ -84,9 +84,26 @@
                 </div>
             </div>
 
+            <!-- Resposta do radio button -->
+            <div class="mb-3">
+                {% if answer.response == 'sim' %}
+                    <span class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+                        <i class="fas fa-check-circle"></i> Sim
+                    </span>
+                {% elif answer.response == 'nao' %}
+                    <span class="inline-flex items-center gap-1.5 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+                        <i class="fas fa-times-circle"></i> Não
+                    </span>
+                {% elif answer.response == 'nao_se_aplica' %}
+                    <span class="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium">
+                        <i class="fas fa-minus-circle"></i> Não se aplica
+                    </span>
+                {% endif %}
+            </div>
+
             {% if answer.observation %}
             <div class="bg-gray-50 rounded-lg p-3 mb-3">
-                <span class="text-xs text-gray-500 block mb-1">Resposta:</span>
+                <span class="text-xs text-gray-500 block mb-1">Observação:</span>
                 <p class="text-sm text-gray-700">{{ answer.observation }}</p>
             </div>
             {% endif %}
