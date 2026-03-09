@@ -50,12 +50,18 @@
         </div>
         
         <!-- Saldo do usuário -->
-        <div class="balance-display text-dark px-6 py-4 rounded-lg shadow-lg mt-4 md:mt-0">
-            <div class="text-sm opacity-90">Seu saldo</div>
-            <div class="text-2xl font-bold">
-                <i class="fas fa-coins mr-2"></i>
-                {{ user_balance|floatformat:0 }} C$
+        <div class="flex flex-col items-end gap-2 mt-4 md:mt-0">
+            <div class="balance-display text-dark px-6 py-4 rounded-lg shadow-lg">
+                <div class="text-sm opacity-90">Seu saldo</div>
+                <div class="text-2xl font-bold">
+                    <i class="fas fa-coins mr-2"></i>
+                    {{ user_balance|floatformat:0 }} C$
+                </div>
             </div>
+            <a href="{% url 'my_cs_statement' %}" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors">
+                <i class="fas fa-receipt"></i>
+                Ver meu extrato C$
+            </a>
         </div>
     </div>
 

@@ -187,7 +187,7 @@
                         </div>
                         {% endif %}
                         <div class="text-center sidebar-text">
-                            <div class="font-medium text-xs sm:text-xs lg:text-sm">{{ user.first_name }} {{ user.last_name }}</div>
+                            <div class="font-medium text-xs sm:text-xs lg:text-sm">{{ user.first_name }}</div>
                             <div class="text-xs text-gray-400">{{ user.get_hierarchy_display }}</div>
                         </div>
                     </div>
@@ -247,20 +247,6 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% if user.hierarchy == 'SUPERADMIN' %}
-                        <li>
-                            <a href="{% url 'notifications:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Notificações">
-                                <i class="fas fa-bell text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Notificações</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                {% if unread_notifications_count > 0 %}
-                                <span class="notification-count-badge bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-auto">
-                                    {{ unread_notifications_count }}
-                                </span>
-                                {% endif %}
-                            </a>
-                        </li>
-                        {% endif %}
                         <li>
                             <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
                                 <i class="fas fa-folder text-primary flex-shrink-0"></i>
@@ -273,14 +259,6 @@
                                 <i class="fas fa-store text-primary flex-shrink-0"></i>
                                 <span class="text-sm">Mercadinho</span>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{% url 'my_cs_statement' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meu Extrato C$">
-                                <i class="fas fa-receipt text-yellow-400 flex-shrink-0"></i>
-                                <span class="text-sm sidebar-text">Meu Extrato C$</span>
-                                <div class="tooltip-collapsed">Meu Extrato C$</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
@@ -755,11 +733,7 @@
                             <nav class="hidden lg:flex space-x-6">
                                 <a href="{% url 'home' %}" class="text-gray-600 hover:text-primary transition-colors {% if request.resolver_match.url_name == 'home' %}text-primary border-b-2 border-primary{% endif %}">Home</a>
                                 <a href="{% url 'dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if request.resolver_match.url_name == 'dashboard' %}text-primary border-b-2 border-primary{% endif %}">Dashboard</a>
-                                <a href="{% url 'communications:communications_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'communications' in request.path %}text-primary border-b-2 border-primary{% endif %}">Comunicados</a>
                                 <a href="{% url 'tickets_list' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'tickets' in request.path %}text-primary border-b-2 border-primary{% endif %}">Chamados</a>
-                                <a href="{% url 'assets:inventory_dashboard' %}" class="text-gray-600 hover:text-primary transition-colors {% if 'assets' in request.path %}text-primary border-b-2 border-primary{% endif %}">
-                                    <i class="fas fa-warehouse mr-1"></i>Almoxarifado
-                                </a>
                             </nav>
                             {% endblock %}
                         </div>
