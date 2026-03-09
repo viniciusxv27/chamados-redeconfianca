@@ -12,7 +12,7 @@ from .models import (
 class ExperienciaQuestionInline(admin.TabularInline):
     model = ExperienciaQuestion
     extra = 1
-    fields = ('text', 'order', 'points')
+    fields = ('pilar', 'item', 'text', 'detalhamento', 'gravidade', 'contestavel', 'order', 'points')
 
 
 @admin.register(ExperienciaTemplate)

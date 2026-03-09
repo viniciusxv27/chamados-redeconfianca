@@ -12,6 +12,7 @@ urlpatterns = [
     path('templates/criar/', views.template_create, name='template_create'),
     path('templates/<int:template_id>/editar/', views.template_edit, name='template_edit'),
     path('templates/<int:template_id>/excluir/', views.template_delete, name='template_delete'),
+    path('templates/importar-pdf/', views.import_template_pdf, name='import_template_pdf'),
 
     # Lançar to-do
     path('lancar/', views.launch_todo, name='launch_todo'),

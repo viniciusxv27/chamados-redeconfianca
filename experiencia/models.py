@@ -48,13 +48,30 @@ class ExperienciaTemplate(models.Model):
 
 class ExperienciaQuestion(models.Model):
     """Pergunta que compõe um template."""
+    GRAVIDADE_CHOICES = [
+        ('leve', 'Leve'),
+        ('media', 'Média'),
+        ('grave', 'Grave'),
+        ('inegociavel', 'Inegociável'),
+    ]
+
     template = models.ForeignKey(
         ExperienciaTemplate,
         on_delete=models.CASCADE,
         related_name='questions',
         verbose_name='Template',
     )
+    pilar = models.CharField(max_length=200, blank=True, verbose_name='Pilar')
+    item = models.CharField(max_length=200, blank=True, verbose_name='Item')
+    gravidade = models.CharField(
+        max_length=20,
+        choices=GRAVIDADE_CHOICES,
+        blank=True,
+        verbose_name='Gravidade',
+    )
     text = models.CharField(max_length=500, verbose_name='Pergunta')
+    detalhamento = models.TextField(blank=True, verbose_name='Detalhamento')
+    contestavel = models.BooleanField(default=True, verbose_name='Contestável?')
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
     points = models.PositiveIntegerField(default=0, verbose_name='Pontos')
 

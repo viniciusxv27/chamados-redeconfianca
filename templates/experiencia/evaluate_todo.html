@@ -41,6 +41,32 @@
                 </span>
             </div>
 
+            {% if answer.question.pilar or answer.question.gravidade %}
+            <div class="flex flex-wrap gap-2 mb-2">
+                {% if answer.question.pilar %}
+                <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ answer.question.pilar }}</span>
+                {% endif %}
+                {% if answer.question.item %}
+                <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{{ answer.question.item }}</span>
+                {% endif %}
+                {% if answer.question.gravidade == 'grave' %}
+                <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Grave</span>
+                {% elif answer.question.gravidade == 'media' %}
+                <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">Média</span>
+                {% elif answer.question.gravidade == 'leve' %}
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">Leve</span>
+                {% elif answer.question.gravidade == 'inegociavel' %}
+                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">Inegociável</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if answer.question.detalhamento %}
+            <div class="bg-blue-50 border border-blue-100 rounded-lg p-2.5 mb-3">
+                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1"></i>{{ answer.question.detalhamento }}</p>
+            </div>
+            {% endif %}
+
             {% if answer.observation %}
             <div class="bg-gray-50 rounded-lg p-3 mb-3">
                 <span class="text-xs text-gray-500 block mb-1">Resposta do setor:</span>

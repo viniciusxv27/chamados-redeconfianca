@@ -41,42 +41,127 @@
                 <span class="text-sm text-gray-500" id="totalPointsDisplay">Total: <span id="totalPoints">0</span> pts</span>
             </div>
 
-            <div id="questionsContainer" class="space-y-3">
+            <div id="questionsContainer" class="space-y-4">
                 {% if questions %}
                     {% for q in questions %}
-                    <div class="question-item flex items-start gap-3 bg-gray-50 rounded-lg p-3">
-                        <div class="flex-1">
-                            <input type="text" name="question_text" value="{{ q.text }}" required
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                                   placeholder="Texto da pergunta">
+                    <div class="question-item bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div class="flex items-start gap-3 mb-3">
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 mb-1">Pergunta *</label>
+                                <input type="text" name="question_text" value="{{ q.text }}" required
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                       placeholder="Texto da pergunta">
+                            </div>
+                            <div class="w-20">
+                                <label class="block text-xs text-gray-500 mb-1">Pontos</label>
+                                <input type="number" name="question_points" value="{{ q.points }}" min="0" required
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 points-input"
+                                       oninput="updateTotalPoints()">
+                            </div>
+                            <button type="button" onclick="removeQuestion(this)" class="text-red-400 hover:text-red-600 mt-5">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </div>
-                        <div class="w-24">
-                            <input type="number" name="question_points" value="{{ q.points }}" min="0" required
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 points-input"
-                                   placeholder="Pts"
-                                   oninput="updateTotalPoints()">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Pilar</label>
+                                <input type="text" name="question_pilar" value="{{ q.pilar }}"
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                       placeholder="Ex: Padronização de Lojas">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Item</label>
+                                <input type="text" name="question_item" value="{{ q.item }}"
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                       placeholder="Ex: Fachada limpa">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Gravidade</label>
+                                <select name="question_gravidade"
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                                    <option value="">—</option>
+                                    <option value="leve" {% if q.gravidade == 'leve' %}selected{% endif %}>Leve</option>
+                                    <option value="media" {% if q.gravidade == 'media' %}selected{% endif %}>Média</option>
+                                    <option value="grave" {% if q.gravidade == 'grave' %}selected{% endif %}>Grave</option>
+                                    <option value="inegociavel" {% if q.gravidade == 'inegociavel' %}selected{% endif %}>Inegociável</option>
+                                </select>
+                            </div>
                         </div>
-                        <button type="button" onclick="removeQuestion(this)" class="text-red-400 hover:text-red-600 mt-2">
-                            <i class="fas fa-times"></i>
-                        </button>
+                        <div class="mb-3">
+                            <label class="block text-xs text-gray-500 mb-1">Detalhamento</label>
+                            <textarea name="question_detalhamento" rows="2"
+                                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                      placeholder="Detalhamento / orientação para o avaliador...">{{ q.detalhamento }}</textarea>
+                        </div>
+                        <div>
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                                <input type="hidden" name="question_contestavel" value="0">
+                                <input type="checkbox" name="question_contestavel" value="1" class="rounded text-blue-600 contestavel-check"
+                                       {% if q.contestavel %}checked{% endif %}
+                                       onchange="this.previousElementSibling.disabled = this.checked">
+                                Contestável
+                            </label>
+                        </div>
                     </div>
                     {% endfor %}
                 {% else %}
-                    <div class="question-item flex items-start gap-3 bg-gray-50 rounded-lg p-3">
-                        <div class="flex-1">
-                            <input type="text" name="question_text" required
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                                   placeholder="Texto da pergunta">
+                    <div class="question-item bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div class="flex items-start gap-3 mb-3">
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 mb-1">Pergunta *</label>
+                                <input type="text" name="question_text" required
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                       placeholder="Texto da pergunta">
+                            </div>
+                            <div class="w-20">
+                                <label class="block text-xs text-gray-500 mb-1">Pontos</label>
+                                <input type="number" name="question_points" value="0" min="0" required
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 points-input"
+                                       oninput="updateTotalPoints()">
+                            </div>
+                            <button type="button" onclick="removeQuestion(this)" class="text-red-400 hover:text-red-600 mt-5">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </div>
-                        <div class="w-24">
-                            <input type="number" name="question_points" value="0" min="0" required
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 points-input"
-                                   placeholder="Pts"
-                                   oninput="updateTotalPoints()">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Pilar</label>
+                                <input type="text" name="question_pilar" value=""
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                       placeholder="Ex: Padronização de Lojas">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Item</label>
+                                <input type="text" name="question_item" value=""
+                                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                       placeholder="Ex: Fachada limpa">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Gravidade</label>
+                                <select name="question_gravidade"
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                                    <option value="">—</option>
+                                    <option value="leve">Leve</option>
+                                    <option value="media">Média</option>
+                                    <option value="grave">Grave</option>
+                                    <option value="inegociavel">Inegociável</option>
+                                </select>
+                            </div>
                         </div>
-                        <button type="button" onclick="removeQuestion(this)" class="text-red-400 hover:text-red-600 mt-2">
-                            <i class="fas fa-times"></i>
-                        </button>
+                        <div class="mb-3">
+                            <label class="block text-xs text-gray-500 mb-1">Detalhamento</label>
+                            <textarea name="question_detalhamento" rows="2"
+                                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                      placeholder="Detalhamento / orientação para o avaliador..."></textarea>
+                        </div>
+                        <div>
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                                <input type="hidden" name="question_contestavel" value="0">
+                                <input type="checkbox" name="question_contestavel" value="1" class="rounded text-blue-600 contestavel-check" checked
+                                       onchange="this.previousElementSibling.disabled = this.checked">
+                                Contestável
+                            </label>
+                        </div>
                     </div>
                 {% endif %}
             </div>
@@ -101,22 +186,64 @@
 function addQuestion() {
     const container = document.getElementById('questionsContainer');
     const div = document.createElement('div');
-    div.className = 'question-item flex items-start gap-3 bg-gray-50 rounded-lg p-3';
+    div.className = 'question-item bg-gray-50 rounded-lg p-4 border border-gray-200';
     div.innerHTML = `
-        <div class="flex-1">
-            <input type="text" name="question_text" required
-                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                   placeholder="Texto da pergunta">
+        <div class="flex items-start gap-3 mb-3">
+            <div class="flex-1">
+                <label class="block text-xs text-gray-500 mb-1">Pergunta *</label>
+                <input type="text" name="question_text" required
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                       placeholder="Texto da pergunta">
+            </div>
+            <div class="w-20">
+                <label class="block text-xs text-gray-500 mb-1">Pontos</label>
+                <input type="number" name="question_points" value="0" min="0" required
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 points-input"
+                       oninput="updateTotalPoints()">
+            </div>
+            <button type="button" onclick="removeQuestion(this)" class="text-red-400 hover:text-red-600 mt-5">
+                <i class="fas fa-trash"></i>
+            </button>
         </div>
-        <div class="w-24">
-            <input type="number" name="question_points" value="0" min="0" required
-                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 points-input"
-                   placeholder="Pts"
-                   oninput="updateTotalPoints()">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Pilar</label>
+                <input type="text" name="question_pilar" value=""
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                       placeholder="Ex: Padronização de Lojas">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Item</label>
+                <input type="text" name="question_item" value=""
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                       placeholder="Ex: Fachada limpa">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Gravidade</label>
+                <select name="question_gravidade"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="">—</option>
+                    <option value="leve">Leve</option>
+                    <option value="media">Média</option>
+                    <option value="grave">Grave</option>
+                    <option value="inegociavel">Inegociável</option>
+                </select>
+            </div>
         </div>
-        <button type="button" onclick="removeQuestion(this)" class="text-red-400 hover:text-red-600 mt-2">
-            <i class="fas fa-times"></i>
-        </button>
+        <div class="mb-3">
+            <label class="block text-xs text-gray-500 mb-1">Detalhamento</label>
+            <textarea name="question_detalhamento" rows="2"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      placeholder="Detalhamento / orientação para o avaliador..."></textarea>
+        </div>
+        <div>
+            <label class="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="hidden" name="question_contestavel" value="0">
+                <input type="checkbox" name="question_contestavel" value="1" class="rounded text-blue-600 contestavel-check" checked
+                       onchange="this.previousElementSibling.disabled = this.checked">
+                Contestável
+            </label>
+        </div>
     `;
     container.appendChild(div);
 }
@@ -136,6 +263,12 @@ function updateTotalPoints() {
     document.getElementById('totalPoints').textContent = total;
 }
 
-document.addEventListener('DOMContentLoaded', updateTotalPoints);
+document.addEventListener('DOMContentLoaded', function() {
+    updateTotalPoints();
+    // Initialize contestavel checkboxes - disable hidden input if checkbox is checked
+    document.querySelectorAll('.contestavel-check').forEach(function(cb) {
+        if (cb.checked) cb.previousElementSibling.disabled = true;
+    });
+});
 </script>
 {% endblock %}

@@ -116,6 +116,11 @@ def template_create(request):
         description = request.POST.get('description', '').strip()
         questions_text = request.POST.getlist('question_text')
         questions_points = request.POST.getlist('question_points')
+        questions_pilar = request.POST.getlist('question_pilar')
+        questions_item = request.POST.getlist('question_item')
+        questions_gravidade = request.POST.getlist('question_gravidade')
+        questions_detalhamento = request.POST.getlist('question_detalhamento')
+        questions_contestavel = request.POST.getlist('question_contestavel')
 
         if not name:
             messages.error(request, 'O nome do template é obrigatório.')
@@ -131,16 +136,21 @@ def template_create(request):
             created_by=user,
         )
 
-        for i, (text, pts) in enumerate(zip(questions_text, questions_points)):
+        for i, text in enumerate(questions_text):
             text = text.strip()
             if text:
                 try:
-                    points = int(pts)
+                    points = int(questions_points[i]) if i < len(questions_points) else 0
                 except (ValueError, TypeError):
                     points = 0
                 ExperienciaQuestion.objects.create(
                     template=template,
                     text=text,
+                    pilar=questions_pilar[i].strip() if i < len(questions_pilar) else '',
+                    item=questions_item[i].strip() if i < len(questions_item) else '',
+                    gravidade=questions_gravidade[i] if i < len(questions_gravidade) else '',
+                    detalhamento=questions_detalhamento[i].strip() if i < len(questions_detalhamento) else '',
+                    contestavel=questions_contestavel[i] == '1' if i < len(questions_contestavel) else True,
                     order=i,
                     points=max(0, points),
                 )
@@ -172,17 +182,27 @@ def template_edit(request, template_id):
 
         questions_text = request.POST.getlist('question_text')
         questions_points = request.POST.getlist('question_points')
+        questions_pilar = request.POST.getlist('question_pilar')
+        questions_item = request.POST.getlist('question_item')
+        questions_gravidade = request.POST.getlist('question_gravidade')
+        questions_detalhamento = request.POST.getlist('question_detalhamento')
+        questions_contestavel = request.POST.getlist('question_contestavel')
 
-        for i, (text, pts) in enumerate(zip(questions_text, questions_points)):
+        for i, text in enumerate(questions_text):
             text = text.strip()
             if text:
                 try:
-                    points = int(pts)
+                    points = int(questions_points[i]) if i < len(questions_points) else 0
                 except (ValueError, TypeError):
                     points = 0
                 ExperienciaQuestion.objects.create(
                     template=template,
                     text=text,
+                    pilar=questions_pilar[i].strip() if i < len(questions_pilar) else '',
+                    item=questions_item[i].strip() if i < len(questions_item) else '',
+                    gravidade=questions_gravidade[i] if i < len(questions_gravidade) else '',
+                    detalhamento=questions_detalhamento[i].strip() if i < len(questions_detalhamento) else '',
+                    contestavel=questions_contestavel[i] == '1' if i < len(questions_contestavel) else True,
                     order=i,
                     points=max(0, points),
                 )
@@ -211,6 +231,93 @@ def template_delete(request, template_id):
     template.save()
     messages.success(request, f'Template "{template.name}" removido.')
     return redirect('experiencia:template_list')
+
+
+@login_required
+def import_template_pdf(request):
+    """Importa template a partir de PDF de checklist."""
+    user = request.user
+    if not _is_gerente_or_superadmin(user):
+        messages.error(request, 'Você não tem permissão.')
+        return redirect('experiencia:dashboard')
+
+    preview_data = None
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'preview')
+
+        if action == 'preview':
+            pdf_file = request.FILES.get('pdf_file')
+            if not pdf_file:
+                messages.error(request, 'Selecione um arquivo PDF.')
+                return redirect('experiencia:import_template_pdf')
+
+            if not pdf_file.name.lower().endswith('.pdf'):
+                messages.error(request, 'O arquivo deve ser um PDF.')
+                return redirect('experiencia:import_template_pdf')
+
+            from .pdf_parser import parse_checklist_pdf
+            try:
+                questions = parse_checklist_pdf(pdf_file)
+            except Exception:
+                messages.error(request, 'Erro ao processar o PDF. Verifique se o formato está correto.')
+                return redirect('experiencia:import_template_pdf')
+
+            if not questions:
+                messages.error(request, 'Nenhuma pergunta encontrada no PDF.')
+                return redirect('experiencia:import_template_pdf')
+
+            # Guardar na sessão para o confirm
+            request.session['pdf_import_questions'] = questions
+            template_name = request.POST.get('name', '').strip() or pdf_file.name.replace('.pdf', '')
+            template_description = request.POST.get('description', '').strip()
+            request.session['pdf_import_name'] = template_name
+            request.session['pdf_import_description'] = template_description
+
+            total_points = sum(q['pontuacao'] for q in questions)
+            preview_data = {
+                'questions': questions,
+                'total': len(questions),
+                'total_points': total_points,
+                'name': template_name,
+                'description': template_description,
+            }
+
+        elif action == 'confirm':
+            questions = request.session.pop('pdf_import_questions', None)
+            name = request.session.pop('pdf_import_name', 'Template Importado')
+            description = request.session.pop('pdf_import_description', '')
+
+            if not questions:
+                messages.error(request, 'Dados da importação expiraram. Tente novamente.')
+                return redirect('experiencia:import_template_pdf')
+
+            template = ExperienciaTemplate.objects.create(
+                name=name,
+                description=description,
+                created_by=user,
+            )
+
+            for q in questions:
+                ExperienciaQuestion.objects.create(
+                    template=template,
+                    text=q['pergunta'],
+                    pilar=q['pilar'],
+                    item=q['item'],
+                    gravidade=q['gravidade'],
+                    detalhamento=q['detalhamento'],
+                    contestavel=q['contestavel'],
+                    order=q['ordem'],
+                    points=q['pontuacao'],
+                )
+
+            messages.success(request, f'Template "{name}" importado com {len(questions)} perguntas!')
+            return redirect('experiencia:template_list')
+
+    return render(request, 'experiencia/import_pdf.html', {
+        'is_superadmin': _is_superadmin(user),
+        'preview_data': preview_data,
+    })
 
 
 # ─── Lançar To-Do (Gestor seleciona template + mês + setor) ──────────────────
