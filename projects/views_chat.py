@@ -2093,7 +2093,7 @@ def support_metrics_api(request):
         from django.db.models import Avg
         rated_tickets = tickets.filter(rating__isnull=False)
         if rated_tickets.exists():
-            avg_rating = rated_tickets.aggregate(Avg('rating'))['rating__avg']
+            avg_rating = rated_tickets.aggregate(Avg('rating__rating'))['rating__rating__avg']
             satisfaction_rate = f"{int((avg_rating / 5) * 100)}%"
         else:
             satisfaction_rate = "N/A"
@@ -2140,7 +2140,6 @@ def support_metrics_api(request):
                     'total': total,
                     'open': cat_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                     'in_progress': cat_tickets.filter(status='EM_ANDAMENTO').count(),
-                    'closed': cat_tickets.filter(status='FECHADO').count(),
                     'closed': cat_tickets.filter(status='FECHADO').count()
                 })
         
@@ -2164,7 +2163,6 @@ def support_metrics_api(request):
                     'total': total,
                     'open': sector_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                     'in_progress': sector_tickets.filter(status='EM_ANDAMENTO').count(),
-                    'closed': sector_tickets.filter(status='FECHADO').count(),
                     'closed': sector_tickets.filter(status='FECHADO').count()
                 })
         
@@ -2189,7 +2187,6 @@ def support_metrics_api(request):
                 'total': item['total'],
                 'open': sector_tickets_qs.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                 'in_progress': sector_tickets_qs.filter(status='EM_ANDAMENTO').count(),
-                'closed': sector_tickets_qs.filter(status='FECHADO').count(),
                 'closed': sector_tickets_qs.filter(status='FECHADO').count()
             })
         
