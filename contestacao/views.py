@@ -293,6 +293,78 @@ def create_contestation(request, exclusion_id):
 
 
 @login_required
+def bulk_create_contestation(request):
+    """Cria contestações em lote para múltiplos registros de exclusão."""
+    if not _can_create_contestations(request.user):
+        messages.error(request, 'Sem permissão para contestar.')
+        return redirect('contestacao:exclusion_list')
+
+    # Parse IDs from GET (initial load) or POST (submit)
+    ids_param = request.GET.get('ids', '') or request.POST.get('ids', '')
+    try:
+        exclusion_ids = [int(x) for x in ids_param.split(',') if x.strip().isdigit()]
+    except (ValueError, AttributeError):
+        exclusion_ids = []
+
+    if not exclusion_ids:
+        messages.error(request, 'Nenhum registro selecionado.')
+        return redirect('contestacao:exclusion_list')
+
+    exclusions = ExclusionRecord.objects.filter(pk__in=exclusion_ids)
+    if not exclusions.exists():
+        messages.error(request, 'Nenhum registro encontrado.')
+        return redirect('contestacao:exclusion_list')
+
+    # Filter out exclusions that already have active contestations
+    already_contested = set(
+        Contestation.objects.filter(
+            exclusion_id__in=exclusion_ids,
+            status__in=['pending', 'accepted', 'confirmed'],
+        ).values_list('exclusion_id', flat=True)
+    )
+    exclusions = exclusions.exclude(pk__in=already_contested)
+
+    if not exclusions.exists():
+        messages.warning(request, 'Todos os registros selecionados já possuem contestação em andamento.')
+        return redirect('contestacao:exclusion_list')
+
+    if request.method == 'POST':
+        reason = request.POST.get('reason', '').strip()
+        attachment = request.FILES.get('attachment')
+        if not reason:
+            messages.error(request, 'Informe o motivo da contestação.')
+        else:
+            created_count = 0
+            for exclusion in exclusions:
+                c = Contestation.objects.create(
+                    exclusion=exclusion,
+                    requester=request.user,
+                    reason=reason,
+                    attachment=attachment,
+                )
+                ContestationHistory.objects.create(
+                    contestation=c,
+                    action='created',
+                    user=request.user,
+                    notes=reason,
+                    extra_data={'exclusion_id': exclusion.pk, 'vendedor': exclusion.vendedor, 'bulk': True},
+                )
+                created_count += 1
+
+            messages.success(request, f'{created_count} contestações criadas com sucesso!')
+            return redirect('contestacao:my_contestations')
+
+    total_receita = sum(e.receita for e in exclusions)
+
+    return render(request, 'contestacao/bulk_create_contestation.html', {
+        'exclusions': exclusions,
+        'ids_param': ','.join(str(e.pk) for e in exclusions),
+        'total_receita': total_receita,
+        'skipped': len(already_contested),
+    })
+
+
+@login_required
 def my_contestations(request):
     """Minhas contestações (criadas por mim) ou todas visíveis por setor."""
     if not _can_create_contestations(request.user):
