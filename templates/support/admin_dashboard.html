@@ -222,7 +222,7 @@
             </div>
         </div>
 
-        <!-- Fechados (inclui Resolvidos + Fechados) -->
+        <!-- Fechados (inclui Fechados) -->
         <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
             <div class="p-4 font-semibold border-b border-gray-200 bg-green-100 text-green-800 flex justify-between items-center">
                 <span>Fechados</span>
@@ -654,7 +654,7 @@ function getStatusLabel(status) {
     const labels = {
         'ABERTO': 'Abertos',
         'EM_ANDAMENTO': 'Em Andamento',
-        'RESOLVIDO': 'Fechados',
+        'FECHADO': 'Fechados',
         'FECHADO': 'Fechados'
     };
     return labels[status] || status;
@@ -904,9 +904,9 @@ function updateStatCounters(stats) {
         if (progressCounter) progressCounter.textContent = stats.in_progress;
     }
     if (containers.length >= 4) {
-        // Fechados (Resolvidos + Fechados somados)
+        // Fechados (Fechados somados)
         const closedCounter = containers[3].querySelector('.text-3xl');
-        const closedTotal = (stats.resolved || 0) + (stats.closed !== undefined ? stats.closed : 0);
+        const closedTotal = (stats.closed || 0) + (stats.closed !== undefined ? stats.closed : 0);
         if (closedCounter) closedCounter.textContent = closedTotal;
     }
     
@@ -918,7 +918,7 @@ function updateStatCounters(stats) {
     if (progressBadge) progressBadge.textContent = stats.in_progress;
     
     const closedCount = document.getElementById('closed-count');
-    const closedTotal = (stats.resolved || 0) + (stats.closed !== undefined ? stats.closed : 0);
+    const closedTotal = (stats.closed || 0) + (stats.closed !== undefined ? stats.closed : 0);
     if (closedCount) closedCount.textContent = closedTotal;
 }
 
@@ -968,7 +968,7 @@ function renderTickets(tickets) {
         'AGUARDANDO': document.getElementById('open-tickets'),
         'ABERTO': document.getElementById('open-tickets'),
         'EM_ANDAMENTO': document.getElementById('progress-tickets'),
-        'RESOLVIDO': document.getElementById('closed-tickets'),
+        'FECHADO': document.getElementById('closed-tickets'),
         'FECHADO': document.getElementById('closed-tickets')
     };
     
@@ -1166,7 +1166,7 @@ function renderListView(tickets) {
         'AGUARDANDO': 'bg-red-100 text-red-800',
         'ABERTO': 'bg-red-100 text-red-800',
         'EM_ANDAMENTO': 'bg-yellow-100 text-yellow-800',
-        'RESOLVIDO': 'bg-blue-100 text-blue-800',
+        'FECHADO': 'bg-blue-100 text-blue-800',
         'FECHADO': 'bg-green-100 text-green-800'
     };
     
@@ -1257,7 +1257,7 @@ function updateTicketCounts(tickets) {
     let closedTotal = 0;
     
     tickets.forEach(ticket => {
-        if (ticket.status === 'RESOLVIDO' || ticket.status === 'FECHADO') {
+        if (ticket.status === 'FECHADO' || ticket.status === 'FECHADO') {
             closedTotal++;
         }
     });
@@ -1410,10 +1410,10 @@ function renderTicketDetails(data) {
                     <div class="pt-4 border-t space-y-2">
                         ${data.chat.status === 'EM_ANDAMENTO' ? `
                         <button onclick="resolveChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
-                            <i class="fas fa-check-circle mr-2"></i>Marcar como Resolvido
+                            <i class="fas fa-check-circle mr-2"></i>Finalizar Atendimento
                         </button>
                         ` : ''}
-                        ${data.chat.status === 'RESOLVIDO' ? `
+                        ${data.chat.status === 'FECHADO' ? `
                         <button onclick="closeChat(${data.chat.id})" class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded text-sm transition-colors">
                             <i class="fas fa-times-circle mr-2"></i>Fechar Ticket
                         </button>
@@ -1541,7 +1541,7 @@ function getStatusColor(status) {
         'AGUARDANDO': 'red',
         'ABERTO': 'red',
         'EM_ANDAMENTO': 'yellow',
-        'RESOLVIDO': 'blue',
+        'FECHADO': 'blue',
         'FECHADO': 'green'
     };
     return colors[status] || 'gray';
@@ -2646,7 +2646,7 @@ function executeTicketAction(chatId, action) {
         ? `/projects/support/chat/${chatId}/resolve/`
         : `/projects/support/chat/${chatId}/close/`;
     const successMsg = action === 'resolve'
-        ? 'Ticket marcado como resolvido!'
+        ? 'Atendimento finalizado!'
         : 'Ticket fechado com sucesso!';
     
     fetch(url, {

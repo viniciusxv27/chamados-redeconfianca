@@ -683,7 +683,6 @@ def support_admin_dashboard(request):
     total_chats = SupportChat.objects.filter(base_filter).count()
     open_chats = SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count()
     in_progress_chats = SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count()
-    resolved_chats = SupportChat.objects.filter(base_filter, status='RESOLVIDO').count()
     closed_chats = SupportChat.objects.filter(base_filter, status='FECHADO').count()
     
     # Chats por prioridade (filtrados)
@@ -775,8 +774,7 @@ def support_admin_dashboard(request):
             'total': total_chats,
             'open': open_chats,
             'in_progress': in_progress_chats,
-            'resolved': resolved_chats,
-            'closed': resolved_chats + closed_chats,
+            'closed': closed_chats,
             'avg_rating': round(avg_rating, 1)
         },
         'priority_stats': list(priority_stats),
@@ -1032,7 +1030,7 @@ def support_admin_template(request):
         'total': SupportChat.objects.filter(chats_filter).count(),
         'open': SupportChat.objects.filter(chats_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(chats_filter, status='EM_ANDAMENTO').count(),
-        'resolved': SupportChat.objects.filter(chats_filter, status='RESOLVIDO').count(),
+        'closed': SupportChat.objects.filter(chats_filter, status='FECHADO').count(),
         'closed': SupportChat.objects.filter(chats_filter, status='FECHADO').count(),
         'avg_rating': round(SupportChatRating.objects.filter(
             chat__in=SupportChat.objects.filter(chats_filter)
@@ -1138,8 +1136,8 @@ def export_metrics_report(request):
     
     # Estatísticas principais
     total_tickets = SupportChat.objects.filter(created_at__gte=start_date).count()
-    resolved_tickets = SupportChat.objects.filter(created_at__gte=start_date, status='FECHADO').count()
-    resolution_rate = round((resolved_tickets / total_tickets * 100) if total_tickets > 0 else 0, 1)
+    closed_tickets = SupportChat.objects.filter(created_at__gte=start_date, status='FECHADO').count()
+    resolution_rate = round((closed_tickets / total_tickets * 100) if total_tickets > 0 else 0, 1)
     avg_rating = round(SupportChatRating.objects.filter(
         chat__created_at__gte=start_date
     ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0, 1)
@@ -1155,7 +1153,7 @@ def export_metrics_report(request):
     # Dados das métricas
     metricas = [
         ('Total de Atendimentos', total_tickets),
-        ('Atendimentos Resolvidos', resolved_tickets),
+        ('Atendimentos Fechados', closed_tickets),
         ('Taxa de Resolução', f'{resolution_rate}%'),
         ('Avaliação Média', f'{avg_rating}/5'),
     ]
@@ -1174,7 +1172,7 @@ def export_metrics_report(request):
     ws_cat = wb.create_sheet('Por Categoria')
     
     # Headers
-    headers_cat = ['Categoria', 'Setor', 'Total', 'Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']
+    headers_cat = ['Categoria', 'Setor', 'Total', 'Abertos', 'Em Andamento', 'Fechados']
     for col, header in enumerate(headers_cat, start=1):
         cell = ws_cat.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -1186,7 +1184,6 @@ def export_metrics_report(request):
         total=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date)),
         abertos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status__in=['AGUARDANDO', 'ABERTO'])),
         em_andamento=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='EM_ANDAMENTO')),
-        resolvidos=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='RESOLVIDO')),
         fechados=Count('support_chats', filter=Q(support_chats__created_at__gte=start_date, support_chats__status='FECHADO'))
     ).select_related('sector').order_by('-total')
     
@@ -1196,18 +1193,17 @@ def export_metrics_report(request):
         ws_cat.cell(row=row, column=3, value=cat.total).border = border
         ws_cat.cell(row=row, column=4, value=cat.abertos).border = border
         ws_cat.cell(row=row, column=5, value=cat.em_andamento).border = border
-        ws_cat.cell(row=row, column=6, value=cat.resolvidos).border = border
-        ws_cat.cell(row=row, column=7, value=cat.fechados).border = border
+        ws_cat.cell(row=row, column=6, value=cat.fechados).border = border
     
     # Ajustar larguras
-    for col in range(1, 8):
+    for col in range(1, 7):
         ws_cat.column_dimensions[get_column_letter(col)].width = 18
     
     # ========== ABA 3: Por Agente ==========
     ws_agente = wb.create_sheet('Por Agente')
     
     # Headers
-    headers_agente = ['Agente', 'Total Atendimentos', 'Resolvidos', 'Taxa de Resolução', 'Avaliação Média']
+    headers_agente = ['Agente', 'Total Atendimentos', 'Fechados', 'Taxa de Resolução', 'Avaliação Média']
     for col, header in enumerate(headers_agente, start=1):
         cell = ws_agente.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -1222,8 +1218,8 @@ def export_metrics_report(request):
     row_num = 2
     for agent in agents:
         total = SupportChat.objects.filter(assigned_to=agent.user, created_at__gte=start_date).count()
-        resolved = SupportChat.objects.filter(assigned_to=agent.user, created_at__gte=start_date, status='FECHADO').count()
-        rate = round((resolved / total * 100) if total > 0 else 0, 1)
+        closed = SupportChat.objects.filter(assigned_to=agent.user, created_at__gte=start_date, status='FECHADO').count()
+        rate = round((closed / total * 100) if total > 0 else 0, 1)
         avg = SupportChatRating.objects.filter(
             chat__assigned_to=agent.user,
             chat__created_at__gte=start_date
@@ -1232,7 +1228,7 @@ def export_metrics_report(request):
         if total > 0:
             ws_agente.cell(row=row_num, column=1, value=agent.user.get_full_name()).border = border
             ws_agente.cell(row=row_num, column=2, value=total).border = border
-            ws_agente.cell(row=row_num, column=3, value=resolved).border = border
+            ws_agente.cell(row=row_num, column=3, value=closed).border = border
             ws_agente.cell(row=row_num, column=4, value=f'{rate}%').border = border
             ws_agente.cell(row=row_num, column=5, value=round(avg, 1)).border = border
             row_num += 1
@@ -1278,7 +1274,7 @@ def export_metrics_report(request):
     ws_setor = wb.create_sheet('Por Setor')
     
     # Headers
-    headers_setor = ['Setor', 'Total', 'Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']
+    headers_setor = ['Setor', 'Total', 'Abertos', 'Em Andamento', 'Fechados', 'Fechados']
     for col, header in enumerate(headers_setor, start=1):
         cell = ws_setor.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -1297,7 +1293,7 @@ def export_metrics_report(request):
             ws_setor.cell(row=row_setor, column=2, value=total).border = border
             ws_setor.cell(row=row_setor, column=3, value=sector_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count()).border = border
             ws_setor.cell(row=row_setor, column=4, value=sector_tickets.filter(status='EM_ANDAMENTO').count()).border = border
-            ws_setor.cell(row=row_setor, column=5, value=sector_tickets.filter(status='RESOLVIDO').count()).border = border
+            ws_setor.cell(row=row_setor, column=5, value=sector_tickets.filter(status='FECHADO').count()).border = border
             ws_setor.cell(row=row_setor, column=6, value=sector_tickets.filter(status='FECHADO').count()).border = border
             row_setor += 1
     
@@ -1308,7 +1304,7 @@ def export_metrics_report(request):
     ws_dia = wb.create_sheet('Média por Dia')
     
     # Headers
-    headers_dia = ['Data', 'Tickets Criados', 'Tickets Resolvidos', 'Tickets Fechados']
+    headers_dia = ['Data', 'Tickets Criados', 'Tickets Fechados', 'Tickets Fechados']
     for col, header in enumerate(headers_dia, start=1):
         cell = ws_dia.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -1323,12 +1319,12 @@ def export_metrics_report(request):
     total_created_count = 0
     while current_date.date() <= datetime.now().date():
         day_created = SupportChat.objects.filter(created_at__date=current_date.date()).count()
-        day_resolved = SupportChat.objects.filter(created_at__date=current_date.date(), status='RESOLVIDO').count()
+        day_closed = SupportChat.objects.filter(created_at__date=current_date.date(), status='FECHADO').count()
         day_closed = SupportChat.objects.filter(created_at__date=current_date.date(), status='FECHADO').count()
         
         ws_dia.cell(row=row_dia, column=1, value=current_date.strftime('%d/%m/%Y')).border = border
         ws_dia.cell(row=row_dia, column=2, value=day_created).border = border
-        ws_dia.cell(row=row_dia, column=3, value=day_resolved).border = border
+        ws_dia.cell(row=row_dia, column=3, value=day_closed).border = border
         ws_dia.cell(row=row_dia, column=4, value=day_closed).border = border
         
         total_days_count += 1
@@ -1350,7 +1346,7 @@ def export_metrics_report(request):
     ws_user_setor = wb.create_sheet('Por Setor do Usuário')
     
     # Headers
-    headers_user_setor = ['Setor do Usuário', 'Total', 'Abertos', 'Em Andamento', 'Resolvidos', 'Fechados']
+    headers_user_setor = ['Setor do Usuário', 'Total', 'Abertos', 'Em Andamento', 'Fechados', 'Fechados']
     for col, header in enumerate(headers_user_setor, start=1):
         cell = ws_user_setor.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -1378,7 +1374,7 @@ def export_metrics_report(request):
             ws_user_setor.cell(row=row_us, column=2, value=total_us).border = border
             ws_user_setor.cell(row=row_us, column=3, value=us_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count()).border = border
             ws_user_setor.cell(row=row_us, column=4, value=us_tickets.filter(status='EM_ANDAMENTO').count()).border = border
-            ws_user_setor.cell(row=row_us, column=5, value=us_tickets.filter(status='RESOLVIDO').count()).border = border
+            ws_user_setor.cell(row=row_us, column=5, value=us_tickets.filter(status='FECHADO').count()).border = border
             ws_user_setor.cell(row=row_us, column=6, value=us_tickets.filter(status='FECHADO').count()).border = border
             row_us += 1
     
@@ -1821,31 +1817,32 @@ def assign_chat_to_agent(request, chat_id):
 @login_required
 @require_POST
 def resolve_support_chat(request, chat_id):
-    """Marca um chat como resolvido"""
+    """Finaliza e fecha um chat de suporte"""
     try:
         chat = get_object_or_404(SupportChat, id=chat_id)
         
-        # Apenas o atendente responsável pode marcar como resolvido
+        # Apenas o atendente responsável pode finalizar
         if chat.assigned_to != request.user and request.user.hierarchy != 'SUPERADMIN':
             return JsonResponse({
                 'success': False,
-                'error': 'Apenas o atendente responsável pode marcar como resolvido'
+                'error': 'Apenas o atendente responsável pode finalizar o atendimento'
             }, status=403)
         
-        chat.status = 'RESOLVIDO'
+        chat.status = 'FECHADO'
+        chat.closed_at = timezone.now()
         chat.save()
         
         # Criar mensagem automática
         SupportChatMessage.objects.create(
             chat=chat,
             user=request.user,
-            message='Ticket marcado como resolvido. Aguardando confirmação do cliente.',
+            message='Atendimento finalizado.',
             is_internal=True
         )
         
         return JsonResponse({
             'success': True,
-            'message': 'Chat marcado como resolvido',
+            'message': 'Atendimento finalizado com sucesso',
             'status': chat.get_status_display()
         })
         
@@ -2078,16 +2075,16 @@ def support_metrics_api(request):
         )
         
         total_tickets = tickets.count()
-        resolved_tickets = tickets.filter(status='RESOLVIDO').count()
+        closed_tickets = tickets.filter(status='FECHADO').count()
         
-        # Tempo médio de resolução (usando closed_at ao invés de resolved_at)
-        resolved_with_time = tickets.filter(status='RESOLVIDO', closed_at__isnull=False)
-        if resolved_with_time.exists():
+        # Tempo médio de resolução (usando closed_at ao invés de closed_at)
+        closed_with_time = tickets.filter(status='FECHADO', closed_at__isnull=False)
+        if closed_with_time.exists():
             total_time = sum([
                 (ticket.closed_at - ticket.created_at).total_seconds() / 3600 
-                for ticket in resolved_with_time
+                for ticket in closed_with_time
             ])
-            avg_time = total_time / resolved_with_time.count()
+            avg_time = total_time / closed_with_time.count()
             avg_time_str = f"{int(avg_time)}h"
         else:
             avg_time_str = "0h"
@@ -2111,14 +2108,14 @@ def support_metrics_api(request):
         for agent in agents:
             agent_tickets = tickets.filter(assigned_to=agent.user)
             total = agent_tickets.count()
-            resolved = agent_tickets.filter(status='RESOLVIDO').count()
-            rate = int((resolved / total * 100)) if total > 0 else 0
+            closed = agent_tickets.filter(status='FECHADO').count()
+            rate = int((closed / total * 100)) if total > 0 else 0
             
             if total > 0:  # Só incluir agentes com tickets
                 agents_stats.append({
                     'name': agent.user.get_full_name(),
                     'total': total,
-                    'resolved': resolved,
+                    'closed': closed,
                     'rate': rate
                 })
         
@@ -2143,7 +2140,7 @@ def support_metrics_api(request):
                     'total': total,
                     'open': cat_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                     'in_progress': cat_tickets.filter(status='EM_ANDAMENTO').count(),
-                    'resolved': cat_tickets.filter(status='RESOLVIDO').count(),
+                    'closed': cat_tickets.filter(status='FECHADO').count(),
                     'closed': cat_tickets.filter(status='FECHADO').count()
                 })
         
@@ -2167,7 +2164,7 @@ def support_metrics_api(request):
                     'total': total,
                     'open': sector_tickets.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                     'in_progress': sector_tickets.filter(status='EM_ANDAMENTO').count(),
-                    'resolved': sector_tickets.filter(status='RESOLVIDO').count(),
+                    'closed': sector_tickets.filter(status='FECHADO').count(),
                     'closed': sector_tickets.filter(status='FECHADO').count()
                 })
         
@@ -2192,7 +2189,7 @@ def support_metrics_api(request):
                 'total': item['total'],
                 'open': sector_tickets_qs.filter(status__in=['AGUARDANDO', 'ABERTO']).count(),
                 'in_progress': sector_tickets_qs.filter(status='EM_ANDAMENTO').count(),
-                'resolved': sector_tickets_qs.filter(status='RESOLVIDO').count(),
+                'closed': sector_tickets_qs.filter(status='FECHADO').count(),
                 'closed': sector_tickets_qs.filter(status='FECHADO').count()
             })
         
@@ -2209,7 +2206,7 @@ def support_metrics_api(request):
             'success': True,
             'metrics': {
                 'total_tickets': total_tickets,
-                'resolved_tickets': resolved_tickets,
+                'closed_tickets': closed_tickets,
                 'avg_resolution_time': avg_time_str,
                 'satisfaction_rate': satisfaction_rate,
                 'avg_per_day': avg_per_day,
@@ -2351,7 +2348,7 @@ def poll_dashboard_updates(request):
         'total': SupportChat.objects.filter(base_filter).count(),
         'open': SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count(),
-        'resolved': SupportChat.objects.filter(base_filter, status='RESOLVIDO').count(),
+        'closed': SupportChat.objects.filter(base_filter, status='FECHADO').count(),
         'closed': SupportChat.objects.filter(base_filter, status='FECHADO').count(),
     }
     
@@ -2618,7 +2615,7 @@ def update_chat_status(request, chat_id):
     old_status = chat.status
     
     # Validar status
-    valid_statuses = ['AGUARDANDO', 'ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']
+    valid_statuses = ['AGUARDANDO', 'ABERTO', 'EM_ANDAMENTO', 'FECHADO']
     if new_status not in valid_statuses:
         return JsonResponse({'success': False, 'error': 'Status inválido'}, status=400)
     
@@ -2639,7 +2636,6 @@ def update_chat_status(request, chat_id):
                 'AGUARDANDO': 'Aguardando na Fila',
                 'ABERTO': 'Aberto',
                 'EM_ANDAMENTO': 'Em Andamento',
-                'RESOLVIDO': 'Resolvido',
                 'FECHADO': 'Fechado'
             }
             notification = PushNotification.objects.create(
@@ -2669,7 +2665,6 @@ def update_chat_status(request, chat_id):
                 'AGUARDANDO': 'Aguardando na Fila',
                 'ABERTO': 'Aberto',
                 'EM_ANDAMENTO': 'Em Andamento',
-                'RESOLVIDO': 'Resolvido',
                 'FECHADO': 'Fechado'
             }
             notification = PushNotification.objects.create(

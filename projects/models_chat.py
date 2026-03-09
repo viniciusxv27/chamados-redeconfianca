@@ -87,7 +87,6 @@ class SupportChat(models.Model):
             ('AGUARDANDO', 'Aguardando na Fila'),
             ('ABERTO', 'Aberto'),
             ('EM_ANDAMENTO', 'Em Andamento'),
-            ('RESOLVIDO', 'Resolvido'),
             ('FECHADO', 'Fechado'),
         ],
         default='AGUARDANDO'
