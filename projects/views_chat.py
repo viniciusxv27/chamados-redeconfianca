@@ -220,6 +220,11 @@ def get_support_chat(request, chat_id):
             'priority': chat.priority.lower() if chat.priority else 'media',
             'get_priority_display': chat.get_priority_display(),
             'queue_position': queue_position,
+            'created_at': chat.created_at.isoformat() if chat.created_at else None,
+            'started_at': chat.started_at.isoformat() if getattr(chat, 'started_at', None) else None,
+            'closed_at': chat.closed_at.isoformat() if chat.closed_at else None,
+            'agent_first_response_at': chat.agent_first_response_at.isoformat() if getattr(chat, 'agent_first_response_at', None) else None,
+            'store_first_response_at': chat.store_first_response_at.isoformat() if getattr(chat, 'store_first_response_at', None) else None,
             'user': {
                 'id': chat.user.id,
                 'get_full_name': chat.user.get_full_name(),
@@ -377,6 +382,24 @@ def send_support_message(request, chat_id):
         message=message_text,
         is_internal=is_internal
     )
+    
+    # Rastrear tempo de resposta
+    if not is_internal:
+        # Se é o cliente (dono do ticket) respondendo e ainda não temos a primeira resposta da loja
+        if chat.user == request.user and not chat.store_first_response_at:
+            # Verificar se já tem alguma mensagem do agente antes
+            has_agent_message = SupportChatMessage.objects.filter(
+                chat=chat,
+                is_internal=False
+            ).exclude(user=chat.user).exists()
+            if has_agent_message:
+                chat.store_first_response_at = timezone.now()
+                chat.save(update_fields=['store_first_response_at'])
+        
+        # Se é um agente respondendo e ainda não temos a primeira resposta do agente
+        if chat.user != request.user and not chat.agent_first_response_at:
+            chat.agent_first_response_at = timezone.now()
+            chat.save(update_fields=['agent_first_response_at'])
     
     # Atualizar status do chat se necessário
     if chat.status == 'ABERTO' and (is_support_agent or is_supervisor_or_higher):
@@ -739,6 +762,8 @@ def support_admin_dashboard(request):
                 'get_full_name': chat.assigned_to.get_full_name()
             } if chat.assigned_to else None,
             'created_at': timezone.localtime(chat.created_at).isoformat(),
+            'started_at': timezone.localtime(chat.started_at).isoformat() if getattr(chat, 'started_at', None) else None,
+            'closed_at': timezone.localtime(chat.closed_at).isoformat() if chat.closed_at else None,
             'can_assume': can_assume
         })
     
@@ -1766,6 +1791,10 @@ def assign_chat_to_agent(request, chat_id):
         if chat.status == 'ABERTO':
             chat.status = 'EM_ANDAMENTO'
         
+        # Registrar início do atendimento se ainda não tiver
+        if not chat.started_at:
+            chat.started_at = timezone.now()
+        
         chat.save()
         
         # Criar mensagem automática
@@ -1884,6 +1913,125 @@ def delete_support_chat(request, chat_id):
         return JsonResponse({
             'success': True,
             'message': f'Chat "{chat_title}" de {chat_user} foi excluído com sucesso'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def transfer_support_chat(request, chat_id):
+    """Transfere um chat de suporte para outro agente"""
+    try:
+        import json
+        data = json.loads(request.body)
+        new_agent_id = data.get('agent_id')
+        
+        if not new_agent_id:
+            return JsonResponse({'success': False, 'error': 'ID do agente é obrigatório'}, status=400)
+        
+        chat = get_object_or_404(SupportChat, id=chat_id)
+        
+        # Verificar permissão: agente atual ou supervisor+
+        is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+        is_assigned_agent = chat.assigned_to == request.user
+        
+        if not (is_supervisor_or_higher or is_assigned_agent):
+            return JsonResponse({
+                'success': False,
+                'error': 'Sem permissão para transferir este chat'
+            }, status=403)
+        
+        # Buscar novo agente
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        new_agent = get_object_or_404(User, id=new_agent_id)
+        
+        # Verificar se é agente de suporte
+        if not hasattr(new_agent, 'support_agent') or not new_agent.support_agent.is_active:
+            return JsonResponse({
+                'success': False,
+                'error': 'Usuário não é um agente de suporte ativo'
+            }, status=400)
+        
+        old_agent_name = chat.assigned_to.get_full_name() if chat.assigned_to else 'Nenhum'
+        chat.assigned_to = new_agent
+        chat.save()
+        
+        # Criar mensagem de transferência
+        SupportChatMessage.objects.create(
+            chat=chat,
+            user=request.user,
+            message=f'Ticket transferido de {old_agent_name} para {new_agent.get_full_name()}.',
+            is_internal=True
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Chat transferido para {new_agent.get_full_name()}',
+            'assigned_to': {
+                'id': new_agent.id,
+                'get_full_name': new_agent.get_full_name()
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def change_chat_category(request, chat_id):
+    """Altera a categoria de um chat de suporte"""
+    try:
+        import json
+        data = json.loads(request.body)
+        category_id = data.get('category_id')
+        
+        if not category_id:
+            return JsonResponse({'success': False, 'error': 'ID da categoria é obrigatório'}, status=400)
+        
+        chat = get_object_or_404(SupportChat, id=chat_id)
+        
+        # Verificar permissão: agente atual ou supervisor+
+        is_supervisor_or_higher = request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or request.user.is_superuser
+        is_assigned_agent = chat.assigned_to == request.user
+        is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
+        
+        if not (is_supervisor_or_higher or is_assigned_agent or is_support_agent):
+            return JsonResponse({
+                'success': False,
+                'error': 'Sem permissão para alterar categoria deste chat'
+            }, status=403)
+        
+        # Buscar nova categoria
+        new_category = get_object_or_404(SupportCategory, id=category_id)
+        
+        old_category_name = chat.category.name if chat.category else 'Nenhuma'
+        chat.category = new_category
+        chat.sector = new_category.sector
+        chat.save()
+        
+        # Criar mensagem de alteração
+        SupportChatMessage.objects.create(
+            chat=chat,
+            user=request.user,
+            message=f'Categoria alterada de "{old_category_name}" para "{new_category.name}".',
+            is_internal=True
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Categoria alterada para {new_category.name}',
+            'category': {
+                'id': new_category.id,
+                'name': new_category.name
+            },
+            'sector': {
+                'id': new_category.sector.id,
+                'name': new_category.sector.name
+            }
         })
         
     except Exception as e:

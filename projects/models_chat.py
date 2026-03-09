@@ -315,3 +315,22 @@ SupportChat.add_to_class('category', models.ForeignKey(
     related_name='support_chats',
     verbose_name="Categoria"
 ))
+
+# Campos para medir tempo de resposta
+SupportChat.add_to_class('store_first_response_at', models.DateTimeField(
+    null=True,
+    blank=True,
+    verbose_name="Primeira resposta da loja"
+))
+
+SupportChat.add_to_class('agent_first_response_at', models.DateTimeField(
+    null=True,
+    blank=True,
+    verbose_name="Primeira resposta do agente"
+))
+
+SupportChat.add_to_class('started_at', models.DateTimeField(
+    null=True,
+    blank=True,
+    verbose_name="Início do atendimento"
+))

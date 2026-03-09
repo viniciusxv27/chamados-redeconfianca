@@ -75,6 +75,38 @@
         color: #991B1B;
     }
 
+    /* Cores para mensagens de diferentes usuários */
+    .msg-color-0 { background-color: #3B82F6 !important; color: white !important; } /* Blue */
+    .msg-color-1 { background-color: #10B981 !important; color: white !important; } /* Green */
+    .msg-color-2 { background-color: #8B5CF6 !important; color: white !important; } /* Purple */
+    .msg-color-3 { background-color: #F59E0B !important; color: white !important; } /* Amber */
+    .msg-color-4 { background-color: #EF4444 !important; color: white !important; } /* Red */
+    .msg-color-5 { background-color: #06B6D4 !important; color: white !important; } /* Cyan */
+    .msg-color-6 { background-color: #EC4899 !important; color: white !important; } /* Pink */
+    .msg-color-7 { background-color: #14B8A6 !important; color: white !important; } /* Teal */
+    
+    /* Mensagem do lado esquerdo (outros usuários) */
+    .msg-left { text-align: left; }
+    .msg-left .msg-bubble { display: inline-block; max-width: 75%; }
+    
+    /* Mensagem do lado direito (usuário logado) */
+    .msg-right { text-align: right; }
+    .msg-right .msg-bubble { display: inline-block; max-width: 75%; }
+
+    /* Cronômetro */
+    .timer-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background-color: #F3F4F6;
+        color: #374151;
+    }
+    .timer-badge.warning { background-color: #FEF3C7; color: #92400E; }
+    .timer-badge.danger { background-color: #FEE2E2; color: #991B1B; }
+
     /* Estilos para Drag and Drop */
     [draggable="true"] {
         cursor: grab;
@@ -150,8 +182,24 @@
         </div>
     </div>
 
+    <!-- View Toggle -->
+    <div class="flex justify-between items-center mb-4">
+        <div class="flex space-x-2">
+            <button onclick="toggleView('kanban')" id="btn-kanban" class="px-4 py-2 rounded-lg bg-blue-500 text-white font-medium transition-colors">
+                <i class="fas fa-columns mr-2"></i>Kanban
+            </button>
+            <button onclick="toggleView('list')" id="btn-list" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium transition-colors">
+                <i class="fas fa-list mr-2"></i>Lista
+            </button>
+        </div>
+        <div class="text-sm text-gray-600">
+            <i class="fas fa-clock mr-1"></i>
+            Atualizado: <span id="lastUpdate">--</span>
+        </div>
+    </div>
+
     <!-- Kanban Board -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[70vh] overflow-hidden">
+    <div id="kanban-view" class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[70vh] overflow-hidden">
         <!-- Abertos -->
         <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
             <div class="p-4 font-semibold border-b border-gray-200 bg-red-100 text-red-800 flex justify-between items-center">
@@ -182,6 +230,32 @@
             </div>
             <div class="flex-1 overflow-y-auto p-2 drop-zone" id="closed-tickets" data-status="FECHADO">
                 <!-- Tickets fechados serão carregados aqui -->
+            </div>
+        </div>
+    </div>
+
+    <!-- List View (hidden by default) -->
+    <div id="list-view" class="hidden h-[70vh] overflow-hidden">
+        <div class="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
+            <div class="overflow-x-auto flex-1">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridade</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Atendente</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tempo</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-tickets" class="bg-white divide-y divide-gray-200">
+                        <!-- Tickets serão carregados aqui -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -330,6 +404,70 @@
                     </button>
                 </form>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Transferir Atendimento -->
+<div id="transferModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-md mx-4 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-exchange-alt text-orange-500 mr-2"></i>Transferir Atendimento
+            </h3>
+            <button onclick="closeTransferModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <input type="hidden" id="transferTicketId" value="">
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Selecione o novo agente:</label>
+            <select id="transferAgentSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="">Carregando agentes...</option>
+            </select>
+        </div>
+        
+        <div class="flex space-x-3">
+            <button onclick="closeTransferModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md text-sm">
+                Cancelar
+            </button>
+            <button onclick="confirmTransfer()" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-md text-sm">
+                <i class="fas fa-exchange-alt mr-2"></i>Transferir
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Alterar Categoria -->
+<div id="changeCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-md mx-4 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-tags text-blue-500 mr-2"></i>Alterar Categoria
+            </h3>
+            <button onclick="closeChangeCategoryModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <input type="hidden" id="changeCategoryTicketId" value="">
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Selecione a nova categoria:</label>
+            <select id="changeCategorySelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="">Carregando categorias...</option>
+            </select>
+        </div>
+        
+        <div class="flex space-x-3">
+            <button onclick="closeChangeCategoryModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md text-sm">
+                Cancelar
+            </button>
+            <button onclick="confirmChangeCategory()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm">
+                <i class="fas fa-check mr-2"></i>Alterar
+            </button>
         </div>
     </div>
 </div>
@@ -856,6 +994,15 @@ function renderTickets(tickets) {
     // Atualizar contadores
     updateTicketCounts(tickets);
     
+    // Renderizar lista também
+    renderListView(tickets);
+    
+    // Atualizar timestamp
+    const lastUpdate = document.getElementById('lastUpdate');
+    if (lastUpdate) {
+        lastUpdate.textContent = new Date().toLocaleTimeString('pt-BR');
+    }
+    
     // Configurar drop zones
     setupDropZones();
 }
@@ -895,6 +1042,9 @@ function createTicketElement(ticket) {
     
     const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
     
+    // Calcular tempo decorrido
+    const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at);
+    
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
             <h4 class="font-medium text-sm text-gray-900 truncate flex-1 mr-2">${escapeHtml(ticket.title)}</h4>
@@ -917,7 +1067,10 @@ function createTicketElement(ticket) {
         </div>
         
         <div class="flex justify-between items-center text-xs">
-            <span class="text-gray-500">${timeAgo}</span>
+            <div class="flex items-center gap-2">
+                <span class="text-gray-500">${timeAgo}</span>
+                ${timerHtml}
+            </div>
             ${canAssign ? `
                 <button onclick="event.stopPropagation(); assignChatToMe(${ticket.id})" 
                         class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors">
@@ -930,6 +1083,140 @@ function createTicketElement(ticket) {
     `;
     
     return div;
+}
+
+// Função para calcular tempo decorrido e retornar HTML do cronômetro
+function getTimerHtml(createdAt, closedAt) {
+    const start = new Date(createdAt);
+    const end = closedAt ? new Date(closedAt) : new Date();
+    const diff = end - start;
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    let timerClass = '';
+    if (hours >= 24) timerClass = 'danger';
+    else if (hours >= 4) timerClass = 'warning';
+    
+    const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    return `<span class="timer-badge ${timerClass}" data-created="${createdAt}" data-closed="${closedAt || ''}">
+        <i class="fas fa-clock"></i>${timeStr}
+    </span>`;
+}
+
+// Função para atualizar cronômetros em tempo real
+function updateTimers() {
+    document.querySelectorAll('.timer-badge').forEach(badge => {
+        const created = badge.dataset.created;
+        const closed = badge.dataset.closed;
+        if (!created) return;
+        
+        const start = new Date(created);
+        const end = closed ? new Date(closed) : new Date();
+        const diff = end - start;
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        badge.classList.remove('warning', 'danger');
+        if (hours >= 24) badge.classList.add('danger');
+        else if (hours >= 4) badge.classList.add('warning');
+        
+        const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        badge.innerHTML = `<i class="fas fa-clock"></i>${timeStr}`;
+    });
+}
+
+// Atualizar cronômetros a cada minuto
+setInterval(updateTimers, 60000);
+
+// Toggle entre visualização kanban e lista
+let currentView = 'kanban';
+function toggleView(view) {
+    currentView = view;
+    const kanbanView = document.getElementById('kanban-view');
+    const listView = document.getElementById('list-view');
+    const btnKanban = document.getElementById('btn-kanban');
+    const btnList = document.getElementById('btn-list');
+    
+    if (view === 'kanban') {
+        kanbanView.classList.remove('hidden');
+        listView.classList.add('hidden');
+        btnKanban.classList.remove('bg-gray-200', 'text-gray-700');
+        btnKanban.classList.add('bg-blue-500', 'text-white');
+        btnList.classList.remove('bg-blue-500', 'text-white');
+        btnList.classList.add('bg-gray-200', 'text-gray-700');
+    } else {
+        kanbanView.classList.add('hidden');
+        listView.classList.remove('hidden');
+        btnList.classList.remove('bg-gray-200', 'text-gray-700');
+        btnList.classList.add('bg-blue-500', 'text-white');
+        btnKanban.classList.remove('bg-blue-500', 'text-white');
+        btnKanban.classList.add('bg-gray-200', 'text-gray-700');
+    }
+}
+
+// Renderizar lista de tickets
+function renderListView(tickets) {
+    const listContainer = document.getElementById('list-tickets');
+    if (!listContainer) return;
+    
+    const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
+    const statusColors = {
+        'AGUARDANDO': 'bg-red-100 text-red-800',
+        'ABERTO': 'bg-red-100 text-red-800',
+        'EM_ANDAMENTO': 'bg-yellow-100 text-yellow-800',
+        'RESOLVIDO': 'bg-blue-100 text-blue-800',
+        'FECHADO': 'bg-green-100 text-green-800'
+    };
+    
+    const priorityColors = {
+        'baixa': 'bg-green-100 text-green-800',
+        'media': 'bg-yellow-100 text-yellow-800',
+        'alta': 'bg-orange-100 text-orange-800',
+        'urgente': 'bg-red-100 text-red-800'
+    };
+    
+    listContainer.innerHTML = tickets.map(ticket => {
+        const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at);
+        const statusClass = statusColors[ticket.status] || 'bg-gray-100 text-gray-800';
+        const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
+        
+        return `
+            <tr class="hover:bg-gray-50 cursor-pointer" onclick="openTicketModal(${ticket.id})">
+                <td class="px-4 py-3">
+                    <div class="text-sm font-medium text-gray-900 truncate max-w-xs">${escapeHtml(ticket.title)}</div>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(ticket.user.get_full_name)}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${ticket.sector ? escapeHtml(ticket.sector.name) : '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${ticket.category ? escapeHtml(ticket.category.name) : '-'}</td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 text-xs rounded-full ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 text-xs rounded-full ${statusClass}">${ticket.get_status_display}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">${ticket.assigned_to ? escapeHtml(ticket.assigned_to.get_full_name) : '-'}</td>
+                <td class="px-4 py-3">${timerHtml}</td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+                        ${ticket.can_assume ? `
+                            <button onclick="assignChatToMe(${ticket.id})" 
+                                    class="text-blue-600 hover:text-blue-800" title="Assumir">
+                                <i class="fas fa-hand-paper"></i>
+                            </button>
+                        ` : ''}
+                        ${canDelete ? `
+                            <button onclick="deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}')" 
+                                    class="text-red-600 hover:text-red-800" title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function deleteTicket(ticketId, ticketTitle) {
@@ -1048,9 +1335,27 @@ function renderTicketDetails(data) {
                     ${data.chat.category ? `
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Categoria</label>
-                        <p class="text-sm text-gray-900">${data.chat.category.name}</p>
+                        <div class="flex items-center justify-between">
+                            <p class="text-sm text-gray-900">${data.chat.category.name}</p>
+                            ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                            <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" 
+                                    class="text-blue-500 hover:text-blue-700 text-xs" title="Alterar categoria">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ` : `
+                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Categoria</label>
+                        <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" 
+                                class="text-blue-500 hover:text-blue-700 text-sm">
+                            <i class="fas fa-plus mr-1"></i>Definir categoria
+                        </button>
                     </div>
                     ` : ''}
+                    `}
                     
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Prioridade</label>
@@ -1060,10 +1365,28 @@ function renderTicketDetails(data) {
                     ${data.chat.assigned_to ? `
                     <div>
                         <label class="block text-xs font-medium text-gray-700">Atendente</label>
-                        <div class="flex items-center space-x-2">
-                            <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name}</p>
-                            ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">(Você)</span>' : ''}
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name}</p>
+                                ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">(Você)</span>' : ''}
+                            </div>
+                            ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                            <button onclick="openTransferModal(${data.chat.id})" 
+                                    class="text-orange-500 hover:text-orange-700 text-xs" title="Transferir">
+                                <i class="fas fa-exchange-alt"></i>
+                            </button>
+                            ` : ''}
                         </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' && !data.chat.assigned_to ? `
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Atendente</label>
+                        <button onclick="openTransferModal(${data.chat.id})" 
+                                class="text-blue-500 hover:text-blue-700 text-sm">
+                            <i class="fas fa-user-plus mr-1"></i>Atribuir agente
+                        </button>
                     </div>
                     ` : ''}
                     
@@ -1157,6 +1480,16 @@ function renderTicketDetails(data) {
 }
 
 function renderChatMessages(messages) {
+    // Criar mapa de cores para usuários (exceto o usuário logado)
+    const userColors = {};
+    let colorIndex = 0;
+    messages.forEach(msg => {
+        if (!msg.is_own && !userColors.hasOwnProperty(msg.user.id)) {
+            userColors[msg.user.id] = colorIndex % 8;
+            colorIndex++;
+        }
+    });
+    
     return messages.map(msg => {
         // Renderizar arquivos se existirem
         let filesHtml = '';
@@ -1171,20 +1504,21 @@ function renderChatMessages(messages) {
                 } else if (file.type === 'AUDIO') {
                     return `<audio src="${file.url}" controls class="w-full mt-2"></audio>`;
                 } else {
-                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 text-white hover:underline ${msg.is_own ? 'text-white' : 'text-blue-600'}">
+                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 hover:underline text-white">
                         <i class="fas fa-file mr-2"></i>${file.name} (${formatFileSize(file.size)})
                     </a>`;
                 }
             }).join('');
         }
         
+        // Determinar posição e cor
+        const isRight = msg.is_own;
+        const colorClass = isRight ? '' : `msg-color-${userColors[msg.user.id]}`;
+        const bgClass = isRight ? 'bg-blue-500 text-white' : colorClass;
+        
         return `
-            <div class="mb-4 ${msg.is_own ? 'text-right' : ''}">
-                <div class="inline-block max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    msg.is_own 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-200 text-gray-800'
-                }">
+            <div class="mb-4 ${isRight ? 'msg-right' : 'msg-left'}">
+                <div class="msg-bubble inline-block max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bgClass}">
                     <p class="text-sm whitespace-pre-wrap">${escapeHtml(msg.message)}</p>
                     ${filesHtml}
                     <p class="text-xs opacity-75 mt-1">${msg.user.name} - ${msg.created_at}</p>
@@ -1520,6 +1854,152 @@ function openAgentsModal() {
 function closeAgentsModal() {
     document.getElementById('agentsModal').classList.add('hidden');
     document.body.style.overflow = '';
+}
+
+// ===== TRANSFERIR ATENDIMENTO =====
+function openTransferModal(ticketId) {
+    document.getElementById('transferTicketId').value = ticketId;
+    document.getElementById('transferModal').classList.remove('hidden');
+    
+    // Carregar agentes
+    const select = document.getElementById('transferAgentSelect');
+    select.innerHTML = '<option value="">Carregando...</option>';
+    
+    fetch('/projects/support/api/agents/')
+        .then(response => response.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Selecione um agente</option>';
+            if (data.success && data.agents) {
+                data.agents.forEach(agent => {
+                    const option = document.createElement('option');
+                    option.value = agent.user.id;
+                    option.textContent = agent.user.get_full_name;
+                    select.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar agentes:', error);
+            select.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+}
+
+function closeTransferModal() {
+    document.getElementById('transferModal').classList.add('hidden');
+}
+
+function confirmTransfer() {
+    const ticketId = document.getElementById('transferTicketId').value;
+    const agentId = document.getElementById('transferAgentSelect').value;
+    
+    if (!agentId) {
+        alert('Selecione um agente para transferir.');
+        return;
+    }
+    
+    fetch(`/projects/support/chat/${ticketId}/transfer/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ agent_id: agentId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Atendimento transferido com sucesso!', 'success');
+            closeTransferModal();
+            closeTicketModal();
+            loadSupportTickets();
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao transferir atendimento');
+    });
+}
+
+// ===== ALTERAR CATEGORIA =====
+function openChangeCategoryModal(ticketId, sectorId) {
+    document.getElementById('changeCategoryTicketId').value = ticketId;
+    document.getElementById('changeCategoryModal').classList.remove('hidden');
+    
+    // Carregar categorias
+    const select = document.getElementById('changeCategorySelect');
+    select.innerHTML = '<option value="">Carregando...</option>';
+    
+    fetch('/projects/support/api/categories/')
+        .then(response => response.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Selecione uma categoria</option>';
+            if (data.success && data.categories) {
+                // Agrupar por setor
+                const grouped = {};
+                data.categories.forEach(cat => {
+                    const sectorName = cat.sector?.name || 'Sem setor';
+                    if (!grouped[sectorName]) grouped[sectorName] = [];
+                    grouped[sectorName].push(cat);
+                });
+                
+                // Criar optgroups
+                for (const [sectorName, categories] of Object.entries(grouped)) {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = sectorName;
+                    categories.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat.id;
+                        option.textContent = cat.name;
+                        optgroup.appendChild(option);
+                    });
+                    select.appendChild(optgroup);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar categorias:', error);
+            select.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+}
+
+function closeChangeCategoryModal() {
+    document.getElementById('changeCategoryModal').classList.add('hidden');
+}
+
+function confirmChangeCategory() {
+    const ticketId = document.getElementById('changeCategoryTicketId').value;
+    const categoryId = document.getElementById('changeCategorySelect').value;
+    
+    if (!categoryId) {
+        alert('Selecione uma categoria.');
+        return;
+    }
+    
+    fetch(`/projects/support/chat/${ticketId}/change-category/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ category_id: categoryId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Categoria alterada com sucesso!', 'success');
+            closeChangeCategoryModal();
+            closeTicketModal();
+            loadSupportTickets();
+        } else {
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao alterar categoria');
+    });
 }
 
 // ===== GERENCIAMENTO DE CATEGORIAS =====
