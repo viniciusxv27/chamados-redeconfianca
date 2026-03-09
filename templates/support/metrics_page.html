@@ -572,7 +572,6 @@ function renderCharts(metrics) {
                     datasets: [
                         { label: 'Abertos', data: metrics.by_category.map(c => c.open), backgroundColor: 'rgba(239, 68, 68, 0.7)', borderRadius: 2 },
                         { label: 'Em Andamento', data: metrics.by_category.map(c => c.in_progress || 0), backgroundColor: 'rgba(245, 158, 11, 0.7)', borderRadius: 2 },
-                        { label: 'Resolvidos', data: metrics.by_category.map(c => c.resolved), backgroundColor: 'rgba(59, 130, 246, 0.7)', borderRadius: 2 },
                         { label: 'Fechados', data: metrics.by_category.map(c => c.closed || 0), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 2 }
                     ]
                 },
@@ -599,7 +598,7 @@ function renderCharts(metrics) {
                     labels: metrics.by_agent.map(a => a.name),
                     datasets: [
                         { label: 'Total', data: metrics.by_agent.map(a => a.total), backgroundColor: 'rgba(139, 92, 246, 0.7)', borderRadius: 3 },
-                        { label: 'Resolvidos', data: metrics.by_agent.map(a => a.resolved), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 3 }
+                        { label: 'Fechados', data: metrics.by_agent.map(a => a.closed), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 3 }
                     ]
                 },
                 options: {

@@ -2077,14 +2077,19 @@ def support_metrics_api(request):
         total_tickets = tickets.count()
         closed_tickets = tickets.filter(status='FECHADO').count()
         
-        # Tempo médio de resolução (usando closed_at ao invés de closed_at)
+        # Tempo médio de resolução (do início do atendimento até o fechamento)
         closed_with_time = tickets.filter(status='FECHADO', closed_at__isnull=False)
         if closed_with_time.exists():
-            total_time = sum([
-                (ticket.closed_at - ticket.created_at).total_seconds() / 3600 
-                for ticket in closed_with_time
-            ])
-            avg_time = total_time / closed_with_time.count()
+            total_time = 0
+            count = 0
+            for ticket in closed_with_time:
+                # Usar started_at se disponível, senão usar created_at
+                start_time = ticket.started_at if ticket.started_at else ticket.created_at
+                hours = (ticket.closed_at - start_time).total_seconds() / 3600
+                if hours > 0:  # Garantir que não há valores negativos
+                    total_time += hours
+                    count += 1
+            avg_time = total_time / count if count > 0 else 0
             avg_time_str = f"{int(avg_time)}h"
         else:
             avg_time_str = "0h"
