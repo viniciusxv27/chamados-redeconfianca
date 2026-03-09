@@ -123,6 +123,32 @@ class CalendarEvent(models.Model):
         help_text='Eventos privados mostram apenas "Ocupado" para outros usuários',
     )
 
+    # Recorrência
+    RECURRENCE_CHOICES = [
+        ('none', 'Sem recorrência'),
+        ('weekly', 'Semanal'),
+    ]
+    recurrence_rule = models.CharField(
+        max_length=20,
+        choices=RECURRENCE_CHOICES,
+        default='none',
+        verbose_name='Recorrência',
+    )
+    recurrence_until = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Repetir até',
+        help_text='Data limite da recorrência (opcional)',
+    )
+    recurrence_parent = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='recurrence_children',
+        verbose_name='Evento pai (recorrência)',
+    )
+
     # Metadados
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

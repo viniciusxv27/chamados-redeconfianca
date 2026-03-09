@@ -258,6 +258,18 @@
                         Privado
                     </label>
                 </div>
+                <div>
+                    <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="checkbox" id="eventRecurring" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" onchange="toggleRecurrenceOptions()">
+                        <i class="fas fa-redo text-indigo-500"></i> Repetir toda semana (mesmo dia)
+                    </label>
+                    <div id="recurrenceOptions" class="hidden mt-2 ml-6">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Repetir até (opcional)</label>
+                        <input type="date" id="eventRecurrenceUntil"
+                               class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <p class="text-xs text-gray-400 mt-1">Se vazio, repete por 3 meses.</p>
+                    </div>
+                </div>
             </form>
             <div class="flex items-center justify-between px-5 py-4 border-t bg-gray-50 rounded-b-xl">
                 <button type="button" id="deleteEventBtn" class="hidden text-red-600 hover:text-red-800 text-sm font-medium" onclick="deleteEvent()">
@@ -403,6 +415,11 @@ function openCreateModal(start, end, allDay) {
     document.getElementById('modalTitle').textContent = 'Novo Evento';
     document.getElementById('deleteEventBtn').classList.add('hidden');
     
+    // Clear recurrence
+    document.getElementById('eventRecurring').checked = false;
+    document.getElementById('eventRecurrenceUntil').value = '';
+    document.getElementById('recurrenceOptions').classList.add('hidden');
+    
     // Clear participants
     selectedParticipantIds = [];
     renderSelectedParticipants();
@@ -437,6 +454,15 @@ function openEditModal(eventData) {
     document.getElementById('eventEnd').value = toLocalInput(eventData.end);
     document.getElementById('modalTitle').textContent = 'Editar Evento';
     document.getElementById('deleteEventBtn').classList.remove('hidden');
+
+    // Recurrence
+    const isRecurring = eventData.recurrence && eventData.recurrence !== 'none';
+    document.getElementById('eventRecurring').checked = isRecurring;
+    document.getElementById('eventRecurrenceUntil').value = eventData.recurrence_until || '';
+    document.getElementById('recurrenceOptions').classList.toggle('hidden', !isRecurring);
+    // Disable recurrence edit on existing events (they're already generated)
+    document.getElementById('eventRecurring').disabled = true;
+    document.getElementById('eventRecurrenceUntil').disabled = true;
 
     // Set selected participants from data
     selectedParticipantIds = [];
@@ -481,6 +507,11 @@ function selectColorByValue(color) {
 function selectCustomColor(color) {
     document.querySelectorAll('.color-option').forEach(c => c.classList.remove('selected'));
     selectedColor = color;
+}
+
+function toggleRecurrenceOptions() {
+    const checked = document.getElementById('eventRecurring').checked;
+    document.getElementById('recurrenceOptions').classList.toggle('hidden', !checked);
 }
 
 // =====================================================================
@@ -581,6 +612,14 @@ async function saveEvent() {
         participants: participantIdsList,
     };
 
+    // Recurrence (only for new events)
+    if (!id) {
+        const recurring = document.getElementById('eventRecurring').checked;
+        payload.recurrence = recurring ? 'weekly' : 'none';
+        const until = document.getElementById('eventRecurrenceUntil').value;
+        if (recurring && until) payload.recurrence_until = until;
+    }
+
     if (!payload.title) { alert('Título é obrigatório'); return; }
 
     const url = id ? `/agenda/api/events/${id}/update/` : API_CREATE;
@@ -601,11 +640,24 @@ async function saveEvent() {
 
 async function deleteEvent() {
     const id = document.getElementById('eventId').value;
-    if (!id || !confirm('Excluir este evento?')) return;
+    if (!id) return;
+
+    // Check if it's a recurring event via the cached detail
+    const ev = window._currentDetailEvent;
+    const isRecurring = ev && ev.recurrence && ev.recurrence !== 'none';
+    let deleteAll = false;
+    if (isRecurring) {
+        const choice = confirm('Este evento faz parte de uma série recorrente.\n\nOK = Excluir TODA a série\nCancelar = Não excluir');
+        if (!choice) return;
+        deleteAll = true;
+    } else {
+        if (!confirm('Excluir este evento?')) return;
+    }
 
     const res = await fetch(`/agenda/api/events/${id}/delete/`, {
         method: 'POST',
-        headers: { 'X-CSRFToken': CSRF },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ delete_all_recurrences: deleteAll }),
     });
 
     if (res.ok) {
@@ -654,6 +706,11 @@ async function showEventDetail(fcEvent) {
     `;
     if (ev.location) html += `<div class="text-sm text-gray-600"><i class="fas fa-map-marker-alt text-gray-400 mr-1"></i> ${escapeHtml(ev.location)}</div>`;
     if (ev.link) html += `<div class="text-sm text-gray-600"><i class="fas fa-link text-gray-400 mr-1"></i> <a href="${escapeHtml(ev.link)}" target="_blank" class="text-indigo-600 hover:underline">${escapeHtml(ev.link)}</a></div>`;
+    if (ev.recurrence && ev.recurrence !== 'none') {
+        let recLabel = '<i class="fas fa-redo text-indigo-400 mr-1"></i> Semanal';
+        if (ev.recurrence_until) recLabel += ' (até ' + new Date(ev.recurrence_until + 'T00:00:00').toLocaleDateString('pt-BR') + ')';
+        html += `<div class="text-sm text-indigo-600 font-medium">${recLabel}</div>`;
+    }
     if (ev.description) html += `<div class="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">${escapeHtml(ev.description)}</div>`;
     if (!ev.is_owner) html += `<div class="text-sm text-gray-500"><i class="fas fa-user text-gray-400 mr-1"></i> Criado por ${escapeHtml(ev.owner_name)}</div>`;
     if (ev.participants && ev.participants.length) {

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, date as date_type
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -118,6 +118,63 @@ def calendar_view(request):
 
 
 # =========================================================================
+# HELPERS DE RECORRÊNCIA
+# =========================================================================
+
+def _parse_recurrence_until(value):
+    """Parse uma data de recurrence_until a partir de string."""
+    if not value:
+        return None
+    try:
+        if isinstance(value, str):
+            return date_type.fromisoformat(value)
+        return value
+    except (ValueError, TypeError):
+        return None
+
+
+def _create_weekly_occurrences(parent_event, invited_users):
+    """Cria ocorrências semanais a partir do evento pai."""
+    until = parent_event.recurrence_until
+    if not until:
+        # Padrão: 3 meses
+        until = (parent_event.start + timedelta(days=90)).date()
+
+    duration = parent_event.end - parent_event.start
+    current_start = parent_event.start + timedelta(weeks=1)
+    max_date = datetime.combine(until, time(23, 59, 59))
+    if current_start.tzinfo and not max_date.tzinfo:
+        from django.utils import timezone as tz
+        max_date = tz.make_aware(max_date)
+
+    while current_start <= max_date:
+        child = CalendarEvent.objects.create(
+            owner=parent_event.owner,
+            title=parent_event.title,
+            description=parent_event.description,
+            event_type=parent_event.event_type,
+            color=parent_event.color,
+            start=current_start,
+            end=current_start + duration,
+            all_day=parent_event.all_day,
+            location=parent_event.location,
+            link=parent_event.link,
+            is_private=parent_event.is_private,
+            recurrence_rule='weekly',
+            recurrence_until=parent_event.recurrence_until,
+            recurrence_parent=parent_event,
+        )
+        # Copiar convites de participantes
+        for user in invited_users:
+            EventParticipant.objects.create(
+                event=child,
+                user=user,
+                status='pending',
+            )
+        current_start += timedelta(weeks=1)
+
+
+# =========================================================================
 # API DE EVENTOS (JSON para FullCalendar)
 # =========================================================================
 
@@ -219,6 +276,9 @@ def api_event_detail(request, pk):
         'is_owner': event.owner_id == request.user.pk,
         'owner_name': event.owner.full_name,
         'participants': participants,
+        'recurrence': event.recurrence_rule,
+        'recurrence_until': event.recurrence_until.isoformat() if event.recurrence_until else None,
+        'recurrence_parent_id': event.recurrence_parent_id,
     })
 
 
@@ -256,13 +316,16 @@ def api_event_create(request):
         location=data.get('location', ''),
         link=data.get('link', ''),
         is_private=data.get('is_private', False),
+        recurrence_rule=data.get('recurrence', 'none'),
+        recurrence_until=_parse_recurrence_until(data.get('recurrence_until')),
     )
 
     # Participantes - criar convites pendentes
     participant_ids = data.get('participants', [])
+    invited_users = []
     if participant_ids:
-        participants = User.objects.filter(pk__in=participant_ids, is_active=True).exclude(pk=request.user.pk)
-        for user in participants:
+        invited_users = list(User.objects.filter(pk__in=participant_ids, is_active=True).exclude(pk=request.user.pk))
+        for user in invited_users:
             EventParticipant.objects.create(
                 event=event,
                 user=user,
@@ -279,6 +342,10 @@ def api_event_create(request):
                     )
                 except Exception:
                     pass
+
+    # Gerar ocorrências recorrentes (semanal)
+    if event.recurrence_rule == 'weekly':
+        _create_weekly_occurrences(event, invited_users)
 
     return JsonResponse({
         'id': event.pk,
@@ -365,7 +432,26 @@ def api_event_update(request, pk):
 def api_event_delete(request, pk):
     """Excluir evento"""
     event = get_object_or_404(CalendarEvent, pk=pk, owner=request.user)
-    event.delete()
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        data = {}
+
+    delete_all = data.get('delete_all_recurrences', False)
+
+    if delete_all and event.recurrence_rule != 'none':
+        # Excluir todos da série
+        if event.recurrence_parent_id:
+            parent = event.recurrence_parent
+            parent.recurrence_children.all().delete()
+            parent.delete()
+        else:
+            event.recurrence_children.all().delete()
+            event.delete()
+    else:
+        event.delete()
+
     return JsonResponse({'ok': True})
 
 
