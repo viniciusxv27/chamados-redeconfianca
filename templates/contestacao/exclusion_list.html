@@ -102,7 +102,7 @@
                         <td class="px-3 py-2.5 text-center">
                             {% with info=contestations_map|get_item:r.pk %}
                             {% if not info %}
-                            <input type="checkbox" class="bulk-check rounded border-gray-300 text-red-600 focus:ring-red-500" value="{{ r.pk }}" data-receita="{{ r.receita }}" onchange="updateBulkBar()">
+                            <input type="checkbox" class="bulk-check rounded border-gray-300 text-red-600 focus:ring-red-500" value="{{ r.pk }}" data-receita="{{ r.receita }}" data-vendedor="{{ r.vendedor }}" data-filial="{{ r.filial }}" onchange="onCheckChange(this)">
                             {% endif %}
                             {% endwith %}
                         </td>
@@ -169,7 +169,7 @@
         <div class="bg-white border rounded-lg p-3 shadow-sm relative">
             {% with info=contestations_map|get_item:r.pk %}
             {% if not info %}
-            <input type="checkbox" class="bulk-check absolute top-3 right-3 rounded border-gray-300 text-red-600 focus:ring-red-500" value="{{ r.pk }}" data-receita="{{ r.receita }}" onchange="updateBulkBar()">
+            <input type="checkbox" class="bulk-check absolute top-3 right-3 rounded border-gray-300 text-red-600 focus:ring-red-500" value="{{ r.pk }}" data-receita="{{ r.receita }}" data-vendedor="{{ r.vendedor }}" data-filial="{{ r.filial }}" onchange="onCheckChange(this)">
             {% endif %}
             {% endwith %}
             <div class="flex justify-between items-start mb-1">
@@ -230,24 +230,32 @@
     {% endif %}
 </div>
 
-<!-- Barra flutuante de ação em lote -->
+<!-- Barra flutuante - carrinho de contestações -->
 <div id="bulkBar" class="hidden fixed bottom-0 inset-x-0 z-40">
     <div class="max-w-4xl mx-auto px-4 pb-4">
-        <div class="bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-red-600 text-white text-sm font-bold" id="bulkCount">0</span>
-                <div class="text-sm">
-                    <span class="font-semibold">selecionadas</span>
-                    <span class="text-gray-400 ml-2" id="bulkReceita">R$ 0,00</span>
+        <div class="bg-gray-900 text-white rounded-xl shadow-2xl overflow-hidden">
+            <!-- Header do carrinho -->
+            <div class="px-5 py-3 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="toggleCartDetail()">
+                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-red-600 text-white text-sm font-bold" id="bulkCount">0</span>
+                    <div class="text-sm">
+                        <span class="font-semibold"><i class="fas fa-shopping-cart mr-1"></i> no carrinho</span>
+                        <span class="text-gray-400 ml-2" id="bulkReceita">R$ 0,00</span>
+                    </div>
+                    <i class="fas fa-chevron-up text-gray-400 text-xs transition-transform" id="cartChevron"></i>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="clearSelection()" class="px-3 py-1.5 text-sm text-gray-300 hover:text-white">
+                        <i class="fas fa-trash-alt mr-1"></i> Limpar
+                    </button>
+                    <button type="button" onclick="goToBulkContestation()" class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg">
+                        <i class="fas fa-paper-plane mr-2"></i> Contestar Tudo
+                    </button>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
-                <button type="button" onclick="clearSelection()" class="px-3 py-1.5 text-sm text-gray-300 hover:text-white">
-                    Limpar
-                </button>
-                <button type="button" onclick="goToBulkContestation()" class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg">
-                    <i class="fas fa-exclamation-triangle mr-2"></i> Contestar Selecionados
-                </button>
+            <!-- Detalhe do carrinho (colapsável) -->
+            <div id="cartDetail" class="hidden border-t border-gray-700 px-5 py-3 max-h-52 overflow-y-auto">
+                <div id="cartItems" class="space-y-1"></div>
             </div>
         </div>
     </div>
@@ -256,46 +264,136 @@
 
 {% block extra_js %}
 <script>
-function getChecked() {
-    return document.querySelectorAll('.bulk-check:checked');
+const CART_KEY = 'contestacao_cart';
+
+// --- Cart persistence (localStorage) ---
+function getCart() {
+    try { return JSON.parse(localStorage.getItem(CART_KEY)) || {}; }
+    catch(e) { return {}; }
+}
+function saveCart(cart) {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
 }
 
-function updateBulkBar() {
-    const checked = getChecked();
-    const bar = document.getElementById('bulkBar');
-    const count = checked.length;
-    document.getElementById('bulkCount').textContent = count;
-    
-    let total = 0;
-    checked.forEach(cb => { total += parseFloat(cb.dataset.receita || 0); });
-    document.getElementById('bulkReceita').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
-    
-    if (count > 0) {
-        bar.classList.remove('hidden');
+// When a checkbox is toggled
+function onCheckChange(cb) {
+    const cart = getCart();
+    const id = cb.value;
+    if (cb.checked) {
+        cart[id] = {
+            receita: parseFloat(cb.dataset.receita || 0),
+            vendedor: cb.dataset.vendedor || '',
+            filial: cb.dataset.filial || '',
+        };
     } else {
-        bar.classList.add('hidden');
+        delete cart[id];
     }
+    saveCart(cart);
+    renderBar();
 }
 
+// Select all visible (adds to cart)
 function toggleSelectAll(master) {
+    const cart = getCart();
     document.querySelectorAll('.bulk-check').forEach(cb => {
         cb.checked = master.checked;
+        const id = cb.value;
+        if (master.checked) {
+            cart[id] = {
+                receita: parseFloat(cb.dataset.receita || 0),
+                vendedor: cb.dataset.vendedor || '',
+                filial: cb.dataset.filial || '',
+            };
+        } else {
+            delete cart[id];
+        }
     });
-    updateBulkBar();
+    saveCart(cart);
+    renderBar();
 }
 
+// Remove single item from cart
+function removeFromCart(id) {
+    const cart = getCart();
+    delete cart[id];
+    saveCart(cart);
+    // Uncheck on page if visible
+    const cb = document.querySelector('.bulk-check[value="' + id + '"]');
+    if (cb) cb.checked = false;
+    renderBar();
+}
+
+// Clear everything
 function clearSelection() {
+    localStorage.removeItem(CART_KEY);
     document.querySelectorAll('.bulk-check').forEach(cb => cb.checked = false);
     const selectAll = document.getElementById('selectAllDesktop');
     if (selectAll) selectAll.checked = false;
-    updateBulkBar();
+    renderBar();
 }
 
+// Go to bulk form
 function goToBulkContestation() {
-    const checked = getChecked();
-    if (checked.length === 0) return;
-    const ids = Array.from(checked).map(cb => cb.value);
+    const cart = getCart();
+    const ids = Object.keys(cart);
+    if (ids.length === 0) return;
+    // Cart is cleared after successful submission (in the bulk page)
     window.location.href = '{% url "contestacao:bulk_create_contestation" %}?ids=' + ids.join(',');
 }
+
+// Toggle cart detail panel
+function toggleCartDetail() {
+    const detail = document.getElementById('cartDetail');
+    const chevron = document.getElementById('cartChevron');
+    detail.classList.toggle('hidden');
+    chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+function escHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+// Render the floating bar from cart state
+function renderBar() {
+    const cart = getCart();
+    const ids = Object.keys(cart);
+    const bar = document.getElementById('bulkBar');
+    const count = ids.length;
+
+    document.getElementById('bulkCount').textContent = count;
+
+    let total = 0;
+    ids.forEach(id => { total += cart[id].receita || 0; });
+    document.getElementById('bulkReceita').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+
+    // Render cart detail items
+    const itemsEl = document.getElementById('cartItems');
+    if (count === 0) {
+        itemsEl.innerHTML = '';
+        bar.classList.add('hidden');
+    } else {
+        let html = '';
+        ids.forEach(id => {
+            const item = cart[id];
+            html += '<div class="flex items-center justify-between text-sm py-1">' +
+                '<div class="flex-1 min-w-0">' +
+                    '<span class="text-white font-medium">' + escHtml(item.vendedor) + '</span>' +
+                    '<span class="text-gray-400 ml-2 text-xs">' + escHtml(item.filial) + '</span>' +
+                '</div>' +
+                '<span class="text-gray-300 font-mono text-xs ml-3">R$ ' + (item.receita || 0).toFixed(2).replace('.', ',') + '</span>' +
+                '<button onclick="removeFromCart(\'' + id + '\')" class="ml-3 text-gray-500 hover:text-red-400 text-xs" title="Remover"><i class="fas fa-times"></i></button>' +
+            '</div>';
+        });
+        itemsEl.innerHTML = html;
+        bar.classList.remove('hidden');
+    }
+}
+
+// On page load: restore checkboxes from cart and show bar
+document.addEventListener('DOMContentLoaded', function() {
+    const cart = getCart();
+    document.querySelectorAll('.bulk-check').forEach(cb => {
+        if (cart[cb.value]) cb.checked = true;
+    });
+    renderBar();
+});
 </script>
 {% endblock %}

@@ -84,3 +84,13 @@
     </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}
+<script>
+// Clear the cart after form submission (the page redirects on success,
+// so this only runs when the form POST renders this page again with errors)
+document.querySelector('form').addEventListener('submit', function() {
+    localStorage.removeItem('contestacao_cart');
+});
+</script>
+{% endblock %}
