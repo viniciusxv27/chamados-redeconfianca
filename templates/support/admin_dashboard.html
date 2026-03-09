@@ -654,7 +654,6 @@ function getStatusLabel(status) {
     const labels = {
         'ABERTO': 'Abertos',
         'EM_ANDAMENTO': 'Em Andamento',
-        'FECHADO': 'Fechados',
         'FECHADO': 'Fechados'
     };
     return labels[status] || status;
@@ -906,8 +905,7 @@ function updateStatCounters(stats) {
     if (containers.length >= 4) {
         // Fechados (Fechados somados)
         const closedCounter = containers[3].querySelector('.text-3xl');
-        const closedTotal = (stats.closed || 0) + (stats.closed !== undefined ? stats.closed : 0);
-        if (closedCounter) closedCounter.textContent = closedTotal;
+        if (closedCounter) closedCounter.textContent = stats.closed || 0;
     }
     
     // Atualizar badges nas colunas do kanban
@@ -918,8 +916,7 @@ function updateStatCounters(stats) {
     if (progressBadge) progressBadge.textContent = stats.in_progress;
     
     const closedCount = document.getElementById('closed-count');
-    const closedTotal = (stats.closed || 0) + (stats.closed !== undefined ? stats.closed : 0);
-    if (closedCount) closedCount.textContent = closedTotal;
+    if (closedCount) closedCount.textContent = stats.closed || 0;
 }
 
 function loadSupportTickets() {
@@ -1257,7 +1254,7 @@ function updateTicketCounts(tickets) {
     let closedTotal = 0;
     
     tickets.forEach(ticket => {
-        if (ticket.status === 'FECHADO' || ticket.status === 'FECHADO') {
+        if (ticket.status === 'FECHADO') {
             closedTotal++;
         }
     });

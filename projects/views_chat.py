@@ -1031,7 +1031,6 @@ def support_admin_template(request):
         'open': SupportChat.objects.filter(chats_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(chats_filter, status='EM_ANDAMENTO').count(),
         'closed': SupportChat.objects.filter(chats_filter, status='FECHADO').count(),
-        'closed': SupportChat.objects.filter(chats_filter, status='FECHADO').count(),
         'avg_rating': round(SupportChatRating.objects.filter(
             chat__in=SupportChat.objects.filter(chats_filter)
         ).aggregate(avg_rating=models.Avg('rating'))['avg_rating'] or 0, 1)
@@ -1320,12 +1319,10 @@ def export_metrics_report(request):
     while current_date.date() <= datetime.now().date():
         day_created = SupportChat.objects.filter(created_at__date=current_date.date()).count()
         day_closed = SupportChat.objects.filter(created_at__date=current_date.date(), status='FECHADO').count()
-        day_closed = SupportChat.objects.filter(created_at__date=current_date.date(), status='FECHADO').count()
         
         ws_dia.cell(row=row_dia, column=1, value=current_date.strftime('%d/%m/%Y')).border = border
         ws_dia.cell(row=row_dia, column=2, value=day_created).border = border
         ws_dia.cell(row=row_dia, column=3, value=day_closed).border = border
-        ws_dia.cell(row=row_dia, column=4, value=day_closed).border = border
         
         total_days_count += 1
         total_created_count += day_created
@@ -2350,7 +2347,6 @@ def poll_dashboard_updates(request):
         'total': SupportChat.objects.filter(base_filter).count(),
         'open': SupportChat.objects.filter(base_filter, status__in=['AGUARDANDO', 'ABERTO']).count(),
         'in_progress': SupportChat.objects.filter(base_filter, status='EM_ANDAMENTO').count(),
-        'closed': SupportChat.objects.filter(base_filter, status='FECHADO').count(),
         'closed': SupportChat.objects.filter(base_filter, status='FECHADO').count(),
     }
     
