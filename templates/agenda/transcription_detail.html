@@ -79,6 +79,7 @@
             <div><span class="font-bold text-white">{{ transcription.sections|length }}</span> seções</div>
             <div><span class="font-bold text-white">{{ transcription.key_decisions|length }}</span> decisões</div>
             <div><span class="font-bold text-white">{{ transcription.action_items|length }}</span> ações</div>
+            <div><span class="font-bold text-white">{{ tasks|length }}</span> tarefas</div>
             <div><span class="font-bold text-white">{{ transcription.suggested_events|length }}</span> eventos sugeridos</div>
         </div>
         {% endif %}
@@ -207,7 +208,74 @@
 
         <!-- Sidebar -->
         <div class="space-y-5">
-            <!-- Itens de Ação -->
+            <!-- Tarefas Criadas (do plano de ação) -->
+            {% if tasks %}
+            <div class="bg-white shadow-sm rounded-xl border border-emerald-100 overflow-hidden">
+                <div class="px-5 py-3 border-b bg-gradient-to-r from-emerald-50 to-green-50 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-clipboard-check text-emerald-600 text-sm"></i>
+                        </div>
+                        <h3 class="font-bold text-emerald-900 text-sm">Tarefas Criadas ({{ tasks|length }})</h3>
+                    </div>
+                    <a href="/users/manage/tasks/" class="text-xs text-emerald-600 hover:underline font-medium">
+                        <i class="fas fa-external-link-alt mr-1"></i> Ver todas
+                    </a>
+                </div>
+                <div class="divide-y divide-emerald-50">
+                    {% for task in tasks %}
+                    <div class="px-5 py-3" id="task-card-{{ task.pk }}">
+                        <div class="flex items-start gap-2">
+                            <span class="mt-0.5 flex-shrink-0
+                                {% if task.priority == 'HIGH' or task.priority == 'URGENT' %}text-red-400
+                                {% elif task.priority == 'MEDIUM' %}text-yellow-400
+                                {% else %}text-gray-300{% endif %}">
+                                <i class="fas fa-circle text-xs"></i>
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm text-gray-700">{{ task.title }}</p>
+                                <div class="flex flex-wrap gap-2 mt-1 text-xs text-gray-400">
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium
+                                        {% if task.status == 'DONE' %}bg-green-100 text-green-700
+                                        {% elif task.status == 'DOING' %}bg-blue-100 text-blue-700
+                                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                        {% if task.status == 'DONE' %}<i class="fas fa-check mr-1"></i>Concluída
+                                        {% elif task.status == 'DOING' %}<i class="fas fa-spinner mr-1"></i>Em andamento
+                                        {% else %}<i class="fas fa-clock mr-1"></i>Pendente{% endif %}
+                                    </span>
+                                    {% if task.priority %}
+                                    <span class="{% if task.priority == 'HIGH' or task.priority == 'URGENT' %}text-red-500{% elif task.priority == 'MEDIUM' %}text-yellow-500{% else %}text-gray-400{% endif %}">
+                                        {% if task.priority == 'URGENT' %}Urgente{% elif task.priority == 'HIGH' %}Alta{% elif task.priority == 'MEDIUM' %}Média{% else %}Baixa{% endif %}
+                                    </span>
+                                    {% endif %}
+                                    {% if task.due_date %}
+                                    <span><i class="fas fa-calendar mr-1"></i>{{ task.due_date|date:"d/m/Y" }}</span>
+                                    {% endif %}
+                                </div>
+                                <!-- Atribuição de usuário -->
+                                <div class="mt-2 flex items-center gap-2">
+                                    <select id="assign-user-{{ task.pk }}" onchange="assignTask({{ transcription.pk }}, {{ task.pk }}, this.value)"
+                                            class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-emerald-500 focus:border-emerald-500 w-full">
+                                        <option value="">Atribuir a...</option>
+                                        {% for u in users %}
+                                        <option value="{{ u.pk }}" {% if task.assigned_to_id == u.pk %}selected{% endif %}>
+                                            {{ u.get_full_name|default:u.username }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <p class="text-xs text-green-600 mt-1 hidden" id="task-success-{{ task.pk }}">
+                                    <i class="fas fa-check-circle mr-1"></i>Atribuído!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Itens de Ação (originais da IA) -->
             {% if transcription.action_items %}
             <div class="bg-white shadow-sm rounded-xl border border-emerald-100 overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gradient-to-r from-emerald-50 to-green-50 flex items-center gap-2">
@@ -385,6 +453,35 @@ function toggleRaw() {
         raw.classList.add('hidden');
         fmt.classList.remove('hidden');
         btn.innerHTML = '<i class="fas fa-code mr-1"></i> Ver texto bruto';
+    }
+}
+
+// ---- Assign task to user ----
+async function assignTask(transcriptionId, taskId, userId) {
+    if (!userId) return;
+
+    try {
+        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/tasks/${taskId}/assign/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+            body: JSON.stringify({ user_id: parseInt(userId) }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            const successEl = document.getElementById(`task-success-${taskId}`);
+            if (successEl) {
+                successEl.textContent = `✓ Atribuído a ${data.assigned_to}`;
+                successEl.classList.remove('hidden');
+                setTimeout(() => successEl.classList.add('hidden'), 3000);
+            }
+        } else {
+            alert(data.error || 'Erro ao atribuir tarefa.');
+        }
+    } catch (err) {
+        alert('Erro: ' + err.message);
     }
 }
 

@@ -629,6 +629,8 @@ def api_transcription_upload(request):
     """Recebe áudio e transcreve usando OpenAI Whisper + GPT-4o com análise avançada"""
     import openai
     import json as json_module
+    import tempfile
+    import os
     from django.conf import settings as django_settings
 
     audio_file = request.FILES.get('audio')
@@ -663,34 +665,33 @@ def api_transcription_upload(request):
     try:
         client = openai.OpenAI(api_key=api_key)
 
-        # 1. Transcrever áudio com Whisper (com timestamps)
+        # 1. Transcrever áudio com Whisper — com split automático para arquivos grandes
         audio_file.seek(0)
-        file_tuple = (audio_file.name, audio_file.read(), audio_file.content_type)
-        whisper_response = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=file_tuple,
-            language="pt",
-            response_format="verbose_json",
-            timestamp_granularities=["segment"],
-        )
+        audio_data = audio_file.read()
+        audio_size = len(audio_data)
 
-        # Extrair texto e segmentos com timestamps
-        if hasattr(whisper_response, 'text'):
-            raw_text = whisper_response.text
-            segments = []
-            if hasattr(whisper_response, 'segments') and whisper_response.segments:
-                for s in whisper_response.segments:
-                    seg = {
-                        'start': getattr(s, 'start', 0),
-                        'end': getattr(s, 'end', 0),
-                        'text': getattr(s, 'text', ''),
-                    }
-                    segments.append(seg)
-            if hasattr(whisper_response, 'duration') and whisper_response.duration:
-                transcription.duration_seconds = int(whisper_response.duration)
+        WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 24MB (margem do limite de 25MB)
+
+        if audio_size <= WHISPER_MAX_SIZE:
+            # Arquivo pequeno: enviar direto
+            file_tuple = (audio_file.name, audio_data, audio_file.content_type or 'audio/webm')
+            whisper_response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=file_tuple,
+                language="pt",
+                response_format="verbose_json",
+                timestamp_granularities=["segment"],
+            )
+            if hasattr(whisper_response, 'text'):
+                raw_text = whisper_response.text
+                if hasattr(whisper_response, 'duration') and whisper_response.duration:
+                    transcription.duration_seconds = int(whisper_response.duration)
+            else:
+                raw_text = str(whisper_response)
         else:
-            raw_text = str(whisper_response)
-            segments = []
+            # Arquivo grande: dividir em partes e transcrever cada uma
+            raw_text = _transcribe_large_audio(client, audio_data, audio_file.name,
+                                                audio_file.content_type or 'audio/webm')
 
         transcription.raw_transcription = raw_text
 
@@ -746,7 +747,6 @@ def api_transcription_upload(request):
         # Limpar markdown code blocks se houver
         if gpt_text.startswith('```'):
             lines = gpt_text.split('\n')
-            # Remove first and last ``` lines
             if lines[0].startswith('```'):
                 lines = lines[1:]
             if lines and lines[-1].strip() == '```':
@@ -789,6 +789,9 @@ def api_transcription_upload(request):
         transcription.calendar_event_created = cal_event
         transcription.save(update_fields=['calendar_event_created'])
 
+        # 4. Criar tarefas automaticamente a partir dos action_items
+        _create_tasks_from_transcription(transcription, request.user)
+
         return JsonResponse({
             'id': transcription.pk,
             'status': 'completed',
@@ -796,7 +799,6 @@ def api_transcription_upload(request):
         })
 
     except json_module.JSONDecodeError:
-        # Se falhar o parse do JSON, tentar salvar o que conseguiu
         transcription.formatted_transcription = transcription.raw_transcription
         transcription.summary = 'Erro ao processar análise avançada. Transcrição bruta disponível.'
         transcription.status = 'completed'
@@ -813,13 +815,89 @@ def api_transcription_upload(request):
         return JsonResponse({'error': f'Erro ao processar: {str(e)}'}, status=500)
 
 
+def _transcribe_large_audio(client, audio_data, filename, content_type):
+    """Divide áudio grande em chunks de ~24MB e transcreve cada parte."""
+    import math
+
+    chunk_size = 24 * 1024 * 1024  # 24MB
+    total_size = len(audio_data)
+    num_chunks = math.ceil(total_size / chunk_size)
+
+    all_text_parts = []
+    for i in range(num_chunks):
+        start = i * chunk_size
+        end = min((i + 1) * chunk_size, total_size)
+        chunk = audio_data[start:end]
+
+        ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'webm'
+        chunk_name = f"part_{i + 1}.{ext}"
+        file_tuple = (chunk_name, chunk, content_type)
+
+        whisper_response = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=file_tuple,
+            language="pt",
+            response_format="text",
+        )
+        text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
+        all_text_parts.append(text.strip())
+
+    return ' '.join(all_text_parts)
+
+
+def _create_tasks_from_transcription(transcription, user):
+    """Cria TaskActivity para cada action_item da transcrição."""
+    from core.models import TaskActivity
+
+    PRIORITY_MAP = {
+        'high': 'HIGH',
+        'medium': 'MEDIUM',
+        'low': 'LOW',
+    }
+
+    action_items = transcription.action_items or []
+    for item in action_items:
+        task_text = item.get('task', '') if isinstance(item, dict) else str(item)
+        if not task_text:
+            continue
+
+        priority = 'MEDIUM'
+        deadline = None
+        if isinstance(item, dict):
+            priority = PRIORITY_MAP.get(item.get('priority', ''), 'MEDIUM')
+            deadline_str = item.get('deadline')
+            if deadline_str:
+                try:
+                    deadline = datetime.fromisoformat(deadline_str)
+                except (ValueError, TypeError):
+                    deadline = None
+
+        task = TaskActivity.objects.create(
+            title=task_text[:200],
+            description=(
+                f"Tarefa gerada automaticamente da transcrição: {transcription.title}\n\n"
+                f"Responsável mencionado: {item.get('responsible', 'A definir') if isinstance(item, dict) else 'A definir'}"
+            ),
+            assigned_to=user,
+            created_by=user,
+            priority=priority,
+            due_date=deadline,
+            status='PENDING',
+        )
+        transcription.tasks_created.add(task)
+
+
 @login_required
 def transcription_detail(request, pk):
     """Visualizar uma transcrição"""
     transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    tasks = transcription.tasks_created.select_related('assigned_to').all()
+    users = User.objects.filter(is_active=True).order_by('first_name', 'username')
 
     context = {
         'transcription': transcription,
+        'tasks': tasks,
+        'users': users,
     }
     return render(request, 'agenda/transcription_detail.html', context)
 
@@ -867,4 +945,38 @@ def api_transcription_schedule(request, pk):
         'ok': True,
         'event_id': event.pk,
         'message': f'Evento "{title}" agendado com sucesso!'
+    })
+
+
+@login_required
+@require_POST
+def api_transcription_assign_task(request, pk, task_id):
+    """Atribuir uma tarefa da transcrição a um usuário"""
+    from core.models import TaskActivity
+
+    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    task = get_object_or_404(TaskActivity, pk=task_id, source_transcription=transcription)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    user_id = data.get('user_id')
+    if not user_id:
+        return JsonResponse({'error': 'user_id é obrigatório.'}, status=400)
+
+    try:
+        target_user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'Usuário não encontrado.'}, status=404)
+
+    task.assigned_to = target_user
+    task.save(update_fields=['assigned_to'])
+
+    return JsonResponse({
+        'ok': True,
+        'task_id': task.pk,
+        'assigned_to': target_user.get_full_name() or target_user.username,
+        'message': f'Tarefa atribuída a {target_user.get_full_name() or target_user.username}!'
     })

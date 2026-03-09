@@ -352,6 +352,12 @@ class MeetingTranscription(models.Model):
         related_name='transcription_source',
         verbose_name='Evento criado na agenda',
     )
+    tasks_created = models.ManyToManyField(
+        'core.TaskActivity',
+        blank=True,
+        related_name='source_transcription',
+        verbose_name='Tarefas criadas',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
