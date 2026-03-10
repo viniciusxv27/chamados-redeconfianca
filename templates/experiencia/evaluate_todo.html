@@ -107,10 +107,28 @@
 
             {% if answer.photo %}
             <div class="mb-3">
-                <span class="text-xs text-gray-500 block mb-1">Foto enviada:</span>
-                <img src="{{ answer.photo.url }}" alt="Evidência" 
-                     class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
-                     onclick="openImageModal(this.src)">
+                <span class="text-xs text-gray-500 block mb-1">Fotos enviadas:</span>
+                <div class="flex flex-wrap gap-2">
+                    <img src="{{ answer.photo.url }}" alt="Evidência" 
+                         class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% for photo in answer.photos.all %}
+                    <img src="{{ photo.photo.url }}" alt="Evidência" 
+                         class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% endfor %}
+                </div>
+            </div>
+            {% elif answer.photos.all %}
+            <div class="mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Fotos enviadas:</span>
+                <div class="flex flex-wrap gap-2">
+                    {% for photo in answer.photos.all %}
+                    <img src="{{ photo.photo.url }}" alt="Evidência" 
+                         class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% endfor %}
+                </div>
             </div>
             {% endif %}
 

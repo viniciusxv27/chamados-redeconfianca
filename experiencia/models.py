@@ -185,6 +185,19 @@ class ExperienciaTodo(models.Model):
         )
         return round((earned_points / total_points) * 100, 2)
 
+    def calculate_partial_score(self):
+        """Calcula pontuação parcial baseada apenas nas respostas (sem exigir aprovação)."""
+        answers = self.answers.select_related('question').all()
+        applicable = [a for a in answers if a.response != 'nao_se_aplica']
+        total_points = sum(a.question.points for a in applicable)
+        if total_points == 0:
+            return 0
+        earned_points = sum(
+            a.question.points for a in applicable
+            if a.response == 'sim'
+        )
+        return round((earned_points / total_points) * 100, 2)
+
     def update_score(self):
         self.score_percentage = self.calculate_score()
         self.save(update_fields=['score_percentage'])
@@ -271,6 +284,30 @@ class ExperienciaAnswer(models.Model):
 
     def __str__(self):
         return f"Resposta: {self.question.text[:50]} - {self.get_status_display()}"
+
+
+class ExperienciaAnswerPhoto(models.Model):
+    """Foto adicional de uma resposta (suporte a múltiplas fotos)."""
+    answer = models.ForeignKey(
+        ExperienciaAnswer,
+        on_delete=models.CASCADE,
+        related_name='photos',
+        verbose_name='Resposta',
+    )
+    photo = models.ImageField(
+        upload_to=upload_experiencia_photo,
+        storage=get_media_storage(),
+        verbose_name='Foto',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+
+    class Meta:
+        verbose_name = 'Foto da Resposta'
+        verbose_name_plural = 'Fotos das Respostas'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Foto de {self.answer}"
 
 
 class ExperienciaEvaluator(models.Model):

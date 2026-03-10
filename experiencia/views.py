@@ -11,6 +11,7 @@ from users.models import Sector, User
 
 from .models import (
     ExperienciaAnswer,
+    ExperienciaAnswerPhoto,
     ExperienciaEvaluator,
     ExperienciaQuestion,
     ExperienciaTemplate,
@@ -433,18 +434,27 @@ def fill_todo(request, todo_id):
         questions = questions.filter(id__in=rejected_ids)
 
     if request.method == 'POST':
+        action = request.POST.get('action', 'submit')
+
         for question in questions:
-            response = request.POST.get(f'response_{question.id}', 'nao')
+            response = request.POST.get(f'response_{question.id}', '')
             if response not in ('sim', 'nao', 'nao_se_aplica'):
-                response = 'nao'
+                if action == 'draft':
+                    response = ''
+                else:
+                    response = 'nao'
             observation = request.POST.get(f'observation_{question.id}', '').strip()
-            photo = request.FILES.get(f'photo_{question.id}')
+            photos = request.FILES.getlist(f'photos_{question.id}')
+
+            # Skip empty answers in draft mode
+            if action == 'draft' and not response and not observation and not photos:
+                continue
 
             answer, created = ExperienciaAnswer.objects.get_or_create(
                 todo=todo,
                 question=question,
                 defaults={
-                    'response': response,
+                    'response': response or 'nao',
                     'observation': observation,
                     'answered_by': user,
                     'answered_at': timezone.now(),
@@ -452,17 +462,28 @@ def fill_todo(request, todo_id):
                 },
             )
             if not created:
-                answer.response = response
+                if response:
+                    answer.response = response
                 answer.observation = observation
                 answer.answered_by = user
                 answer.answered_at = timezone.now()
-                answer.status = 'pendente'
-                answer.rejection_reason = ''
+                if action != 'draft':
+                    answer.status = 'pendente'
+                    answer.rejection_reason = ''
+                answer.save()
 
-            if photo:
-                answer.photo = photo
+            # Save multiple photos
+            for photo_file in photos:
+                ExperienciaAnswerPhoto.objects.create(
+                    answer=answer,
+                    photo=photo_file,
+                )
 
-            answer.save()
+        if action == 'draft':
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True, 'message': 'Rascunho salvo'})
+            messages.success(request, 'Rascunho salvo com sucesso!')
+            return redirect('experiencia:fill_todo', todo_id=todo.id)
 
         todo.status = 'enviado'
         todo.submitted_by = user
@@ -475,9 +496,13 @@ def fill_todo(request, todo_id):
     questions_with_answers = []
     for q in questions:
         existing = existing_answers.get(q.id)
+        existing_photos = []
+        if existing:
+            existing_photos = list(existing.photos.all())
         questions_with_answers.append({
             'question': q,
             'answer': existing,
+            'photos': existing_photos,
         })
 
     return render(request, 'experiencia/fill_todo.html', {
@@ -504,17 +529,39 @@ def view_todo(request, todo_id):
     answers = todo.answers.select_related('question', 'answered_by').all()
     applicable = [a for a in answers if a.response != 'nao_se_aplica']
     total_points = sum(a.question.points for a in applicable)
-    approved_points = sum(
-        a.question.points for a in applicable
-        if a.response == 'sim' and a.status == 'aprovado'
-    )
+
+    # For enviados/pending, show partial score based on responses only
+    if todo.status in ('enviado', 'aberto', 'recusado'):
+        earned_points = sum(
+            a.question.points for a in applicable
+            if a.response == 'sim'
+        )
+        score = todo.calculate_partial_score()
+    else:
+        earned_points = sum(
+            a.question.points for a in applicable
+            if a.response == 'sim' and a.status == 'aprovado'
+        )
+        score = todo.score_percentage
+
+    # Filter by response
+    response_filter = request.GET.get('response', '')
+    filtered_answers = answers
+    if response_filter in ('sim', 'nao', 'nao_se_aplica'):
+        filtered_answers = [a for a in answers if a.response == response_filter]
 
     return render(request, 'experiencia/view_todo.html', {
         'todo': todo,
-        'answers': answers,
+        'answers': filtered_answers,
+        'all_answers': answers,
         'total_points': total_points,
-        'approved_points': approved_points,
-        'score': todo.score_percentage,
+        'approved_points': earned_points,
+        'score': score,
+        'is_partial': todo.status in ('enviado', 'aberto', 'recusado'),
+        'response_filter': response_filter,
+        'count_sim': sum(1 for a in answers if a.response == 'sim'),
+        'count_nao': sum(1 for a in answers if a.response == 'nao'),
+        'count_nao_se_aplica': sum(1 for a in answers if a.response == 'nao_se_aplica'),
         'is_superadmin': _is_superadmin(user),
     })
 
@@ -684,6 +731,13 @@ def reports(request):
         avg=models.Avg('score_percentage')
     )['avg'] or 0
 
+    # Contagem de respostas por tipo (todos os to-dos filtrados)
+    todo_ids = todos.values_list('id', flat=True)
+    all_answers = ExperienciaAnswer.objects.filter(todo_id__in=todo_ids)
+    total_sim = all_answers.filter(response='sim').count()
+    total_nao = all_answers.filter(response='nao').count()
+    total_nao_se_aplica = all_answers.filter(response='nao_se_aplica').count()
+
     sectors = Sector.objects.all().order_by('name') if is_superadmin else Sector.objects.filter(
         id__in=[s.id for s in _get_user_sectors(user)]
     ).order_by('name')
@@ -696,6 +750,9 @@ def reports(request):
         'total': total,
         'finalized': finalized,
         'avg_score': round(avg_score, 1),
+        'total_sim': total_sim,
+        'total_nao': total_nao,
+        'total_nao_se_aplica': total_nao_se_aplica,
         'is_superadmin': is_superadmin,
         'current_month': now.month,
         'current_year': now.year,

@@ -7,7 +7,7 @@
     <div class="flex items-center justify-between mb-6">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">
-                <i class="fas fa-eye text-gray-500 mr-2"></i>Visualizar To-Do
+                <i class="fas fa-eye text-blue-500 mr-2"></i>Visualizar To-Do
             </h1>
             <p class="text-gray-500 text-sm mt-1">
                 {{ todo.sector.name }} - {{ todo.month_year_display }} - {{ todo.template.name }}
@@ -18,104 +18,99 @@
         </a>
     </div>
 
-    <!-- Resumo -->
-    <div class="bg-white rounded-xl shadow p-5 mb-6">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-                <span class="text-xs text-gray-500">Status</span>
-                <div class="mt-1">
-                    {% if todo.status == 'aberto' %}
-                        <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Aberto</span>
-                    {% elif todo.status == 'enviado' %}
-                        <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Aguardando Avaliação</span>
-                    {% elif todo.status == 'finalizado' %}
-                        <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Finalizado</span>
-                    {% elif todo.status == 'recusado' %}
-                        <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Recusado Parcialmente</span>
-                    {% endif %}
-                </div>
-            </div>
-            <div>
-                <span class="text-xs text-gray-500">Pontuação</span>
-                <div class="text-lg font-bold text-purple-600 mt-1">{{ score }}%</div>
-                <div class="text-xs text-gray-400">{{ approved_points }} / {{ total_points }} pts</div>
-            </div>
-            <div>
-                <span class="text-xs text-gray-500">Lançado por</span>
-                <div class="text-sm font-medium mt-1">{{ todo.launched_by.get_full_name }}</div>
-                <div class="text-xs text-gray-400">{{ todo.created_at|date:"d/m/Y H:i" }}</div>
-            </div>
-            <div>
-                <span class="text-xs text-gray-500">Avaliado por</span>
-                {% if todo.evaluated_by %}
-                <div class="text-sm font-medium mt-1">{{ todo.evaluated_by.get_full_name }}</div>
-                <div class="text-xs text-gray-400">{{ todo.evaluation_date|date:"d/m/Y H:i" }}</div>
+    <!-- Info / Score -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-xs text-gray-500">Status</div>
+            <div class="mt-1">
+                {% if todo.status == 'aberto' %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Aberto</span>
+                {% elif todo.status == 'enviado' %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Enviado</span>
+                {% elif todo.status == 'aprovado' or todo.status == 'finalizado' %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Finalizado</span>
+                {% elif todo.status == 'recusado' %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">Recusado</span>
                 {% else %}
-                <div class="text-sm text-gray-400 mt-1">Pendente</div>
+                    <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700">{{ todo.get_status_display }}</span>
                 {% endif %}
             </div>
         </div>
-        <!-- Barra de progresso -->
-        <div class="mt-4">
-            <div class="w-full bg-gray-200 rounded-full h-3">
-                <div class="bg-purple-500 h-3 rounded-full transition-all" style="width: {{ score }}%"></div>
-            </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-xs text-gray-500">Pontuação{% if is_partial %} <span class="text-yellow-600">(parcial)</span>{% endif %}</div>
+            <div class="text-2xl font-bold text-purple-600">{{ score }}%</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-xs text-gray-500">Pontos Obtidos</div>
+            <div class="text-2xl font-bold text-green-600">{{ approved_points }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-xs text-gray-500">Total Aplicável</div>
+            <div class="text-2xl font-bold text-gray-700">{{ total_points }}</div>
         </div>
     </div>
 
-    <!-- Respostas -->
+    <!-- Response Filter Tabs -->
+    <div class="flex flex-wrap gap-2 mb-6">
+        <a href="{% url 'experiencia:view_todo' todo.id %}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition {% if not response_filter %}bg-purple-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+            Todos ({{ count_sim|add:count_nao|add:count_nao_se_aplica }})
+        </a>
+        <a href="{% url 'experiencia:view_todo' todo.id %}?response=sim"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition {% if response_filter == 'sim' %}bg-green-600 text-white{% else %}bg-green-50 text-green-700 hover:bg-green-100{% endif %}">
+            <i class="fas fa-check-circle mr-1"></i>Sim ({{ count_sim }})
+        </a>
+        <a href="{% url 'experiencia:view_todo' todo.id %}?response=nao"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition {% if response_filter == 'nao' %}bg-red-600 text-white{% else %}bg-red-50 text-red-700 hover:bg-red-100{% endif %}">
+            <i class="fas fa-times-circle mr-1"></i>Não ({{ count_nao }})
+        </a>
+        <a href="{% url 'experiencia:view_todo' todo.id %}?response=nao_se_aplica"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition {% if response_filter == 'nao_se_aplica' %}bg-gray-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+            <i class="fas fa-minus-circle mr-1"></i>N/A ({{ count_nao_se_aplica }})
+        </a>
+    </div>
+
+    <!-- Answers -->
     <div class="space-y-4">
         {% for answer in answers %}
-        <div class="bg-white rounded-xl shadow p-5 {% if answer.status == 'recusado' %}border-l-4 border-red-400{% elif answer.status == 'aprovado' %}border-l-4 border-green-400{% else %}border-l-4 border-gray-300{% endif %}">
+        <div class="bg-white rounded-xl shadow p-5">
             <div class="flex items-start justify-between mb-3">
-                <h3 class="font-medium text-gray-900 flex-1">
-                    <span class="text-purple-600 font-bold mr-2">#{{ forloop.counter }}</span>
-                    {{ answer.question.text }}
-                </h3>
-                <div class="flex items-center gap-2 ml-2">
-                    <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">{{ answer.question.points }} pts</span>
-                    {% if answer.status == 'aprovado' %}
-                        <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs"><i class="fas fa-check mr-1"></i>Aprovado</span>
-                    {% elif answer.status == 'recusado' %}
-                        <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs"><i class="fas fa-times mr-1"></i>Recusado</span>
-                    {% else %}
-                        <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">Pendente</span>
+                <div class="flex-1">
+                    <h3 class="font-medium text-gray-900">
+                        <span class="text-purple-600 font-bold mr-2">#{{ answer.question.order|add:1 }}</span>
+                        {{ answer.question.text }}
+                    </h3>
+                    {% if answer.question.pilar or answer.question.gravidade %}
+                    <div class="flex flex-wrap gap-2 mt-1.5">
+                        {% if answer.question.pilar %}
+                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ answer.question.pilar }}</span>
+                        {% endif %}
+                        {% if answer.question.item %}
+                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{{ answer.question.item }}</span>
+                        {% endif %}
+                        {% if answer.question.gravidade == 'grave' %}
+                        <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Grave</span>
+                        {% elif answer.question.gravidade == 'media' %}
+                        <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">Média</span>
+                        {% elif answer.question.gravidade == 'leve' %}
+                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">Leve</span>
+                        {% elif answer.question.gravidade == 'inegociavel' %}
+                        <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">Inegociável</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if answer.question.detalhamento %}
+                    <div class="mt-2 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
+                        <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1"></i>{{ answer.question.detalhamento }}</p>
+                    </div>
                     {% endif %}
                 </div>
+                <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ml-2">
+                    {{ answer.question.points }} pts
+                </span>
             </div>
 
-            {% if answer.question.pilar or answer.question.gravidade %}
-            <div class="flex flex-wrap gap-2 mb-2">
-                {% if answer.question.pilar %}
-                <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ answer.question.pilar }}</span>
-                {% endif %}
-                {% if answer.question.item %}
-                <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{{ answer.question.item }}</span>
-                {% endif %}
-                {% if answer.question.gravidade == 'grave' %}
-                <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Grave</span>
-                {% elif answer.question.gravidade == 'media' %}
-                <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">Média</span>
-                {% elif answer.question.gravidade == 'leve' %}
-                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">Leve</span>
-                {% elif answer.question.gravidade == 'inegociavel' %}
-                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">Inegociável</span>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            {% if answer.question.detalhamento %}
-            <div class="bg-blue-50 border border-blue-100 rounded-lg p-2.5 mb-3">
-                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1"></i>{{ answer.question.detalhamento }}</p>
-            </div>
-            {% endif %}
-                    {% else %}
-                        <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">Pendente</span>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Resposta do radio button -->
+            <!-- Response Badge -->
             <div class="mb-3">
                 {% if answer.response == 'sim' %}
                     <span class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-sm font-medium">
@@ -130,6 +125,21 @@
                         <i class="fas fa-minus-circle"></i> Não se aplica
                     </span>
                 {% endif %}
+
+                <!-- Approval Status -->
+                {% if answer.status == 'aprovado' %}
+                    <span class="inline-flex items-center gap-1 bg-green-50 text-green-600 px-2 py-1 rounded text-xs ml-2">
+                        <i class="fas fa-check"></i> Aprovado
+                    </span>
+                {% elif answer.status == 'recusado' %}
+                    <span class="inline-flex items-center gap-1 bg-red-50 text-red-600 px-2 py-1 rounded text-xs ml-2">
+                        <i class="fas fa-times"></i> Recusado
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1 bg-yellow-50 text-yellow-600 px-2 py-1 rounded text-xs ml-2">
+                        <i class="fas fa-clock"></i> Pendente
+                    </span>
+                {% endif %}
             </div>
 
             {% if answer.observation %}
@@ -139,27 +149,47 @@
             </div>
             {% endif %}
 
-            {% if answer.photo %}
-            <div class="mb-3">
-                <span class="text-xs text-gray-500 block mb-1">Foto:</span>
-                <img src="{{ answer.photo.url }}" alt="Evidência" 
-                     class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
-                     onclick="openImageModal(this.src)">
-            </div>
-            {% endif %}
-
             {% if answer.rejection_reason %}
-            <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                <i class="fas fa-comment-alt mr-1"></i>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-sm text-red-700">
+                <i class="fas fa-times-circle mr-1"></i>
                 <strong>Motivo da recusa:</strong> {{ answer.rejection_reason }}
             </div>
             {% endif %}
 
+            <!-- Photos -->
+            {% if answer.photo %}
+            <div class="mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Foto:</span>
+                <div class="flex flex-wrap gap-2">
+                    <img src="{{ answer.photo.url }}" alt="Evidência"
+                         class="w-24 h-24 object-cover rounded-lg border border-gray-200 cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                </div>
+            </div>
+            {% endif %}
+            {% if answer.photos.all %}
+            <div class="mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Fotos adicionais:</span>
+                <div class="flex flex-wrap gap-2">
+                    {% for photo in answer.photos.all %}
+                    <img src="{{ photo.photo.url }}" alt="Evidência"
+                         class="w-24 h-24 object-cover rounded-lg border border-gray-200 cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             {% if answer.answered_by %}
-            <div class="text-xs text-gray-400 mt-2">
+            <div class="text-xs text-gray-400">
                 Respondido por {{ answer.answered_by.get_full_name }} em {{ answer.answered_at|date:"d/m/Y H:i" }}
             </div>
             {% endif %}
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-xl shadow p-8 text-center text-gray-500">
+            <i class="fas fa-inbox text-4xl text-gray-300 mb-3"></i>
+            <p>Nenhuma resposta encontrada{% if response_filter %} com este filtro{% endif %}.</p>
         </div>
         {% endfor %}
     </div>

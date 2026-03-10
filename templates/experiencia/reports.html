@@ -20,7 +20,7 @@
     </div>
 
     <!-- Estatísticas -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div class="bg-white rounded-xl shadow p-4">
             <div class="text-sm text-gray-500">Total de To-Dos</div>
             <div class="text-3xl font-bold text-gray-900">{{ total }}</div>
@@ -32,6 +32,25 @@
         <div class="bg-white rounded-xl shadow p-4">
             <div class="text-sm text-gray-500">Média de Pontuação</div>
             <div class="text-3xl font-bold text-purple-600">{{ avg_score }}%</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4">
+            <div class="text-sm text-gray-500">Total de Avaliações</div>
+            <div class="text-3xl font-bold text-blue-600">{{ total_sim|add:total_nao|add:total_nao_se_aplica }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow p-4 border-l-4 border-green-500">
+            <div class="flex items-center gap-2 text-sm text-gray-500"><i class="fas fa-check-circle text-green-500"></i>Total de perguntas com SIM</div>
+            <div class="text-3xl font-bold text-green-600 mt-1">{{ total_sim }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border-l-4 border-red-500">
+            <div class="flex items-center gap-2 text-sm text-gray-500"><i class="fas fa-times-circle text-red-500"></i>Total de perguntas com NÃO</div>
+            <div class="text-3xl font-bold text-red-600 mt-1">{{ total_nao }}</div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border-l-4 border-gray-400">
+            <div class="flex items-center gap-2 text-sm text-gray-500"><i class="fas fa-minus-circle text-gray-400"></i>Total de perguntas com NÃO SE APLICA</div>
+            <div class="text-3xl font-bold text-gray-600 mt-1">{{ total_nao_se_aplica }}</div>
         </div>
     </div>
 
