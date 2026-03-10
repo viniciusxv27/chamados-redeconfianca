@@ -19,6 +19,7 @@
                 <i class="fas fa-user-check mr-1"></i> Avaliadores
             </a>
             {% endif %}
+            {% if is_gerente %}
             <a href="{% url 'experiencia:template_list' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition">
                 <i class="fas fa-file-alt mr-1"></i> Templates
             </a>
@@ -28,6 +29,7 @@
             <a href="{% url 'experiencia:reports' %}" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition">
                 <i class="fas fa-chart-bar mr-1"></i> Relatórios
             </a>
+            {% endif %}
         </div>
     </div>
 

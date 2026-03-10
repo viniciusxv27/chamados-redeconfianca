@@ -408,14 +408,11 @@ def fill_todo(request, todo_id):
         id=todo_id,
     )
 
-    if not _is_gerente_or_superadmin(user):
-        messages.error(request, 'Você não tem permissão.')
-        return redirect('experiencia:dashboard')
-
-    # Verificar se o usuário pertence ao setor (ou é superadmin)
+    # Verificar se o usuário pertence ao setor (ou é gerente/superadmin)
     if not _is_superadmin(user):
         user_sectors = _get_user_sectors(user)
-        if todo.sector not in user_sectors:
+        is_gerente = user.groups.filter(name='Gerentes').exists()
+        if todo.sector not in user_sectors and not is_gerente:
             messages.error(request, 'Você não pertence a este setor.')
             return redirect('experiencia:dashboard')
 
@@ -522,9 +519,13 @@ def view_todo(request, todo_id):
         id=todo_id,
     )
 
-    if not _is_gerente_or_superadmin(user):
-        messages.error(request, 'Sem permissão.')
-        return redirect('experiencia:dashboard')
+    # Verificar se o usuário pertence ao setor (ou é gerente/superadmin)
+    if not _is_superadmin(user):
+        user_sectors = _get_user_sectors(user)
+        is_gerente = user.groups.filter(name='Gerentes').exists()
+        if todo.sector not in user_sectors and not is_gerente:
+            messages.error(request, 'Sem permissão.')
+            return redirect('experiencia:dashboard')
 
     answers = todo.answers.select_related('question', 'answered_by').all()
     applicable = [a for a in answers if a.response != 'nao_se_aplica']
