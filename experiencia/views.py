@@ -51,11 +51,9 @@ def _get_user_sectors(user):
 @login_required
 def dashboard(request):
     user = request.user
-    if not _is_gerente_or_superadmin(user):
-        messages.error(request, 'Você não tem permissão para acessar esta área.')
-        return redirect('home')
 
     is_superadmin = _is_superadmin(user)
+    is_gerente = _is_gerente_or_superadmin(user)
 
     # To-dos do usuário (setores dele)
     user_sectors = _get_user_sectors(user)
@@ -78,6 +76,7 @@ def dashboard(request):
         'current_todos': current_todos.select_related('sector', 'template', 'launched_by'),
         'pending_evaluation': pending_evaluation.select_related('sector', 'template') if is_evaluator else [],
         'is_superadmin': is_superadmin,
+        'is_gerente': is_gerente,
         'is_evaluator': is_evaluator,
         'total_todos': todos.count(),
         'approved_todos': todos.filter(status='finalizado').count(),
