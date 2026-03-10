@@ -86,8 +86,17 @@
     </div>
 
     {% if transcription.status == 'error' %}
-    <div class="bg-red-50 border border-red-200 rounded-lg px-5 py-3 mb-4">
-        <p class="text-sm text-red-700"><i class="fas fa-exclamation-circle mr-1"></i> {{ transcription.error_message }}</p>
+    <div class="bg-red-50 border border-red-200 rounded-xl px-5 py-4 mb-4">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <p class="text-sm font-medium text-red-700"><i class="fas fa-exclamation-circle mr-1"></i> Erro no processamento</p>
+                <p class="text-xs text-red-500 mt-1">{{ transcription.error_message }}</p>
+            </div>
+            <button onclick="reprocessTranscription({{ transcription.pk }})" id="btn-reprocess-error"
+                    class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition flex-shrink-0 shadow-sm">
+                <i class="fas fa-redo mr-2"></i> Reprocessar
+            </button>
+        </div>
     </div>
     {% endif %}
 
@@ -380,13 +389,18 @@
     </div>
 
     {% elif transcription.status == 'processing' %}
-    <div class="bg-white shadow-md rounded-xl p-10 text-center">
-        <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4">
+    <div class="bg-white shadow-md rounded-xl p-10 text-center" id="processing-card">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4" id="processing-icon">
             <i class="fas fa-spinner fa-spin text-2xl text-indigo-600"></i>
         </div>
-        <p class="text-gray-700 font-medium text-lg">Processando transcrição com IA...</p>
+        <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA...</p>
         <p class="text-sm text-gray-400 mt-2">Transcrição de áudio + análise avançada com GPT-4o</p>
-        <p class="text-xs text-gray-400 mt-1">Atualize a página em alguns instantes.</p>
+        <p class="text-xs text-gray-400 mt-1 mb-5">Criado em {{ transcription.created_at|date:"d/m/Y H:i" }}</p>
+        <button onclick="reprocessTranscription({{ transcription.pk }})" id="btn-reprocess-processing"
+                class="inline-flex items-center px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition shadow-sm">
+            <i class="fas fa-redo mr-2"></i> Reiniciar Processamento
+        </button>
+        <p class="text-xs text-gray-400 mt-3">Se está travado, clique para reiniciar a transcrição desde o início.</p>
     </div>
     {% endif %}
 </div>
@@ -453,6 +467,38 @@ function toggleRaw() {
         raw.classList.add('hidden');
         fmt.classList.remove('hidden');
         btn.innerHTML = '<i class="fas fa-code mr-1"></i> Ver texto bruto';
+    }
+}
+
+// ---- Reprocess transcription ----
+async function reprocessTranscription(transcriptionId) {
+    const btn = event.currentTarget;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Reprocessando...';
+
+    try {
+        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/reprocess/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+        });
+        const data = await resp.json();
+        if (resp.ok && data.redirect) {
+            window.location.href = data.redirect;
+        } else if (resp.ok) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Erro ao reprocessar.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    } catch (err) {
+        alert('Erro de conexão: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
     }
 }
 

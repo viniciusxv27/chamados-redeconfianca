@@ -1066,3 +1066,193 @@ def api_transcription_assign_task(request, pk, task_id):
         'assigned_to': target_user.get_full_name() or target_user.username,
         'message': f'Tarefa atribuída a {target_user.get_full_name() or target_user.username}!'
     })
+
+
+@login_required
+@require_POST
+def api_transcription_reprocess(request, pk):
+    """Reiniciar o processamento de uma transcrição (processing travada ou com erro).
+    
+    Se já existe raw_transcription, pula o Whisper e refaz apenas a análise GPT-4o.
+    Se não existe, refaz tudo desde o Whisper.
+    """
+    import openai
+    import json as json_module
+    from django.conf import settings as django_settings
+
+    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+
+    if transcription.status == 'completed':
+        # Permitir reprocessar mesmo completas (o usuário quer "priorizar" = refazer)
+        pass
+
+    api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        return JsonResponse({'error': 'Chave da API OpenAI não configurada.'}, status=500)
+
+    transcription.status = 'processing'
+    transcription.error_message = ''
+    transcription.save(update_fields=['status', 'error_message'])
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+
+        # Se já tem raw_transcription, pula Whisper
+        raw_text = transcription.raw_transcription or ''
+
+        if not raw_text and transcription.audio_file:
+            # Precisa transcrever com Whisper
+            transcription.audio_file.open('rb')
+            audio_data = transcription.audio_file.read()
+            transcription.audio_file.close()
+            audio_size = len(audio_data)
+
+            fname = transcription.audio_file.name or 'audio.webm'
+            content_type = 'audio/webm'
+
+            WHISPER_MAX_SIZE = 24 * 1024 * 1024
+
+            if audio_size <= WHISPER_MAX_SIZE:
+                file_tuple = (fname, audio_data, content_type)
+                whisper_response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=file_tuple,
+                    language="pt",
+                    response_format="verbose_json",
+                    timestamp_granularities=["segment"],
+                )
+                if hasattr(whisper_response, 'text'):
+                    raw_text = whisper_response.text
+                    if hasattr(whisper_response, 'duration') and whisper_response.duration:
+                        transcription.duration_seconds = int(whisper_response.duration)
+                else:
+                    raw_text = str(whisper_response)
+            else:
+                raw_text = _transcribe_large_audio(client, audio_data, fname, content_type)
+
+            transcription.raw_transcription = raw_text
+            transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
+
+        if not raw_text:
+            transcription.status = 'error'
+            transcription.error_message = 'Sem áudio ou transcrição bruta para processar.'
+            transcription.save(update_fields=['status', 'error_message'])
+            return JsonResponse({'error': 'Sem áudio ou transcrição bruta para processar.'}, status=400)
+
+        # Análise GPT-4o
+        today_str = timezone.now().strftime('%Y-%m-%d')
+        system_prompt = (
+            "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
+            "Analise a transcrição da reunião e retorne um JSON estruturado com a seguinte análise completa:\n\n"
+            "RETORNE UM JSON com estas chaves:\n\n"
+            '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
+            '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
+            '   - "title": Título descritivo do tópico\n'
+            '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line")\n'
+            '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
+            '   - "highlights": Lista de frases-chave ou citações importantes\n'
+            '   - "duration_estimate": Estimativa de duração em minutos\n\n'
+            '3. "key_decisions": Lista de decisões. Cada uma com:\n'
+            '   - "decision": Texto da decisão\n'
+            '   - "context": Breve contexto\n'
+            '   - "impact": "high", "medium" ou "low"\n\n'
+            '4. "action_items": Lista de itens de ação. Cada um com:\n'
+            '   - "task": Descrição da tarefa\n'
+            '   - "responsible": Nome do responsável (ou "A definir")\n'
+            '   - "deadline": Prazo ISO date ou null\n'
+            '   - "priority": "high", "medium" ou "low"\n\n'
+            '5. "participants_identified": Lista de nomes de participantes.\n\n'
+            '6. "sentiment": "positive", "neutral", "negative" ou "mixed".\n\n'
+            '7. "meeting_type_detected": "standup", "planning", "review", "brainstorm", '
+            '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
+            '8. "tags": Lista de 3-8 tags relevantes.\n\n'
+            '9. "formatted": Transcrição completa formatada com parágrafos e identificação de falantes.\n\n'
+            '10. "suggested_events": Lista de compromissos futuros. Cada um com:\n'
+            '    - "title": Título\n'
+            '    - "description": Descrição\n'
+            f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
+            "IMPORTANTE: Divida a reunião em pelo menos 3 seções se possível. "
+            "Responda APENAS com JSON válido, sem markdown, sem ```.\n"
+        )
+
+        gpt_response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Transcrição da reunião '{transcription.title}':\n\n{raw_text}"}
+            ],
+            temperature=0.2,
+            max_tokens=4096,
+        )
+
+        gpt_text = gpt_response.choices[0].message.content.strip()
+        if gpt_text.startswith('```'):
+            lines = gpt_text.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            gpt_text = '\n'.join(lines)
+
+        parsed = json_module.loads(gpt_text)
+
+        transcription.formatted_transcription = parsed.get('formatted', raw_text)
+        transcription.summary = parsed.get('summary', '')
+        transcription.sections = parsed.get('sections', [])
+        transcription.key_decisions = parsed.get('key_decisions', [])
+        transcription.action_items = parsed.get('action_items', [])
+        transcription.participants_identified = parsed.get('participants_identified', [])
+        transcription.sentiment = parsed.get('sentiment', 'neutral')
+        transcription.meeting_type_detected = parsed.get('meeting_type_detected', 'general')
+        transcription.tags = parsed.get('tags', [])
+        transcription.suggested_events = parsed.get('suggested_events', [])
+        transcription.status = 'completed'
+        transcription.save()
+
+        # Criar evento na agenda se ainda não existe
+        if not transcription.calendar_event_created:
+            now = timezone.now()
+            cal_event = CalendarEvent.objects.create(
+                owner=request.user,
+                title=f"📝 Transcrição: {transcription.title}",
+                description=(
+                    f"Transcrição de reunião processada com IA.\n\n"
+                    f"📋 Resumo: {transcription.summary[:200]}...\n"
+                    f"✅ Itens de ação: {len(transcription.action_items)}\n"
+                    f"🎯 Decisões: {len(transcription.key_decisions)}\n\n"
+                    f"Ver transcrição completa: /agenda/transcricoes/{transcription.pk}/"
+                ),
+                event_type='task',
+                color='#9333ea',
+                start=now - timedelta(seconds=max(transcription.duration_seconds or 60, 60)),
+                end=now,
+                all_day=False,
+            )
+            transcription.calendar_event_created = cal_event
+            transcription.save(update_fields=['calendar_event_created'])
+
+        # Criar tarefas se ainda não existem
+        if not transcription.tasks_created.exists():
+            _create_tasks_from_transcription(transcription, request.user)
+
+        return JsonResponse({
+            'ok': True,
+            'status': 'completed',
+            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        })
+
+    except json_module.JSONDecodeError:
+        transcription.formatted_transcription = transcription.raw_transcription
+        transcription.summary = 'Erro ao processar análise avançada. Transcrição bruta disponível.'
+        transcription.status = 'completed'
+        transcription.save()
+        return JsonResponse({
+            'ok': True,
+            'status': 'completed',
+            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        })
+    except Exception as e:
+        transcription.status = 'error'
+        transcription.error_message = str(e)
+        transcription.save(update_fields=['status', 'error_message'])
+        return JsonResponse({'error': f'Erro ao reprocessar: {str(e)}'}, status=500)
