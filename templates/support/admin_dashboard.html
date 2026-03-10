@@ -1884,7 +1884,7 @@ function openTransferModal(ticketId) {
                 data.agents.forEach(agent => {
                     const option = document.createElement('option');
                     option.value = agent.user.id;
-                    option.textContent = agent.user.get_full_name;
+                    option.textContent = agent.user.name;
                     option.style.color = '#111827';
                     option.style.backgroundColor = '#ffffff';
                     select.appendChild(option);
