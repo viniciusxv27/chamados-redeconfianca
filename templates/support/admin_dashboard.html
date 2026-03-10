@@ -247,6 +247,17 @@
     <!-- List View (hidden by default) -->
     <div id="list-view" class="hidden h-[70vh] overflow-hidden">
         <div class="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
+            <!-- Filtro de Status -->
+            <div class="p-3 border-b border-gray-200 bg-gray-50 flex items-center gap-4">
+                <label class="text-sm font-medium text-gray-700">Filtrar por Status:</label>
+                <select id="listStatusFilter" onchange="applyListFilter()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Todos</option>
+                    <option value="ABERTO">Abertos</option>
+                    <option value="EM_ANDAMENTO">Em Andamento</option>
+                    <option value="FECHADO">Fechados</option>
+                </select>
+                <span id="listFilterCount" class="text-sm text-gray-500"></span>
+            </div>
             <div class="overflow-x-auto flex-1">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50 sticky top-0">
@@ -1167,10 +1178,26 @@ function toggleView(view) {
     }
 }
 
+// Armazenar tickets para filtro
+let allTicketsData = [];
+
 // Renderizar lista de tickets
 function renderListView(tickets) {
     const listContainer = document.getElementById('list-tickets');
     if (!listContainer) return;
+    
+    // Armazenar todos os tickets para filtro
+    allTicketsData = tickets;
+    
+    // Aplicar filtro atual
+    const filter = document.getElementById('listStatusFilter')?.value || '';
+    const filteredTickets = filter ? tickets.filter(t => t.status === filter) : tickets;
+    
+    // Atualizar contador
+    const countEl = document.getElementById('listFilterCount');
+    if (countEl) {
+        countEl.textContent = filter ? `(${filteredTickets.length} de ${tickets.length})` : `(${tickets.length} tickets)`;
+    }
     
     const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
     const statusColors = {
@@ -1188,7 +1215,7 @@ function renderListView(tickets) {
         'urgente': 'bg-red-100 text-red-800'
     };
     
-    listContainer.innerHTML = tickets.map(ticket => {
+    listContainer.innerHTML = filteredTickets.map(ticket => {
         const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at, ticket.started_at);
         const statusClass = statusColors[ticket.status] || 'bg-gray-100 text-gray-800';
         const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
@@ -1228,6 +1255,13 @@ function renderListView(tickets) {
             </tr>
         `;
     }).join('');
+}
+
+// Função para aplicar filtro na lista
+function applyListFilter() {
+    if (allTicketsData.length > 0) {
+        renderListView(allTicketsData);
+    }
 }
 
 function deleteTicket(ticketId, ticketTitle) {
