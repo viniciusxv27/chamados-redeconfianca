@@ -5,6 +5,16 @@
 
 {% block extra_css %}
 <style>
+    /* Forçar cor escura nos selects dos modais */
+    #transferAgentSelect,
+    #transferAgentSelect option,
+    #changeCategorySelect,
+    #changeCategorySelect option,
+    #changeCategorySelect optgroup {
+        color: #111827 !important;
+        background-color: #ffffff !important;
+    }
+    
     /* Estilização customizada da barra de rolagem */
     #chatMessages::-webkit-scrollbar {
         width: 8px;
