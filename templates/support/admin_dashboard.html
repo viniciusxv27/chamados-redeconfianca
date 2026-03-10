@@ -1864,24 +1864,26 @@ function openTransferModal(ticketId) {
     
     // Carregar agentes
     const select = document.getElementById('transferAgentSelect');
-    select.innerHTML = '<option value="">Carregando...</option>';
+    select.innerHTML = '<option value="" style="color: #111827;">Carregando...</option>';
     
     fetch('/projects/support/api/agents/')
         .then(response => response.json())
         .then(data => {
-            select.innerHTML = '<option value="">Selecione um agente</option>';
+            select.innerHTML = '<option value="" style="color: #111827;">Selecione um agente</option>';
             if (data.success && data.agents) {
                 data.agents.forEach(agent => {
                     const option = document.createElement('option');
                     option.value = agent.user.id;
                     option.textContent = agent.user.get_full_name;
+                    option.style.color = '#111827';
+                    option.style.backgroundColor = '#ffffff';
                     select.appendChild(option);
                 });
             }
         })
         .catch(error => {
             console.error('Erro ao carregar agentes:', error);
-            select.innerHTML = '<option value="">Erro ao carregar</option>';
+            select.innerHTML = '<option value="" style="color: #111827;">Erro ao carregar</option>';
         });
 }
 
@@ -1930,12 +1932,12 @@ function openChangeCategoryModal(ticketId, sectorId) {
     
     // Carregar categorias
     const select = document.getElementById('changeCategorySelect');
-    select.innerHTML = '<option value="">Carregando...</option>';
+    select.innerHTML = '<option value="" style="color: #111827;">Carregando...</option>';
     
     fetch('/projects/support/api/categories/')
         .then(response => response.json())
         .then(data => {
-            select.innerHTML = '<option value="">Selecione uma categoria</option>';
+            select.innerHTML = '<option value="" style="color: #111827;">Selecione uma categoria</option>';
             if (data.success && data.categories) {
                 // Agrupar por setor
                 const grouped = {};
@@ -1949,10 +1951,14 @@ function openChangeCategoryModal(ticketId, sectorId) {
                 for (const [sectorName, categories] of Object.entries(grouped)) {
                     const optgroup = document.createElement('optgroup');
                     optgroup.label = sectorName;
+                    optgroup.style.color = '#111827';
+                    optgroup.style.fontWeight = 'bold';
                     categories.forEach(cat => {
                         const option = document.createElement('option');
                         option.value = cat.id;
                         option.textContent = cat.name;
+                        option.style.color = '#111827';
+                        option.style.backgroundColor = '#ffffff';
                         optgroup.appendChild(option);
                     });
                     select.appendChild(optgroup);
