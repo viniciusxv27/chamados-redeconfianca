@@ -252,9 +252,25 @@ async function submitTranscription() {
             headers: { 'X-CSRFToken': '{{ csrf_token }}' },
             body: formData,
         });
-        const data = await resp.json();
 
         clearInterval(stepInterval);
+
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            // Servidor retornou HTML (timeout, erro 500, etc.)
+            if (resp.status === 413) {
+                alert('Arquivo de áudio muito grande. Tente um arquivo menor ou comprima o áudio.');
+            } else if (resp.status === 502 || resp.status === 504) {
+                alert('O processamento demorou demais e o servidor não respondeu a tempo. A transcrição pode ainda estar sendo processada. Verifique a lista de transcrições em alguns minutos.');
+            } else {
+                alert('Erro no servidor (código ' + resp.status + '). A transcrição pode estar sendo processada em segundo plano. Verifique a lista de transcrições.');
+            }
+            document.getElementById('btn-submit').disabled = false;
+            document.getElementById('processing-status').classList.add('hidden');
+            return;
+        }
+
+        const data = await resp.json();
         if (resp.ok && data.redirect) {
             window.location.href = data.redirect;
         } else {
@@ -264,7 +280,7 @@ async function submitTranscription() {
         }
     } catch (err) {
         clearInterval(stepInterval);
-        alert('Erro de conexão: ' + err.message);
+        alert('Erro de conexão. O processamento pode estar acontecendo em segundo plano. Verifique a lista de transcrições em alguns minutos.');
         document.getElementById('btn-submit').disabled = false;
         document.getElementById('processing-status').classList.add('hidden');
     }

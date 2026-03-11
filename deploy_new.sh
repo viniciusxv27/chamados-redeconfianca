@@ -92,7 +92,7 @@ echo "🌐 Iniciando servidor Gunicorn..."
 echo "📊 Configurações:"
 echo "   - Porta: ${PORT:-8000}"
 echo "   - Workers: ${WEB_CONCURRENCY:-3}"
-echo "   - Timeout: 120s"
+echo "   - Timeout: 600s"
 echo "   - Database: ${DATABASE_URL:0:20}..."
 
 # Iniciar servidor com logs detalhados
@@ -100,7 +100,7 @@ exec gunicorn redeconfianca.wsgi:application \
     --bind 0.0.0.0:${PORT:-8000} \
     --workers ${WEB_CONCURRENCY:-3} \
     --worker-class sync \
-    --timeout 120 \
+    --timeout 600 \
     --keep-alive 2 \
     --max-requests 1000 \
     --max-requests-jitter 100 \

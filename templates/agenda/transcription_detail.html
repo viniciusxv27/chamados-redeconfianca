@@ -485,6 +485,19 @@ async function reprocessTranscription(transcriptionId) {
                 'X-CSRFToken': '{{ csrf_token }}',
             },
         });
+
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            if (resp.status === 502 || resp.status === 504) {
+                alert('O reprocessamento demorou demais. Aguarde e atualize a página.');
+            } else {
+                alert('Erro no servidor (código ' + resp.status + '). O reprocessamento pode estar ocorrendo em segundo plano. Atualize a página em alguns minutos.');
+            }
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            return;
+        }
+
         const data = await resp.json();
         if (resp.ok && data.redirect) {
             window.location.href = data.redirect;
@@ -496,7 +509,7 @@ async function reprocessTranscription(transcriptionId) {
             btn.innerHTML = originalHtml;
         }
     } catch (err) {
-        alert('Erro de conexão: ' + err.message);
+        alert('O reprocessamento pode estar acontecendo em segundo plano. Atualize a página em alguns minutos.');
         btn.disabled = false;
         btn.innerHTML = originalHtml;
     }
