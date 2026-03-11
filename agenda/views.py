@@ -751,33 +751,12 @@ def api_transcription_upload(request):
     try:
         client = openai.OpenAI(api_key=api_key)
 
-        # 1. Transcrever áudio com Whisper — com split automático para arquivos grandes
+        # 1. Transcrever áudio com Whisper (converte para mp3 via ffmpeg)
         audio_file.seek(0)
         audio_data = audio_file.read()
-        audio_size = len(audio_data)
-
-        WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 24MB (margem do limite de 25MB)
-
-        if audio_size <= WHISPER_MAX_SIZE:
-            # Arquivo pequeno: enviar direto
-            file_tuple = (audio_file.name, audio_data, audio_file.content_type or 'audio/webm')
-            whisper_response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=file_tuple,
-                language="pt",
-                response_format="verbose_json",
-                timestamp_granularities=["segment"],
-            )
-            if hasattr(whisper_response, 'text'):
-                raw_text = whisper_response.text
-                if hasattr(whisper_response, 'duration') and whisper_response.duration:
-                    transcription.duration_seconds = int(whisper_response.duration)
-            else:
-                raw_text = str(whisper_response)
-        else:
-            # Arquivo grande: dividir em partes e transcrever cada uma
-            raw_text = _transcribe_large_audio(client, audio_data, audio_file.name,
-                                                audio_file.content_type or 'audio/webm')
+        raw_text, duration = _transcribe_audio(client, audio_data, audio_file.name)
+        if duration:
+            transcription.duration_seconds = duration
 
         transcription.raw_transcription = raw_text
 
@@ -901,34 +880,154 @@ def api_transcription_upload(request):
         return JsonResponse({'error': f'Erro ao processar: {str(e)}'}, status=500)
 
 
-def _transcribe_large_audio(client, audio_data, filename, content_type):
-    """Divide áudio grande em chunks de ~24MB e transcreve cada parte."""
+def _convert_to_mp3(audio_data, original_filename):
+    """Converte áudio para mp3 usando ffmpeg. Retorna path do arquivo mp3 temporário."""
+    import subprocess
+    import tempfile
+    import os
+
+    ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else 'webm'
+    tmp_input = tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False)
+    tmp_input.write(audio_data)
+    tmp_input.close()
+
+    tmp_output = tmp_input.name.rsplit('.', 1)[0] + '.mp3'
+
+    try:
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', tmp_input.name, '-vn', '-acodec', 'libmp3lame',
+             '-ab', '64k', '-ar', '16000', '-ac', '1', tmp_output],
+            capture_output=True, timeout=300, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        # Se ffmpeg falhar, tenta enviar o original (pode funcionar se já for formato válido)
+        os.unlink(tmp_input.name)
+        return None, audio_data, original_filename
+    finally:
+        if os.path.exists(tmp_input.name):
+            os.unlink(tmp_input.name)
+
+    return tmp_output, None, None
+
+
+def _transcribe_audio(client, audio_data, original_filename):
+    """Converte para mp3, divide se necessário, e transcreve com Whisper.
+    Retorna (raw_text, duration_seconds)."""
+    import os
     import math
+    import subprocess
+    import tempfile
 
-    chunk_size = 24 * 1024 * 1024  # 24MB
-    total_size = len(audio_data)
-    num_chunks = math.ceil(total_size / chunk_size)
+    WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 24MB
 
-    all_text_parts = []
-    for i in range(num_chunks):
-        start = i * chunk_size
-        end = min((i + 1) * chunk_size, total_size)
-        chunk = audio_data[start:end]
+    # Converter para mp3 (mono 64kbps 16kHz — muito menor que o original)
+    mp3_path, fallback_data, fallback_name = _convert_to_mp3(audio_data, original_filename)
 
-        ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'webm'
-        chunk_name = f"part_{i + 1}.{ext}"
-        file_tuple = (chunk_name, chunk, content_type)
+    if mp3_path:
+        mp3_size = os.path.getsize(mp3_path)
 
+        if mp3_size <= WHISPER_MAX_SIZE:
+            # Arquivo cabe num único envio
+            with open(mp3_path, 'rb') as f:
+                mp3_data = f.read()
+            os.unlink(mp3_path)
+
+            whisper_response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=('audio.mp3', mp3_data, 'audio/mpeg'),
+                language="pt",
+                response_format="verbose_json",
+                timestamp_granularities=["segment"],
+            )
+            duration = None
+            if hasattr(whisper_response, 'text'):
+                raw_text = whisper_response.text
+                if hasattr(whisper_response, 'duration') and whisper_response.duration:
+                    duration = int(whisper_response.duration)
+            else:
+                raw_text = str(whisper_response)
+            return raw_text, duration
+        else:
+            # Ainda grande demais — dividir por tempo com ffmpeg
+            raw_text = _split_and_transcribe(client, mp3_path, mp3_size)
+            os.unlink(mp3_path)
+            return raw_text, None
+    else:
+        # ffmpeg não disponível, enviar original
+        file_tuple = (fallback_name or 'audio.webm', fallback_data, 'audio/webm')
         whisper_response = client.audio.transcriptions.create(
             model="whisper-1",
             file=file_tuple,
             language="pt",
-            response_format="text",
+            response_format="verbose_json",
+            timestamp_granularities=["segment"],
         )
-        text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
-        all_text_parts.append(text.strip())
+        duration = None
+        if hasattr(whisper_response, 'text'):
+            raw_text = whisper_response.text
+            if hasattr(whisper_response, 'duration') and whisper_response.duration:
+                duration = int(whisper_response.duration)
+        else:
+            raw_text = str(whisper_response)
+        return raw_text, duration
 
-    return ' '.join(all_text_parts)
+
+def _split_and_transcribe(client, mp3_path, mp3_size):
+    """Divide mp3 grande em segmentos de ~10min e transcreve cada parte."""
+    import subprocess
+    import tempfile
+    import os
+    import glob
+
+    WHISPER_MAX_SIZE = 24 * 1024 * 1024
+    # Calcular duração do áudio
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', mp3_path],
+            capture_output=True, text=True, timeout=30,
+        )
+        total_duration = float(result.stdout.strip())
+    except Exception:
+        total_duration = 3600  # fallback: assume 1 hora
+
+    # Segmentos de 10 minutos
+    segment_seconds = 600
+    num_segments = max(1, int(total_duration / segment_seconds) + 1)
+
+    tmp_dir = tempfile.mkdtemp()
+    segment_pattern = os.path.join(tmp_dir, 'seg_%03d.mp3')
+
+    try:
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', mp3_path, '-f', 'segment',
+             '-segment_time', str(segment_seconds), '-acodec', 'libmp3lame',
+             '-ab', '64k', '-ar', '16000', '-ac', '1', segment_pattern],
+            capture_output=True, timeout=300, check=True,
+        )
+
+        segment_files = sorted(glob.glob(os.path.join(tmp_dir, 'seg_*.mp3')))
+        all_text_parts = []
+
+        for seg_file in segment_files:
+            with open(seg_file, 'rb') as f:
+                seg_data = f.read()
+
+            whisper_response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=('segment.mp3', seg_data, 'audio/mpeg'),
+                language="pt",
+                response_format="text",
+            )
+            text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
+            all_text_parts.append(text.strip())
+
+        return ' '.join(all_text_parts)
+    finally:
+        # Limpar arquivos temporários
+        for f in glob.glob(os.path.join(tmp_dir, '*')):
+            os.unlink(f)
+        os.rmdir(tmp_dir)
 
 
 def _create_tasks_from_transcription(transcription, user):
@@ -1105,30 +1204,11 @@ def api_transcription_reprocess(request, pk):
             transcription.audio_file.open('rb')
             audio_data = transcription.audio_file.read()
             transcription.audio_file.close()
-            audio_size = len(audio_data)
 
             fname = transcription.audio_file.name or 'audio.webm'
-            content_type = 'audio/webm'
-
-            WHISPER_MAX_SIZE = 24 * 1024 * 1024
-
-            if audio_size <= WHISPER_MAX_SIZE:
-                file_tuple = (fname, audio_data, content_type)
-                whisper_response = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=file_tuple,
-                    language="pt",
-                    response_format="verbose_json",
-                    timestamp_granularities=["segment"],
-                )
-                if hasattr(whisper_response, 'text'):
-                    raw_text = whisper_response.text
-                    if hasattr(whisper_response, 'duration') and whisper_response.duration:
-                        transcription.duration_seconds = int(whisper_response.duration)
-                else:
-                    raw_text = str(whisper_response)
-            else:
-                raw_text = _transcribe_large_audio(client, audio_data, fname, content_type)
+            raw_text, duration = _transcribe_audio(client, audio_data, fname)
+            if duration:
+                transcription.duration_seconds = duration
 
             transcription.raw_transcription = raw_text
             transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
