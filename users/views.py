@@ -737,26 +737,47 @@ def create_user_view(request):
     if request.method == 'POST':
         email = request.POST.get('email')
         username = request.POST.get('username')
-        first_name = request.POST.get('first_name')
-        last_name = request.POST.get('last_name')
+        full_name = request.POST.get('full_name', '').strip()
+        name_parts = full_name.split()
+        first_name = name_parts[0] if name_parts else ''
+        last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
         password = request.POST.get('password')
         sector_id = request.POST.get('sector')
+        sectors_ids = request.POST.getlist('sectors')
         hierarchy = request.POST.get('hierarchy')
         phone = request.POST.get('phone')
         disc_profile = request.POST.get('disc_profile')
         uniform_size_shirt = request.POST.get('uniform_size_shirt')
         uniform_size_pants = request.POST.get('uniform_size_pants')
+        is_active = request.POST.get('is_active') == 'on'
+        
+        # Campos de RH
+        cpf = request.POST.get('cpf', '')
+        pis = request.POST.get('pis', '')
+        job_title = request.POST.get('job_title', '')
+        birth_date = request.POST.get('birth_date', '')
+        admission_date = request.POST.get('admission_date', '')
+        login_code = request.POST.get('login_code', '')
+        pdv = request.POST.get('pdv', '')
+        neighborhood = request.POST.get('neighborhood', '')
+        city = request.POST.get('city', '')
+        
+        context = {
+            'sectors': Sector.objects.all(),
+            'hierarchy_choices': User.HIERARCHY_CHOICES,
+            'user': request.user,
+        }
         
         try:
             # Verificar se email já existe
             if User.objects.filter(email=email).exists():
                 messages.error(request, 'Email já existe.')
-                return render(request, 'admin/create_user.html', {'sectors': Sector.objects.all()})
+                return render(request, 'admin/create_user.html', context)
             
             # Verificar se username já existe
             if User.objects.filter(username=username).exists():
                 messages.error(request, 'Nome de usuário já existe.')
-                return render(request, 'admin/create_user.html', {'sectors': Sector.objects.all()})
+                return render(request, 'admin/create_user.html', context)
             
             sector = get_object_or_404(Sector, id=sector_id) if sector_id else None
             
@@ -771,8 +792,27 @@ def create_user_view(request):
                 phone=phone,
                 disc_profile=disc_profile,
                 uniform_size_shirt=uniform_size_shirt,
-                uniform_size_pants=uniform_size_pants
+                uniform_size_pants=uniform_size_pants,
+                is_active=is_active,
+                cpf=cpf,
+                pis=pis,
+                job_title=job_title,
+                birth_date=birth_date if birth_date else None,
+                admission_date=admission_date if admission_date else None,
+                login_code=login_code,
+                pdv=pdv,
+                neighborhood=neighborhood,
+                city=city,
             )
+            
+            # Atualizar setores múltiplos
+            sectors = Sector.objects.filter(id__in=sectors_ids) if sectors_ids else Sector.objects.none()
+            user.sectors.set(sectors)
+            
+            # Se não tem setor principal definido, definir o primeiro da lista
+            if not user.sector and sectors.exists():
+                user.sector = sectors.first()
+                user.save()
             
             log_action(
                 request.user, 

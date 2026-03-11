@@ -35,23 +35,16 @@
                 
                 <!-- Personal Information -->
                 <div class="space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 gap-6">
                         <div>
-                            <label for="first_name" class="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+                            <label for="full_name" class="block text-sm font-medium text-gray-700 mb-2">Nome Completo *</label>
                             <input type="text" 
-                                   id="first_name" 
-                                   name="first_name" 
+                                   id="full_name" 
+                                   name="full_name" 
                                    required
+                                   placeholder="Ex: João da Silva"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        </div>
-                        
-                        <div>
-                            <label for="last_name" class="block text-sm font-medium text-gray-700 mb-2">Sobrenome *</label>
-                            <input type="text" 
-                                   id="last_name" 
-                                   name="last_name" 
-                                   required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Digite o nome completo (primeiro nome será usado como nome, o restante como sobrenome)</p>
                         </div>
                     </div>
 
@@ -113,13 +106,14 @@
                         <div>
                             <label for="uniform_size_shirt" class="block text-sm font-medium text-gray-700 mb-2">
                                 <i class="fas fa-tshirt mr-1 text-blue-500"></i>
-                                Tamanho Uniforme (Blusa)
+                                Tamanho Uniforme (Blusa) *
                             </label>
                             <input type="text" 
                                    id="uniform_size_shirt" 
                                    name="uniform_size_shirt" 
                                    maxlength="3"
                                    placeholder="ex: P, M, G, GG"
+                                   required
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                             <p class="text-xs text-gray-500 mt-1">Tamanho da blusa do uniforme</p>
                         </div>
@@ -127,21 +121,123 @@
                         <div>
                             <label for="uniform_size_pants" class="block text-sm font-medium text-gray-700 mb-2">
                                 <i class="fas fa-user-tie mr-1 text-green-500"></i>
-                                Tamanho Uniforme (Calça)
+                                Tamanho Uniforme (Calça) *
                             </label>
                             <input type="text" 
                                    id="uniform_size_pants" 
                                    name="uniform_size_pants" 
                                    maxlength="3"
                                    placeholder="ex: P, M, G, 38, 40"
+                                   required
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                             <p class="text-xs text-gray-500 mt-1">Tamanho da calça do uniforme</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Dados Pessoais/RH -->
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            <i class="fas fa-id-card text-primary mr-2"></i>
+                            Dados Pessoais / RH
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <label for="cpf" class="block text-sm font-medium text-gray-700 mb-2">CPF *</label>
+                                <input type="text" 
+                                       id="cpf" 
+                                       name="cpf" 
+                                       maxlength="14"
+                                       placeholder="000.000.000-00"
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label for="pis" class="block text-sm font-medium text-gray-700 mb-2">PIS *</label>
+                                <input type="text" 
+                                       id="pis" 
+                                       name="pis" 
+                                       maxlength="20"
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label for="job_title" class="block text-sm font-medium text-gray-700 mb-2">Cargo *</label>
+                                <input type="text" 
+                                       id="job_title" 
+                                       name="job_title" 
+                                       maxlength="100"
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                            <div>
+                                <label for="birth_date" class="block text-sm font-medium text-gray-700 mb-2">Data de Nascimento *</label>
+                                <input type="date" 
+                                       id="birth_date" 
+                                       name="birth_date" 
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label for="admission_date" class="block text-sm font-medium text-gray-700 mb-2">Data de Admissão *</label>
+                                <input type="date" 
+                                       id="admission_date" 
+                                       name="admission_date" 
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label for="login_code" class="block text-sm font-medium text-gray-700 mb-2">Login/Código</label>
+                                <input type="text" 
+                                       id="login_code" 
+                                       name="login_code" 
+                                       maxlength="20"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                            <div>
+                                <label for="pdv" class="block text-sm font-medium text-gray-700 mb-2">PDV</label>
+                                <input type="text" 
+                                       id="pdv" 
+                                       name="pdv" 
+                                       maxlength="100"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label for="neighborhood" class="block text-sm font-medium text-gray-700 mb-2">Bairro *</label>
+                                <input type="text" 
+                                       id="neighborhood" 
+                                       name="neighborhood" 
+                                       maxlength="100"
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            
+                            <div>
+                                <label for="city" class="block text-sm font-medium text-gray-700 mb-2">Cidade *</label>
+                                <input type="text" 
+                                       id="city" 
+                                       name="city" 
+                                       maxlength="100"
+                                       required
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
                         <div>
-                            <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                            <label for="sector" class="block text-sm font-medium text-gray-700 mb-2">Setor Principal</label>
                             <select id="sector" 
                                     name="sector"
                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
@@ -153,6 +249,59 @@
                         </div>
                         
                         <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <label class="block text-sm font-medium text-gray-700">Todos os Setores</label>
+                                <div class="flex space-x-2">
+                                    <button type="button" id="selectAllSectors" class="text-xs text-primary hover:text-orange-600 font-medium">
+                                        <i class="fas fa-check-double mr-1"></i>Selecionar Todos
+                                    </button>
+                                    <button type="button" id="clearAllSectors" class="text-xs text-gray-500 hover:text-gray-700 font-medium">
+                                        <i class="fas fa-times mr-1"></i>Limpar Todos
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                {% for sector in sectors %}
+                                <div class="relative">
+                                    <input type="checkbox" 
+                                           id="sector_{{ sector.id }}" 
+                                           name="sectors" 
+                                           value="{{ sector.id }}"
+                                           class="hidden sector-checkbox">
+                                    <label for="sector_{{ sector.id }}" 
+                                           class="sector-card flex items-center w-full p-3 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 hover:border-primary hover:shadow-sm transition-all duration-200 transform hover:scale-102">
+                                        <div class="flex items-center flex-1 min-w-0">
+                                            <div class="sector-icon w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3 flex-shrink-0 transition-colors">
+                                                <i class="fas fa-building text-gray-400 transition-colors text-sm"></i>
+                                            </div>
+                                            <span class="font-medium truncate pr-2">{{ sector.name }}</span>
+                                        </div>
+                                        <div class="flex items-center flex-shrink-0">
+                                            <div class="sector-check w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center transition-all">
+                                                <i class="fas fa-check text-xs text-transparent transition-colors"></i>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                {% empty %}
+                                <div class="col-span-full text-center py-8 text-gray-500">
+                                    <i class="fas fa-building-slash text-3xl mb-3 text-gray-300"></i>
+                                    <p class="font-medium">Nenhum setor cadastrado</p>
+                                    <p class="text-xs">Cadastre setores para poder associá-los aos usuários</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+                                <span>Clique nos cards para selecionar/desselecionar</span>
+                                <span id="selectedCount" class="font-medium">
+                                    0 selecionados
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
                             <label for="hierarchy" class="block text-sm font-medium text-gray-700 mb-2">Hierarquia *</label>
                             <select id="hierarchy" 
                                     name="hierarchy" 
@@ -162,6 +311,20 @@
                                 <option value="{{ key }}">{{ value }}</option>
                                 {% endfor %}
                             </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                            <div class="flex items-center">
+                                <input type="checkbox" 
+                                       id="is_active" 
+                                       name="is_active" 
+                                       checked
+                                       class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2">
+                                <label for="is_active" class="ml-2 text-sm text-gray-700">
+                                    Usuário Ativo
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -184,4 +347,128 @@
         </div>
     </div>
 </div>
+
+<style>
+.sector-card {
+    min-height: 56px;
+}
+
+.sector-card:hover {
+    transform: scale(1.02) !important;
+}
+
+.sector-card.selected {
+    background-color: #f97316 !important;
+    color: white !important;
+    border-color: #f97316 !important;
+    box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.1), 0 2px 4px -1px rgba(249, 115, 22, 0.06) !important;
+    transform: scale(1.02) !important;
+}
+
+.sector-card.selected .sector-icon {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.sector-card.selected .sector-icon i {
+    color: white !important;
+}
+
+.sector-card.selected .sector-check {
+    border-color: white !important;
+    background-color: white !important;
+}
+
+.sector-card.selected .sector-check i {
+    color: #f97316 !important;
+}
+
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sectorCheckboxes = document.querySelectorAll('input[name="sectors"]');
+    const primarySectorSelect = document.getElementById('sector');
+    const selectedCountElement = document.getElementById('selectedCount');
+    const selectAllBtn = document.getElementById('selectAllSectors');
+    const clearAllBtn = document.getElementById('clearAllSectors');
+    
+    function updateCardStates() {
+        sectorCheckboxes.forEach(checkbox => {
+            const card = checkbox.nextElementSibling;
+            if (checkbox.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+    }
+    
+    function updateSelectedCount() {
+        const checkedCount = document.querySelectorAll('input[name="sectors"]:checked').length;
+        selectedCountElement.textContent = `${checkedCount} selecionado${checkedCount !== 1 ? 's' : ''}`;
+    }
+    
+    function updatePrimarySectorOptions() {
+        const checkedSectors = Array.from(document.querySelectorAll('input[name="sectors"]:checked'));
+        const primarySectorValue = primarySectorSelect.value;
+        
+        Array.from(primarySectorSelect.options).forEach((option, index) => {
+            if (index === 0) return;
+            option.remove();
+        });
+        
+        checkedSectors.forEach(checkbox => {
+            const sectorId = checkbox.value;
+            const sectorName = checkbox.closest('div').querySelector('span').textContent;
+            const option = new Option(sectorName, sectorId);
+            
+            if (sectorId === primarySectorValue) {
+                option.selected = true;
+            }
+            
+            primarySectorSelect.add(option);
+        });
+        
+        if (primarySectorValue && !checkedSectors.some(cb => cb.value === primarySectorValue)) {
+            primarySectorSelect.value = '';
+        }
+    }
+    
+    sectorCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateCardStates();
+            updateSelectedCount();
+            updatePrimarySectorOptions();
+        });
+    });
+    
+    selectAllBtn.addEventListener('click', function() {
+        sectorCheckboxes.forEach(checkbox => {
+            checkbox.checked = true;
+        });
+        updateCardStates();
+        updateSelectedCount();
+        updatePrimarySectorOptions();
+    });
+    
+    clearAllBtn.addEventListener('click', function() {
+        sectorCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        primarySectorSelect.value = '';
+        updateCardStates();
+        updateSelectedCount();
+        updatePrimarySectorOptions();
+    });
+    
+    updateCardStates();
+    updateSelectedCount();
+    updatePrimarySectorOptions();
+});
+</script>
 {% endblock %}
