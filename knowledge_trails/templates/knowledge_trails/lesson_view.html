@@ -128,6 +128,14 @@ video::-webkit-media-controls-panel {
                         <span class="px-3 py-1 bg-white bg-opacity-20 rounded-full text-sm font-medium">
                             <i class="fas fa-file-alt mr-1"></i> Documento
                         </span>
+                        {% elif lesson.lesson_type == 'slides_images' %}
+                        <span class="px-3 py-1 bg-white bg-opacity-20 rounded-full text-sm font-medium">
+                            <i class="fas fa-images mr-1"></i> Slides (Imagens)
+                        </span>
+                        {% elif lesson.lesson_type == 'slides_pdf' %}
+                        <span class="px-3 py-1 bg-white bg-opacity-20 rounded-full text-sm font-medium">
+                            <i class="fas fa-file-powerpoint mr-1"></i> Slides (PDF)
+                        </span>
                         {% elif lesson.lesson_type == 'quiz' %}
                         <span class="px-3 py-1 bg-white bg-opacity-20 rounded-full text-sm font-medium">
                             <i class="fas fa-question-circle mr-1"></i> Quiz
@@ -280,6 +288,123 @@ video::-webkit-media-controls-panel {
                 </div>
                 {% endif %}
             
+            {% elif lesson.lesson_type == 'slides_images' %}
+                <!-- Slides de Imagens -->
+                {% if slide_images %}
+                <div class="slides-viewer relative" id="slidesViewer">
+                    <!-- Slide Container -->
+                    <div class="relative bg-gray-900 rounded-2xl overflow-hidden shadow-2xl" style="min-height: 400px;">
+                        {% for slide in slide_images %}
+                        <div class="slide-item {% if forloop.first %}active{% endif %}" data-slide="{{ forloop.counter0 }}" style="{% if not forloop.first %}display:none;{% endif %}">
+                            <img src="{{ slide.image.url }}" alt="Slide {{ forloop.counter }}" class="w-full h-auto max-h-[70vh] object-contain mx-auto block">
+                        </div>
+                        {% endfor %}
+
+                        <!-- Controles de navegação -->
+                        <button id="slidePrev" class="absolute left-4 top-1/2 -translate-y-1/2 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-800 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-10">
+                            <i class="fas fa-chevron-left text-xl"></i>
+                        </button>
+                        <button id="slideNext" class="absolute right-4 top-1/2 -translate-y-1/2 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-800 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-10">
+                            <i class="fas fa-chevron-right text-xl"></i>
+                        </button>
+
+                        <!-- Contador -->
+                        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-60 text-white px-4 py-2 rounded-full text-sm font-medium z-10">
+                            <span id="slideCurrentNum">1</span> / <span id="slideTotalNum">{{ slide_images|length }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Barra de progresso -->
+                    <div class="mt-4 bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div id="slideProgressBar" class="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+
+                    <!-- Thumbnails -->
+                    <div class="mt-4 flex gap-2 overflow-x-auto pb-2" id="slideThumbnails">
+                        {% for slide in slide_images %}
+                        <button class="slide-thumb flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden border-2 {% if forloop.first %}border-indigo-500{% else %}border-transparent{% endif %} hover:border-indigo-300 transition-all" data-slide="{{ forloop.counter0 }}">
+                            <img src="{{ slide.image.url }}" alt="Thumb {{ forloop.counter }}" class="w-full h-full object-cover">
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 text-4xl mb-3"></i>
+                    <p class="text-yellow-700 font-medium">Nenhuma imagem de slide configurada para esta lição.</p>
+                </div>
+                {% endif %}
+
+                {% if lesson.content %}
+                <div class="lesson-content prose max-w-none mt-6">
+                    {{ lesson.content|linebreaks }}
+                </div>
+                {% endif %}
+
+            {% elif lesson.lesson_type == 'slides_pdf' %}
+                <!-- Slides de PDF -->
+                {% if lesson.document_file %}
+                <div class="slides-pdf-viewer" id="slidesPdfViewer">
+                    <div class="relative bg-gray-900 rounded-2xl overflow-hidden shadow-2xl" style="min-height: 500px;">
+                        <!-- Canvas para renderização do PDF -->
+                        <canvas id="pdfCanvas" class="w-full block mx-auto"></canvas>
+
+                        <!-- Controles de navegação -->
+                        <button id="pdfPrev" class="absolute left-4 top-1/2 -translate-y-1/2 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-800 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-10">
+                            <i class="fas fa-chevron-left text-xl"></i>
+                        </button>
+                        <button id="pdfNext" class="absolute right-4 top-1/2 -translate-y-1/2 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-800 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-10">
+                            <i class="fas fa-chevron-right text-xl"></i>
+                        </button>
+
+                        <!-- Contador -->
+                        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-60 text-white px-4 py-2 rounded-full text-sm font-medium z-10">
+                            <span id="pdfCurrentPage">1</span> / <span id="pdfTotalPages">...</span>
+                        </div>
+
+                        <!-- Loading -->
+                        <div id="pdfLoading" class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-20">
+                            <div class="text-center text-white">
+                                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
+                                <p class="text-lg font-medium">Carregando PDF...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Barra de progresso -->
+                    <div class="mt-4 bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div id="pdfProgressBar" class="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+
+                    <!-- Controles adicionais -->
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <button id="pdfZoomOut" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors text-sm">
+                                <i class="fas fa-search-minus"></i>
+                            </button>
+                            <span id="pdfZoomLevel" class="text-sm font-medium text-gray-600">100%</span>
+                            <button id="pdfZoomIn" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors text-sm">
+                                <i class="fas fa-search-plus"></i>
+                            </button>
+                        </div>
+                        <a href="{{ lesson.document_file.url }}" target="_blank" download class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm flex items-center gap-2">
+                            <i class="fas fa-download"></i> Baixar PDF
+                        </a>
+                    </div>
+                </div>
+                {% else %}
+                <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 text-4xl mb-3"></i>
+                    <p class="text-yellow-700 font-medium">Nenhum PDF configurado para esta lição.</p>
+                </div>
+                {% endif %}
+
+                {% if lesson.content %}
+                <div class="lesson-content prose max-w-none mt-6">
+                    {{ lesson.content|linebreaks }}
+                </div>
+                {% endif %}
+
             {% elif lesson.lesson_type == 'quiz' %}
                 <!-- Quiz -->
                 <form method="post" id="quizForm">
@@ -571,6 +696,157 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Forçar carregamento
         video.load();
+    }
+    
+    // ===== Slideshow de Imagens =====
+    const slidesViewer = document.getElementById('slidesViewer');
+    if (slidesViewer) {
+        const slides = slidesViewer.querySelectorAll('.slide-item');
+        const thumbs = slidesViewer.querySelectorAll('.slide-thumb');
+        const totalSlides = slides.length;
+        let currentSlide = 0;
+        
+        function showSlide(index) {
+            if (index < 0) index = totalSlides - 1;
+            if (index >= totalSlides) index = 0;
+            currentSlide = index;
+            
+            slides.forEach(s => s.style.display = 'none');
+            slides[currentSlide].style.display = 'block';
+            
+            thumbs.forEach(t => t.classList.replace('border-indigo-500', 'border-transparent'));
+            if (thumbs[currentSlide]) thumbs[currentSlide].classList.replace('border-transparent', 'border-indigo-500');
+            
+            document.getElementById('slideCurrentNum').textContent = currentSlide + 1;
+            
+            const progress = ((currentSlide + 1) / totalSlides) * 100;
+            document.getElementById('slideProgressBar').style.width = progress + '%';
+        }
+        
+        document.getElementById('slidePrev')?.addEventListener('click', () => showSlide(currentSlide - 1));
+        document.getElementById('slideNext')?.addEventListener('click', () => showSlide(currentSlide + 1));
+        
+        thumbs.forEach(thumb => {
+            thumb.addEventListener('click', () => showSlide(parseInt(thumb.dataset.slide)));
+        });
+        
+        // Navegação por teclado
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft') showSlide(currentSlide - 1);
+            if (e.key === 'ArrowRight') showSlide(currentSlide + 1);
+        });
+        
+        showSlide(0);
+    }
+    
+    // ===== PDF Slides Viewer =====
+    const pdfViewer = document.getElementById('slidesPdfViewer');
+    if (pdfViewer) {
+        const pdfUrl = '{{ lesson.document_file.url|default:"" }}';
+        if (pdfUrl) {
+            // Carregar PDF.js via CDN
+            const pdfjsScript = document.createElement('script');
+            pdfjsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            pdfjsScript.onload = function() {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                
+                let pdfDoc = null;
+                let pageNum = 1;
+                let pageRendering = false;
+                let pageNumPending = null;
+                let scale = 1.5;
+                const canvas = document.getElementById('pdfCanvas');
+                const ctx = canvas.getContext('2d');
+                
+                function renderPage(num) {
+                    pageRendering = true;
+                    pdfDoc.getPage(num).then(function(page) {
+                        const viewport = page.getViewport({ scale: scale });
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        const renderContext = {
+                            canvasContext: ctx,
+                            viewport: viewport
+                        };
+                        
+                        page.render(renderContext).promise.then(function() {
+                            pageRendering = false;
+                            if (pageNumPending !== null) {
+                                renderPage(pageNumPending);
+                                pageNumPending = null;
+                            }
+                        });
+                    });
+                    
+                    document.getElementById('pdfCurrentPage').textContent = num;
+                    const progress = (num / pdfDoc.numPages) * 100;
+                    document.getElementById('pdfProgressBar').style.width = progress + '%';
+                }
+                
+                function queueRenderPage(num) {
+                    if (pageRendering) {
+                        pageNumPending = num;
+                    } else {
+                        renderPage(num);
+                    }
+                }
+                
+                function onPrevPage() {
+                    if (pageNum <= 1) return;
+                    pageNum--;
+                    queueRenderPage(pageNum);
+                }
+                
+                function onNextPage() {
+                    if (pageNum >= pdfDoc.numPages) return;
+                    pageNum++;
+                    queueRenderPage(pageNum);
+                }
+                
+                pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+                    pdfDoc = pdf;
+                    document.getElementById('pdfTotalPages').textContent = pdf.numPages;
+                    document.getElementById('pdfLoading').style.display = 'none';
+                    renderPage(pageNum);
+                }).catch(function(error) {
+                    console.error('Erro ao carregar PDF:', error);
+                    document.getElementById('pdfLoading').innerHTML = `
+                        <div class="text-center text-white">
+                            <i class="fas fa-exclamation-triangle text-4xl mb-3 text-red-400"></i>
+                            <p class="font-medium">Erro ao carregar o PDF</p>
+                            <a href="${pdfUrl}" target="_blank" download class="mt-3 inline-block px-4 py-2 bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors text-sm">
+                                <i class="fas fa-download mr-1"></i> Baixar PDF
+                            </a>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('pdfPrev')?.addEventListener('click', onPrevPage);
+                document.getElementById('pdfNext')?.addEventListener('click', onNextPage);
+                
+                document.getElementById('pdfZoomIn')?.addEventListener('click', function() {
+                    scale += 0.25;
+                    document.getElementById('pdfZoomLevel').textContent = Math.round(scale / 1.5 * 100) + '%';
+                    queueRenderPage(pageNum);
+                });
+                
+                document.getElementById('pdfZoomOut')?.addEventListener('click', function() {
+                    if (scale > 0.5) {
+                        scale -= 0.25;
+                        document.getElementById('pdfZoomLevel').textContent = Math.round(scale / 1.5 * 100) + '%';
+                        queueRenderPage(pageNum);
+                    }
+                });
+                
+                // Navegação por teclado
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'ArrowLeft') onPrevPage();
+                    if (e.key === 'ArrowRight') onNextPage();
+                });
+            };
+            document.head.appendChild(pdfjsScript);
+        }
     }
 });
 </script>

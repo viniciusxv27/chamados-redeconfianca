@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption,
-    TrailProgress, LessonProgress, Certificate
+    TrailProgress, LessonProgress, Certificate, SlideImage
 )
 
 
@@ -15,6 +15,12 @@ class LessonInline(admin.TabularInline):
     model = Lesson
     extra = 1
     fields = ['title', 'lesson_type', 'points', 'duration_minutes', 'order', 'is_active']
+
+
+class SlideImageInline(admin.TabularInline):
+    model = SlideImage
+    extra = 1
+    fields = ['image', 'order']
 
 
 class QuizOptionInline(admin.TabularInline):
@@ -75,6 +81,7 @@ class LessonAdmin(admin.ModelAdmin):
     list_display = ['title', 'module', 'lesson_type', 'points', 'duration_minutes', 'order', 'is_active']
     list_filter = ['module__trail', 'lesson_type', 'is_active']
     search_fields = ['title', 'description', 'content']
+    inlines = [SlideImageInline]
     
     fieldsets = (
         ('Informações Básicas', {

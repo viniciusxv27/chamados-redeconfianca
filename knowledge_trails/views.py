@@ -301,11 +301,18 @@ def lesson_view(request, lesson_id):
         is_active=True
     ).first()
     
+    # Buscar imagens de slide se for tipo slides_images
+    slide_images = []
+    if lesson.lesson_type == 'slides_images':
+        from .models import SlideImage
+        slide_images = lesson.slide_images.all()
+    
     context = {
         'lesson': lesson,
         'trail': trail,
         'lesson_progress': lesson_progress,
         'next_lesson': next_lesson,
+        'slide_images': slide_images,
     }
     
     return render(request, 'knowledge_trails/lesson_view.html', context)
@@ -832,6 +839,24 @@ def create_lesson(request, module_id):
             lesson.module = module
             lesson.save()
             
+            # Salvar imagens de slide se for tipo slides_images
+            if lesson.lesson_type == 'slides_images':
+                from .models import SlideImage
+                images = request.FILES.getlist('slide_images')
+                for i, image in enumerate(images):
+                    SlideImage.objects.create(
+                        lesson=lesson,
+                        image=image,
+                        order=i
+                    )
+            
+            # Salvar PDF como documento se for tipo slides_pdf
+            if lesson.lesson_type == 'slides_pdf':
+                pdf_file = request.FILES.get('slides_pdf_file')
+                if pdf_file:
+                    lesson.document_file = pdf_file
+                    lesson.save()
+            
             messages.success(request, f'✅ Lição "{lesson.title}" criada com sucesso!')
             
             # Se for quiz, redirecionar para adicionar questões
@@ -880,6 +905,28 @@ def edit_lesson(request, lesson_id):
         form = LessonForm(request.POST, request.FILES, instance=lesson)
         if form.is_valid():
             lesson = form.save()
+            
+            # Atualizar imagens de slide se for tipo slides_images
+            if lesson.lesson_type == 'slides_images':
+                from .models import SlideImage
+                images = request.FILES.getlist('slide_images')
+                if images:
+                    # Remover imagens anteriores e adicionar novas
+                    lesson.slide_images.all().delete()
+                    for i, image in enumerate(images):
+                        SlideImage.objects.create(
+                            lesson=lesson,
+                            image=image,
+                            order=i
+                        )
+            
+            # Atualizar PDF se for tipo slides_pdf
+            if lesson.lesson_type == 'slides_pdf':
+                pdf_file = request.FILES.get('slides_pdf_file')
+                if pdf_file:
+                    lesson.document_file = pdf_file
+                    lesson.save()
+            
             messages.success(request, f'✅ Lição "{lesson.title}" atualizada com sucesso!')
             return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
     else:

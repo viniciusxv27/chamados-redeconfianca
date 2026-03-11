@@ -40,7 +40,7 @@
                         </label>
                         {{ form.lesson_type }}
                         <small class="text-gray-500 text-xs mt-1 block">
-                            <strong>Texto:</strong> Conteúdo escrito • <strong>Vídeo:</strong> URL ou arquivo • <strong>Documento:</strong> PDF/DOC • <strong>Quiz:</strong> Perguntas e respostas
+                            <strong>Texto:</strong> Conteúdo escrito • <strong>Vídeo:</strong> URL ou arquivo • <strong>Documento:</strong> PDF/DOC • <strong>Quiz:</strong> Perguntas e respostas • <strong>Slides (Imagens):</strong> Várias fotos como slideshow • <strong>Slides (PDF):</strong> PDF exibido como slides
                         </small>
                     </div>
 
@@ -131,6 +131,55 @@
                     </div>
                 </div>
 
+                <!-- Slides (Imagens) -->
+                <div id="slides-images-section" class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-images text-purple-600"></i>
+                        Slides (Imagens)
+                    </h3>
+                    <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
+                        <i class="fas fa-info-circle mr-2 text-blue-600"></i>
+                        Faça upload de várias imagens que serão exibidas como um slideshow. A ordem será a mesma em que forem selecionadas.
+                    </div>
+                    <div>
+                        <label for="slide_images" class="block text-sm font-semibold text-gray-700 mb-2">
+                            Imagens dos Slides <span class="text-red-500">*</span>
+                        </label>
+                        <input type="file" 
+                               id="slide_images" 
+                               name="slide_images" 
+                               multiple 
+                               accept="image/*"
+                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 outline-none transition-all duration-300">
+                        <small class="text-gray-500 text-xs mt-1 block">Selecione múltiplas imagens (JPG, PNG, WEBP). Segure Ctrl/Cmd para selecionar várias.</small>
+                    </div>
+                    <div id="slides-preview" class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 hidden">
+                    </div>
+                </div>
+
+                <!-- Slides (PDF) -->
+                <div id="slides-pdf-section" class="border-t-2 border-gray-100 pt-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-file-powerpoint text-purple-600"></i>
+                        Slides (PDF)
+                    </h3>
+                    <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
+                        <i class="fas fa-info-circle mr-2 text-blue-600"></i>
+                        Faça upload de um arquivo PDF que será exibido como slides dentro do portal. Cada página do PDF será um slide.
+                    </div>
+                    <div>
+                        <label for="slides_pdf_file" class="block text-sm font-semibold text-gray-700 mb-2">
+                            Arquivo PDF <span class="text-red-500">*</span>
+                        </label>
+                        <input type="file" 
+                               id="slides_pdf_file" 
+                               name="slides_pdf_file" 
+                               accept=".pdf"
+                               class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 outline-none transition-all duration-300">
+                        <small class="text-gray-500 text-xs mt-1 block">Selecione um arquivo PDF para exibir como apresentação de slides.</small>
+                    </div>
+                </div>
+
                 <!-- Configurações -->
                 <div class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -186,11 +235,15 @@ document.getElementById('{{ form.lesson_type.id_for_label }}').addEventListener(
     const contentSection = document.getElementById('content-section');
     const videoSection = document.getElementById('video-section');
     const documentSection = document.getElementById('document-section');
+    const slidesImagesSection = document.getElementById('slides-images-section');
+    const slidesPdfSection = document.getElementById('slides-pdf-section');
     
     // Ocultar todas
     contentSection.style.display = 'none';
     videoSection.style.display = 'none';
     documentSection.style.display = 'none';
+    slidesImagesSection.style.display = 'none';
+    slidesPdfSection.style.display = 'none';
     
     // Mostrar relevantes
     if (type === 'text') {
@@ -199,11 +252,40 @@ document.getElementById('{{ form.lesson_type.id_for_label }}').addEventListener(
         videoSection.style.display = 'block';
     } else if (type === 'document') {
         documentSection.style.display = 'block';
+    } else if (type === 'slides_images') {
+        slidesImagesSection.style.display = 'block';
+    } else if (type === 'slides_pdf') {
+        slidesPdfSection.style.display = 'block';
     }
     // Quiz não precisa de conteúdo aqui, será configurado depois
 });
 
 // Trigger inicial
 document.getElementById('{{ form.lesson_type.id_for_label }}').dispatchEvent(new Event('change'));
+
+// Preview de imagens para slides
+document.getElementById('slide_images')?.addEventListener('change', function(e) {
+    const preview = document.getElementById('slides-preview');
+    preview.innerHTML = '';
+    
+    if (this.files.length > 0) {
+        preview.classList.remove('hidden');
+        Array.from(this.files).forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const div = document.createElement('div');
+                div.className = 'relative rounded-xl overflow-hidden border-2 border-gray-200 aspect-video bg-gray-100';
+                div.innerHTML = `
+                    <img src="${e.target.result}" class="w-full h-full object-cover" alt="Slide ${index + 1}">
+                    <span class="absolute top-2 left-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full">${index + 1}</span>
+                `;
+                preview.appendChild(div);
+            };
+            reader.readAsDataURL(file);
+        });
+    } else {
+        preview.classList.add('hidden');
+    }
+});
 </script>
 {% endblock %}

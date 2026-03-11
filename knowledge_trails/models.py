@@ -30,6 +30,14 @@ def upload_lesson_media(instance, filename):
     return os.path.join('knowledge_trails', 'lessons', new_filename)
 
 
+def upload_slide_image(instance, filename):
+    """Define o caminho de upload para imagens de slide"""
+    ext = filename.split('.')[-1]
+    lesson_id = instance.lesson_id if instance.lesson_id else 'new'
+    new_filename = f"slide_{lesson_id}_{instance.order}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return os.path.join('knowledge_trails', 'slides', new_filename)
+
+
 def upload_certificate_logo(instance, filename):
     """Define o caminho de upload para logo do certificado"""
     ext = filename.split('.')[-1]
@@ -245,6 +253,8 @@ class Lesson(models.Model):
         ('document', 'Documento'),
         ('quiz', 'Quiz'),
         ('interactive', 'Interativo'),
+        ('slides_images', 'Slides (Imagens)'),
+        ('slides_pdf', 'Slides (PDF)'),
     ]
     
     module = models.ForeignKey(
@@ -349,6 +359,31 @@ class Lesson(models.Model):
             user=user,
             completed=True
         ).exists()
+
+
+class SlideImage(models.Model):
+    """Imagem individual de um slide"""
+    
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='slide_images',
+        verbose_name='Lição'
+    )
+    image = models.ImageField(
+        upload_to=upload_slide_image,
+        storage=get_lesson_media_storage(),
+        verbose_name='Imagem do Slide'
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
+    
+    class Meta:
+        verbose_name = 'Imagem de Slide'
+        verbose_name_plural = 'Imagens de Slide'
+        ordering = ['order']
+    
+    def __str__(self):
+        return f'{self.lesson.title} - Slide {self.order + 1}'
 
 
 class QuizQuestion(models.Model):
