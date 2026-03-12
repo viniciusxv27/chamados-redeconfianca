@@ -256,6 +256,34 @@ def get_support_chat(request, chat_id):
 @require_POST
 def create_support_chat(request):
     """Criar novo chat de suporte"""
+    from datetime import datetime
+    
+    # Verificar horário de atendimento
+    now = datetime.now()
+    day_of_week = now.weekday()  # 0 = Segunda, ..., 6 = Domingo
+    current_hour = now.hour
+    current_minute = now.minute
+    current_time = current_hour * 60 + current_minute
+    
+    open_time = 9 * 60  # 09:00
+    close_time_weekday = 18 * 60  # 18:00
+    close_time_saturday = 13 * 60  # 13:00
+    
+    is_open = False
+    # Segunda a Sexta (0-4)
+    if 0 <= day_of_week <= 4:
+        is_open = open_time <= current_time < close_time_weekday
+    # Sábado (5)
+    elif day_of_week == 5:
+        is_open = open_time <= current_time < close_time_saturday
+    # Domingo (6) - Fechado
+    
+    if not is_open:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Olá, seja bem vindo ao CANAL DE SUPORTE A LOJAS. Nosso horário de atendimento por aqui é de Segunda a Sexta das 9hs às 18hs, sábado das 9hs às 13hs.'
+        })
+    
     title = request.POST.get('title', '').strip()
     message = request.POST.get('message', '').strip()
     sector_id = request.POST.get('sector_id')

@@ -2265,6 +2265,64 @@
             container.appendChild(messageDiv);
         }
         
+        // Função para verificar se está dentro do horário de atendimento
+        window.isSupportChatOpen = function() {
+            const now = new Date();
+            const dayOfWeek = now.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const currentTime = hours * 60 + minutes; // Converter para minutos desde meia-noite
+            
+            const openTime = 9 * 60; // 09:00 = 540 minutos
+            const closeTimeWeekday = 18 * 60; // 18:00 = 1080 minutos
+            const closeTimeSaturday = 13 * 60; // 13:00 = 780 minutos
+            
+            // Domingo (0) - Fechado
+            if (dayOfWeek === 0) {
+                return false;
+            }
+            
+            // Sábado (6) - 09:00 às 13:00
+            if (dayOfWeek === 6) {
+                return currentTime >= openTime && currentTime < closeTimeSaturday;
+            }
+            
+            // Segunda a Sexta (1-5) - 09:00 às 18:00
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                return currentTime >= openTime && currentTime < closeTimeWeekday;
+            }
+            
+            return false;
+        };
+        
+        window.showOutsideHoursMessage = function() {
+            const message = "Olá, seja bem vindo ao CANAL DE SUPORTE A LOJAS. Nosso horário de atendimento por aqui é de Segunda a Sexta das 9hs às 18hs, sábado das 9hs às 13hs.";
+            
+            // Criar modal de aviso
+            let modal = document.getElementById('supportHoursModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'supportHoursModal';
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mr-4">
+                                <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-900">Fora do Horário de Atendimento</h3>
+                        </div>
+                        <p class="text-gray-600 mb-6">${message}</p>
+                        <button onclick="document.getElementById('supportHoursModal').remove()" 
+                                class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg font-medium transition-colors">
+                            Entendi
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+        };
+        
         // Global functions for support chat (called from onclick)
         window.toggleSupportChat = function() {
             console.log('toggleSupportChat called'); // Debug log
@@ -2279,6 +2337,12 @@
                 
                 // Usar apenas display ao invés de classes
                 if (chatWindow.style.display === 'none' || chatWindow.style.display === '') {
+                    // Verificar horário de atendimento antes de abrir
+                    if (!window.isSupportChatOpen()) {
+                        window.showOutsideHoursMessage();
+                        return;
+                    }
+                    
                     chatWindow.style.display = 'flex';
                     console.log('Chat window opened'); // Debug log
                     // Verificar se os setores precisam ser carregados (só se não estiverem no HTML)
