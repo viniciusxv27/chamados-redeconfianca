@@ -169,34 +169,24 @@ class ExperienciaTodo(models.Model):
         return f"{months[self.month]}/{self.year}"
 
     def calculate_score(self):
-        """Calcula a porcentagem de pontos.
-        - Sim + aprovado = soma pontos
-        - Não = não soma pontos
-        - Não se aplica = retira a pergunta do total
+        """Calcula a pontuação: começa em 100, cada NÃO aprovado subtrai os pontos da pergunta.
+        Não se aplica = ignora a pergunta. Pode ficar negativo.
         """
         answers = self.answers.select_related('question').all()
-        applicable = [a for a in answers if a.response != 'nao_se_aplica']
-        total_points = sum(a.question.points for a in applicable)
-        if total_points == 0:
-            return 0
-        earned_points = sum(
-            a.question.points for a in applicable
-            if a.response == 'sim' and a.status == 'aprovado'
+        deductions = sum(
+            a.question.points for a in answers
+            if a.response == 'nao' and a.status == 'aprovado'
         )
-        return round((earned_points / total_points) * 100, 2)
+        return round(100 - deductions, 2)
 
     def calculate_partial_score(self):
-        """Calcula pontuação parcial baseada apenas nas respostas (sem exigir aprovação)."""
+        """Pontuação parcial (sem exigir aprovação): 100 - pontos de cada NÃO."""
         answers = self.answers.select_related('question').all()
-        applicable = [a for a in answers if a.response != 'nao_se_aplica']
-        total_points = sum(a.question.points for a in applicable)
-        if total_points == 0:
-            return 0
-        earned_points = sum(
-            a.question.points for a in applicable
-            if a.response == 'sim'
+        deductions = sum(
+            a.question.points for a in answers
+            if a.response == 'nao'
         )
-        return round((earned_points / total_points) * 100, 2)
+        return round(100 - deductions, 2)
 
     def update_score(self):
         self.score_percentage = self.calculate_score()

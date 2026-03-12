@@ -528,22 +528,14 @@ def view_todo(request, todo_id):
             return redirect('experiencia:dashboard')
 
     answers = todo.answers.select_related('question', 'answered_by').all()
-    applicable = [a for a in answers if a.response != 'nao_se_aplica']
-    total_points = sum(a.question.points for a in applicable)
 
-    # For enviados/pending, show partial score based on responses only
+    # Pontuação: 100 - (pontos de cada NÃO)
     if todo.status in ('enviado', 'aberto', 'recusado'):
-        earned_points = sum(
-            a.question.points for a in applicable
-            if a.response == 'sim'
-        )
         score = todo.calculate_partial_score()
+        deductions = sum(a.question.points for a in answers if a.response == 'nao')
     else:
-        earned_points = sum(
-            a.question.points for a in applicable
-            if a.response == 'sim' and a.status == 'aprovado'
-        )
         score = todo.score_percentage
+        deductions = sum(a.question.points for a in answers if a.response == 'nao' and a.status == 'aprovado')
 
     # Filter by response
     response_filter = request.GET.get('response', '')
@@ -555,8 +547,7 @@ def view_todo(request, todo_id):
         'todo': todo,
         'answers': filtered_answers,
         'all_answers': answers,
-        'total_points': total_points,
-        'approved_points': earned_points,
+        'deductions': deductions,
         'score': score,
         'is_partial': todo.status in ('enviado', 'aberto', 'recusado'),
         'response_filter': response_filter,

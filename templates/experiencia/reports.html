@@ -31,7 +31,7 @@
         </div>
         <div class="bg-white rounded-xl shadow p-4">
             <div class="text-sm text-gray-500">Média de Pontuação</div>
-            <div class="text-3xl font-bold text-purple-600">{{ avg_score }}%</div>
+            <div class="text-3xl font-bold text-purple-600">{{ avg_score }}</div>
         </div>
         <div class="bg-white rounded-xl shadow p-4">
             <div class="text-sm text-gray-500">Total de Avaliações</div>
@@ -140,12 +140,7 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
-                                <div class="w-16 bg-gray-200 rounded-full h-2">
-                                    <div class="bg-purple-500 h-2 rounded-full" style="width: {{ todo.score_percentage }}%"></div>
-                                </div>
-                                <span class="text-xs font-medium">{{ todo.score_percentage }}%</span>
-                            </div>
+                            <span class="text-sm font-bold {% if todo.score_percentage < 0 %}text-red-600{% elif todo.score_percentage < 50 %}text-yellow-600{% else %}text-purple-600{% endif %}">{{ todo.score_percentage }}</span>
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-600">{{ todo.launched_by.get_full_name }}</td>
                         <td class="px-4 py-3">

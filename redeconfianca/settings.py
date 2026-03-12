@@ -231,11 +231,13 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # Configurações adicionais para uploads e formulários
-DATA_UPLOAD_MAX_MEMORY_SIZE = 300 * 1024 * 1024  # 300MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 300 * 1024 * 1024  # 300MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024  # 500MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024  # 500MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000  # Suportar muitos campos (muitas fotos/perguntas)
 
-# Configurações de sessão
-SESSION_COOKIE_AGE = 86400  # 24 horas
+# Configurações de sessão - usar DB para aguentar sessões grandes
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 86400 * 7  # 7 dias
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 

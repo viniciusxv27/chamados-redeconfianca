@@ -229,8 +229,19 @@ function scheduleDraftSave() {
 function saveDraft() {
     clearTimeout(draftTimer);
     var form = document.getElementById('todoForm');
-    var formData = new FormData(form);
+    // Build FormData with only text fields (no photos) to avoid huge uploads
+    var formData = new FormData();
     formData.set('action', 'draft');
+    // Copy CSRF token
+    var csrf = form.querySelector('[name=csrfmiddlewaretoken]');
+    if (csrf) formData.set('csrfmiddlewaretoken', csrf.value);
+    // Copy only radio and textarea values
+    form.querySelectorAll('input[type=radio]:checked').forEach(function(r) {
+        formData.set(r.name, r.value);
+    });
+    form.querySelectorAll('textarea').forEach(function(t) {
+        formData.set(t.name, t.value);
+    });
 
     var status = document.getElementById('autosave-status');
     status.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-500 mr-1"></i>Salvando...';
@@ -265,6 +276,18 @@ document.querySelectorAll('.response-radio:checked').forEach(function(radio) {
     var section = document.getElementById('photo_section_' + qid);
     if (section && radio.value === 'nao_se_aplica') {
         section.style.display = 'none';
+    }
+});
+
+// Proteger contra perda de dados ao sair da página
+var formSubmitting = false;
+document.getElementById('todoForm').addEventListener('submit', function() { formSubmitting = true; });
+window.addEventListener('beforeunload', function(e) {
+    if (!formSubmitting) {
+        // Salvar rascunho antes de sair
+        saveDraft();
+        e.preventDefault();
+        e.returnValue = 'Você tem alterações não salvas. Deseja sair?';
     }
 });
 </script>

@@ -38,15 +38,15 @@
         </div>
         <div class="bg-white rounded-xl shadow p-4">
             <div class="text-xs text-gray-500">Pontuação{% if is_partial %} <span class="text-yellow-600">(parcial)</span>{% endif %}</div>
-            <div class="text-2xl font-bold text-purple-600">{{ score }}%</div>
+            <div class="text-2xl font-bold {% if score < 0 %}text-red-600{% elif score < 50 %}text-yellow-600{% else %}text-purple-600{% endif %}">{{ score }}</div>
         </div>
         <div class="bg-white rounded-xl shadow p-4">
-            <div class="text-xs text-gray-500">Pontos Obtidos</div>
-            <div class="text-2xl font-bold text-green-600">{{ approved_points }}</div>
+            <div class="text-xs text-gray-500">Deduções (NÃO)</div>
+            <div class="text-2xl font-bold text-red-600">-{{ deductions }}</div>
         </div>
         <div class="bg-white rounded-xl shadow p-4">
-            <div class="text-xs text-gray-500">Total Aplicável</div>
-            <div class="text-2xl font-bold text-gray-700">{{ total_points }}</div>
+            <div class="text-xs text-gray-500">Base Inicial</div>
+            <div class="text-2xl font-bold text-gray-700">100</div>
         </div>
     </div>
 

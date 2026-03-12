@@ -90,12 +90,7 @@
                                 {% endif %}
                             </td>
                             <td class="py-3 pr-4">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-24 bg-gray-200 rounded-full h-2">
-                                        <div class="bg-purple-500 h-2 rounded-full" style="width: {{ todo.score_percentage }}%"></div>
-                                    </div>
-                                    <span class="text-sm font-medium">{{ todo.score_percentage }}%</span>
-                                </div>
+                                <span class="text-sm font-bold {% if todo.score_percentage < 0 %}text-red-600{% elif todo.score_percentage < 50 %}text-yellow-600{% else %}text-purple-600{% endif %}">{{ todo.score_percentage }}</span>
                             </td>
                             <td class="py-3">
                                 <div class="flex gap-2">
