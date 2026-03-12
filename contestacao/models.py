@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
+from core.storage import get_media_storage
+
 
 class ExclusionRecord(models.Model):
     """Registro importado da planilha BASE_EXCLUSAO."""
@@ -57,8 +59,8 @@ class Contestation(models.Model):
     )
     reason = models.TextField(verbose_name='Motivo da Contestação')
     attachment = models.FileField(
-        upload_to='contestacoes/%Y/%m/', blank=True, null=True,
-        verbose_name='Anexo/Evidência'
+        upload_to='contestacoes/%Y/%m/', storage=get_media_storage(),
+        blank=True, null=True, verbose_name='Anexo/Evidência'
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='Status')
     payment_status = models.CharField(

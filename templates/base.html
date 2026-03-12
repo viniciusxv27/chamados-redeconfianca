@@ -281,6 +281,13 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                <li>
+                                    <a href="{% url 'knowledge_trails:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Trilhas de Conhecimento">
+                                        <i class="fas fa-graduation-cap text-cyan-400 flex-shrink-0"></i>
+                                        <span>Trilhas de Conhecimento</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
                                 {% if user.can_manage_users %}
                                     <li>
                                         <a href="{% url 'training_upload' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo Treinamento">
@@ -306,16 +313,6 @@
                                 <i class="fas fa-gift text-primary flex-shrink-0"></i>
                                 <span class="text-sm sidebar-text">Clube de Benefícios</span>
                                 <div class="tooltip-collapsed">Clube de Benefícios</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-
-                        <!-- Menu Trilhas de Conhecimento -->
-                        <li>
-                            <a href="{% url 'knowledge_trails:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Trilhas de Conhecimento">
-                                <i class="fas fa-graduation-cap text-primary flex-shrink-0"></i>
-                                <span class="text-sm sidebar-text">Trilhas de Conhecimento</span>
-                                <div class="tooltip-collapsed">Trilhas de Conhecimento</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
