@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard – Contestações{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-chart-bar mr-2 text-teal-600"></i> Dashboard de Contestações</h1>
+            <p class="text-sm text-gray-500 mt-1">Visão geral das contestações</p>
+        </div>
+        <a href="{% url 'contestacao:exclusion_list' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+            <i class="fas fa-arrow-left mr-2"></i> Voltar à Base
+        </a>
+    </div>
+
+    <!-- Cards principais -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Total Enviado -->
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 text-blue-600">
+                    <i class="fas fa-paper-plane text-lg"></i>
+                </span>
+            </div>
+            <p class="text-2xl font-bold text-gray-900">{{ total_enviado }}</p>
+            <p class="text-xs text-gray-500 mt-1">Total Enviado</p>
+        </div>
+        <!-- Total Aceito -->
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-100 text-green-600">
+                    <i class="fas fa-check-circle text-lg"></i>
+                </span>
+            </div>
+            <p class="text-2xl font-bold text-green-700">{{ total_aceito }}</p>
+            <p class="text-xs text-gray-500 mt-1">Total Aceito</p>
+        </div>
+        <!-- Total Recusado -->
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100 text-red-600">
+                    <i class="fas fa-times-circle text-lg"></i>
+                </span>
+            </div>
+            <p class="text-2xl font-bold text-red-700">{{ total_recusado }}</p>
+            <p class="text-xs text-gray-500 mt-1">Total Recusado</p>
+        </div>
+        <!-- Total Pendente -->
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100 text-yellow-600">
+                    <i class="fas fa-clock text-lg"></i>
+                </span>
+            </div>
+            <p class="text-2xl font-bold text-yellow-700">{{ total_pendente }}</p>
+            <p class="text-xs text-gray-500 mt-1">Pendentes</p>
+        </div>
+    </div>
+
+    <!-- Cards de receita e taxa -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-600">
+                    <i class="fas fa-dollar-sign"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Receita Contestada</span>
+            </div>
+            <p class="text-xl font-bold text-gray-900">R$ {{ receita_contestada|floatformat:2 }}</p>
+        </div>
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600">
+                    <i class="fas fa-coins"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Receita Aceita</span>
+            </div>
+            <p class="text-xl font-bold text-green-700">R$ {{ receita_aceita|floatformat:2 }}</p>
+        </div>
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-teal-100 text-teal-600">
+                    <i class="fas fa-percentage"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Taxa de Aprovação</span>
+            </div>
+            <p class="text-xl font-bold text-teal-700">{{ taxa_aprovacao }}%</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Por Pilar -->
+        <div class="bg-white border rounded-xl shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b bg-gray-50">
+                <h2 class="text-sm font-semibold text-gray-700"><i class="fas fa-layer-group mr-2 text-purple-500"></i> Por Pilar</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Pilar</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Aceitos</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Recusados</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for item in por_pilar %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2.5 text-sm font-medium text-gray-900">{{ item.exclusion__pilar|default:'-' }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-gray-700">{{ item.total }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-green-600 font-medium">{{ item.aceitos }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-red-600 font-medium">{{ item.recusados }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-400">Sem dados</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Por Filial -->
+        <div class="bg-white border rounded-xl shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b bg-gray-50">
+                <h2 class="text-sm font-semibold text-gray-700"><i class="fas fa-store mr-2 text-blue-500"></i> Por Filial</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Filial</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Aceitos</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Recusados</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for item in por_filial %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2.5 text-sm font-medium text-gray-900">{{ item.exclusion__filial|default:'-' }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-gray-700">{{ item.total }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-green-600 font-medium">{{ item.aceitos }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-red-600 font-medium">{{ item.recusados }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-400">Sem dados</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

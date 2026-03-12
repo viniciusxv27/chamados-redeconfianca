@@ -5,6 +5,7 @@ app_name = 'contestacao'
 
 urlpatterns = [
     path('', views.exclusion_list, name='exclusion_list'),
+    path('dashboard/', views.dashboard, name='dashboard'),
     path('sincronizar/', views.sync_exclusions, name='sync_exclusions'),
     path('historico/', views.contestation_history, name='contestation_history'),
     path('contestar/<int:exclusion_id>/', views.create_contestation, name='create_contestation'),

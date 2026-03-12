@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
 from django.http import JsonResponse
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from .models import ExclusionRecord, Contestation, ContestationHistory
@@ -294,74 +294,59 @@ def create_contestation(request, exclusion_id):
 
 @login_required
 def bulk_create_contestation(request):
-    """Cria contestações em lote para múltiplos registros de exclusão."""
+    """Cria contestações em lote — cada item com seu motivo individual (via JSON)."""
     if not _can_create_contestations(request.user):
-        messages.error(request, 'Sem permissão para contestar.')
-        return redirect('contestacao:exclusion_list')
+        return JsonResponse({'success': False, 'error': 'Sem permissão para contestar.'}, status=403)
 
-    # Parse IDs from GET (initial load) or POST (submit)
-    ids_param = request.GET.get('ids', '') or request.POST.get('ids', '')
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método não permitido.'}, status=405)
+
+    import json
     try:
-        exclusion_ids = [int(x) for x in ids_param.split(',') if x.strip().isdigit()]
-    except (ValueError, AttributeError):
-        exclusion_ids = []
+        data = json.loads(request.body)
+        items = data.get('items', [])
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'success': False, 'error': 'Dados inválidos.'}, status=400)
 
-    if not exclusion_ids:
-        messages.error(request, 'Nenhum registro selecionado.')
-        return redirect('contestacao:exclusion_list')
+    if not items:
+        return JsonResponse({'success': False, 'error': 'Nenhum item enviado.'}, status=400)
 
-    exclusions = ExclusionRecord.objects.filter(pk__in=exclusion_ids)
-    if not exclusions.exists():
-        messages.error(request, 'Nenhum registro encontrado.')
-        return redirect('contestacao:exclusion_list')
+    exclusion_ids = [int(item['exclusion_id']) for item in items if item.get('exclusion_id')]
+    exclusions_by_id = {e.pk: e for e in ExclusionRecord.objects.filter(pk__in=exclusion_ids)}
 
-    # Filter out exclusions that already have active contestations
+    # Filter out already contested
     already_contested = set(
         Contestation.objects.filter(
             exclusion_id__in=exclusion_ids,
             status__in=['pending', 'accepted', 'confirmed'],
         ).values_list('exclusion_id', flat=True)
     )
-    exclusions = exclusions.exclude(pk__in=already_contested)
 
-    if not exclusions.exists():
-        messages.warning(request, 'Todos os registros selecionados já possuem contestação em andamento.')
-        return redirect('contestacao:exclusion_list')
+    created_count = 0
+    for item in items:
+        eid = int(item.get('exclusion_id', 0))
+        reason = str(item.get('reason', '')).strip()
+        if not reason or eid not in exclusions_by_id or eid in already_contested:
+            continue
+        exclusion = exclusions_by_id[eid]
+        c = Contestation.objects.create(
+            exclusion=exclusion,
+            requester=request.user,
+            reason=reason,
+        )
+        ContestationHistory.objects.create(
+            contestation=c,
+            action='created',
+            user=request.user,
+            notes=reason,
+            extra_data={'exclusion_id': exclusion.pk, 'vendedor': exclusion.vendedor, 'bulk': True},
+        )
+        created_count += 1
 
-    if request.method == 'POST':
-        reason = request.POST.get('reason', '').strip()
-        attachment = request.FILES.get('attachment')
-        if not reason:
-            messages.error(request, 'Informe o motivo da contestação.')
-        else:
-            created_count = 0
-            for exclusion in exclusions:
-                c = Contestation.objects.create(
-                    exclusion=exclusion,
-                    requester=request.user,
-                    reason=reason,
-                    attachment=attachment,
-                )
-                ContestationHistory.objects.create(
-                    contestation=c,
-                    action='created',
-                    user=request.user,
-                    notes=reason,
-                    extra_data={'exclusion_id': exclusion.pk, 'vendedor': exclusion.vendedor, 'bulk': True},
-                )
-                created_count += 1
+    if created_count == 0:
+        return JsonResponse({'success': False, 'error': 'Nenhuma contestação pôde ser criada (já existem contestações em andamento).'})
 
-            messages.success(request, f'{created_count} contestações criadas com sucesso!')
-            return redirect('contestacao:my_contestations')
-
-    total_receita = sum(e.receita for e in exclusions)
-
-    return render(request, 'contestacao/bulk_create_contestation.html', {
-        'exclusions': exclusions,
-        'ids_param': ','.join(str(e.pk) for e in exclusions),
-        'total_receita': total_receita,
-        'skipped': len(already_contested),
-    })
+    return JsonResponse({'success': True, 'created': created_count})
 
 
 @login_required
@@ -584,3 +569,79 @@ def contestation_history(request):
         'action_choices': ContestationHistory.ACTION_CHOICES,
     }
     return render(request, 'contestacao/contestation_history.html', context)
+
+
+@login_required
+def dashboard(request):
+    """Dashboard de contestações com métricas e totais."""
+    if not _can_create_contestations(request.user):
+        messages.error(request, 'Sem permissão para acessar o dashboard.')
+        return redirect('home')
+
+    qs = Contestation.objects.select_related('exclusion')
+    rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
+
+    # Filtro por setor (mesma lógica do exclusion_list)
+    if rank < HIERARCHY_RANK['SUPERADMIN']:
+        user_sectors = list(request.user.sectors.values_list('name', flat=True))
+        if request.user.sector:
+            user_sectors.append(request.user.sector.name)
+        upper_sectors = [s.strip().upper() for s in user_sectors if s]
+        if upper_sectors:
+            q = Q()
+            for s in upper_sectors:
+                q |= Q(exclusion__filial__iexact=s)
+            qs = qs.filter(q)
+        else:
+            qs = qs.filter(requester=request.user)
+
+    total_enviado = qs.count()
+    total_aceito = qs.filter(status__in=['accepted', 'confirmed']).count()
+    total_recusado = qs.filter(status__in=['rejected', 'denied']).count()
+    total_pendente = qs.filter(status='pending').count()
+
+    receita_contestada = qs.aggregate(total=Sum('exclusion__receita'))['total'] or 0
+    receita_aceita = qs.filter(status__in=['accepted', 'confirmed']).aggregate(total=Sum('exclusion__receita'))['total'] or 0
+
+    # Métricas por pilar
+    por_pilar = (
+        qs.values('exclusion__pilar')
+        .annotate(
+            total=Count('id'),
+            aceitos=Count('id', filter=Q(status__in=['accepted', 'confirmed'])),
+            recusados=Count('id', filter=Q(status__in=['rejected', 'denied'])),
+        )
+        .order_by('-total')
+    )
+
+    # Métricas por filial
+    por_filial = (
+        qs.values('exclusion__filial')
+        .annotate(
+            total=Count('id'),
+            aceitos=Count('id', filter=Q(status__in=['accepted', 'confirmed'])),
+            recusados=Count('id', filter=Q(status__in=['rejected', 'denied'])),
+        )
+        .order_by('-total')
+    )
+
+    # Métricas por status
+    por_status = qs.values('status').annotate(total=Count('id')).order_by('-total')
+
+    # Taxa de aprovação
+    finalizados = total_aceito + total_recusado
+    taxa_aprovacao = round((total_aceito / finalizados * 100), 1) if finalizados > 0 else 0
+
+    context = {
+        'total_enviado': total_enviado,
+        'total_aceito': total_aceito,
+        'total_recusado': total_recusado,
+        'total_pendente': total_pendente,
+        'receita_contestada': receita_contestada,
+        'receita_aceita': receita_aceita,
+        'por_pilar': por_pilar,
+        'por_filial': por_filial,
+        'por_status': por_status,
+        'taxa_aprovacao': taxa_aprovacao,
+    }
+    return render(request, 'contestacao/dashboard.html', context)
