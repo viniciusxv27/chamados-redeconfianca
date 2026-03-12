@@ -24,8 +24,10 @@
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'pending' %}bg-yellow-500 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">
             Pendentes{% if pending_count %} ({{ pending_count }}){% endif %}
         </a>
-        <a href="?status=accepted{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
-           class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'accepted' %}bg-blue-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Aguardando Gerente</a>
+        <a href="?status=awaiting_manager{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
+           class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'awaiting_manager' %}bg-blue-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">
+            Aguardando Gerente{% if awaiting_manager_count %} ({{ awaiting_manager_count }}){% endif %}
+        </a>
         <a href="?status=confirmed{% if filial_filter %}&filial={{ filial_filter }}{% endif %}"
            class="px-3 py-1.5 text-sm rounded-md {% if status_filter == 'confirmed' %}bg-green-600 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">
             Para Pagamento{% if confirmed_count %} ({{ confirmed_count }}){% endif %}
@@ -73,11 +75,13 @@
                             {% if c.status == 'pending' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pendente</span>
                             {% elif c.status == 'accepted' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Aprovada &middot; Aguardando Gerente</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Aprovada &middot; Aguardando De Acordo</span>
                             {% elif c.status == 'confirmed' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Confirmada</span>
+                            {% elif c.status == 'rejected' and not c.confirmed_by %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Rejeitada &middot; Aguardando De Acordo</span>
                             {% elif c.status == 'rejected' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Rejeitada</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Rejeitada &middot; De Acordo</span>
                             {% elif c.status == 'denied' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Negada pelo Gerente</span>
                             {% endif %}

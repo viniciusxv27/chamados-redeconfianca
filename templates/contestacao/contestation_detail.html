@@ -26,6 +26,8 @@
                 <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"><i class="fas fa-user-check mr-1"></i> Aprovada pelo Gestor</span>
                 {% elif c.status == 'confirmed' %}
                 <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"><i class="fas fa-check-double mr-1"></i> Confirmada</span>
+                {% elif c.status == 'rejected' and not c.confirmed_by %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800"><i class="fas fa-times mr-1"></i> Rejeitada – Aguardando De Acordo</span>
                 {% elif c.status == 'rejected' %}
                 <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i> Rejeitada</span>
                 {% elif c.status == 'denied' %}
@@ -132,10 +134,10 @@
         </div>
         {% endif %}
 
-        <!-- Ação: Gerente confirma/nega -->
+        <!-- Ação: Gerente confirma/nega (aprovação) -->
         {% if c.status == 'accepted' and c.requester == request.user %}
         <div class="px-5 py-4 bg-blue-50 space-y-3">
-            <h3 class="text-xs uppercase font-semibold text-blue-700 mb-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou — confirme ou negue</h3>
+            <h3 class="text-xs uppercase font-semibold text-blue-700 mb-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou — dê o de acordo ou negue</h3>
             <input type="text" id="conf-notes" placeholder="Observação (opcional)"
                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
             <div class="flex gap-3">
@@ -143,7 +145,32 @@
                     {% csrf_token %}
                     <input type="hidden" name="confirmation_notes" value="">
                     <button type="submit" class="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
-                        <i class="fas fa-check-double mr-2"></i> Confirmar
+                        <i class="fas fa-check-double mr-2"></i> De Acordo
+                    </button>
+                </form>
+                <form method="post" action="{% url 'contestacao:deny_contestation' c.pk %}" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="confirmation_notes" value="">
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-500 text-white text-sm font-medium rounded-md hover:bg-gray-600">
+                        <i class="fas fa-times mr-2"></i> Negar
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Ação: Gerente confirma/nega (rejeição) -->
+        {% if c.status == 'rejected' and not c.confirmed_by and c.requester == request.user %}
+        <div class="px-5 py-4 bg-red-50 space-y-3">
+            <h3 class="text-xs uppercase font-semibold text-red-700 mb-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou — dê o de acordo ou negue</h3>
+            <input type="text" id="conf-notes" placeholder="Observação (opcional)"
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500">
+            <div class="flex gap-3">
+                <form method="post" action="{% url 'contestacao:confirm_contestation' c.pk %}" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="confirmation_notes" value="">
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
+                        <i class="fas fa-check-double mr-2"></i> De Acordo
                     </button>
                 </form>
                 <form method="post" action="{% url 'contestacao:deny_contestation' c.pk %}" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes').value;">

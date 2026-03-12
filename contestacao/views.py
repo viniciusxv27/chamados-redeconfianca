@@ -390,7 +390,9 @@ def my_contestations(request):
         qs = qs.filter(requester=request.user)
 
     status_filter = request.GET.get('status', '')
-    if status_filter:
+    if status_filter == 'rejected_pending':
+        qs = qs.filter(status='rejected', confirmed_by__isnull=True)
+    elif status_filter:
         qs = qs.filter(status=status_filter)
 
     context = {
@@ -424,7 +426,9 @@ def manage_contestations(request):
 
     # Filtro de status
     status_filter = request.GET.get('status', 'pending')
-    if status_filter:
+    if status_filter == 'awaiting_manager':
+        qs = qs.filter(status__in=['accepted', 'rejected'], confirmed_by__isnull=True)
+    elif status_filter:
         qs = qs.filter(status=status_filter)
     
     # Filtro de loja/filial
@@ -439,6 +443,9 @@ def manage_contestations(request):
 
     pending_count = Contestation.objects.filter(status='pending').count()
     confirmed_count = Contestation.objects.filter(status='confirmed', payment_status='pending_payment').count()
+    awaiting_manager_count = Contestation.objects.filter(
+        status__in=['accepted', 'rejected'], confirmed_by__isnull=True
+    ).count()
 
     context = {
         'contestations': qs[:100],
@@ -447,6 +454,7 @@ def manage_contestations(request):
         'filiais': filiais,
         'pending_count': pending_count,
         'confirmed_count': confirmed_count,
+        'awaiting_manager_count': awaiting_manager_count,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
 
@@ -499,33 +507,36 @@ def reject_contestation(request, pk):
     ContestationHistory.objects.create(
         contestation=c, action='rejected', user=request.user, notes=notes,
     )
-    messages.success(request, f'Contestação #{c.pk} rejeitada.')
+    messages.success(request, f'Contestação #{c.pk} rejeitada! Aguardando de acordo do gerente.')
     return redirect('contestacao:manage_contestations')
 
 
 @login_required
 def confirm_contestation(request, pk):
-    """Gerente confirma após aprovação do gestor."""
-    c = get_object_or_404(Contestation, pk=pk, status='accepted')
-    # Apenas o criador da contestação pode confirmar
+    """Gerente dá de acordo após decisão do gestor (aprovação ou rejeição)."""
+    c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
     if c.requester != request.user:
-        messages.error(request, 'Apenas o solicitante pode confirmar esta contestação.')
+        messages.error(request, 'Apenas o solicitante pode dar de acordo nesta contestação.')
         return redirect('contestacao:my_contestations')
+    was_accepted = c.status == 'accepted'
     notes = request.POST.get('confirmation_notes', '')
     c.confirm(request.user, notes)
     ContestationHistory.objects.create(
         contestation=c, action='confirmed', user=request.user, notes=notes,
     )
-    messages.success(request, f'Contestação #{c.pk} confirmada! Aguardando pagamento.')
+    if was_accepted:
+        messages.success(request, f'Contestação #{c.pk} confirmada! Aguardando pagamento.')
+    else:
+        messages.success(request, f'De acordo registrado na contestação #{c.pk}.')
     return redirect('contestacao:my_contestations')
 
 
 @login_required
 def deny_contestation(request, pk):
-    """Gerente nega após aprovação do gestor."""
-    c = get_object_or_404(Contestation, pk=pk, status='accepted')
+    """Gerente discorda da decisão do gestor."""
+    c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
     if c.requester != request.user:
-        messages.error(request, 'Apenas o solicitante pode negar esta contestação.')
+        messages.error(request, 'Apenas o solicitante pode contestar esta decisão.')
         return redirect('contestacao:my_contestations')
     notes = request.POST.get('confirmation_notes', '')
     c.deny_confirmation(request.user, notes)

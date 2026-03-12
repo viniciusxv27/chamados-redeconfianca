@@ -101,7 +101,7 @@ class Contestation(models.Model):
         self.save()
 
     def reject(self, reviewer, notes=''):
-        """Gestor rejeita — fim do fluxo."""
+        """Gestor rejeita — aguarda de acordo do gerente."""
         self.status = 'rejected'
         self.reviewed_by = reviewer
         self.review_notes = notes
@@ -109,16 +109,18 @@ class Contestation(models.Model):
         self.save()
 
     def confirm(self, requester, notes=''):
-        """Gerente confirma após aprovação do gestor."""
-        self.status = 'confirmed'
-        self.payment_status = 'pending_payment'
+        """Gerente dá de acordo após decisão do gestor."""
+        if self.status == 'accepted':
+            self.status = 'confirmed'
+            self.payment_status = 'pending_payment'
+        # Se rejeitada, mantém 'rejected' mas registra o de acordo
         self.confirmed_by = requester
         self.confirmation_notes = notes
         self.confirmed_at = timezone.now()
         self.save()
 
     def deny_confirmation(self, requester, notes=''):
-        """Gerente nega após aprovação do gestor."""
+        """Gerente nega/discorda da decisão do gestor."""
         self.status = 'denied'
         self.confirmed_by = requester
         self.confirmation_notes = notes
