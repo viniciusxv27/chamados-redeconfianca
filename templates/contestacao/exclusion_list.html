@@ -158,19 +158,25 @@
                     {% if not info %}
                     <tr class="reason-row bg-red-50" id="reason-row-{{ r.pk }}">
                         <td colspan="9" class="px-4 py-3">
-                            <div class="flex items-start gap-3">
-                                <div class="flex-1">
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação para <strong>{{ r.vendedor }}</strong></label>
-                                    <textarea class="reason-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
-                                              data-id="{{ r.pk }}" rows="2" placeholder="Descreva o motivo da contestação..."></textarea>
-                                </div>
-                                <div class="flex items-center gap-2 pt-5">
-                                    <button type="button" onclick="confirmReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
-                                        <i class="fas fa-check mr-1"></i> OK
-                                    </button>
-                                    <button type="button" onclick="cancelReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">
-                                        <i class="fas fa-times mr-1"></i>
-                                    </button>
+                            <div class="flex flex-col gap-2">
+                                <div class="flex items-start gap-3">
+                                    <div class="flex-1">
+                                        <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação para <strong>{{ r.vendedor }}</strong></label>
+                                        <textarea class="reason-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                                  data-id="{{ r.pk }}" rows="2" placeholder="Descreva o motivo da contestação..."></textarea>
+                                    </div>
+                                    <div class="flex-1">
+                                        <label class="block text-xs font-medium text-gray-600 mb-1"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
+                                        <input type="file" class="evidence-input w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-red-500 focus:border-red-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+                                    </div>
+                                    <div class="flex items-center gap-2 pt-5">
+                                        <button type="button" onclick="confirmReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                                            <i class="fas fa-check mr-1"></i> OK
+                                        </button>
+                                        <button type="button" onclick="cancelReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">
+                                            <i class="fas fa-times mr-1"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -234,6 +240,8 @@
                 <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação</label>
                 <textarea class="reason-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
                           data-id="{{ r.pk }}" rows="2" placeholder="Descreva o motivo..."></textarea>
+                <label class="block text-xs font-medium text-gray-600 mt-2 mb-1"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
+                <input type="file" class="evidence-input w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-red-500 focus:border-red-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
                 <div class="flex gap-2 mt-2">
                     <button type="button" onclick="confirmReason({{ r.pk }})" class="flex-1 inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
                         <i class="fas fa-check mr-1"></i> OK
@@ -288,6 +296,8 @@
 <script>
 // Stores confirmed reasons: { exclusion_id: "reason text" }
 const pendingReasons = {};
+// Stores evidence files: { exclusion_id: File }
+const pendingFiles = {};
 
 function toggleReason(id) {
     // Desktop
@@ -309,7 +319,16 @@ function confirmReason(id) {
         alert('Informe o motivo da contestação.');
         return;
     }
+    // Check evidence file
+    const fileInputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"');
+    let file = null;
+    fileInputs.forEach(fi => { if (fi.files && fi.files.length > 0) file = fi.files[0]; });
+    if (!file) {
+        alert('Anexe a evidência (obrigatório).');
+        return;
+    }
     pendingReasons[id] = reason;
+    pendingFiles[id] = file;
     // Close the inline area
     const row = document.getElementById('reason-row-' + id);
     if (row) row.classList.remove('active');
@@ -362,9 +381,11 @@ function resetButton(id) {
 function clearAllReasons() {
     Object.keys(pendingReasons).forEach(id => {
         delete pendingReasons[id];
+        delete pendingFiles[id];
         resetButton(id);
-        // Clear textareas
-        document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
+        // Clear textareas and file inputs
+        document.querySelectorAll('.reason-input[data-id="' + id + '"').forEach(ta => ta.value = '');
+        document.querySelectorAll('.evidence-input[data-id="' + id + '"').forEach(fi => fi.value = '');
     });
     renderBar();
 }
@@ -389,15 +410,22 @@ function submitAllContestations() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando...';
 
-    const items = ids.map(id => ({ exclusion_id: parseInt(id), reason: pendingReasons[id] }));
+    const formData = new FormData();
+    ids.forEach((id, i) => {
+        formData.append('exclusion_id_' + i, id);
+        formData.append('reason_' + i, pendingReasons[id]);
+        if (pendingFiles[id]) {
+            formData.append('file_' + i, pendingFiles[id]);
+        }
+    });
+    formData.append('count', ids.length);
 
     fetch('{% url "contestacao:bulk_create_contestation" %}', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
             'X-CSRFToken': '{{ csrf_token }}',
         },
-        body: JSON.stringify({ items: items }),
+        body: formData,
     })
     .then(resp => resp.json())
     .then(data => {

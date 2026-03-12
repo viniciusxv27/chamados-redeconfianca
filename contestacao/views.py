@@ -294,24 +294,34 @@ def create_contestation(request, exclusion_id):
 
 @login_required
 def bulk_create_contestation(request):
-    """Cria contestações em lote — cada item com seu motivo individual (via JSON)."""
+    """Cria contestações em lote — cada item com motivo e evidência individual (via FormData)."""
     if not _can_create_contestations(request.user):
         return JsonResponse({'success': False, 'error': 'Sem permissão para contestar.'}, status=403)
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método não permitido.'}, status=405)
 
-    import json
     try:
-        data = json.loads(request.body)
-        items = data.get('items', [])
-    except (json.JSONDecodeError, AttributeError):
+        count = int(request.POST.get('count', 0))
+    except (ValueError, TypeError):
         return JsonResponse({'success': False, 'error': 'Dados inválidos.'}, status=400)
 
-    if not items:
+    if count <= 0:
         return JsonResponse({'success': False, 'error': 'Nenhum item enviado.'}, status=400)
 
-    exclusion_ids = [int(item['exclusion_id']) for item in items if item.get('exclusion_id')]
+    # Parse items from FormData
+    items = []
+    for i in range(count):
+        eid = request.POST.get(f'exclusion_id_{i}')
+        reason = request.POST.get(f'reason_{i}', '').strip()
+        attachment = request.FILES.get(f'file_{i}')
+        if eid and reason and attachment:
+            items.append({'exclusion_id': int(eid), 'reason': reason, 'attachment': attachment})
+
+    if not items:
+        return JsonResponse({'success': False, 'error': 'Nenhum item válido. Motivo e evidência são obrigatórios.'}, status=400)
+
+    exclusion_ids = [item['exclusion_id'] for item in items]
     exclusions_by_id = {e.pk: e for e in ExclusionRecord.objects.filter(pk__in=exclusion_ids)}
 
     # Filter out already contested
@@ -324,15 +334,17 @@ def bulk_create_contestation(request):
 
     created_count = 0
     for item in items:
-        eid = int(item.get('exclusion_id', 0))
-        reason = str(item.get('reason', '')).strip()
-        if not reason or eid not in exclusions_by_id or eid in already_contested:
+        eid = item['exclusion_id']
+        reason = item['reason']
+        attachment = item['attachment']
+        if eid not in exclusions_by_id or eid in already_contested:
             continue
         exclusion = exclusions_by_id[eid]
         c = Contestation.objects.create(
             exclusion=exclusion,
             requester=request.user,
             reason=reason,
+            attachment=attachment,
         )
         ContestationHistory.objects.create(
             contestation=c,
@@ -595,6 +607,18 @@ def dashboard(request):
         else:
             qs = qs.filter(requester=request.user)
 
+    # Total na base (ExclusionRecord) com mesmo filtro de setor
+    base_qs = ExclusionRecord.objects.all()
+    if rank < HIERARCHY_RANK['SUPERADMIN']:
+        if upper_sectors:
+            bq = Q()
+            for s in upper_sectors:
+                bq |= Q(filial__iexact=s)
+            base_qs = base_qs.filter(bq)
+        else:
+            base_qs = base_qs.none()
+    total_na_base = base_qs.count()
+
     total_enviado = qs.count()
     total_aceito = qs.filter(status__in=['accepted', 'confirmed']).count()
     total_recusado = qs.filter(status__in=['rejected', 'denied']).count()
@@ -633,6 +657,7 @@ def dashboard(request):
     taxa_aprovacao = round((total_aceito / finalizados * 100), 1) if finalizados > 0 else 0
 
     context = {
+        'total_na_base': total_na_base,
         'total_enviado': total_enviado,
         'total_aceito': total_aceito,
         'total_recusado': total_recusado,
