@@ -69,7 +69,16 @@
     </div>
 
     <!-- Cards de receita e taxa -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-600">
+                    <i class="fas fa-database"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Total de Receita na Base</span>
+            </div>
+            <p class="text-xl font-bold text-gray-900">R$ {{ receita_na_base|floatformat:2 }}</p>
+        </div>
         <div class="bg-white border rounded-xl p-5 shadow-sm">
             <div class="flex items-center gap-3 mb-2">
                 <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-600">

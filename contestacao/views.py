@@ -618,6 +618,7 @@ def dashboard(request):
         else:
             base_qs = base_qs.none()
     total_na_base = base_qs.count()
+    receita_na_base = base_qs.aggregate(total=Sum('receita'))['total'] or 0
 
     total_enviado = qs.count()
     total_aceito = qs.filter(status__in=['accepted', 'confirmed']).count()
@@ -658,6 +659,7 @@ def dashboard(request):
 
     context = {
         'total_na_base': total_na_base,
+        'receita_na_base': receita_na_base,
         'total_enviado': total_enviado,
         'total_aceito': total_aceito,
         'total_recusado': total_recusado,
