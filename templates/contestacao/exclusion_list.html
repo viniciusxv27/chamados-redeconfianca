@@ -4,11 +4,12 @@
 {% block title %}Exclusões – Contestação{% endblock %}
 
 {% block extra_css %}
+<link href="https://unpkg.com/filepond@4/dist/filepond.min.css" rel="stylesheet" />
 <style>
     #bulkBar { transition: transform 0.2s ease, opacity 0.2s ease; }
     #bulkBar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
     .row-white { background-color: #ffffff; }
-    .row-alt-orange { background-color: rgba(251, 146, 60, 0.12); }
+    .row-alt-soft { background-color: #fff4e8; }
     .reason-enter {
         animation: reasonReveal 0.28s ease-out;
     }
@@ -107,7 +108,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for r in records %}
-                    {% cycle 'row-white' 'row-alt-orange' as row_bg silent %}
+                    {% cycle 'row-white' 'row-alt-soft' as row_bg silent %}
                     <tr class="{{ row_bg }} hover:bg-orange-100/70 transition-colors" id="row-{{ r.pk }}">
                         <td class="px-4 py-2.5 text-sm text-gray-900 font-medium">{{ r.vendedor }}</td>
                         <td class="px-4 py-2.5 text-sm text-gray-600">{{ r.filial }}</td>
@@ -313,11 +314,32 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://unpkg.com/filepond@4/dist/filepond.min.js"></script>
 <script>
 // Stores confirmed reasons: { exclusion_id: "reason text" }
 const pendingReasons = {};
 // Stores evidence files: { exclusion_id: File }
 const pendingFiles = {};
+const evidencePonds = {};
+
+function setupEvidenceInputs() {
+    if (!window.FilePond) return;
+
+    document.querySelectorAll('.evidence-input').forEach((input) => {
+        if (input.dataset.pondReady === '1') return;
+        const id = String(input.dataset.id || '');
+        const pond = FilePond.create(input, {
+            allowMultiple: false,
+            credits: false,
+            allowFileEncode: false,
+            maxFiles: 1,
+            labelIdle: 'Arraste o arquivo aqui ou <span class="filepond--label-action">clique para selecionar</span>',
+        });
+        if (!evidencePonds[id]) evidencePonds[id] = [];
+        evidencePonds[id].push(pond);
+        input.dataset.pondReady = '1';
+    });
+}
 
 function openReason(id) {
     const row = document.getElementById('reason-row-' + id);
@@ -352,10 +374,18 @@ function confirmReason(id) {
         alert('Informe o motivo da contestação.');
         return;
     }
-    // Check evidence file
-    const fileInputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"]');
+    // Check evidence file (FilePond first, fallback to native input)
     let file = null;
-    fileInputs.forEach(fi => { if (fi.files && fi.files.length > 0) file = fi.files[0]; });
+    const ponds = evidencePonds[String(id)] || [];
+    ponds.forEach((pond) => {
+        if (!file && pond.getFiles().length > 0) {
+            file = pond.getFiles()[0].file;
+        }
+    });
+    if (!file) {
+        const fileInputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"]');
+        fileInputs.forEach(fi => { if (fi.files && fi.files.length > 0) file = fi.files[0]; });
+    }
     if (!file) {
         alert('Anexe a evidência (obrigatório).');
         return;
@@ -411,6 +441,8 @@ function clearAllReasons() {
         resetButton(id);
         // Clear textareas and file inputs
         document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
+        const ponds = evidencePonds[String(id)] || [];
+        ponds.forEach((pond) => pond.removeFiles());
         document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach(fi => fi.value = '');
     });
     renderBar();
@@ -470,6 +502,9 @@ function submitAllContestations() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', renderBar);
+document.addEventListener('DOMContentLoaded', () => {
+    setupEvidenceInputs();
+    renderBar();
+});
 </script>
 {% endblock %}
