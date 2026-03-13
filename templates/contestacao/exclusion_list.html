@@ -8,6 +8,8 @@
 <style>
     #bulkBar { transition: transform 0.2s ease, opacity 0.2s ease; }
     #bulkBar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+    .line-white > td { background-color: #ffffff !important; }
+    .line-graphite > td { background-color: #9ca3af !important; }
     .data-row:hover > td { background-color: #b8c0cc !important; }
     .reason-enter {
         animation: reasonReveal 0.28s ease-out;
@@ -107,11 +109,11 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for r in records %}
-                    {% cycle '#ffffff' '#c9ced6' as zebra_bg silent %}
-                    <tr class="data-row transition-colors" id="row-{{ r.pk }}">
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-900 font-medium">{{ r.vendedor }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-600">{{ r.filial }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2">
+                    {% cycle 'line-white' 'line-graphite' as zebra_class silent %}
+                    <tr class="data-row {{ zebra_class }} transition-colors" id="row-{{ r.pk }}">
+                        <td class="px-3 py-2 text-[11px] text-gray-900 font-medium">{{ r.vendedor }}</td>
+                        <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.filial }}</td>
+                        <td class="px-3 py-2">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
                                 {% if r.pilar == 'MOVEL' %}bg-blue-100 text-blue-700
                                 {% elif r.pilar == 'FIXA' %}bg-green-100 text-green-700
@@ -120,12 +122,12 @@
                                 {% elif r.pilar == 'SVA' %}bg-pink-100 text-pink-700
                                 {% else %}bg-gray-100 text-gray-700{% endif %}">{{ r.pilar }}</span>
                         </td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-600">{{ r.cpf_cnpj|default:'-' }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-600">{{ r.numero_acesso|default:'-' }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-right font-mono text-gray-900">R$ {{ r.receita|floatformat:2 }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:8 }}</td>
-                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-center">
+                        <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.cpf_cnpj|default:'-' }}</td>
+                        <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.numero_acesso|default:'-' }}</td>
+                        <td class="px-3 py-2 text-[11px] text-right font-mono text-gray-900">R$ {{ r.receita|floatformat:2 }}</td>
+                        <td class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
+                        <td class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:8 }}</td>
+                        <td class="px-3 py-2 text-center">
                             {% with info=contestations_map|get_item:r.pk %}
                             {% if info %}
                                 {% if info.status == 'pending' %}
@@ -168,18 +170,18 @@
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info %}
-                    <tr id="reason-row-{{ r.pk }}" style="display:none; background-color: {{ zebra_bg }};">
+                    <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
                         <td colspan="9" class="px-4 py-3">
                             <div class="reason-content flex flex-col gap-2 border border-orange-200 rounded-xl bg-transparent p-3 shadow-sm">
                                 <div class="flex items-start gap-3">
                                     <div class="flex-1">
                                         <label class="block mb-1 text-xs font-semibold text-gray-700">Motivo da contestação para <strong>{{ r.vendedor }}</strong></label>
-                                        <textarea class="reason-input block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500"
+                                        <textarea class="reason-input bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand block w-full p-3.5 shadow-xs placeholder:text-body"
                                                   data-id="{{ r.pk }}" rows="3" placeholder="Descreva o motivo da contestação..."></textarea>
                                     </div>
                                     <div class="flex-1">
                                         <label class="block mb-1 text-xs font-semibold text-gray-700"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
-                                        <input type="file" class="evidence-input block w-full cursor-pointer rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+                                        <input type="file" class="evidence-input cursor-pointer bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand block w-full shadow-xs placeholder:text-body" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
                                     </div>
                                     <div class="flex items-center gap-2 pt-5">
                                         <button type="button" onclick="confirmReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
@@ -257,10 +259,10 @@
             <div id="reason-card-{{ r.pk }}" style="display:none" class="mt-2 border-t pt-2">
                     <div class="reason-content bg-transparent border border-orange-200 rounded-xl p-2.5">
                         <label class="block mb-1 text-xs font-semibold text-gray-700">Motivo da contestação</label>
-                        <textarea class="reason-input block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500"
+                        <textarea class="reason-input bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand block w-full p-3.5 shadow-xs placeholder:text-body"
                                   data-id="{{ r.pk }}" rows="3" placeholder="Descreva o motivo..."></textarea>
                         <label class="block mt-2 mb-1 text-xs font-semibold text-gray-700"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
-                        <input type="file" class="evidence-input block w-full cursor-pointer rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+                        <input type="file" class="evidence-input cursor-pointer bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand block w-full shadow-xs placeholder:text-body" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
                         <div class="flex gap-2 mt-2">
                             <button type="button" onclick="confirmReason({{ r.pk }})" class="flex-1 inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
                                 <i class="fas fa-check mr-1"></i> OK
