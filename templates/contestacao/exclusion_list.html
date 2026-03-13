@@ -14,23 +14,34 @@
         --border-gray: #e9ecef;
     }
     
-    #bulkBar { transition: transform 0.2s ease, opacity 0.2s ease; }
-    #bulkBar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+    #bulkBar {
+        transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+    #bulkBar.hidden {
+        transform: translateY(100%);
+        opacity: 0;
+        pointer-events: none;
+    }
     #bulkBar .bulk-panel {
-        background: linear-gradient(135deg, #ff6b35 0%, #ff8a4d 100%) !important;
-        border: 2px solid #ffffff !important;
-        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.42), 0 0 0 4px rgba(255, 107, 53, 0.28) !important;
+        background: #ffffff !important;
+        border: 2px solid #ff6b35 !important;
+        box-shadow: 0 24px 50px rgba(2, 6, 23, 0.38), 0 0 0 6px rgba(255, 107, 53, 0.24) !important;
         opacity: 1 !important;
     }
+    #bulkBar .bulk-header {
+        background: linear-gradient(90deg, #ff6b35 0%, #f97316 100%) !important;
+        border-bottom: 1px solid #ea580c !important;
+    }
     #bulkBar .bulk-details {
-        background-color: rgba(17, 24, 39, 0.9) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.25) !important;
+        background-color: #fff7ed !important;
+        border-top: 1px solid #fed7aa !important;
     }
     #bulkBar .bulk-detail-item {
-        border: 1px solid rgba(255, 255, 255, 0.25) !important;
-        background-color: rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid #fdba74 !important;
+        background-color: #ffffff !important;
         border-radius: 0.6rem;
-        padding: 0.65rem 0.75rem;
+        padding: 0.75rem 0.875rem;
+        color: #1f2937 !important;
     }
     .reason-content {
         background: #ffffff !important;
@@ -386,29 +397,29 @@
 
 <!-- Barra flutuante - enviar contestações -->
 <div id="bulkBar" class="hidden fixed bottom-0 inset-x-0 z-40">
-    <div class="max-w-4xl mx-auto px-4 pb-4">
+    <div class="max-w-5xl mx-auto px-4 pb-4">
         <div class="bulk-panel rounded-xl shadow-2xl overflow-hidden">
-            <div class="px-5 py-3 flex items-center justify-between gap-4">
+            <div class="bulk-header px-5 py-3 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
-                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: var(--primary)" id="bulkCount">0</span>
+                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #1f2937" id="bulkCount">0</span>
                     <div class="text-sm text-white">
-                        <span class="font-semibold">contestações preenchidas</span>
+                        <span class="font-semibold">pedido de contestação pronto para envio</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button type="button" id="btnToggleBulkDetails" class="px-3 py-1.5 text-sm text-white hover:text-gray-100 font-semibold rounded-md" style="background-color: rgba(0,0,0,0.22)">
+                <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <button type="button" id="btnToggleBulkDetails" class="px-3 py-1.5 text-sm text-white hover:text-gray-100 font-semibold rounded-md" style="background-color: #7c2d12">
                         <i class="fas fa-chevron-down mr-1"></i> Ver detalhes
                     </button>
-                    <button type="button" onclick="clearAllReasons()" class="px-3 py-1.5 text-sm text-gray-200 hover:text-white font-medium">
+                    <button type="button" onclick="clearAllReasons()" class="px-3 py-1.5 text-sm text-white hover:text-white font-medium rounded-md" style="background-color: #374151">
                         <i class="fas fa-trash-alt mr-1"></i> Limpar
                     </button>
-                    <button type="button" onclick="submitAllContestations()" id="btnSubmitAll" class="inline-flex items-center px-5 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 transition" style="background-color: var(--primary)">
+                    <button type="button" onclick="submitAllContestations()" id="btnSubmitAll" class="inline-flex items-center px-5 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 transition" style="background-color: #111827">
                         <i class="fas fa-paper-plane mr-2"></i> Enviar
                     </button>
                 </div>
             </div>
             <div id="bulkDetails" class="bulk-details hidden px-5 py-4">
-                <div class="mb-2 text-sm font-semibold text-white">Itens adicionados ao pedido</div>
+                <div class="mb-2 text-sm font-semibold text-gray-800">Itens adicionados ao pedido</div>
                 <div id="bulkDetailsList" class="space-y-2 max-h-48 overflow-y-auto"></div>
             </div>
         </div>
@@ -581,12 +592,12 @@ window.renderBar = function() {
             const fileName = window.pendingFiles[id] ? window.pendingFiles[id].name : 'Sem arquivo';
 
             const item = document.createElement('div');
-            item.className = 'bulk-detail-item text-white text-xs';
+            item.className = 'bulk-detail-item text-xs';
             item.innerHTML = `
-                <div class="font-semibold text-sm">${summary.vendedor} <span class="opacity-90">(${summary.filial})</span></div>
-                <div class="mt-1 opacity-95">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
-                <div class="mt-1 opacity-95">Motivo: ${shortReason || '-'}</div>
-                <div class="mt-1 opacity-90">Evidência: ${fileName}</div>
+                <div class="font-semibold text-sm text-gray-900">${summary.vendedor} <span class="text-gray-600">(${summary.filial})</span></div>
+                <div class="mt-1 text-gray-700">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
+                <div class="mt-1 text-gray-700">Motivo: ${shortReason || '-'}</div>
+                <div class="mt-1 text-gray-600">Evidência: ${fileName}</div>
             `;
             detailsList.appendChild(item);
         });
