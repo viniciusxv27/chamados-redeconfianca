@@ -213,12 +213,10 @@
                                 {% endif %}
                             {% else %}
                             <div class="inline-flex items-center gap-1.5">
-                                <button type="button" onclick="openReason({{ r.pk }})"
-                                   class="btn-sim inline-flex items-center px-4 py-2 text-xs font-semibold text-white rounded-lg" id="btn-{{ r.pk }}">
+                                <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35; color: white; padding: 0.625rem 1rem; border-radius: 0.5rem; border: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center;" id="btn-{{ r.pk }}">
                                     <i class="fas fa-check mr-1"></i> Sim
                                 </button>
-                                          <button type="button" onclick="cancelReason({{ r.pk }})"
-                                              class="inline-flex items-center px-4 py-2 text-xs font-semibold text-gray-800 bg-gray-200 rounded-lg hover:bg-gray-300 transition" aria-label="Não">
+                                <button type="button" onclick="cancelReason({{ r.pk }})" style="background-color: #d1d5db; color: #1f2937; padding: 0.625rem 1rem; border-radius: 0.5rem; border: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center;" aria-label="Não">
                                     <i class="fas fa-times mr-1"></i> Não
                                 </button>
                             </div>
@@ -234,18 +232,18 @@
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     <div>
                                         <label class="block mb-2.5 text-sm font-semibold text-gray-800">Motivo da contestação</label>
-                                        <textarea class="reason-input form-textarea w-full" data-id="{{ r.pk }}" placeholder="Descreva o motivo da contestação para {{ r.vendedor }}..."></textarea>
+                                        <textarea class="reason-input w-full" data-id="{{ r.pk }}" placeholder="Descreva o motivo da contestação para {{ r.vendedor }}..." style="min-height: 6.5rem; padding: 0.75rem; border: 1.5px solid #e5e7eb; border-radius: 0.5rem; background-color: #f3f4f6; font-size: 0.875rem; resize: vertical;"></textarea>
                                     </div>
                                     <div>
-                                        <label class="block mb-2.5 text-sm font-semibold text-gray-800"><i class="fas fa-paperclip mr-2" style="color: var(--primary)"></i>Evidência <span class="text-red-600">*</span></label>
-                                        <input type="file" class="evidence-input form-file w-full" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+                                        <label class="block mb-2.5 text-sm font-semibold text-gray-800"><i class="fas fa-paperclip mr-2" style="color: #FF6B35"></i>Evidência <span class="text-red-600">*</span></label>
+                                        <input type="file" class="evidence-input w-full" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="height: 2.75rem; padding: 0.625rem 0.875rem; border: 1.5px solid #e5e7eb; border-radius: 0.5rem; background-color: #f3f4f6; font-size: 0.875rem; cursor: pointer;">
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2 mt-5 pt-4 border-t">
-                                    <button type="button" onclick="confirmReason({{ r.pk }})" class="inline-flex items-center px-5 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 transition" style="background-color: var(--primary)">
+                                    <button type="button" onclick="confirmReason({{ r.pk }})" style="background-color: #FF6B35; color: white; padding: 0.75rem 1.25rem; border-radius: 0.5rem; border: none; font-size: 0.875rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center;">
                                         <i class="fas fa-check mr-2"></i> Confirmar
                                     </button>
-                                    <button type="button" onclick="cancelReason({{ r.pk }})" class="inline-flex items-center px-5 py-2.5 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition">
+                                    <button type="button" onclick="cancelReason({{ r.pk }})" style="background-color: #d1d5db; color: #1f2937; padding: 0.75rem 1.25rem; border-radius: 0.5rem; border: none; font-size: 0.875rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center;">
                                         <i class="fas fa-times mr-2"></i> Cancelar
                                     </button>
                                 </div>
@@ -303,12 +301,10 @@
                 {% endif %}
             {% else %}
                 <div class="grid grid-cols-2 gap-2 mt-3">
-                <button type="button" onclick="openReason({{ r.pk }})"
-                       class="btn-sim inline-flex items-center px-3 py-2.5 text-xs font-semibold text-white rounded-lg w-full justify-center" id="btn-mobile-{{ r.pk }}">
+                <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35; color: white; padding: 0.75rem 0.5rem; border-radius: 0.5rem; border: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-flex; align-items: center; justify-content: center; width: 100%;" id="btn-mobile-{{ r.pk }}">
                         <i class="fas fa-check mr-1"></i> Sim
                     </button>
-                     <button type="button" onclick="cancelReason({{ r.pk }})"
-                         class="inline-flex items-center px-3 py-2.5 text-xs font-semibold text-gray-800 bg-gray-200 rounded-lg w-full justify-center hover:bg-gray-300 transition" aria-label="Não">
+                     <button type="button" onclick="cancelReason({{ r.pk }})" style="background-color: #d1d5db; color: #1f2937; padding: 0.75rem 0.5rem; border-radius: 0.5rem; border: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 100%;" aria-label="Não">
                         <i class="fas fa-times mr-1"></i> Não
                     </button>
                 </div>
@@ -316,14 +312,14 @@
             <div id="reason-card-{{ r.pk }}" style="display:none" class="mt-4 pt-4 border-t">
                     <div class="reason-content bg-white border-2 rounded-lg p-4" style="border-color: var(--primary)">
                         <label class="block mb-2.5 text-sm font-semibold text-gray-800">Motivo da contestação</label>
-                        <textarea class="reason-input form-textarea w-full mb-3" data-id="{{ r.pk }}" placeholder="Descreva o motivo..."></textarea>
-                        <label class="block mb-2.5 text-sm font-semibold text-gray-800"><i class="fas fa-paperclip mr-2" style="color: var(--primary)"></i>Evidência <span class="text-red-600">*</span></label>
-                        <input type="file" class="evidence-input form-file w-full mb-4" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+                        <textarea class="reason-input w-full mb-3" data-id="{{ r.pk }}" placeholder="Descreva o motivo..." style="min-height: 6.5rem; padding: 0.75rem; border: 1.5px solid #e5e7eb; border-radius: 0.5rem; background-color: #f3f4f6; font-size: 0.875rem; resize: vertical;"></textarea>
+                        <label class="block mb-2.5 text-sm font-semibold text-gray-800"><i class="fas fa-paperclip mr-2" style="color: #FF6B35"></i>Evidência <span class="text-red-600">*</span></label>
+                        <input type="file" class="evidence-input w-full mb-4" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="height: 2.75rem; padding: 0.625rem 0.875rem; border: 1.5px solid #e5e7eb; border-radius: 0.5rem; background-color: #f3f4f6; font-size: 0.875rem; cursor: pointer;">
                         <div class="flex gap-2">
-                            <button type="button" onclick="confirmReason({{ r.pk }})" class="flex-1 inline-flex items-center justify-center px-3 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition" style="background-color: var(--primary)">
+                            <button type="button" onclick="confirmReason({{ r.pk }})" style="background-color: #FF6B35; color: white; padding: 0.75rem 1rem; border-radius: 0.5rem; border: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: 1;" class="text-white">
                                 <i class="fas fa-check mr-1"></i> Confirmar
                             </button>
-                            <button type="button" onclick="cancelReason({{ r.pk }})" class="inline-flex items-center px-3 py-2.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition">
+                            <button type="button" onclick="cancelReason({{ r.pk }})" style="background-color: #d1d5db; color: #1f2937; padding: 0.75rem 1rem; border-radius: 0.5rem; border: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
                                 <i class="fas fa-times mr-2"></i>
                             </button>
                         </div>
