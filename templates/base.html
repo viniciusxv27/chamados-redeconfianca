@@ -240,21 +240,6 @@
                         </li>
                         {% endif %}-->
                         <li>
-                            <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists">
-                                <i class="fas fa-clipboard-check text-green-400 flex-shrink-0 w-6 text-center"></i>
-                                <span class="text-sm sidebar-text">Checklists ADM</span>
-                                <div class="tooltip-collapsed">Checklists ADM</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
-                                <i class="fas fa-folder text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Arquivos</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
                             <a href="{% url 'marketplace' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Marketplace C$">
                                 <i class="fas fa-store text-primary flex-shrink-0"></i>
                                 <span class="text-sm">Mercadinho</span>
@@ -331,6 +316,13 @@
                         <!-- Sub Menu Checklists -->
                         <li class="ml-4 submenu-content hidden" id="checklists-menu">
                             <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
+                                        <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
+                                        <span>Checklists ADM</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
                                 <li>
                                     <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Checklists">
                                         <i class="fas fa-list-check text-blue-400 flex-shrink-0"></i>
@@ -477,31 +469,78 @@
                         </li>
                         {% endif %}
                         
-                        <!-- Menu Comissionamento - Liberado para todos os setores -->
+                        <!-- Menu Financeiro -->
                         <li>
-                            <a href="{% url 'commission' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Comissionamento">
-                                <i class="fas fa-dollar-sign text-green-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Comissionamento</span>
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('financeiro-menu')" title="Financeiro">
+                                <i class="fas fa-wallet text-green-400 flex-shrink-0"></i>
+                                <span class="text-sm flex-1">Financeiro</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="financeiro-menu-icon"></i>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            </div>
                         </li>
-                        
-                        <!-- Menu Almoxarifado - Liberado para todos -->
-                        <li>
-                            <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
-                                <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Almoxarifado</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                        <li class="ml-4 submenu-content hidden" id="financeiro-menu">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'commission' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Comissionamento">
+                                        <i class="fas fa-dollar-sign text-green-400 flex-shrink-0"></i>
+                                        <span>Comissionamento</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'contracheque:my_payslips' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contracheque">
+                                        <i class="fas fa-file-invoice-dollar text-green-400 flex-shrink-0"></i>
+                                        <span>Contracheque</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user.hierarchy == 'SUPERVISOR' or user.hierarchy == 'ADMIN' or user.hierarchy == 'SUPERADMIN' %}
+                                <li>
+                                    <a href="{% url 'contestacao:exclusion_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contestação">
+                                        <i class="fas fa-gavel text-red-400 flex-shrink-0"></i>
+                                        <span>Contestação</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
+                            </ul>
                         </li>
 
-                        <!-- Menu Inventário (Legado) -->
+                        <!-- Menu Gestão -->
                         <li>
-                            <a href="{% url 'assets:list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Inventário">
-                                <i class="fas fa-clipboard-list text-teal-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Inventário</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
+                                 onclick="toggleSubmenu('gestao-menu')" title="Gestão">
+                                <i class="fas fa-boxes text-orange-400 flex-shrink-0"></i>
+                                <span class="text-sm flex-1">Gestão</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="gestao-menu-icon"></i>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </div>
+                        </li>
+                        <li class="ml-4 submenu-content hidden" id="gestao-menu">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
+                                        <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
+                                        <span>Almoxarifado</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'assets:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Inventário">
+                                        <i class="fas fa-clipboard-list text-teal-400 flex-shrink-0"></i>
+                                        <span>Inventário</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
+                                        <i class="fas fa-folder text-primary flex-shrink-0"></i>
+                                        <span>Arquivos</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                         
                         <!-- Menu Agenda - Liberado para todos -->
@@ -510,26 +549,6 @@
                                 <i class="fas fa-calendar-alt text-indigo-400 flex-shrink-0"></i>
                                 <span class="text-sm flex-1">Agenda</span>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-
-                        <!-- Menu Contestação - Para supervisores+ -->
-                        {% if user.hierarchy == 'SUPERVISOR' or user.hierarchy == 'ADMIN' or user.hierarchy == 'SUPERADMIN' %}
-                        <li>
-                            <a href="{% url 'contestacao:exclusion_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contestação">
-                                <i class="fas fa-gavel text-red-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Contestação</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-
-                        <!-- Menu Contracheque - Para todos os usuários -->
-                        <li>
-                            <a href="{% url 'contracheque:my_payslips' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contracheque">
-                                <i class="fas fa-file-invoice-dollar text-green-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Contracheque</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
 
