@@ -566,6 +566,54 @@ def mark_paid(request, pk):
 
 
 @login_required
+def bulk_mark_paid(request):
+    """Marca várias contestações confirmadas como pagas."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('contestacao:manage_contestations')
+
+    if request.method != 'POST':
+        return redirect('contestacao:manage_contestations')
+
+    ids = request.POST.getlist('contestation_ids')
+    valid_ids = []
+    for raw_id in ids:
+        try:
+            valid_ids.append(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+
+    if not valid_ids:
+        messages.warning(request, 'Selecione ao menos uma contestação para marcar como paga.')
+        return redirect('contestacao:manage_contestations?status=confirmed')
+
+    contestations = Contestation.objects.filter(
+        pk__in=valid_ids,
+        status='confirmed',
+        payment_status='pending_payment',
+    ).select_related('exclusion')
+
+    paid_count = 0
+    for c in contestations:
+        c.mark_paid(request.user)
+        ContestationHistory.objects.create(
+            contestation=c,
+            action='paid',
+            user=request.user,
+            notes='Pagamento em lote',
+            extra_data={'bulk': True},
+        )
+        paid_count += 1
+
+    if paid_count == 0:
+        messages.warning(request, 'Nenhuma contestação válida foi marcada como paga.')
+    else:
+        messages.success(request, f'{paid_count} contestação(ões) marcada(s) como paga(s)!')
+
+    return redirect('contestacao:manage_contestations?status=confirmed')
+
+
+@login_required
 def contestation_history(request):
     """Histórico de todas as ações em contestações (apenas SUPERADMIN)."""
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)

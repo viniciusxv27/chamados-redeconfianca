@@ -18,4 +18,5 @@ urlpatterns = [
     path('<int:pk>/confirmar/', views.confirm_contestation, name='confirm_contestation'),
     path('<int:pk>/negar/', views.deny_contestation, name='deny_contestation'),
     path('<int:pk>/marcar-pago/', views.mark_paid, name='mark_paid'),
+    path('marcar-pago-lote/', views.bulk_mark_paid, name='bulk_mark_paid'),
 ]
