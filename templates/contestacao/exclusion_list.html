@@ -16,7 +16,7 @@
     
     #bulkBar {
         transition: transform 0.25s ease, opacity 0.25s ease;
-        background: rgba(15, 23, 42, 0.45) !important;
+        background: rgba(251, 146, 60, 0.35) !important;
         backdrop-filter: blur(2px);
     }
     #bulkBar.hidden {
@@ -25,9 +25,9 @@
         pointer-events: none;
     }
     #bulkBar .bulk-panel {
-        background: #0f172a !important;
+        background: #ffedd5 !important;
         border: 2px solid #fb923c !important;
-        box-shadow: 0 24px 50px rgba(2, 6, 23, 0.55), 0 0 0 6px rgba(251, 146, 60, 0.32) !important;
+        box-shadow: 0 24px 50px rgba(194, 65, 12, 0.35), 0 0 0 6px rgba(251, 146, 60, 0.32) !important;
         opacity: 1 !important;
     }
     #bulkBar .bulk-header {
@@ -398,24 +398,24 @@
 </div>
 
 <!-- Barra flutuante - enviar contestações -->
-<div id="bulkBar" class="hidden fixed bottom-0 inset-x-0 z-40" style="background: rgba(15, 23, 42, 0.45) !important;">
+<div id="bulkBar" class="hidden fixed bottom-0 inset-x-0 z-40" style="background: rgba(251, 146, 60, 0.35) !important;">
     <div class="max-w-5xl mx-auto px-4 pb-4">
-        <div class="bulk-panel rounded-xl shadow-2xl overflow-hidden" style="background: #0f172a !important; border: 2px solid #fb923c !important; box-shadow: 0 24px 50px rgba(2, 6, 23, 0.55), 0 0 0 6px rgba(251, 146, 60, 0.32) !important;">
+        <div class="bulk-panel rounded-xl shadow-2xl overflow-hidden" style="background: #ffedd5 !important; border: 2px solid #fb923c !important; box-shadow: 0 24px 50px rgba(194, 65, 12, 0.35), 0 0 0 6px rgba(251, 146, 60, 0.32) !important;">
             <div class="bulk-header px-5 py-3 flex items-center justify-between gap-4" style="background: #ea580c !important; border-bottom: 1px solid #c2410c !important;">
                 <div class="flex items-center gap-3">
-                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #1f2937" id="bulkCount">0</span>
+                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #c2410c" id="bulkCount">0</span>
                     <div class="text-sm text-white">
                         <span class="font-semibold">pedido de contestação pronto para envio</span>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap justify-end">
-                    <button type="button" id="btnToggleBulkDetails" class="px-3 py-1.5 text-sm text-white hover:text-gray-100 font-semibold rounded-md" style="background-color: #7c2d12">
+                    <button type="button" id="btnToggleBulkDetails" class="px-3 py-1.5 text-sm text-white hover:text-gray-100 font-semibold rounded-md" style="background-color: #c2410c">
                         <i class="fas fa-chevron-down mr-1"></i> Ver detalhes
                     </button>
-                    <button type="button" onclick="clearAllReasons()" class="px-3 py-1.5 text-sm text-white hover:text-white font-medium rounded-md" style="background-color: #374151">
+                    <button type="button" onclick="clearAllReasons()" class="px-3 py-1.5 text-sm text-white hover:text-white font-medium rounded-md" style="background-color: #ea580c">
                         <i class="fas fa-trash-alt mr-1"></i> Limpar
                     </button>
-                    <button type="button" onclick="submitAllContestations()" id="btnSubmitAll" class="inline-flex items-center px-5 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 transition" style="background-color: #111827">
+                    <button type="button" onclick="submitAllContestations()" id="btnSubmitAll" class="inline-flex items-center px-5 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 transition" style="background-color: #9a3412">
                         <i class="fas fa-paper-plane mr-2"></i> Enviar
                     </button>
                 </div>
