@@ -4,60 +4,13 @@
 {% block title %}Exclusões – Contestação{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.5.2/flowbite.min.css" />
 <style>
     #bulkBar { transition: transform 0.2s ease, opacity 0.2s ease; }
     #bulkBar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
-    .zebra-white > td { background-color: #ffffff; }
-    .zebra-graphite > td { background-color: #c9ced6; }
-    .zebra-white:hover > td,
-    .zebra-graphite:hover > td { background-color: #b8c0cc !important; }
+    .data-row:hover > td { background-color: #b8c0cc !important; }
     .reason-enter {
         animation: reasonReveal 0.28s ease-out;
-    }
-    .fancy-control {
-        width: 100%;
-        border: 2px solid #fb923c;
-        border-radius: 0.9rem;
-        padding: 0.7rem 0.9rem;
-        font-size: 0.85rem;
-        color: #1f2937;
-        background: #ffffff;
-        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
-        transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
-    }
-    .fancy-control:focus {
-        outline: none;
-        border-color: #ea580c;
-        box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.22), 0 8px 18px rgba(15, 23, 42, 0.12);
-        background: #fffdfb;
-    }
-    .fancy-file {
-        width: 100%;
-        border: 2px dashed #ea580c;
-        border-radius: 0.9rem;
-        padding: 0.55rem;
-        background: #fff7ed;
-        color: #1f2937;
-        font-size: 0.8rem;
-        box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.24), 0 6px 14px rgba(15, 23, 42, 0.08);
-    }
-    .fancy-file::file-selector-button {
-        border: 0;
-        border-radius: 0.7rem;
-        background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
-        color: #ffffff;
-        font-size: 0.78rem;
-        font-weight: 600;
-        padding: 0.45rem 0.75rem;
-        margin-right: 0.6rem;
-        cursor: pointer;
-    }
-    .reason-field {
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid #fed7aa;
-        border-radius: 0.95rem;
-        padding: 0.65rem;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
     }
     @keyframes reasonReveal {
         0% { opacity: 0; transform: translateY(-8px) scale(0.99); }
@@ -106,11 +59,11 @@
         <div class="flex-1 min-w-[200px]">
             <label class="block text-xs font-medium text-gray-500 mb-1">Buscar</label>
             <input type="text" name="q" value="{{ search }}" placeholder="Vendedor, cliente, CPF..."
-                   class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                   class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500">
         </div>
         <div class="w-40">
             <label class="block text-xs font-medium text-gray-500 mb-1">Pilar</label>
-            <select name="pilar" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <select name="pilar" class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500">
                 <option value="">Todos</option>
                 {% for p in pilares %}
                 <option value="{{ p }}" {% if pilar_filter == p %}selected{% endif %}>{{ p }}</option>
@@ -119,7 +72,7 @@
         </div>
         <div class="w-44">
             <label class="block text-xs font-medium text-gray-500 mb-1">Loja / Filial</label>
-            <select name="filial" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <select name="filial" class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500">
                 <option value="">Todas</option>
                 {% for f in filiais %}
                 <option value="{{ f }}" {% if filial_filter == f %}selected{% endif %}>{{ f }}</option>
@@ -154,11 +107,11 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for r in records %}
-                    {% cycle 'zebra-white' 'zebra-graphite' as zebra_class silent %}
-                    <tr class="{{ zebra_class }} transition-colors" id="row-{{ r.pk }}">
-                        <td class="px-3 py-2 text-[11px] text-gray-900 font-medium">{{ r.vendedor }}</td>
-                        <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.filial }}</td>
-                        <td class="px-3 py-2">
+                    {% cycle '#ffffff' '#c9ced6' as zebra_bg silent %}
+                    <tr class="data-row transition-colors" id="row-{{ r.pk }}">
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-900 font-medium">{{ r.vendedor }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-600">{{ r.filial }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
                                 {% if r.pilar == 'MOVEL' %}bg-blue-100 text-blue-700
                                 {% elif r.pilar == 'FIXA' %}bg-green-100 text-green-700
@@ -167,12 +120,12 @@
                                 {% elif r.pilar == 'SVA' %}bg-pink-100 text-pink-700
                                 {% else %}bg-gray-100 text-gray-700{% endif %}">{{ r.pilar }}</span>
                         </td>
-                        <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.cpf_cnpj|default:'-' }}</td>
-                        <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.numero_acesso|default:'-' }}</td>
-                        <td class="px-3 py-2 text-[11px] text-right font-mono text-gray-900">R$ {{ r.receita|floatformat:2 }}</td>
-                        <td class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
-                        <td class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:8 }}</td>
-                        <td class="px-3 py-2 text-center">
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-600">{{ r.cpf_cnpj|default:'-' }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-600">{{ r.numero_acesso|default:'-' }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-right font-mono text-gray-900">R$ {{ r.receita|floatformat:2 }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:8 }}</td>
+                        <td style="background-color: {{ zebra_bg }};" class="px-3 py-2 text-center">
                             {% with info=contestations_map|get_item:r.pk %}
                             {% if info %}
                                 {% if info.status == 'pending' %}
@@ -215,22 +168,18 @@
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info %}
-                    <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
+                    <tr id="reason-row-{{ r.pk }}" style="display:none; background-color: {{ zebra_bg }};">
                         <td colspan="9" class="px-4 py-3">
                             <div class="reason-content flex flex-col gap-2 border border-orange-200 rounded-xl bg-transparent p-3 shadow-sm">
                                 <div class="flex items-start gap-3">
                                     <div class="flex-1">
-                                        <div class="reason-field">
-                                            <label class="block text-xs font-semibold text-gray-700 mb-1">Motivo da contestação para <strong>{{ r.vendedor }}</strong></label>
-                                            <textarea class="reason-input fancy-control"
-                                                      data-id="{{ r.pk }}" rows="3" placeholder="Descreva o motivo da contestação..."></textarea>
-                                        </div>
+                                        <label class="block mb-1 text-xs font-semibold text-gray-700">Motivo da contestação para <strong>{{ r.vendedor }}</strong></label>
+                                        <textarea class="reason-input block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500"
+                                                  data-id="{{ r.pk }}" rows="3" placeholder="Descreva o motivo da contestação..."></textarea>
                                     </div>
                                     <div class="flex-1">
-                                        <div class="reason-field">
-                                            <label class="block text-xs font-semibold text-gray-700 mb-1"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
-                                            <input type="file" class="evidence-input fancy-file" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
-                                        </div>
+                                        <label class="block mb-1 text-xs font-semibold text-gray-700"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
+                                        <input type="file" class="evidence-input block w-full cursor-pointer rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
                                     </div>
                                     <div class="flex items-center gap-2 pt-5">
                                         <button type="button" onclick="confirmReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
@@ -307,15 +256,11 @@
             <!-- Inline reason area for mobile -->
             <div id="reason-card-{{ r.pk }}" style="display:none" class="mt-2 border-t pt-2">
                     <div class="reason-content bg-transparent border border-orange-200 rounded-xl p-2.5">
-                        <div class="reason-field">
-                            <label class="block text-xs font-semibold text-gray-700 mb-1">Motivo da contestação</label>
-                            <textarea class="reason-input fancy-control"
-                                      data-id="{{ r.pk }}" rows="3" placeholder="Descreva o motivo..."></textarea>
-                        </div>
-                        <div class="reason-field mt-2">
-                            <label class="block text-xs font-semibold text-gray-700 mb-1"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
-                            <input type="file" class="evidence-input fancy-file" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
-                        </div>
+                        <label class="block mb-1 text-xs font-semibold text-gray-700">Motivo da contestação</label>
+                        <textarea class="reason-input block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-orange-500 focus:ring-orange-500"
+                                  data-id="{{ r.pk }}" rows="3" placeholder="Descreva o motivo..."></textarea>
+                        <label class="block mt-2 mb-1 text-xs font-semibold text-gray-700"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
+                        <input type="file" class="evidence-input block w-full cursor-pointer rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
                         <div class="flex gap-2 mt-2">
                             <button type="button" onclick="confirmReason({{ r.pk }})" class="flex-1 inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
                                 <i class="fas fa-check mr-1"></i> OK
@@ -368,6 +313,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.5.2/flowbite.min.js"></script>
 <script>
 // Stores confirmed reasons: { exclusion_id: "reason text" }
 const pendingReasons = {};
