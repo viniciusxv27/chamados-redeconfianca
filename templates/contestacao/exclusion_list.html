@@ -9,8 +9,7 @@
 <style>
     #bulkBar { transition: transform 0.2s ease, opacity 0.2s ease; }
     #bulkBar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
-    .row-zebra { background-color: var(--row-bg); }
-    .row-zebra:hover { background-color: #d8dde6 !important; }
+    .row-zebra:hover { background-color: #cfd4dc !important; }
     .reason-enter {
         animation: reasonReveal 0.28s ease-out;
     }
@@ -33,17 +32,18 @@
     }
     .fancy-file {
         width: 100%;
-        border: 1px dashed #fb923c;
+        border: 2px dashed #fb923c;
         border-radius: 0.85rem;
-        padding: 0.4rem;
-        background: #fff7ed;
-        color: #6b7280;
+        padding: 0.55rem;
+        background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+        color: #374151;
         font-size: 0.82rem;
+        box-shadow: 0 2px 6px rgba(17, 24, 39, 0.08);
     }
     .fancy-file::file-selector-button {
         border: 0;
         border-radius: 0.7rem;
-        background: #f97316;
+        background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
         color: #ffffff;
         font-size: 0.78rem;
         font-weight: 600;
@@ -52,16 +52,16 @@
         cursor: pointer;
     }
     .trix-wrapper {
-        border: 1px solid #fdba74;
+        border: 2px solid #fdba74;
         border-radius: 0.85rem;
-        background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
-        box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+        background: linear-gradient(180deg, #fffdfb 0%, #fff7ed 100%);
+        box-shadow: 0 3px 10px rgba(17, 24, 39, 0.08);
         overflow: hidden;
     }
     .trix-wrapper trix-toolbar {
         padding: 0.25rem 0.4rem;
-        background: #fff1e6;
-        border-bottom: 1px solid #fed7aa;
+        background: #ffe7d1;
+        border-bottom: 1px solid #fdba74;
     }
     .trix-wrapper trix-editor {
         min-height: 110px;
@@ -69,9 +69,10 @@
         overflow: auto;
         border: 0;
         padding: 0.65rem 0.8rem;
-        font-size: 0.83rem;
+        font-size: 0.82rem;
         color: #374151;
         line-height: 1.35;
+        background: #fffdf8;
     }
     .trix-wrapper trix-editor:focus {
         outline: none;
@@ -173,7 +174,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for r in records %}
-                    <tr class="row-zebra transition-colors" style="--row-bg:{% if forloop.counter0|divisibleby:2 %}#ffffff{% else %}#e5e7eb{% endif %};" id="row-{{ r.pk }}">
+                    <tr class="row-zebra transition-colors" style="background-color:{% if forloop.counter0|divisibleby:2 %}#ffffff{% else %}#d1d5db{% endif %};" id="row-{{ r.pk }}">
                         <td class="px-3 py-2 text-[11px] text-gray-900 font-medium">{{ r.vendedor }}</td>
                         <td class="px-3 py-2 text-[11px] text-gray-600">{{ r.filial }}</td>
                         <td class="px-3 py-2">
@@ -233,7 +234,7 @@
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info %}
-                    <tr id="reason-row-{{ r.pk }}" style="display:none; --row-bg:{% if forloop.counter0|divisibleby:2 %}#ffffff{% else %}#e5e7eb{% endif %};" class="row-zebra">
+                    <tr id="reason-row-{{ r.pk }}" style="display:none; background-color:{% if forloop.counter0|divisibleby:2 %}#ffffff{% else %}#d1d5db{% endif %};" class="row-zebra">
                         <td colspan="9" class="px-4 py-3">
                             <div class="reason-content flex flex-col gap-2 border border-orange-200 rounded-xl bg-transparent p-3 shadow-sm">
                                 <div class="flex items-start gap-3">
