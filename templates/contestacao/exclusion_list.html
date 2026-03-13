@@ -390,13 +390,13 @@
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.5.2/flowbite.min.js"></script>
-<script type="text/javascript">
+<script>
 // Stores confirmed reasons: { exclusion_id: "reason text" }
-const pendingReasons = {};
+window.pendingReasons = {};
 // Stores evidence files: { exclusion_id: File }
-const pendingFiles = {};
+window.pendingFiles = {};
 
-function openReason(id) {
+window.openReason = function(id) {
     const row = document.getElementById('reason-row-' + id);
     if (row) row.style.display = 'table-row';
     const card = document.getElementById('reason-card-' + id);
@@ -412,16 +412,16 @@ function openReason(id) {
 
     const ta = document.querySelector('.reason-input[data-id="' + id + '"]');
     if (ta) setTimeout(() => ta.focus(), 50);
-}
+};
 
-function closeReasonBox(id) {
+window.closeReasonBox = function(id) {
     const row = document.getElementById('reason-row-' + id);
     if (row) row.style.display = 'none';
     const card = document.getElementById('reason-card-' + id);
     if (card) card.style.display = 'none';
-}
+};
 
-function confirmReason(id) {
+window.confirmReason = function(id) {
     const textareas = document.querySelectorAll('.reason-input[data-id="' + id + '"]');
     let reason = '';
     textareas.forEach(ta => { if (ta.value.trim()) reason = ta.value.trim(); });
@@ -436,9 +436,9 @@ function confirmReason(id) {
         alert('Anexe a evidência (obrigatório).');
         return;
     }
-    pendingReasons[id] = reason;
-    pendingFiles[id] = file;
-    closeReasonBox(id);
+    window.pendingReasons[id] = reason;
+    window.pendingFiles[id] = file;
+    window.closeReasonBox(id);
     // Update button to show it's ready
     const btn = document.getElementById('btn-' + id);
     if (btn) {
@@ -464,20 +464,20 @@ function confirmReason(id) {
         toast.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
-    renderBar();
-}
+    window.renderBar();
+};
 
-function cancelReason(id) {
-    closeReasonBox(id);
-    if (pendingReasons[id]) {
-        delete pendingReasons[id];
-        delete pendingFiles[id];
-        resetButton(id);
-        renderBar();
+window.cancelReason = function(id) {
+    window.closeReasonBox(id);
+    if (window.pendingReasons[id]) {
+        delete window.pendingReasons[id];
+        delete window.pendingFiles[id];
+        window.resetButton(id);
+        window.renderBar();
     }
-}
+};
 
-function resetButton(id) {
+window.resetButton = function(id) {
     const btn = document.getElementById('btn-' + id);
     if (btn) {
         btn.innerHTML = '<i class="fas fa-check mr-1"></i> Sim';
@@ -499,22 +499,22 @@ function resetButton(id) {
         btnMobile.style.backgroundColor = '#FF6B35';
         btnMobile.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
     }
-}
+};
 
-function clearAllReasons() {
-    Object.keys(pendingReasons).forEach(id => {
-        delete pendingReasons[id];
-        delete pendingFiles[id];
-        resetButton(id);
+window.clearAllReasons = function() {
+    Object.keys(window.pendingReasons).forEach(id => {
+        delete window.pendingReasons[id];
+        delete window.pendingFiles[id];
+        window.resetButton(id);
         // Clear textareas and file inputs
         document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
         document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach(fi => fi.value = '');
     });
-    renderBar();
-}
+    window.renderBar();
+};
 
-function renderBar() {
-    const ids = Object.keys(pendingReasons);
+window.renderBar = function() {
+    const ids = Object.keys(window.pendingReasons);
     const bar = document.getElementById('bulkBar');
     const count = ids.length;
     document.getElementById('bulkCount').textContent = count;
@@ -523,10 +523,10 @@ function renderBar() {
     } else {
         bar.classList.remove('hidden');
     }
-}
+};
 
-function submitAllContestations() {
-    const ids = Object.keys(pendingReasons);
+window.submitAllContestations = function() {
+    const ids = Object.keys(window.pendingReasons);
     if (ids.length === 0) return;
 
     const btn = document.getElementById('btnSubmitAll');
@@ -543,9 +543,9 @@ function submitAllContestations() {
     const formData = new FormData();
     ids.forEach((id, i) => {
         formData.append('exclusion_id_' + i, id);
-        formData.append('reason_' + i, pendingReasons[id]);
-        if (pendingFiles[id]) {
-            formData.append('file_' + i, pendingFiles[id]);
+        formData.append('reason_' + i, window.pendingReasons[id]);
+        if (window.pendingFiles[id]) {
+            formData.append('file_' + i, window.pendingFiles[id]);
         }
     });
     formData.append('count', ids.length);
@@ -572,8 +572,8 @@ function submitAllContestations() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar todas as contestações';
     });
-}
+};
 
-document.addEventListener('DOMContentLoaded', renderBar);
+document.addEventListener('DOMContentLoaded', window.renderBar);
 </script>
 {% endblock %}
