@@ -11,6 +11,13 @@
     .reason-row.active { display: table-row; }
     .reason-card { display: none; }
     .reason-card.active { display: block; }
+    .reason-content {
+        animation: reasonReveal 0.28s ease-out;
+    }
+    @keyframes reasonReveal {
+        0% { opacity: 0; transform: translateY(-8px) scale(0.99); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
 </style>
 {% endblock %}
 
@@ -102,7 +109,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for r in records %}
-                    <tr class="hover:bg-gray-50" id="row-{{ r.pk }}">
+                    <tr class="{% cycle 'bg-white' 'bg-gray-50' %} hover:bg-indigo-50 transition-colors" id="row-{{ r.pk }}">
                         <td class="px-4 py-2.5 text-sm text-gray-900 font-medium">{{ r.vendedor }}</td>
                         <td class="px-4 py-2.5 text-sm text-gray-600">{{ r.filial }}</td>
                         <td class="px-4 py-2.5">
@@ -146,19 +153,25 @@
                                 <span class="text-xs text-yellow-600 font-medium"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                                 {% endif %}
                             {% else %}
-                            <button type="button" onclick="toggleReason({{ r.pk }})"
-                               class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100" id="btn-{{ r.pk }}">
-                                <i class="fas fa-exclamation-triangle mr-1"></i> Contestar
-                            </button>
+                            <div class="inline-flex items-center gap-1.5">
+                                <button type="button" onclick="toggleReason({{ r.pk }})"
+                                   class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100" id="btn-{{ r.pk }}">
+                                    <i class="fas fa-check mr-1"></i> Sim
+                                </button>
+                                <button type="button"
+                                   class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-md cursor-default" aria-label="Não">
+                                    <i class="fas fa-times mr-1"></i> Não
+                                </button>
+                            </div>
                             {% endif %}
                             {% endwith %}
                         </td>
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info %}
-                    <tr class="reason-row bg-red-50" id="reason-row-{{ r.pk }}">
+                    <tr class="reason-row bg-rose-50" id="reason-row-{{ r.pk }}">
                         <td colspan="9" class="px-4 py-3">
-                            <div class="flex flex-col gap-2">
+                            <div class="reason-content flex flex-col gap-2 border border-rose-200 rounded-lg bg-white/80 p-3 shadow-sm">
                                 <div class="flex items-start gap-3">
                                     <div class="flex-1">
                                         <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação para <strong>{{ r.vendedor }}</strong></label>
@@ -231,24 +244,32 @@
                 <span class="text-xs text-yellow-600"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                 {% endif %}
             {% else %}
-            <button type="button" onclick="toggleReason({{ r.pk }})"
-               class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 w-full justify-center" id="btn-mobile-{{ r.pk }}">
-                <i class="fas fa-exclamation-triangle mr-1"></i> Contestar
-            </button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="toggleReason({{ r.pk }})"
+                       class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 w-full justify-center" id="btn-mobile-{{ r.pk }}">
+                        <i class="fas fa-check mr-1"></i> Sim
+                    </button>
+                    <button type="button"
+                       class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md w-full justify-center cursor-default" aria-label="Não">
+                        <i class="fas fa-times mr-1"></i> Não
+                    </button>
+                </div>
             <!-- Inline reason area for mobile -->
             <div class="reason-card mt-2 border-t pt-2" id="reason-card-{{ r.pk }}">
-                <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação</label>
-                <textarea class="reason-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
-                          data-id="{{ r.pk }}" rows="2" placeholder="Descreva o motivo..."></textarea>
-                <label class="block text-xs font-medium text-gray-600 mt-2 mb-1"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
-                <input type="file" class="evidence-input w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-red-500 focus:border-red-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
-                <div class="flex gap-2 mt-2">
-                    <button type="button" onclick="confirmReason({{ r.pk }})" class="flex-1 inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
-                        <i class="fas fa-check mr-1"></i> OK
-                    </button>
-                    <button type="button" onclick="cancelReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">
-                        <i class="fas fa-times mr-1"></i>
-                    </button>
+                    <div class="reason-content bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação</label>
+                        <textarea class="reason-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                  data-id="{{ r.pk }}" rows="2" placeholder="Descreva o motivo..."></textarea>
+                        <label class="block text-xs font-medium text-gray-600 mt-2 mb-1"><i class="fas fa-paperclip mr-1"></i> Evidência <span class="text-red-500">*</span></label>
+                        <input type="file" class="evidence-input w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-red-500 focus:border-red-500" data-id="{{ r.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+                        <div class="flex gap-2 mt-2">
+                            <button type="button" onclick="confirmReason({{ r.pk }})" class="flex-1 inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                                <i class="fas fa-check mr-1"></i> OK
+                            </button>
+                            <button type="button" onclick="cancelReason({{ r.pk }})" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">
+                                <i class="fas fa-times mr-1"></i>
+                            </button>
+                        </div>
                 </div>
             </div>
             {% endif %}
@@ -320,7 +341,7 @@ function confirmReason(id) {
         return;
     }
     // Check evidence file
-    const fileInputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"');
+    const fileInputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"]');
     let file = null;
     fileInputs.forEach(fi => { if (fi.files && fi.files.length > 0) file = fi.files[0]; });
     if (!file) {
@@ -366,15 +387,15 @@ function cancelReason(id) {
 function resetButton(id) {
     const btn = document.getElementById('btn-' + id);
     if (btn) {
-        btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Contestar';
+        btn.innerHTML = '<i class="fas fa-check mr-1"></i> Sim';
         btn.classList.remove('text-green-700', 'bg-green-50', 'hover:bg-green-100');
-        btn.classList.add('text-red-600', 'bg-red-50', 'hover:bg-red-100');
+        btn.classList.add('text-emerald-700', 'bg-emerald-50', 'hover:bg-emerald-100');
     }
     const btnMobile = document.getElementById('btn-mobile-' + id);
     if (btnMobile) {
-        btnMobile.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Contestar';
+        btnMobile.innerHTML = '<i class="fas fa-check mr-1"></i> Sim';
         btnMobile.classList.remove('bg-green-600', 'hover:bg-green-700');
-        btnMobile.classList.add('bg-red-600', 'hover:bg-red-700');
+        btnMobile.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
     }
 }
 
@@ -384,8 +405,8 @@ function clearAllReasons() {
         delete pendingFiles[id];
         resetButton(id);
         // Clear textareas and file inputs
-        document.querySelectorAll('.reason-input[data-id="' + id + '"').forEach(ta => ta.value = '');
-        document.querySelectorAll('.evidence-input[data-id="' + id + '"').forEach(fi => fi.value = '');
+        document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
+        document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach(fi => fi.value = '');
     });
     renderBar();
 }
