@@ -11,7 +11,7 @@
     .reason-row.active { display: table-row; }
     .reason-card { display: none; }
     .reason-card.active { display: block; }
-    .reason-content {
+    .reason-enter {
         animation: reasonReveal 0.28s ease-out;
     }
     @keyframes reasonReveal {
@@ -154,7 +154,7 @@
                                 {% endif %}
                             {% else %}
                             <div class="inline-flex items-center gap-1.5">
-                                <button type="button" onclick="toggleReason({{ r.pk }})"
+                                <button type="button" onclick="openReason({{ r.pk }})"
                                    class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100" id="btn-{{ r.pk }}">
                                     <i class="fas fa-check mr-1"></i> Sim
                                 </button>
@@ -245,7 +245,7 @@
                 {% endif %}
             {% else %}
                 <div class="grid grid-cols-2 gap-2">
-                    <button type="button" onclick="toggleReason({{ r.pk }})"
+                <button type="button" onclick="openReason({{ r.pk }})"
                        class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 w-full justify-center" id="btn-mobile-{{ r.pk }}">
                         <i class="fas fa-check mr-1"></i> Sim
                     </button>
@@ -320,13 +320,22 @@ const pendingReasons = {};
 // Stores evidence files: { exclusion_id: File }
 const pendingFiles = {};
 
-function toggleReason(id) {
+function openReason(id) {
     // Desktop
     const row = document.getElementById('reason-row-' + id);
-    if (row) row.classList.toggle('active');
+    if (row) row.classList.add('active');
     // Mobile
     const card = document.getElementById('reason-card-' + id);
-    if (card) card.classList.toggle('active');
+    if (card) card.classList.add('active');
+
+    // Trigger animation every time it opens
+    const blocks = document.querySelectorAll('#reason-row-' + id + ' .reason-content, #reason-card-' + id + ' .reason-content');
+    blocks.forEach((block) => {
+        block.classList.remove('reason-enter');
+        void block.offsetWidth;
+        block.classList.add('reason-enter');
+    });
+
     // Focus textarea
     const ta = document.querySelector('.reason-input[data-id="' + id + '"]');
     if (ta) setTimeout(() => ta.focus(), 50);
@@ -465,6 +474,11 @@ function submitAllContestations() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', renderBar);
+document.addEventListener('DOMContentLoaded', () => {
+    // Ensure all reason boxes start hidden
+    document.querySelectorAll('.reason-row.active').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.reason-card.active').forEach(el => el.classList.remove('active'));
+    renderBar();
+});
 </script>
 {% endblock %}
