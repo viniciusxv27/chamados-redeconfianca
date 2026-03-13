@@ -158,8 +158,8 @@
                                    class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100" id="btn-{{ r.pk }}">
                                     <i class="fas fa-check mr-1"></i> Sim
                                 </button>
-                                <button type="button"
-                                   class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-md cursor-default" aria-label="Não">
+                                          <button type="button" onclick="cancelReason({{ r.pk }})"
+                                              class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200" aria-label="Não">
                                     <i class="fas fa-times mr-1"></i> Não
                                 </button>
                             </div>
@@ -249,8 +249,8 @@
                        class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 w-full justify-center" id="btn-mobile-{{ r.pk }}">
                         <i class="fas fa-check mr-1"></i> Sim
                     </button>
-                    <button type="button"
-                       class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md w-full justify-center cursor-default" aria-label="Não">
+                     <button type="button" onclick="cancelReason({{ r.pk }})"
+                         class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md w-full justify-center hover:bg-gray-200" aria-label="Não">
                         <i class="fas fa-times mr-1"></i> Não
                     </button>
                 </div>
