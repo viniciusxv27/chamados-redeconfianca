@@ -74,6 +74,15 @@
         background-color: var(--primary-dark) !important;
         box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
     }
+    
+    @keyframes slideIn {
+        from { transform: translateX(400px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(400px); opacity: 0; }
+    }
 
 </style>
 {% endblock %}
@@ -163,7 +172,7 @@
                         <th class="px-4 py-3 text-center text-[10px] font-semibold text-gray-700 uppercase">Ação</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody class="divide-y divide-gray-400">
                     {% for r in records %}
                     {% cycle 'line-white' 'line-light-gray' as zebra_class silent %}
                     <tr class="data-row {{ zebra_class }} transition-colors" id="row-{{ r.pk }}">
@@ -433,16 +442,28 @@ function confirmReason(id) {
     // Update button to show it's ready
     const btn = document.getElementById('btn-' + id);
     if (btn) {
-        btn.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Pronto';
+        btn.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Adicionado';
         btn.style.backgroundColor = '#10b981';
         btn.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+        btn.disabled = true;
     }
     const btnMobile = document.getElementById('btn-mobile-' + id);
     if (btnMobile) {
-        btnMobile.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Pronto';
+        btnMobile.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Adicionado';
         btnMobile.style.backgroundColor = '#10b981';
         btnMobile.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+        btnMobile.disabled = true;
     }
+    
+    // Mostra notificação visual
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: #10b981; color: white; padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999; animation: slideIn 0.3s ease; font-weight: 500;';
+    toast.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Contestação adicionada ao pedido';
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
     renderBar();
 }
 
@@ -462,6 +483,15 @@ function resetButton(id) {
         btn.innerHTML = '<i class="fas fa-check mr-1"></i> Sim';
         btn.style.backgroundColor = '#FF6B35';
         btn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        btn.disabled = false;
+    }
+    const btnMobile = document.getElementById('btn-mobile-' + id);
+    if (btnMobile) {
+        btnMobile.innerHTML = '<i class="fas fa-check mr-1"></i> Sim';
+        btnMobile.style.backgroundColor = '#FF6B35';
+        btnMobile.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        btnMobile.disabled = false;
+    }
     }
     const btnMobile = document.getElementById('btn-mobile-' + id);
     if (btnMobile) {
@@ -500,8 +530,15 @@ function submitAllContestations() {
     if (ids.length === 0) return;
 
     const btn = document.getElementById('btnSubmitAll');
+    
+    // Confirmação antes de enviar
+    const confirmMsg = `Você está prestes a enviar ${ids.length} contestação${ids.length > 1 ? 'ões' : ''}. Deseja continuar?`;
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando contestações...';
 
     const formData = new FormData();
     ids.forEach((id, i) => {
