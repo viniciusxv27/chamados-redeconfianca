@@ -7,10 +7,6 @@
 <style>
     #bulkBar { transition: transform 0.2s ease, opacity 0.2s ease; }
     #bulkBar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
-    .reason-row { display: none; }
-    .reason-row.active { display: table-row; }
-    .reason-card { display: none; }
-    .reason-card.active { display: block; }
     .reason-enter {
         animation: reasonReveal 0.28s ease-out;
     }
@@ -169,7 +165,7 @@
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info %}
-                    <tr class="reason-row bg-rose-50" id="reason-row-{{ r.pk }}">
+                    <tr id="reason-row-{{ r.pk }}" style="display:none" class="bg-rose-50">
                         <td colspan="9" class="px-4 py-3">
                             <div class="reason-content flex flex-col gap-2 border border-rose-200 rounded-lg bg-white/80 p-3 shadow-sm">
                                 <div class="flex items-start gap-3">
@@ -255,7 +251,7 @@
                     </button>
                 </div>
             <!-- Inline reason area for mobile -->
-            <div class="reason-card mt-2 border-t pt-2" id="reason-card-{{ r.pk }}">
+            <div id="reason-card-{{ r.pk }}" style="display:none" class="mt-2 border-t pt-2">
                     <div class="reason-content bg-rose-50 border border-rose-200 rounded-lg p-2.5">
                         <label class="block text-xs font-medium text-gray-600 mb-1">Motivo da contestação</label>
                         <textarea class="reason-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"
@@ -321,24 +317,28 @@ const pendingReasons = {};
 const pendingFiles = {};
 
 function openReason(id) {
-    // Desktop
     const row = document.getElementById('reason-row-' + id);
-    if (row) row.classList.add('active');
-    // Mobile
+    if (row) row.style.display = 'table-row';
     const card = document.getElementById('reason-card-' + id);
-    if (card) card.classList.add('active');
+    if (card) card.style.display = 'block';
 
-    // Trigger animation every time it opens
+    // Re-trigger animation on inner content every time it opens
     const blocks = document.querySelectorAll('#reason-row-' + id + ' .reason-content, #reason-card-' + id + ' .reason-content');
     blocks.forEach((block) => {
         block.classList.remove('reason-enter');
-        void block.offsetWidth;
+        void block.offsetWidth; // force reflow
         block.classList.add('reason-enter');
     });
 
-    // Focus textarea
     const ta = document.querySelector('.reason-input[data-id="' + id + '"]');
     if (ta) setTimeout(() => ta.focus(), 50);
+}
+
+function closeReasonBox(id) {
+    const row = document.getElementById('reason-row-' + id);
+    if (row) row.style.display = 'none';
+    const card = document.getElementById('reason-card-' + id);
+    if (card) card.style.display = 'none';
 }
 
 function confirmReason(id) {
@@ -359,11 +359,7 @@ function confirmReason(id) {
     }
     pendingReasons[id] = reason;
     pendingFiles[id] = file;
-    // Close the inline area
-    const row = document.getElementById('reason-row-' + id);
-    if (row) row.classList.remove('active');
-    const card = document.getElementById('reason-card-' + id);
-    if (card) card.classList.remove('active');
+    closeReasonBox(id);
     // Update button to show it's ready
     const btn = document.getElementById('btn-' + id);
     if (btn) {
@@ -381,13 +377,10 @@ function confirmReason(id) {
 }
 
 function cancelReason(id) {
-    const row = document.getElementById('reason-row-' + id);
-    if (row) row.classList.remove('active');
-    const card = document.getElementById('reason-card-' + id);
-    if (card) card.classList.remove('active');
-    // If was already confirmed, remove it
+    closeReasonBox(id);
     if (pendingReasons[id]) {
         delete pendingReasons[id];
+        delete pendingFiles[id];
         resetButton(id);
         renderBar();
     }
@@ -474,11 +467,6 @@ function submitAllContestations() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Ensure all reason boxes start hidden
-    document.querySelectorAll('.reason-row.active').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.reason-card.active').forEach(el => el.classList.remove('active'));
-    renderBar();
-});
+document.addEventListener('DOMContentLoaded', renderBar);
 </script>
 {% endblock %}

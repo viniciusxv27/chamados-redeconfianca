@@ -142,8 +142,11 @@ def sync_exclusions(request):
         messages.error(request, 'Colunas obrigatórias não encontradas na planilha (FILIAL, VENDEDOR, RECEITA, PILAR).')
         return redirect('contestacao:exclusion_list')
 
-    # Limpar registros antigos e reimportar
-    ExclusionRecord.objects.all().delete()
+    # Apagar apenas registros SEM contestações ativas — nunca apagar os que têm contestação
+    contested_ids = set(
+        Contestation.objects.values_list('exclusion_id', flat=True)
+    )
+    ExclusionRecord.objects.exclude(pk__in=contested_ids).delete()
 
     records = []
     for _, row in df.iterrows():
