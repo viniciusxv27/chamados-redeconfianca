@@ -65,6 +65,14 @@
                 </span>
             </div>
 
+            <div class="mt-4">
+                <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-main"
+                        class="inline-flex items-center px-4 py-2 bg-white/15 text-white text-sm font-medium rounded-lg hover:bg-white/25 transition border border-white/20">
+                    <i class="fas fa-redo mr-2"></i> Retranscrever
+                </button>
+                <p class="text-xs text-indigo-100 mt-2">Prioriza o áudio salvo; se não existir, usa a transcrição bruta.</p>
+            </div>
+
             {% if transcription.participants_identified %}
             <div class="mt-3 flex items-center gap-2 text-sm text-indigo-100">
                 <i class="fas fa-users"></i>
@@ -92,7 +100,7 @@
                 <p class="text-sm font-medium text-red-700"><i class="fas fa-exclamation-circle mr-1"></i> Erro no processamento</p>
                 <p class="text-xs text-red-500 mt-1">{{ transcription.error_message }}</p>
             </div>
-            <button onclick="reprocessTranscription({{ transcription.pk }})" id="btn-reprocess-error"
+            <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-error"
                     class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition flex-shrink-0 shadow-sm">
                 <i class="fas fa-redo mr-2"></i> Reprocessar
             </button>
@@ -396,7 +404,7 @@
         <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA...</p>
         <p class="text-sm text-gray-400 mt-2">Transcrição de áudio + análise avançada com GPT-4o</p>
         <p class="text-xs text-gray-400 mt-1 mb-5">Criado em {{ transcription.created_at|date:"d/m/Y H:i" }}</p>
-        <button onclick="reprocessTranscription({{ transcription.pk }})" id="btn-reprocess-processing"
+        <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-processing"
                 class="inline-flex items-center px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition shadow-sm">
             <i class="fas fa-redo mr-2"></i> Reiniciar Processamento
         </button>
@@ -471,8 +479,8 @@ function toggleRaw() {
 }
 
 // ---- Reprocess transcription ----
-async function reprocessTranscription(transcriptionId) {
-    const btn = event.currentTarget;
+async function reprocessTranscription(transcriptionId, btn) {
+    if (!btn) return;
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Reprocessando...';
