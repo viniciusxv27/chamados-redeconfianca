@@ -1188,8 +1188,8 @@ def api_transcription_assign_task(request, pk, task_id):
 def api_transcription_reprocess(request, pk):
     """Reiniciar o processamento de uma transcrição (processing travada ou com erro).
     
-    Prioriza reprocessar a partir do áudio salvo (MinIO/storage).
-    Se o áudio não existir/acessar, usa a transcrição bruta já salva como fallback.
+    Prioriza reprocessar a partir da transcrição já salva (bruta/completa).
+    Se não houver texto, tenta reconstruir a transcrição a partir do áudio salvo.
     """
     import openai
     import json as json_module
@@ -1201,51 +1201,67 @@ def api_transcription_reprocess(request, pk):
         # Permitir reprocessar mesmo completas (o usuário quer "priorizar" = refazer)
         pass
 
-    api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
-    if not api_key:
-        return JsonResponse({'error': 'Chave da API OpenAI não configurada.'}, status=500)
-
     transcription.status = 'processing'
     transcription.error_message = ''
     transcription.save(update_fields=['status', 'error_message'])
 
+    source_text = (transcription.raw_transcription or '').strip()
+    formatted_text = (transcription.formatted_transcription or '').strip()
+
+    # 1) Priorizar texto já salvo (Bruta/Completa) para evitar depender do áudio.
+    if not source_text and formatted_text:
+        source_text = formatted_text
+        transcription.raw_transcription = formatted_text
+        transcription.save(update_fields=['raw_transcription'])
+
+    api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
+    if not api_key and source_text:
+        transcription.formatted_transcription = formatted_text or source_text
+        transcription.summary = (
+            transcription.summary
+            or 'Reprocessado usando a transcrição já salva. Configure OPENAI_API_KEY para análise avançada.'
+        )
+        transcription.status = 'completed'
+        transcription.error_message = ''
+        transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
+        return JsonResponse({
+            'ok': True,
+            'status': 'completed',
+            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        })
+    if not api_key:
+        return JsonResponse({'error': 'Chave da API OpenAI não configurada.'}, status=500)
+
     try:
         client = openai.OpenAI(api_key=api_key)
 
-        raw_text = ''
-
-        # 1) Priorizar áudio salvo no storage (ex: MinIO)
-        if transcription.audio_file:
+        # 2) Se não houver texto, tentar áudio salvo no storage (ex: MinIO)
+        if not source_text and transcription.audio_file:
             try:
                 transcription.audio_file.open('rb')
                 audio_data = transcription.audio_file.read()
                 transcription.audio_file.close()
 
                 fname = transcription.audio_file.name or 'audio.webm'
-                raw_text, duration = _transcribe_audio(client, audio_data, fname)
+                source_text, duration = _transcribe_audio(client, audio_data, fname)
                 if duration:
                     transcription.duration_seconds = duration
 
-                transcription.raw_transcription = raw_text
+                transcription.raw_transcription = source_text
                 transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
             except Exception:
-                # 2) Se o áudio não existir/acessar, cair para o texto bruto salvo
-                raw_text = transcription.raw_transcription or ''
+                source_text = (transcription.raw_transcription or '').strip() or formatted_text
 
-        # 3) Sem áudio válido, usar texto bruto existente
-        if not raw_text:
-            raw_text = transcription.raw_transcription or ''
-
-        if not raw_text:
+        if not source_text:
             transcription.status = 'error'
-            transcription.error_message = 'Sem áudio ou transcrição bruta para processar.'
+            transcription.error_message = 'Sem transcrição bruta/completa ou áudio para processar.'
             transcription.save(update_fields=['status', 'error_message'])
-            return JsonResponse({'error': 'Sem áudio ou transcrição bruta para processar.'}, status=400)
+            return JsonResponse({'error': 'Sem transcrição bruta/completa ou áudio para processar.'}, status=400)
 
         # Análise GPT-4o
         # Evita estouro de contexto em reuniões muito longas no reprocessamento.
-        if len(raw_text) > 120000:
-            raw_text = raw_text[:120000]
+        if len(source_text) > 120000:
+            source_text = source_text[:120000]
 
         today_str = timezone.now().strftime('%Y-%m-%d')
         system_prompt = (
@@ -1286,7 +1302,7 @@ def api_transcription_reprocess(request, pk):
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Transcrição da reunião '{transcription.title}':\n\n{raw_text}"}
+                {"role": "user", "content": f"Transcrição da reunião '{transcription.title}':\n\n{source_text}"}
             ],
             temperature=0.2,
             max_tokens=4096,
@@ -1296,7 +1312,9 @@ def api_transcription_reprocess(request, pk):
         gpt_text = gpt_response.choices[0].message.content.strip()
         parsed = _extract_json_payload(gpt_text)
 
-        transcription.formatted_transcription = parsed.get('formatted', raw_text)
+        transcription.formatted_transcription = parsed.get('formatted', source_text)
+        if not transcription.raw_transcription:
+            transcription.raw_transcription = source_text
         transcription.summary = parsed.get('summary', '')
         transcription.sections = parsed.get('sections', [])
         transcription.key_decisions = parsed.get('key_decisions', [])
@@ -1342,7 +1360,7 @@ def api_transcription_reprocess(request, pk):
         })
 
     except json_module.JSONDecodeError:
-        transcription.formatted_transcription = transcription.raw_transcription
+        transcription.formatted_transcription = transcription.formatted_transcription or transcription.raw_transcription or source_text
         transcription.summary = 'Erro ao processar análise avançada. Transcrição bruta disponível.'
         transcription.status = 'completed'
         transcription.save()
@@ -1352,6 +1370,22 @@ def api_transcription_reprocess(request, pk):
             'redirect': f'/agenda/transcricoes/{transcription.pk}/',
         })
     except Exception as e:
+        # Fallback seguro: se já temos texto salvo, mantemos a transcrição como concluída.
+        if source_text:
+            transcription.formatted_transcription = transcription.formatted_transcription or source_text
+            transcription.summary = (
+                transcription.summary
+                or 'Reprocessamento parcial concluído usando a transcrição já salva.'
+            )
+            transcription.status = 'completed'
+            transcription.error_message = ''
+            transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
+            return JsonResponse({
+                'ok': True,
+                'status': 'completed',
+                'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+            })
+
         transcription.status = 'error'
         transcription.error_message = str(e)
         transcription.save(update_fields=['status', 'error_message'])
