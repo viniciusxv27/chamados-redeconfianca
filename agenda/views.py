@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timedelta, time, date as date_type
 
 from django.contrib import messages
@@ -85,6 +86,29 @@ def _get_available_slots(user, date, slot_duration_min=30):
         current = slot_end
 
     return slots
+
+
+def _extract_json_payload(text):
+    """Extrai um objeto JSON válido mesmo quando a IA retorna texto extra."""
+    if not text:
+        return {}
+
+    cleaned = text.strip()
+    if cleaned.startswith('```'):
+        lines = cleaned.split('\n')
+        if lines and lines[0].startswith('```'):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == '```':
+            lines = lines[:-1]
+        cleaned = '\n'.join(lines).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r'\{[\s\S]*\}', cleaned)
+        if not match:
+            raise
+        return json.loads(match.group(0))
 
 
 # =========================================================================
@@ -806,19 +830,11 @@ def api_transcription_upload(request):
             ],
             temperature=0.2,
             max_tokens=4096,
+            response_format={"type": "json_object"},
         )
 
         gpt_text = gpt_response.choices[0].message.content.strip()
-        # Limpar markdown code blocks se houver
-        if gpt_text.startswith('```'):
-            lines = gpt_text.split('\n')
-            if lines[0].startswith('```'):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == '```':
-                lines = lines[:-1]
-            gpt_text = '\n'.join(lines)
-
-        parsed = json_module.loads(gpt_text)
+        parsed = _extract_json_payload(gpt_text)
 
         transcription.formatted_transcription = parsed.get('formatted', raw_text)
         transcription.summary = parsed.get('summary', '')
@@ -1227,6 +1243,10 @@ def api_transcription_reprocess(request, pk):
             return JsonResponse({'error': 'Sem áudio ou transcrição bruta para processar.'}, status=400)
 
         # Análise GPT-4o
+        # Evita estouro de contexto em reuniões muito longas no reprocessamento.
+        if len(raw_text) > 120000:
+            raw_text = raw_text[:120000]
+
         today_str = timezone.now().strftime('%Y-%m-%d')
         system_prompt = (
             "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
@@ -1270,18 +1290,11 @@ def api_transcription_reprocess(request, pk):
             ],
             temperature=0.2,
             max_tokens=4096,
+            response_format={"type": "json_object"},
         )
 
         gpt_text = gpt_response.choices[0].message.content.strip()
-        if gpt_text.startswith('```'):
-            lines = gpt_text.split('\n')
-            if lines[0].startswith('```'):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == '```':
-                lines = lines[:-1]
-            gpt_text = '\n'.join(lines)
-
-        parsed = json_module.loads(gpt_text)
+        parsed = _extract_json_payload(gpt_text)
 
         transcription.formatted_transcription = parsed.get('formatted', raw_text)
         transcription.summary = parsed.get('summary', '')
