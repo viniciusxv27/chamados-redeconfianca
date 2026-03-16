@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
 from django.http import JsonResponse
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Min, Q, Sum
 from django.utils import timezone
 
 from .models import ExclusionRecord, Contestation, ContestationHistory
@@ -483,7 +483,7 @@ def manage_contestations(request):
     pending_sector_cards = (
         base_qs.filter(status='pending')
         .values('exclusion__filial')
-        .annotate(total=Count('id'))
+        .annotate(total=Count('id'), earliest=Min('created_at'))
         .order_by('exclusion__filial')
     )
     if status_filter == 'pending':
@@ -545,7 +545,8 @@ def approve_contestation(request, pk):
         return redirect('contestacao:manage_contestations')
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
-    c.approve(request.user, notes, approval_mode='approved')
+    attachment = request.FILES.get('review_attachment')
+    c.approve(request.user, notes, approval_mode='approved', attachment=attachment)
     ContestationHistory.objects.create(
         contestation=c, action='approved', user=request.user, notes=notes,
     )
@@ -561,7 +562,8 @@ def approve_and_contest_contestation(request, pk):
         return redirect('contestacao:manage_contestations')
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
-    c.approve(request.user, notes, approval_mode='approved_and_contested')
+    attachment = request.FILES.get('review_attachment')
+    c.approve(request.user, notes, approval_mode='approved_and_contested', attachment=attachment)
     ContestationHistory.objects.create(
         contestation=c,
         action='approved_and_contested',
@@ -580,7 +582,8 @@ def reject_contestation(request, pk):
         return redirect('contestacao:manage_contestations')
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
-    c.reject(request.user, notes)
+    attachment = request.FILES.get('review_attachment')
+    c.reject(request.user, notes, attachment=attachment)
 
     # Rejeitada volta à base com parecer de rejeição no campo observação.
     parecer = notes.strip() if notes else 'Sem parecer informado.'

@@ -82,6 +82,7 @@
                 <p class="text-xs uppercase tracking-wide text-gray-500">Setor</p>
                 <p class="text-sm font-bold text-gray-900 mt-1">{{ item.exclusion__filial }}</p>
                 <p class="text-xs text-yellow-700 mt-1">{{ item.total }} pendente{{ item.total|pluralize:"s" }}</p>
+                {% if item.earliest %}<p class="text-xs text-gray-400 mt-1"><i class="fas fa-clock mr-1"></i>Abertura: {{ item.earliest|date:"d/m/Y H:i" }}</p>{% endif %}
             </a>
             {% endfor %}
         </div>
@@ -190,30 +191,45 @@
             </div>
 
             {% if c.status == 'pending' %}
-            <div class="px-4 py-3 border-t bg-gray-50 flex flex-wrap gap-2 items-center">
-                <input type="text" id="notes-{{ c.pk }}" placeholder="Observação (opcional)"
-                       class="flex-1 min-w-[200px] border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                <form method="post" action="{% url 'contestacao:approve_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=review_notes]').value=document.getElementById('notes-{{ c.pk }}').value;">
+            <div class="px-4 py-3 border-t bg-gray-50">
+                <div class="flex flex-wrap gap-2 items-end mb-2">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs text-gray-500 mb-1">Observação (opcional)</label>
+                        <input type="text" id="notes-{{ c.pk }}" placeholder="Observação opcional"
+                               class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="w-full sm:w-auto">
+                        <label class="block text-xs text-gray-500 mb-1"><i class="fas fa-paperclip mr-1"></i>Anexo do gestor (opcional)</label>
+                        <input type="file" id="review-file-{{ c.pk }}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                               class="block text-xs text-gray-500 border border-gray-300 rounded-md px-2 py-1">
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2 items-center">
+                <form method="post" action="{% url 'contestacao:approve_contestation' c.pk %}" class="inline" enctype="multipart/form-data"
+                      onsubmit="injectNoteAndFile(this, 'notes-{{ c.pk }}', 'review-file-{{ c.pk }}')">
                     {% csrf_token %}
                     <input type="hidden" name="review_notes" value="">
                     <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">
                         <i class="fas fa-check mr-1"></i> Aprovar
                     </button>
                 </form>
-                <form method="post" action="{% url 'contestacao:approve_and_contest_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=review_notes]').value=document.getElementById('notes-{{ c.pk }}').value;">
+                <form method="post" action="{% url 'contestacao:approve_and_contest_contestation' c.pk %}" class="inline" enctype="multipart/form-data"
+                      onsubmit="injectNoteAndFile(this, 'notes-{{ c.pk }}', 'review-file-{{ c.pk }}')">
                     {% csrf_token %}
                     <input type="hidden" name="review_notes" value="">
                     <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
                         <i class="fas fa-clipboard-check mr-1"></i> Aprovar e Contestar
                     </button>
                 </form>
-                <form method="post" action="{% url 'contestacao:reject_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=review_notes]').value=document.getElementById('notes-{{ c.pk }}').value;">
+                <form method="post" action="{% url 'contestacao:reject_contestation' c.pk %}" class="inline" enctype="multipart/form-data"
+                      onsubmit="injectNoteAndFile(this, 'notes-{{ c.pk }}', 'review-file-{{ c.pk }}')">
                     {% csrf_token %}
                     <input type="hidden" name="review_notes" value="">
                     <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">
                         <i class="fas fa-times mr-1"></i> Rejeitar
                     </button>
                 </form>
+                </div>
             </div>
             {% elif c.status == 'confirmed' and c.payment_status == 'pending_payment' %}
             <div class="px-4 py-3 border-t bg-green-50">
@@ -274,6 +290,28 @@ document.addEventListener('DOMContentLoaded', function () {
 {% endif %}
 
 <script>
+function injectNoteAndFile(form, notesId, fileId) {
+    const notesEl = document.getElementById(notesId);
+    if (notesEl) {
+        const hidden = form.querySelector('[name=review_notes]');
+        if (hidden) hidden.value = notesEl.value;
+    }
+    const fileEl = document.getElementById(fileId);
+    if (fileEl && fileEl.files && fileEl.files.length > 0) {
+        const dt = new DataTransfer();
+        dt.items.add(fileEl.files[0]);
+        let reviewInput = form.querySelector('input[name=review_attachment]');
+        if (!reviewInput) {
+            reviewInput = document.createElement('input');
+            reviewInput.type = 'file';
+            reviewInput.name = 'review_attachment';
+            reviewInput.style.display = 'none';
+            form.appendChild(reviewInput);
+        }
+        reviewInput.files = dt.files;
+    }
+}
+
 function toggleAttachmentWrong(contestationId, checked) {
     const formData = new FormData();
     formData.append('attachment_wrong', checked ? 'true' : 'false');

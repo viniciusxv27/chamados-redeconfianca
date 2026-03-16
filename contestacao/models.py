@@ -78,6 +78,10 @@ class Contestation(models.Model):
         verbose_name='Analisado por'
     )
     review_notes = models.TextField(blank=True, default='', verbose_name='Observações da Análise')
+    review_attachment = models.FileField(
+        upload_to='contestacoes/gestor/%Y/%m/', storage=get_media_storage(),
+        blank=True, null=True, verbose_name='Anexo do Gestor'
+    )
     approval_mode = models.CharField(
         max_length=30,
         choices=APPROVAL_MODE_CHOICES,
@@ -104,20 +108,24 @@ class Contestation(models.Model):
     def __str__(self):
         return f'Contestação #{self.pk} – {self.exclusion.vendedor} ({self.get_status_display()})'
 
-    def approve(self, reviewer, notes='', approval_mode='approved'):
+    def approve(self, reviewer, notes='', approval_mode='approved', attachment=None):
         """Gestor aprova — aguarda confirmação do gerente."""
         self.status = 'accepted'
         self.reviewed_by = reviewer
         self.review_notes = notes
         self.approval_mode = approval_mode
+        if attachment:
+            self.review_attachment = attachment
         self.reviewed_at = timezone.now()
         self.save()
 
-    def reject(self, reviewer, notes=''):
+    def reject(self, reviewer, notes='', attachment=None):
         """Gestor rejeita — aguarda de acordo do gerente."""
         self.status = 'rejected'
         self.reviewed_by = reviewer
         self.review_notes = notes
+        if attachment:
+            self.review_attachment = attachment
         self.reviewed_at = timezone.now()
         self.save()
 

@@ -69,6 +69,11 @@
                         {% if c.review_notes %}
                         <p class="text-xs text-blue-600 mt-1"><i class="fas fa-reply mr-1"></i> Gestor: {{ c.review_notes }}</p>
                         {% endif %}
+                        {% if c.review_attachment %}
+                        <a href="{{ c.review_attachment.url }}" target="_blank" class="inline-flex items-center text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded mt-1 hover:bg-blue-100">
+                            <i class="fas fa-paperclip mr-1"></i> Anexo do gestor
+                        </a>
+                        {% endif %}
                     </div>
                     <i class="fas fa-chevron-right text-gray-300 mt-2"></i>
                 </div>
