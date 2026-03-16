@@ -16,10 +16,33 @@ from rest_framework.permissions import IsAuthenticated
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import User, Sector
+from .models import User, Sector, normalize_cpf
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
 import json
+
+
+def _parse_bool_excel(value, default=False):
+    if value is None or value == '':
+        return default
+    return str(value).strip().lower() in ['sim', 'true', '1', 'yes', 'y']
+
+
+def _parse_date_excel(value):
+    if not value:
+        return None
+    from datetime import datetime
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except Exception:
+                continue
+        return None
+    return value
 
 
 def login_view(request):
@@ -254,7 +277,7 @@ def export_users_excel(request):
         'Username', 'Email', 'Nome Completo', 'Telefone', 
         'Setor ID', 'Setor Nome', 'Hierarquia', 'Saldo C$', 'Ativo', 
         'Data Criação', 'Último Login',
-        'CPF', 'PIS', 'Cargo', 'Data Nascimento', 'Data Admissão',
+        'CPF', 'PIS', 'Cargo', 'Data Nascimento', 'Data Admissão', 'Se Há Janela de Experiencia', 'Data de Demissão',
         'Login/Código', 'PDV', 'Bairro', 'Cidade',
         'Perfil DISC', 'Tamanho Blusa', 'Tamanho Calça'
     ]
@@ -287,18 +310,20 @@ def export_users_excel(request):
         ws.cell(row=row, column=10, value=user.date_joined.strftime("%Y-%m-%d %H:%M:%S"))
         ws.cell(row=row, column=11, value=user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else "")
         # Novos campos de RH
-        ws.cell(row=row, column=12, value=user.cpf or "")
+        ws.cell(row=row, column=12, value=normalize_cpf(user.cpf))
         ws.cell(row=row, column=13, value=user.pis or "")
         ws.cell(row=row, column=14, value=user.job_title or "")
         ws.cell(row=row, column=15, value=user.birth_date.strftime("%d/%m/%Y") if user.birth_date else "")
         ws.cell(row=row, column=16, value=user.admission_date.strftime("%d/%m/%Y") if user.admission_date else "")
-        ws.cell(row=row, column=17, value=user.login_code or "")
-        ws.cell(row=row, column=18, value=user.pdv or "")
-        ws.cell(row=row, column=19, value=user.neighborhood or "")
-        ws.cell(row=row, column=20, value=user.city or "")
-        ws.cell(row=row, column=21, value=user.disc_profile or "")
-        ws.cell(row=row, column=22, value=user.uniform_size_shirt or "")
-        ws.cell(row=row, column=23, value=user.uniform_size_pants or "")
+        ws.cell(row=row, column=17, value="Sim" if user.has_experience_window else "Não")
+        ws.cell(row=row, column=18, value=user.demission_date.strftime("%d/%m/%Y") if user.demission_date else "")
+        ws.cell(row=row, column=19, value=user.login_code or "")
+        ws.cell(row=row, column=20, value=user.pdv or "")
+        ws.cell(row=row, column=21, value=user.neighborhood or "")
+        ws.cell(row=row, column=22, value=user.city or "")
+        ws.cell(row=row, column=23, value=user.disc_profile or "")
+        ws.cell(row=row, column=24, value=user.uniform_size_shirt or "")
+        ws.cell(row=row, column=25, value=user.uniform_size_pants or "")
     
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
@@ -360,13 +385,25 @@ def import_users_excel(request):
             # Processar cada linha (pular cabeçalho)
             for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
                 try:
-                    # Desempacotar todos os campos (23 colunas)
-                    row_data = list(row) + [None] * (23 - len(row))  # Garantir 23 campos
-                    (username, email, full_name, phone, sector_id, sector_name, hierarchy, 
-                     balance_cs, is_active, date_created, last_login,
-                     cpf, pis, job_title, birth_date, admission_date,
-                     login_code, pdv, neighborhood, city,
-                     disc_profile, uniform_size_shirt, uniform_size_pants) = row_data[:23]
+                    # Suporta planilha antiga (23 colunas) e nova (25 colunas)
+                    row_data = list(row)
+                    has_window_columns = len(row_data) >= 25
+                    if len(row_data) >= 25:
+                        row_data = row_data[:25]
+                        (username, email, full_name, phone, sector_id, sector_name, hierarchy,
+                         balance_cs, is_active, date_created, last_login,
+                         cpf, pis, job_title, birth_date, admission_date, has_experience_window,
+                         demission_date, login_code, pdv, neighborhood, city,
+                         disc_profile, uniform_size_shirt, uniform_size_pants) = row_data
+                    else:
+                        row_data = row_data + [None] * (23 - len(row_data))
+                        (username, email, full_name, phone, sector_id, sector_name, hierarchy,
+                         balance_cs, is_active, date_created, last_login,
+                         cpf, pis, job_title, birth_date, admission_date,
+                         login_code, pdv, neighborhood, city,
+                         disc_profile, uniform_size_shirt, uniform_size_pants) = row_data[:23]
+                        has_experience_window = None
+                        demission_date = None
                     
                     # Separar nome completo: primeira palavra = first_name, restante = last_name
                     name_parts = (full_name or '').strip().split()
@@ -384,26 +421,12 @@ def import_users_excel(request):
                         except Sector.DoesNotExist:
                             pass
                     
-                    # Processar datas
-                    from datetime import datetime
-                    birth_date_parsed = None
-                    admission_date_parsed = None
-                    if birth_date:
-                        try:
-                            if isinstance(birth_date, str):
-                                birth_date_parsed = datetime.strptime(birth_date, '%d/%m/%Y').date()
-                            else:
-                                birth_date_parsed = birth_date
-                        except:
-                            pass
-                    if admission_date:
-                        try:
-                            if isinstance(admission_date, str):
-                                admission_date_parsed = datetime.strptime(admission_date, '%d/%m/%Y').date()
-                            else:
-                                admission_date_parsed = admission_date
-                        except:
-                            pass
+                    # Processar datas e campos normalizados
+                    birth_date_parsed = _parse_date_excel(birth_date)
+                    admission_date_parsed = _parse_date_excel(admission_date)
+                    demission_date_parsed = _parse_date_excel(demission_date)
+                    has_experience_window_parsed = _parse_bool_excel(has_experience_window, default=False) if has_window_columns else None
+                    normalized_cpf = normalize_cpf(cpf)
                     
                     # Verificar se usuário já existe
                     user, created = User.objects.get_or_create(
@@ -416,12 +439,14 @@ def import_users_excel(request):
                             'sector': sector,
                             'hierarchy': hierarchy or 'PADRAO',
                             'balance_cs': Decimal(str(balance_cs)) if balance_cs else Decimal('0'),
-                            'is_active': str(is_active).lower() in ['sim', 'true', '1'] if is_active else True,
-                            'cpf': cpf or '',
+                            'is_active': _parse_bool_excel(is_active, default=True),
+                            'cpf': normalized_cpf,
                             'pis': pis or '',
                             'job_title': job_title or '',
                             'birth_date': birth_date_parsed,
                             'admission_date': admission_date_parsed,
+                            'has_experience_window': has_experience_window_parsed if has_experience_window_parsed is not None else False,
+                            'demission_date': demission_date_parsed,
                             'login_code': login_code or '',
                             'pdv': pdv or '',
                             'neighborhood': neighborhood or '',
@@ -450,10 +475,10 @@ def import_users_excel(request):
                         if balance_cs is not None:
                             user.balance_cs = Decimal(str(balance_cs))
                         if is_active is not None:
-                            user.is_active = str(is_active).lower() in ['sim', 'true', '1']
+                            user.is_active = _parse_bool_excel(is_active, default=user.is_active)
                         # Novos campos
-                        if cpf:
-                            user.cpf = cpf
+                        if cpf not in [None, '']:
+                            user.cpf = normalized_cpf
                         if pis:
                             user.pis = pis
                         if job_title:
@@ -462,6 +487,9 @@ def import_users_excel(request):
                             user.birth_date = birth_date_parsed
                         if admission_date_parsed:
                             user.admission_date = admission_date_parsed
+                        if has_window_columns:
+                            user.has_experience_window = has_experience_window_parsed
+                            user.demission_date = demission_date_parsed
                         if login_code:
                             user.login_code = login_code
                         if pdv:
@@ -627,7 +655,7 @@ def import_colaboradores_csv(request):
                     # CPF
                     cpf = row.get('CPF', '').strip()
                     if cpf and cpf != '#N/D':
-                        user.cpf = cpf
+                        user.cpf = normalize_cpf(cpf)
                         updated = True
                     
                     # PIS
@@ -752,11 +780,13 @@ def create_user_view(request):
         is_active = request.POST.get('is_active') == 'on'
         
         # Campos de RH
-        cpf = request.POST.get('cpf', '')
+        cpf = normalize_cpf(request.POST.get('cpf', ''))
         pis = request.POST.get('pis', '')
         job_title = request.POST.get('job_title', '')
         birth_date = request.POST.get('birth_date', '')
         admission_date = request.POST.get('admission_date', '')
+        has_experience_window = request.POST.get('has_experience_window') == 'on'
+        demission_date = request.POST.get('demission_date', '')
         login_code = request.POST.get('login_code', '')
         pdv = request.POST.get('pdv', '')
         neighborhood = request.POST.get('neighborhood', '')
@@ -799,6 +829,8 @@ def create_user_view(request):
                 job_title=job_title,
                 birth_date=birth_date if birth_date else None,
                 admission_date=admission_date if admission_date else None,
+                has_experience_window=has_experience_window,
+                demission_date=demission_date if demission_date else None,
                 login_code=login_code,
                 pdv=pdv,
                 neighborhood=neighborhood,
@@ -862,11 +894,13 @@ def edit_user_view(request, user_id):
         is_active = request.POST.get('is_active') == 'on'
         
         # Novos campos de RH
-        cpf = request.POST.get('cpf', '')
+        cpf = normalize_cpf(request.POST.get('cpf', ''))
         pis = request.POST.get('pis', '')
         job_title = request.POST.get('job_title', '')
         birth_date = request.POST.get('birth_date', '')
         admission_date = request.POST.get('admission_date', '')
+        has_experience_window = request.POST.get('has_experience_window') == 'on'
+        demission_date = request.POST.get('demission_date', '')
         login_code = request.POST.get('login_code', '')
         pdv = request.POST.get('pdv', '')
         neighborhood = request.POST.get('neighborhood', '')
@@ -897,6 +931,8 @@ def edit_user_view(request, user_id):
                 user_to_edit.job_title = job_title
                 user_to_edit.birth_date = birth_date if birth_date else None
                 user_to_edit.admission_date = admission_date if admission_date else None
+                user_to_edit.has_experience_window = has_experience_window
+                user_to_edit.demission_date = demission_date if demission_date else None
                 user_to_edit.login_code = login_code
                 user_to_edit.pdv = pdv
                 user_to_edit.neighborhood = neighborhood

@@ -8,6 +8,7 @@ from django.db import models
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
+from datetime import timedelta
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -18,6 +19,48 @@ from .models import Communication, CommunicationRead, CommunicationComment, Comm
 from .serializers import CommunicationSerializer
 from users.models import User, Sector
 from core.middleware import log_action
+
+
+def _get_experience_window_alerts_for_dp():
+    """Retorna usuários com janela de experiência próxima do encerramento (<= 10 dias)."""
+    today = timezone.localdate()
+    alerts = []
+
+    users = User.objects.filter(
+        is_active=True,
+        has_experience_window=True,
+        admission_date__isnull=False,
+    ).filter(
+        Q(demission_date__isnull=True) | Q(demission_date__gte=today)
+    ).order_by('admission_date', 'first_name', 'last_name')
+
+    for user in users:
+        days_since_admission = (today - user.admission_date).days
+        if days_since_admission < 0:
+            continue
+
+        if days_since_admission <= 45:
+            window_name = '1a janela (45 dias)'
+            days_remaining = 45 - days_since_admission
+            window_end_date = user.admission_date + timedelta(days=45)
+        elif days_since_admission <= 90:
+            window_name = '2a janela (90 dias)'
+            days_remaining = 90 - days_since_admission
+            window_end_date = user.admission_date + timedelta(days=90)
+        else:
+            continue
+
+        if 0 <= days_remaining <= 10:
+            alerts.append({
+                'user_id': user.id,
+                'full_name': user.full_name or user.email,
+                'window_name': window_name,
+                'days_remaining': days_remaining,
+                'window_end_date': window_end_date,
+            })
+
+    alerts.sort(key=lambda item: (item['days_remaining'], item['full_name']))
+    return alerts
 
 
 @login_required
@@ -54,11 +97,16 @@ def home_feed(request):
     paginator = Paginator(communications_list, 10)
     page_number = request.GET.get('page')
     communications = paginator.get_page(page_number)
+
+    show_experience_window_popup = request.user.groups.filter(id=5).exists()
+    experience_window_alerts = _get_experience_window_alerts_for_dp() if show_experience_window_popup else []
     
     context = {
         'pinned_communications': pinned_communications,
         'communications': communications,
         'recent_compliments': recent_compliments,
+        'show_experience_window_popup': show_experience_window_popup and bool(experience_window_alerts),
+        'experience_window_alerts': experience_window_alerts,
     }
     return render(request, 'home.html', context)
 

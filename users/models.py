@@ -5,6 +5,16 @@ from decimal import Decimal
 from core.utils import upload_user_profile_photo
 
 
+def normalize_cpf(value):
+    """Normalize CPF to 11 numeric digits (00000000000)."""
+    if not value:
+        return ''
+    digits = ''.join(ch for ch in str(value) if ch.isdigit())
+    if not digits:
+        return ''
+    return digits[:11].zfill(11)
+
+
 class SystemConfig(models.Model):
     """
     Modelo para armazenar configurações do sistema.
@@ -129,6 +139,8 @@ class User(AbstractUser):
     pis = models.CharField(max_length=20, blank=True, verbose_name="PIS")
     birth_date = models.DateField(null=True, blank=True, verbose_name="Data de Nascimento")
     admission_date = models.DateField(null=True, blank=True, verbose_name="Data de Admissão")
+    has_experience_window = models.BooleanField(default=False, verbose_name="Se Há Janela de Experiencia")
+    demission_date = models.DateField(null=True, blank=True, verbose_name="Data de Demissão")
     job_title = models.CharField(max_length=100, blank=True, verbose_name="Cargo")
     login_code = models.CharField(max_length=20, blank=True, verbose_name="Login/Código")
     pdv = models.CharField(max_length=100, blank=True, verbose_name="PDV")
@@ -151,6 +163,10 @@ class User(AbstractUser):
     
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email})"
+
+    def save(self, *args, **kwargs):
+        self.cpf = normalize_cpf(self.cpf)
+        super().save(*args, **kwargs)
     
     @property
     def full_name(self):
