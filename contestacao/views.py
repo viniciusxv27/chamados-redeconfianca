@@ -30,8 +30,7 @@ def _can_manage_contestations(user):
 
 
 def _can_create_contestations(user):
-    rank = HIERARCHY_RANK.get(user.hierarchy, 0)
-    return rank >= HIERARCHY_RANK['SUPERVISOR']
+    return user.can_create_contestations()
 
 
 def _get_excel_download_url(share_url):

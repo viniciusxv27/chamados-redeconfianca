@@ -256,6 +256,16 @@ class User(AbstractUser):
     
     def can_manage_webhooks(self):
         return self.hierarchy in ['SUPERADMIN']
+
+    def can_create_contestations(self):
+        """Permite criação de contestações para SUPERVISOR+ ou PADRAO no grupo Gerentes."""
+        if self.is_superuser:
+            return True
+        if self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
+            return True
+        if self.hierarchy == 'PADRAO' and self.groups.filter(name__iexact='gerentes').exists():
+            return True
+        return False
     
     def can_delete_users(self):
         return self.hierarchy in ['SUPERADMIN']
