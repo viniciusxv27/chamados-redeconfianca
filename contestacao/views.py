@@ -413,7 +413,7 @@ def manage_contestations(request):
         messages.error(request, 'Sem permissão para gerenciar contestações.')
         return redirect('contestacao:my_contestations')
 
-    qs = Contestation.objects.select_related('exclusion', 'requester', 'reviewed_by')
+    base_qs = Contestation.objects.select_related('exclusion', 'requester', 'reviewed_by', 'confirmed_by')
 
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
     if rank < HIERARCHY_RANK['SUPERADMIN']:
@@ -425,28 +425,45 @@ def manage_contestations(request):
             q = Q()
             for s in upper_sectors:
                 q |= Q(exclusion__filial__iexact=s)
-            qs = qs.filter(q)
+            base_qs = base_qs.filter(q)
+        else:
+            base_qs = base_qs.none()
+
+    # Filtro de loja/filial
+    filial_filter = request.GET.get('filial', '').strip()
+    if filial_filter:
+        base_qs = base_qs.filter(exclusion__filial__iexact=filial_filter)
 
     # Filtro de status
     status_filter = request.GET.get('status', 'pending')
+    qs = base_qs
     if status_filter == 'awaiting_manager':
         qs = qs.filter(status__in=['accepted', 'rejected'], confirmed_by__isnull=True)
     elif status_filter:
         qs = qs.filter(status=status_filter)
-    
-    # Filtro de loja/filial
-    filial_filter = request.GET.get('filial', '').strip()
-    if filial_filter:
-        qs = qs.filter(exclusion__filial__iexact=filial_filter)
+
+    # Em "Pendentes", mostrar cards de setor e listar apenas quando setor for selecionado.
+    selected_sector = request.GET.get('setor', '').strip()
+    pending_sector_cards = (
+        base_qs.filter(status='pending')
+        .values('exclusion__filial')
+        .annotate(total=Count('id'))
+        .order_by('exclusion__filial')
+    )
+    if status_filter == 'pending':
+        if selected_sector:
+            qs = qs.filter(exclusion__filial__iexact=selected_sector)
+        else:
+            qs = qs.none()
     
     # Get list of filiais for dropdown
-    filiais = Contestation.objects.select_related('exclusion').values_list(
+    filiais = base_qs.values_list(
         'exclusion__filial', flat=True
-    ).distinct().order_by('exclusion__filial')
+    ).exclude(exclusion__filial='').distinct().order_by('exclusion__filial')
 
-    pending_count = Contestation.objects.filter(status='pending').count()
-    confirmed_count = Contestation.objects.filter(status='confirmed', payment_status='pending_payment').count()
-    awaiting_manager_count = Contestation.objects.filter(
+    pending_count = base_qs.filter(status='pending').count()
+    confirmed_count = base_qs.filter(status='confirmed', payment_status='pending_payment').count()
+    awaiting_manager_count = base_qs.filter(
         status__in=['accepted', 'rejected'], confirmed_by__isnull=True
     ).count()
 
@@ -458,6 +475,8 @@ def manage_contestations(request):
         'pending_count': pending_count,
         'confirmed_count': confirmed_count,
         'awaiting_manager_count': awaiting_manager_count,
+        'pending_sector_cards': pending_sector_cards,
+        'selected_sector': selected_sector,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
 

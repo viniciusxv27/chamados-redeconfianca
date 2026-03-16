@@ -63,6 +63,36 @@
     }
     </script>
 
+    {% if status_filter == 'pending' %}
+    <div class="mb-4">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-semibold text-gray-700">Setores com pendências</h2>
+            {% if selected_sector %}
+            <a href="?status=pending{% if filial_filter %}&filial={{ filial_filter }}{% endif %}" class="text-xs text-indigo-600 hover:text-indigo-800">
+                Limpar setor selecionado
+            </a>
+            {% endif %}
+        </div>
+
+        {% if pending_sector_cards %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {% for item in pending_sector_cards %}
+            <a href="?status=pending&setor={{ item.exclusion__filial|urlencode }}{% if filial_filter %}&filial={{ filial_filter|urlencode }}{% endif %}"
+               class="rounded-lg border p-3 transition {% if selected_sector|upper == item.exclusion__filial|upper %}border-yellow-500 bg-yellow-50{% else %}border-gray-200 bg-white hover:border-yellow-400 hover:bg-yellow-50/50{% endif %}">
+                <p class="text-xs uppercase tracking-wide text-gray-500">Setor</p>
+                <p class="text-sm font-bold text-gray-900 mt-1">{{ item.exclusion__filial }}</p>
+                <p class="text-xs text-yellow-700 mt-1">{{ item.total }} pendente{{ item.total|pluralize:"s" }}</p>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
+            Nenhum setor com solicitações pendentes.
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% if contestations %}
     {% if status_filter == 'confirmed' %}
     <form id="bulkPaidForm" method="post" action="{% url 'contestacao:bulk_mark_paid' %}" class="mb-3 bg-green-50 border border-green-200 rounded-lg p-3 flex flex-wrap items-center gap-3">
@@ -184,7 +214,11 @@
     {% else %}
     <div class="text-center py-16 text-gray-400">
         <i class="fas fa-check-circle text-5xl mb-4"></i>
+        {% if status_filter == 'pending' and not selected_sector and pending_sector_cards %}
+        <p>Selecione um setor para ver as vendas contestadas pendentes</p>
+        {% else %}
         <p>Nenhuma contestação nesta categoria</p>
+        {% endif %}
     </div>
     {% endif %}
 </div>
