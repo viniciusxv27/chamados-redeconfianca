@@ -3,6 +3,8 @@ from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 
+from core.storage import get_media_storage
+
 
 class EventParticipant(models.Model):
     """Participante de um evento com status de aceite"""
@@ -324,6 +326,7 @@ class MeetingTranscription(models.Model):
     title = models.CharField(max_length=255, verbose_name='Título da Reunião')
     audio_file = models.FileField(
         upload_to='transcriptions/audio/%Y/%m/',
+        storage=get_media_storage(),
         blank=True, null=True,
         verbose_name='Arquivo de Áudio',
     )

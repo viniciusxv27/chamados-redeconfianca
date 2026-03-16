@@ -1172,8 +1172,8 @@ def api_transcription_assign_task(request, pk, task_id):
 def api_transcription_reprocess(request, pk):
     """Reiniciar o processamento de uma transcrição (processing travada ou com erro).
     
-    Se já existe raw_transcription, pula o Whisper e refaz apenas a análise GPT-4o.
-    Se não existe, refaz tudo desde o Whisper.
+    Prioriza reprocessar a partir do áudio salvo (MinIO/storage).
+    Se o áudio não existir/acessar, usa a transcrição bruta já salva como fallback.
     """
     import openai
     import json as json_module
@@ -1196,22 +1196,29 @@ def api_transcription_reprocess(request, pk):
     try:
         client = openai.OpenAI(api_key=api_key)
 
-        # Se já tem raw_transcription, pula Whisper
-        raw_text = transcription.raw_transcription or ''
+        raw_text = ''
 
-        if not raw_text and transcription.audio_file:
-            # Precisa transcrever com Whisper
-            transcription.audio_file.open('rb')
-            audio_data = transcription.audio_file.read()
-            transcription.audio_file.close()
+        # 1) Priorizar áudio salvo no storage (ex: MinIO)
+        if transcription.audio_file:
+            try:
+                transcription.audio_file.open('rb')
+                audio_data = transcription.audio_file.read()
+                transcription.audio_file.close()
 
-            fname = transcription.audio_file.name or 'audio.webm'
-            raw_text, duration = _transcribe_audio(client, audio_data, fname)
-            if duration:
-                transcription.duration_seconds = duration
+                fname = transcription.audio_file.name or 'audio.webm'
+                raw_text, duration = _transcribe_audio(client, audio_data, fname)
+                if duration:
+                    transcription.duration_seconds = duration
 
-            transcription.raw_transcription = raw_text
-            transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
+                transcription.raw_transcription = raw_text
+                transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
+            except Exception:
+                # 2) Se o áudio não existir/acessar, cair para o texto bruto salvo
+                raw_text = transcription.raw_transcription or ''
+
+        # 3) Sem áudio válido, usar texto bruto existente
+        if not raw_text:
+            raw_text = transcription.raw_transcription or ''
 
         if not raw_text:
             transcription.status = 'error'
