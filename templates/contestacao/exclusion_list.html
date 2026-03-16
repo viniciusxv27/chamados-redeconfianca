@@ -180,7 +180,7 @@
                 {% endfor %}
             </select>
         </div>
-        <button type="submit" class="px-5 py-2.5 text-white text-sm rounded-lg font-medium hover:opacity-90 transition" style="background-color: var(--primary)">
+        <button type="submit" class="inline-flex items-center px-5 py-2.5 text-sm rounded-lg font-semibold transition" style="background-color: var(--primary) !important; color: #ffffff !important; border: 1px solid var(--primary-dark) !important; box-shadow: 0 2px 6px rgba(0,0,0,0.12) !important;">
             <i class="fas fa-search mr-1"></i> Filtrar
         </button>
         {% if search or pilar_filter or filial_filter %}
@@ -256,6 +256,11 @@
                                 <span class="text-xs font-medium" style="color: #f59e0b"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                                 {% endif %}
                             {% else %}
+                            {% if r.filial|upper in locked_sectors %}
+                            <span class="text-xs font-medium text-red-600" title="Já existe contestação em andamento neste setor.">
+                                <i class="fas fa-lock mr-1"></i>Setor bloqueado
+                            </span>
+                            {% else %}
                             <div class="inline-flex items-center gap-1.5">
                                 <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35 !important; color: white !important; padding: 0.625rem 1rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.75rem !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: inline-flex !important; align-items: center !important;" id="btn-{{ r.pk }}">
                                     <i class="fas fa-check mr-1"></i> Sim
@@ -265,11 +270,12 @@
                                 </button>
                             </div>
                             {% endif %}
+                            {% endif %}
                             {% endwith %}
                         </td>
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
-                    {% if not info %}
+                    {% if not info and r.filial|upper not in locked_sectors %}
                     <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
                         <td colspan="9" class="px-4 py-4">
                             <div class="reason-content bg-white rounded-lg p-5 shadow-sm" style="background-color: #ffffff !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
@@ -352,6 +358,9 @@
                 <span class="text-xs font-medium" style="color: #f59e0b"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                 {% endif %}
             {% else %}
+                {% if r.filial|upper in locked_sectors %}
+                <span class="text-xs font-medium text-red-600"><i class="fas fa-lock mr-1"></i>Setor bloqueado</span>
+                {% else %}
                 <div class="grid grid-cols-2 gap-2 mt-3">
                 <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35 !important; color: white !important; padding: 0.75rem 0.5rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.75rem !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 100% !important;" id="btn-mobile-{{ r.pk }}">
                         <i class="fas fa-check mr-1"></i> Sim
@@ -384,6 +393,7 @@
                         </div>
                 </div>
             </div>
+                {% endif %}
             {% endif %}
             {% endwith %}
         </div>
@@ -439,7 +449,95 @@
 window.pendingReasons = {};
 // Stores evidence files: { exclusion_id: File }
 window.pendingFiles = {};
+window.pendingFileMeta = {};
 window.bulkDetailsExpanded = false;
+window.contestationStorageKey = 'contestacao_pending_request_{{ request.user.id }}';
+
+window.fileToDataUrl = function(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
+        reader.readAsDataURL(file);
+    });
+};
+
+window.dataUrlToFile = async function(dataUrl, fileName, mimeType) {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], fileName, { type: mimeType || blob.type || 'application/octet-stream' });
+};
+
+window.persistPendingDraft = async function() {
+    const payload = {
+        reasons: window.pendingReasons,
+        files: {},
+    };
+
+    const ids = Object.keys(window.pendingReasons);
+    for (const id of ids) {
+        const file = window.pendingFiles[id];
+        if (!file) {
+            continue;
+        }
+
+        let dataUrl = file.__dataUrl || null;
+        if (!dataUrl) {
+            dataUrl = await window.fileToDataUrl(file);
+            file.__dataUrl = dataUrl;
+        }
+
+        payload.files[id] = {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            dataUrl: dataUrl,
+        };
+    }
+
+    localStorage.setItem(window.contestationStorageKey, JSON.stringify(payload));
+};
+
+window.restorePendingDraft = async function() {
+    const raw = localStorage.getItem(window.contestationStorageKey);
+    if (!raw) {
+        return;
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        const reasons = parsed.reasons || {};
+        const files = parsed.files || {};
+
+        for (const id of Object.keys(reasons)) {
+            if (!document.getElementById('row-' + id) && !document.getElementById('card-' + id)) {
+                continue;
+            }
+
+            const reason = (reasons[id] || '').trim();
+            if (!reason) {
+                continue;
+            }
+
+            window.pendingReasons[id] = reason;
+
+            if (files[id] && files[id].dataUrl) {
+                try {
+                    const restoredFile = await window.dataUrlToFile(files[id].dataUrl, files[id].name || 'anexo', files[id].type || 'application/octet-stream');
+                    restoredFile.__dataUrl = files[id].dataUrl;
+                    window.pendingFiles[id] = restoredFile;
+                    window.pendingFileMeta[id] = files[id];
+                } catch (_) {
+                    // Se não conseguir reconstruir o arquivo, mantém só o motivo.
+                }
+            }
+
+            window.setButtonAdded(id);
+        }
+    } catch (_) {
+        localStorage.removeItem(window.contestationStorageKey);
+    }
+};
 
 window.getRecordSummary = function(id) {
     const desktopRow = document.getElementById('row-' + id);
@@ -494,7 +592,7 @@ window.closeReasonBox = function(id) {
     if (card) card.style.display = 'none';
 };
 
-window.confirmReason = function(id) {
+window.confirmReason = async function(id) {
     const textareas = document.querySelectorAll('.reason-input[data-id="' + id + '"]');
     let reason = '';
     textareas.forEach(ta => { if (ta.value.trim()) reason = ta.value.trim(); });
@@ -509,10 +607,46 @@ window.confirmReason = function(id) {
         alert('Anexe a evidência (obrigatório).');
         return;
     }
+
+    let fileDataUrl = null;
+    try {
+        fileDataUrl = await window.fileToDataUrl(file);
+        file.__dataUrl = fileDataUrl;
+    } catch (_) {
+        alert('Não foi possível preparar o anexo para salvar no navegador.');
+        return;
+    }
+
     window.pendingReasons[id] = reason;
     window.pendingFiles[id] = file;
+    window.pendingFileMeta[id] = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: fileDataUrl,
+    };
     window.closeReasonBox(id);
-    // Update button to show it's ready
+
+    window.setButtonAdded(id);
+
+    // Mostra notificação visual
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: #10b981; color: white; padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999; animation: slideIn 0.3s ease; font-weight: 500;';
+    toast.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Contestação adicionada ao pedido';
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+    try {
+        await window.persistPendingDraft();
+    } catch (_) {
+        alert('Não foi possível salvar o pedido no navegador. Tente reduzir o tamanho do anexo.');
+    }
+    window.renderBar();
+};
+
+window.setButtonAdded = function(id) {
     const btn = document.getElementById('btn-' + id);
     if (btn) {
         btn.innerHTML = '<i class="fas fa-check-circle mr-1"></i> Adicionado';
@@ -527,17 +661,6 @@ window.confirmReason = function(id) {
         btnMobile.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
         btnMobile.disabled = true;
     }
-    
-    // Mostra notificação visual
-    const toast = document.createElement('div');
-    toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: #10b981; color: white; padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999; animation: slideIn 0.3s ease; font-weight: 500;';
-    toast.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Contestação adicionada ao pedido';
-    document.body.appendChild(toast);
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-    window.renderBar();
 };
 
 window.cancelReason = function(id) {
@@ -545,7 +668,9 @@ window.cancelReason = function(id) {
     if (window.pendingReasons[id]) {
         delete window.pendingReasons[id];
         delete window.pendingFiles[id];
+        delete window.pendingFileMeta[id];
         window.resetButton(id);
+        window.persistPendingDraft().catch(() => {});
         window.renderBar();
     }
 };
@@ -571,11 +696,13 @@ window.clearAllReasons = function() {
     Object.keys(window.pendingReasons).forEach(id => {
         delete window.pendingReasons[id];
         delete window.pendingFiles[id];
+        delete window.pendingFileMeta[id];
         window.resetButton(id);
         // Clear textareas and file inputs
         document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
         document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach(fi => fi.value = '');
     });
+    window.persistPendingDraft().catch(() => {});
     window.renderBar();
 };
 
@@ -666,6 +793,7 @@ window.submitAllContestations = function() {
     .then(resp => resp.json())
     .then(data => {
         if (data.success) {
+            localStorage.removeItem(window.contestationStorageKey);
             window.location.href = '{% url "contestacao:my_contestations" %}';
         } else {
             alert(data.error || 'Erro ao enviar contestações.');
@@ -685,7 +813,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (toggleBtn) {
         toggleBtn.addEventListener('click', window.toggleBulkDetails);
     }
-    window.renderBar();
+    window.restorePendingDraft().then(() => {
+        window.renderBar();
+    });
 });
 </script>
 {% endblock %}

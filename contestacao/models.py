@@ -48,6 +48,10 @@ class Contestation(models.Model):
         ('pending_payment', 'Aguardando Pagamento'),
         ('paid', 'Pago'),
     ]
+    APPROVAL_MODE_CHOICES = [
+        ('approved', 'Aprovar'),
+        ('approved_and_contested', 'Aprovar e Contestar'),
+    ]
 
     exclusion = models.ForeignKey(
         ExclusionRecord, on_delete=models.CASCADE,
@@ -58,6 +62,7 @@ class Contestation(models.Model):
         related_name='contestations_created', verbose_name='Solicitante'
     )
     reason = models.TextField(verbose_name='Motivo da Contestação')
+    attachment_wrong = models.BooleanField(default=False, verbose_name='Anexo veio errado')
     attachment = models.FileField(
         upload_to='contestacoes/%Y/%m/', storage=get_media_storage(),
         blank=True, null=True, verbose_name='Anexo/Evidência'
@@ -73,6 +78,12 @@ class Contestation(models.Model):
         verbose_name='Analisado por'
     )
     review_notes = models.TextField(blank=True, default='', verbose_name='Observações da Análise')
+    approval_mode = models.CharField(
+        max_length=30,
+        choices=APPROVAL_MODE_CHOICES,
+        default='approved',
+        verbose_name='Modo de Aprovação'
+    )
     reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da Análise')
     confirmed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
@@ -81,6 +92,7 @@ class Contestation(models.Model):
     )
     confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da Confirmação')
     confirmation_notes = models.TextField(blank=True, default='', verbose_name='Observações da Confirmação')
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name='Data do Pagamento')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
 
@@ -92,11 +104,12 @@ class Contestation(models.Model):
     def __str__(self):
         return f'Contestação #{self.pk} – {self.exclusion.vendedor} ({self.get_status_display()})'
 
-    def approve(self, reviewer, notes=''):
+    def approve(self, reviewer, notes='', approval_mode='approved'):
         """Gestor aprova — aguarda confirmação do gerente."""
         self.status = 'accepted'
         self.reviewed_by = reviewer
         self.review_notes = notes
+        self.approval_mode = approval_mode
         self.reviewed_at = timezone.now()
         self.save()
 
@@ -130,7 +143,7 @@ class Contestation(models.Model):
     def mark_paid(self, reviewer):
         self.payment_status = 'paid'
         self.reviewed_by = reviewer
-        self.reviewed_at = timezone.now()
+        self.paid_at = timezone.now()
         self.save()
 
 
@@ -139,6 +152,7 @@ class ContestationHistory(models.Model):
     ACTION_CHOICES = [
         ('created', 'Contestação Criada'),
         ('approved', 'Aprovada pelo Gestor'),
+        ('approved_and_contested', 'Aprovada e Contestada pelo Gestor'),
         ('rejected', 'Rejeitada pelo Gestor'),
         ('confirmed', 'Confirmada pelo Gerente'),
         ('denied', 'Negada pelo Gerente'),
@@ -151,7 +165,7 @@ class ContestationHistory(models.Model):
         related_name='history', verbose_name='Contestação',
         null=True, blank=True,
     )
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES, verbose_name='Ação')
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES, verbose_name='Ação')
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='contestation_actions',

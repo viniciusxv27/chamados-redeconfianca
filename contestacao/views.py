@@ -33,6 +33,24 @@ def _can_create_contestations(user):
     return user.can_create_contestations()
 
 
+def _open_contestation_filter():
+    return Q(status__in=['pending', 'accepted']) | Q(status='confirmed', payment_status='pending_payment')
+
+
+def _has_open_contestation_for_sector(filial):
+    if not filial:
+        return False
+    return Contestation.objects.filter(exclusion__filial__iexact=filial).filter(_open_contestation_filter()).exists()
+
+
+def _format_avg_duration(total_seconds, count):
+    if count <= 0:
+        return '0h'
+    avg_seconds = total_seconds / count
+    avg_hours = int(avg_seconds // 3600)
+    return f'{avg_hours}h'
+
+
 def _get_excel_download_url(share_url):
     """Converte URL de compartilhamento OneDrive em URL de download."""
     if 'download=1' in share_url:
@@ -221,12 +239,18 @@ def exclusion_list(request):
     pilares = ExclusionRecord.objects.values_list('pilar', flat=True).distinct().order_by('pilar')
     filiais = ExclusionRecord.objects.values_list('filial', flat=True).distinct().order_by('filial')
 
-    # IDs que já têm contestação pendente/em andamento with their statuses
+    # IDs que já têm contestação ativa com seus status (rejeitadas ficam livres para novo envio)
     contestations_map = {}
     for c in Contestation.objects.filter(
-        status__in=['pending', 'accepted', 'confirmed', 'rejected', 'denied']
+        _open_contestation_filter()
     ).values('exclusion_id', 'status', 'pk'):
         contestations_map[c['exclusion_id']] = {'status': c['status'], 'pk': c['pk']}
+
+    locked_sectors = set(
+        Contestation.objects.filter(_open_contestation_filter())
+        .values_list('exclusion__filial', flat=True)
+    )
+    locked_sectors = {str(sector).strip().upper() for sector in locked_sectors if sector}
     
     # Keep backwards compatibility
     contested_ids = set(contestations_map.keys())
@@ -245,6 +269,7 @@ def exclusion_list(request):
         'total_receita': total_receita,
         'contested_ids': contested_ids,
         'contestations_map': contestations_map,
+        'locked_sectors': locked_sectors,
         'can_manage': _can_manage_contestations(request.user),
         'can_sync': _can_create_contestations(request.user),
         'is_superadmin': rank >= HIERARCHY_RANK['SUPERADMIN'],
@@ -267,6 +292,10 @@ def create_contestation(request, exclusion_id):
     ).first()
     if existing:
         messages.warning(request, 'Já existe uma contestação pendente para este registro.')
+        return redirect('contestacao:exclusion_list')
+
+    if _has_open_contestation_for_sector(exclusion.filial):
+        messages.warning(request, f'Já existe uma contestação em andamento para o setor {exclusion.filial}.')
         return redirect('contestacao:exclusion_list')
 
     if request.method == 'POST':
@@ -334,6 +363,12 @@ def bulk_create_contestation(request):
         ).values_list('exclusion_id', flat=True)
     )
 
+    open_sectors = set(
+        Contestation.objects.filter(_open_contestation_filter())
+        .values_list('exclusion__filial', flat=True)
+    )
+    open_sectors = {str(sector).strip().upper() for sector in open_sectors if sector}
+
     created_count = 0
     for item in items:
         eid = item['exclusion_id']
@@ -342,6 +377,8 @@ def bulk_create_contestation(request):
         if eid not in exclusions_by_id or eid in already_contested:
             continue
         exclusion = exclusions_by_id[eid]
+        if str(exclusion.filial).strip().upper() in open_sectors:
+            continue
         c = Contestation.objects.create(
             exclusion=exclusion,
             requester=request.user,
@@ -358,7 +395,7 @@ def bulk_create_contestation(request):
         created_count += 1
 
     if created_count == 0:
-        return JsonResponse({'success': False, 'error': 'Nenhuma contestação pôde ser criada (já existem contestações em andamento).'})
+        return JsonResponse({'success': False, 'error': 'Nenhuma contestação pôde ser criada (já existem contestações em andamento para os setores selecionados).'})
 
     return JsonResponse({'success': True, 'created': created_count})
 
@@ -508,11 +545,30 @@ def approve_contestation(request, pk):
         return redirect('contestacao:manage_contestations')
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
-    c.approve(request.user, notes)
+    c.approve(request.user, notes, approval_mode='approved')
     ContestationHistory.objects.create(
         contestation=c, action='approved', user=request.user, notes=notes,
     )
     messages.success(request, f'Contestação #{c.pk} aprovada! Aguardando confirmação do gerente.')
+    return redirect('contestacao:manage_contestations')
+
+
+@login_required
+def approve_and_contest_contestation(request, pk):
+    """Gestor aprova e marca como 'Aprovar e Contestar' para relatório."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('contestacao:manage_contestations')
+    c = get_object_or_404(Contestation, pk=pk, status='pending')
+    notes = request.POST.get('review_notes', '')
+    c.approve(request.user, notes, approval_mode='approved_and_contested')
+    ContestationHistory.objects.create(
+        contestation=c,
+        action='approved_and_contested',
+        user=request.user,
+        notes=notes,
+    )
+    messages.success(request, f'Contestação #{c.pk} aprovada como "Aprovar e Contestar".')
     return redirect('contestacao:manage_contestations')
 
 
@@ -525,11 +581,33 @@ def reject_contestation(request, pk):
     c = get_object_or_404(Contestation, pk=pk, status='pending')
     notes = request.POST.get('review_notes', '')
     c.reject(request.user, notes)
+
+    # Rejeitada volta à base com parecer de rejeição no campo observação.
+    parecer = notes.strip() if notes else 'Sem parecer informado.'
+    c.exclusion.observacao = f'Parecer da rejeição: {parecer}'
+    c.exclusion.save(update_fields=['observacao'])
+
     ContestationHistory.objects.create(
         contestation=c, action='rejected', user=request.user, notes=notes,
     )
     messages.success(request, f'Contestação #{c.pk} rejeitada! Aguardando de acordo do gerente.')
     return redirect('contestacao:manage_contestations')
+
+
+@login_required
+def toggle_attachment_wrong(request, pk):
+    """Marca/desmarca 'Anexo veio errado' na contestação."""
+    if not _can_manage_contestations(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão.'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método não permitido.'}, status=405)
+
+    c = get_object_or_404(Contestation, pk=pk)
+    value = request.POST.get('attachment_wrong', 'false').lower() in ['1', 'true', 'on', 'yes']
+    c.attachment_wrong = value
+    c.save(update_fields=['attachment_wrong', 'updated_at'])
+
+    return JsonResponse({'success': True, 'attachment_wrong': c.attachment_wrong})
 
 
 @login_required
@@ -737,6 +815,37 @@ def dashboard(request):
     finalizados = total_aceito + total_recusado
     taxa_aprovacao = round((total_aceito / finalizados * 100), 1) if finalizados > 0 else 0
 
+    # Tempo médio da solicitação do gerente: criado -> analisado pelo gestor
+    manager_request_seconds = 0
+    manager_request_count = 0
+    for c in qs.filter(reviewed_at__isnull=False):
+        delta = (c.reviewed_at - c.created_at).total_seconds()
+        if delta > 0:
+            manager_request_seconds += delta
+            manager_request_count += 1
+
+    # Tempo médio aguardando gerente: analisado -> de acordo do gerente
+    awaiting_manager_seconds = 0
+    awaiting_manager_count = 0
+    for c in qs.filter(reviewed_at__isnull=False, confirmed_at__isnull=False):
+        delta = (c.confirmed_at - c.reviewed_at).total_seconds()
+        if delta > 0:
+            awaiting_manager_seconds += delta
+            awaiting_manager_count += 1
+
+    # Tempo médio do pagamento: confirmado -> pago
+    payment_seconds = 0
+    payment_count = 0
+    for c in qs.filter(payment_status='paid', paid_at__isnull=False, confirmed_at__isnull=False):
+        delta = (c.paid_at - c.confirmed_at).total_seconds()
+        if delta > 0:
+            payment_seconds += delta
+            payment_count += 1
+
+    avg_manager_request_time = _format_avg_duration(manager_request_seconds, manager_request_count)
+    avg_awaiting_manager_time = _format_avg_duration(awaiting_manager_seconds, awaiting_manager_count)
+    avg_payment_time = _format_avg_duration(payment_seconds, payment_count)
+
     context = {
         'total_na_base': total_na_base,
         'receita_na_base': receita_na_base,
@@ -750,5 +859,8 @@ def dashboard(request):
         'por_filial': por_filial,
         'por_status': por_status,
         'taxa_aprovacao': taxa_aprovacao,
+        'avg_manager_request_time': avg_manager_request_time,
+        'avg_awaiting_manager_time': avg_awaiting_manager_time,
+        'avg_payment_time': avg_payment_time,
     }
     return render(request, 'contestacao/dashboard.html', context)
