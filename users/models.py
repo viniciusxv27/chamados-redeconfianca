@@ -279,7 +279,9 @@ class User(AbstractUser):
             return True
         if self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
             return True
-        if self.hierarchy == 'PADRAO':
+        if self.hierarchy == 'PADRAO' and self.groups.filter(
+            models.Q(name__iexact='GERENTES') | models.Q(name__iexact='GERENTES (CHECKLIST)')
+        ).exists():
             return True
         return False
     

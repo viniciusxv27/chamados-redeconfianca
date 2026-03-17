@@ -304,8 +304,11 @@ def lesson_view(request, lesson_id):
     # Buscar imagens de slide se for tipo slides_images
     slide_images = []
     if lesson.lesson_type == 'slides_images':
-        from .models import SlideImage
-        slide_images = lesson.slide_images.all()
+        slide_images = lesson.slide_images.filter(
+            image__isnull=False
+        ).exclude(
+            image=''
+        ).order_by('order', 'id')
     
     context = {
         'lesson': lesson,
@@ -587,7 +590,8 @@ def create_trail(request):
         title = request.POST.get('title')
         description = request.POST.get('description')
         sector_id = request.POST.get('sector')
-        icon = request.POST.get('icon', '📚')
+        icon_emoji = request.POST.get('icon_emoji', '📚')
+        icon_image = request.FILES.get('icon_image')
         color = request.POST.get('color', '#6366f1')
         difficulty = request.POST.get('difficulty', 'beginner')
         estimated_hours = request.POST.get('estimated_hours', 1)
@@ -609,7 +613,8 @@ def create_trail(request):
                 title=title,
                 description=description,
                 sector=sector,
-                icon=icon,
+                icon_emoji=icon_emoji,
+                icon=icon_image,
                 color=color,
                 difficulty=difficulty,
                 estimated_hours=estimated_hours,
@@ -664,7 +669,12 @@ def edit_trail(request, trail_id):
             else:
                 trail.sector = sector
         
-        trail.icon = request.POST.get('icon', trail.icon)
+        trail.icon_emoji = request.POST.get('icon_emoji', trail.icon_emoji)
+        icon_image = request.FILES.get('icon_image')
+        if icon_image:
+            trail.icon = icon_image
+        if request.POST.get('remove_icon_image') == 'on':
+            trail.icon = None
         trail.color = request.POST.get('color', trail.color)
         trail.difficulty = request.POST.get('difficulty', trail.difficulty)
         trail.estimated_hours = request.POST.get('estimated_hours', trail.estimated_hours)
@@ -750,6 +760,7 @@ def create_module(request, trail_id):
         title = request.POST.get('title')
         description = request.POST.get('description', '')
         icon_emoji = request.POST.get('icon_emoji', '📖')
+        logo_image = request.FILES.get('logo_image')
         order = request.POST.get('order', 0)
         
         if not title:
@@ -761,6 +772,7 @@ def create_module(request, trail_id):
                 title=title,
                 description=description,
                 icon_emoji=icon_emoji,
+                logo_image=logo_image,
                 order=order,
                 map_x=50,
                 map_y=50
@@ -774,6 +786,51 @@ def create_module(request, trail_id):
     }
     
     return render(request, 'knowledge_trails/create_module.html', context)
+
+
+@login_required
+def edit_module(request, module_id):
+    """Editar módulo existente"""
+    module = get_object_or_404(TrailModule.objects.select_related('trail'), id=module_id)
+    trail = module.trail
+    user = request.user
+
+    can_manage = False
+    if hasattr(user, 'hierarchy'):
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
+            can_manage = True
+        elif user.hierarchy == 'SUPERVISOR':
+            user_sectors = list(user.sectors.all())
+            if user.sector:
+                user_sectors.append(user.sector)
+            can_manage = trail.sector in user_sectors
+
+    if not can_manage:
+        messages.error(request, 'Você não tem permissão para editar este módulo.')
+        return redirect('knowledge_trails:dashboard')
+
+    if request.method == 'POST':
+        module.title = request.POST.get('title', module.title)
+        module.description = request.POST.get('description', module.description)
+        module.icon_emoji = request.POST.get('icon_emoji', module.icon_emoji)
+        module.order = request.POST.get('order', module.order)
+        module.is_active = request.POST.get('is_active') == 'on'
+
+        logo_image = request.FILES.get('logo_image')
+        if logo_image:
+            module.logo_image = logo_image
+        if request.POST.get('remove_logo_image') == 'on':
+            module.logo_image = None
+
+        module.save()
+        messages.success(request, f'✅ Módulo "{module.title}" atualizado com sucesso!')
+        return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
+
+    context = {
+        'module': module,
+        'trail': trail,
+    }
+    return render(request, 'knowledge_trails/edit_module.html', context)
 
 
 @login_required

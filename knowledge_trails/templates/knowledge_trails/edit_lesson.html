@@ -10,7 +10,14 @@
         <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
             <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">{{ trail.icon }} {{ trail.title }}</a>
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">
+                {% if trail.icon %}
+                <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
+                {% else %}
+                {{ trail.icon_emoji }}
+                {% endif %}
+                {{ trail.title }}
+            </a>
             <i class="fas fa-chevron-right text-xs"></i>
             <span class="text-gray-800 font-semibold">Editar {{ lesson.title }}</span>
         </div>
@@ -23,7 +30,14 @@
                             <i class="fas fa-edit"></i>
                             Editar Lição
                         </h2>
-                        <p class="mt-2 text-white text-opacity-90">{{ module.icon_emoji }} {{ module.title }}</p>
+                        <p class="mt-2 text-white text-opacity-90">
+                            {% if module.logo_image %}
+                            <img src="{{ module.logo_image.url }}" alt="Logo do módulo" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
+                            {% else %}
+                            {{ module.icon_emoji }}
+                            {% endif %}
+                            {{ module.title }}
+                        </p>
                     </div>
                     {% if lesson.lesson_type == 'quiz' %}
                     <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="px-6 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-xl transition-all duration-300 flex items-center gap-2">
@@ -66,6 +80,26 @@
                                 {{ form.title.label }} <span class="text-red-500">*</span>
                             </label>
                             {{ form.title }}
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="{{ form.icon_emoji.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                    {{ form.icon_emoji.label }}
+                                </label>
+                                {{ form.icon_emoji }}
+                            </div>
+                            <div>
+                                <label for="{{ form.logo_image.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                                    {{ form.logo_image.label }}
+                                </label>
+                                {{ form.logo_image }}
+                                {% if lesson.logo_image %}
+                                <small class="text-green-600 text-xs mt-1 block">
+                                    <i class="fas fa-check-circle"></i> Logo atual definida
+                                </small>
+                                {% endif %}
+                            </div>
                         </div>
 
                         <div>

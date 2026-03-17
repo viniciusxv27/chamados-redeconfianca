@@ -295,9 +295,11 @@ video::-webkit-media-controls-panel {
                     <!-- Slide Container -->
                     <div class="relative bg-gray-900 rounded-2xl overflow-hidden shadow-2xl" style="min-height: 400px;">
                         {% for slide in slide_images %}
+                        {% if slide.image %}
                         <div class="slide-item {% if forloop.first %}active{% endif %}" data-slide="{{ forloop.counter0 }}" style="{% if not forloop.first %}display:none;{% endif %}">
                             <img src="{{ slide.image.url }}" alt="Slide {{ forloop.counter }}" class="w-full h-auto max-h-[70vh] object-contain mx-auto block">
                         </div>
+                        {% endif %}
                         {% endfor %}
 
                         <!-- Controles de navegação -->
@@ -322,9 +324,11 @@ video::-webkit-media-controls-panel {
                     <!-- Thumbnails -->
                     <div class="mt-4 flex gap-2 overflow-x-auto pb-2" id="slideThumbnails">
                         {% for slide in slide_images %}
+                        {% if slide.image %}
                         <button class="slide-thumb flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden border-2 {% if forloop.first %}border-indigo-500{% else %}border-transparent{% endif %} hover:border-indigo-300 transition-all" data-slide="{{ forloop.counter0 }}">
                             <img src="{{ slide.image.url }}" alt="Thumb {{ forloop.counter }}" class="w-full h-full object-cover">
                         </button>
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </div>

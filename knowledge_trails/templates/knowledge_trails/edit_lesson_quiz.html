@@ -10,7 +10,14 @@
         <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
             <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">{{ trail.icon }} {{ trail.title }}</a>
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">
+                {% if trail.icon %}
+                <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
+                {% else %}
+                {{ trail.icon_emoji }}
+                {% endif %}
+                {{ trail.title }}
+            </a>
             <i class="fas fa-chevron-right text-xs"></i>
             <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-purple-600 transition-colors">{{ lesson.title }}</a>
             <i class="fas fa-chevron-right text-xs"></i>
