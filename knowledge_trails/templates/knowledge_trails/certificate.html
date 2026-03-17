@@ -1,0 +1,323 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Certificado - {{ certificate.trail.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .certificate-container {
+        max-width: 1000px;
+        aspect-ratio: 16 / 9;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: 3px solid #FFD700;
+        border-radius: 20px;
+        padding: 60px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .certificate-container::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 500px;
+        height: 500px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+    }
+
+    .certificate-container::after {
+        content: '';
+        position: absolute;
+        bottom: -50%;
+        left: -50%;
+        width: 500px;
+        height: 500px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+    }
+
+    .certificate-content {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+        color: white;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .certificate-header {
+        margin-bottom: 20px;
+    }
+
+    .certificate-header h1 {
+        font-size: 48px;
+        font-weight: bold;
+        margin: 0;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        text-transform: uppercase;
+        letter-spacing: 3px;
+    }
+
+    .certificate-logo {
+        max-height: 60px;
+        margin-top: 10px;
+        filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.2));
+    }
+
+    .certificate-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        margin: 30px 0;
+    }
+
+    .certificate-text {
+        font-size: 18px;
+        margin-bottom: 20px;
+        font-style: italic;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .certificate-name {
+        font-size: 36px;
+        font-weight: bold;
+        margin: 15px 0;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        text-decoration: underline;
+        text-decoration-color: #FFD700;
+        text-underline-offset: 8px;
+    }
+
+    .certificate-achievement {
+        font-size: 16px;
+        margin-top: 15px;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+        line-height: 1.6;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .certificate-footer {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end;
+        margin-top: auto;
+        padding-top: 20px;
+        border-top: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .certificate-signature {
+        flex: 1;
+        text-align: center;
+    }
+
+    .certificate-signature-line {
+        border-top: 2px solid white;
+        margin-top: 30px;
+        padding-top: 5px;
+        font-style: italic;
+        font-size: 14px;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .certificate-code {
+        font-size: 12px;
+        font-family: monospace;
+        color: rgba(255, 255, 255, 0.8);
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .actions-container {
+        margin-top: 40px;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+    }
+
+    .btn-download {
+        background: white;
+        color: #667eea;
+        padding: 12px 32px;
+        border-radius: 50px;
+        font-weight: bold;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-download:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-back {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        padding: 12px 32px;
+        border-radius: 50px;
+        font-weight: bold;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 2px solid white;
+    }
+
+    .btn-back:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    @media (max-width: 768px) {
+        .certificate-container {
+            padding: 30px;
+            aspect-ratio: auto;
+            min-height: 500px;
+        }
+
+        .certificate-header h1 {
+            font-size: 28px;
+            letter-spacing: 1px;
+        }
+
+        .certificate-name {
+            font-size: 24px;
+        }
+
+        .certificate-footer {
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .certificate-signature {
+            width: 100%;
+        }
+
+        .actions-container {
+            flex-direction: column;
+        }
+
+        .btn-download,
+        .btn-back {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 p-4 md:p-8 py-16">
+    <div class="max-w-6xl mx-auto">
+        <!-- Título -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">🎉 Parabéns!</h1>
+            <p class="text-lg text-gray-600">Você concluiu com sucesso a trilha de conhecimento</p>
+        </div>
+
+        <!-- Certificado -->
+        <div class="flex justify-center mb-12">
+            <div class="certificate-container">
+                <div class="certificate-content">
+                    <!-- Header -->
+                    <div class="certificate-header">
+                        <h1>Certificado</h1>
+                        <p style="font-size: 14px; margin: 5px 0 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">de Conclusão</p>
+                        {% if certificate.trail.logo %}
+                        <img src="{{ certificate.trail.logo.url }}" alt="Logo" class="certificate-logo mx-auto">
+                        {% endif %}
+                    </div>
+
+                    <!-- Body -->
+                    <div class="certificate-body">
+                        <p class="certificate-text">
+                            Este certificado é apresentado a
+                        </p>
+                        <div class="certificate-name">
+                            {{ certificate.user.full_name }}
+                        </div>
+                        <div class="certificate-achievement">
+                            <p>Por ter concluído com êxito a trilha de conhecimento</p>
+                            <p style="font-size: 18px; font-weight: bold; margin-top: 10px;">
+                                "{{ certificate.trail.title }}"
+                            </p>
+                            <p style="font-size: 14px; margin-top: 10px;">
+                                Emitido em {{ certificate.issued_at|date:"d de F de Y" }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="certificate-footer">
+                        <div class="certificate-signature">
+                            <div class="certificate-signature-line">{{ certificate.trail.instructor_name|default:"Red Confiança" }}</div>
+                            <div style="font-size: 12px; margin-top: 3px;">Instrutor</div>
+                        </div>
+                        <div class="certificate-code" style="padding: 0 20px;">
+                            Código: {{ certificate.certificate_code }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações e Ações -->
+        <div class="bg-white rounded-xl shadow-lg p-8 mb-8 max-w-2xl mx-auto">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8 text-center">
+                <div>
+                    <div class="text-3xl font-bold text-indigo-600">{{ certificate.trail_progress.total_points_earned }}</div>
+                    <p class="text-sm text-gray-600 mt-1">Pontos Ganhos</p>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-purple-600">
+                        {% if certificate.trail_progress %}
+                        {{ certificate.trail_progress.lessons_completed }}
+                        {% else %}
+                        0
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">Lições</p>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-pink-600">{{ certificate.issued_at|date:"d" }}</div>
+                    <p class="text-sm text-gray-600 mt-1">{{ certificate.issued_at|date:"M" }}</p>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-green-600">✓</div>
+                    <p class="text-sm text-gray-600 mt-1">Concluída</p>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <p class="text-gray-600 mb-4">
+                    <i class="fas fa-lock-open text-green-500 mr-2"></i>
+                    Certificado validado e registrado no seu perfil
+                </p>
+            </div>
+        </div>
+
+        <!-- Botões de Ação -->
+        <div class="actions-container">
+            <a href="{% url 'knowledge_trails:download_certificate_pdf' certificate.id %}" class="btn-download" target="_blank">
+                <i class="fas fa-download"></i> Download PDF
+            </a>
+            <a href="{% url 'knowledge_trails:trail_detail' certificate.trail.id %}" class="btn-back">
+                <i class="fas fa-arrow-left"></i> Voltar à Trilha
+            </a>
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="btn-back">
+                <i class="fas fa-home"></i> Meus Certificados
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
