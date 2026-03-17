@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
 from django.http import JsonResponse
+from django.db import models
 from django.db.models import Count, Min, Q, Sum
 from django.utils import timezone
 
@@ -130,7 +131,8 @@ def _find_column(df, name):
 @login_required
 def sync_exclusions(request):
     """Sincroniza registros da planilha BASE_EXCLUSAO para o banco de dados."""
-    if not _can_create_contestations(request.user):
+    # Apenas ADMIN+ podem sincronizar
+    if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão para sincronizar.')
         return redirect('contestacao:exclusion_list')
 
@@ -236,8 +238,9 @@ def exclusion_list(request):
     if filial_filter:
         qs = qs.filter(filial__iexact=filial_filter)
 
-    pilares = ExclusionRecord.objects.values_list('pilar', flat=True).distinct().order_by('pilar')
-    filiais = ExclusionRecord.objects.values_list('filial', flat=True).distinct().order_by('filial')
+    # Pilares e filiais filtrados pelos setores acessíveis do usuário (para a UI)
+    pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
+    filiais = qs.values_list('filial', flat=True).distinct().order_by('filial')
 
     # IDs que já têm contestação ativa com seus status (rejeitadas ficam livres para novo envio)
     contestations_map = {}
@@ -271,7 +274,8 @@ def exclusion_list(request):
         'contestations_map': contestations_map,
         'locked_sectors': locked_sectors,
         'can_manage': _can_manage_contestations(request.user),
-        'can_sync': _can_create_contestations(request.user),
+        'can_sync': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem sincronizar
+        'can_dashboard': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem acessar dashboard
         'is_superadmin': rank >= HIERARCHY_RANK['SUPERADMIN'],
     }
     return render(request, 'contestacao/exclusion_list.html', context)
@@ -414,6 +418,19 @@ def my_contestations(request):
         pass  # vê tudo
     elif rank >= HIERARCHY_RANK['ADMIN']:
         # Admin vê as de seus setores
+        user_sectors = list(request.user.sectors.values_list('name', flat=True))
+        if request.user.sector:
+            user_sectors.append(request.user.sector.name)
+        upper_sectors = [s.strip().upper() for s in user_sectors if s]
+        if upper_sectors:
+            q = Q()
+            for s in upper_sectors:
+                q |= Q(exclusion__filial__iexact=s)
+            qs = qs.filter(q)
+        else:
+            qs = qs.filter(requester=request.user)
+    elif rank == HIERARCHY_RANK['PADRAO']:
+        # Gerentes (PADRAO no grupo GERENTES) veem contestações de seu setor
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
@@ -747,7 +764,8 @@ def contestation_history(request):
 @login_required
 def dashboard(request):
     """Dashboard de contestações com métricas e totais."""
-    if not _can_create_contestations(request.user):
+    # Apenas ADMIN+ podem acessar o dashboard
+    if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão para acessar o dashboard.')
         return redirect('home')
 

@@ -907,11 +907,12 @@ def create_lesson(request, module_id):
                         order=i
                     )
             
-            # Salvar PDF como documento se for tipo slides_pdf
-            if lesson.lesson_type == 'slides_pdf':
-                pdf_file = request.FILES.get('slides_pdf_file')
-                if pdf_file:
-                    lesson.document_file = pdf_file
+            # Salvar PDF como documento se for tipo slides_pdf ou document
+            if lesson.lesson_type in ['slides_pdf', 'document']:
+                file_field_name = 'slides_pdf_file' if lesson.lesson_type == 'slides_pdf' else 'document_file'
+                doc_file = request.FILES.get(file_field_name)
+                if doc_file:
+                    lesson.document_file = doc_file
                     lesson.save()
             
             messages.success(request, f'✅ Lição "{lesson.title}" criada com sucesso!')
@@ -977,11 +978,12 @@ def edit_lesson(request, lesson_id):
                             order=i
                         )
             
-            # Atualizar PDF se for tipo slides_pdf
-            if lesson.lesson_type == 'slides_pdf':
-                pdf_file = request.FILES.get('slides_pdf_file')
-                if pdf_file:
-                    lesson.document_file = pdf_file
+            # Atualizar PDF/Documento se for tipo slides_pdf ou document
+            if lesson.lesson_type in ['slides_pdf', 'document']:
+                file_field_name = 'slides_pdf_file' if lesson.lesson_type == 'slides_pdf' else 'document_file'
+                doc_file = request.FILES.get(file_field_name)
+                if doc_file:
+                    lesson.document_file = doc_file
                     lesson.save()
             
             messages.success(request, f'✅ Lição "{lesson.title}" atualizada com sucesso!')

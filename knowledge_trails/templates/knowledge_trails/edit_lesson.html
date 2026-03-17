@@ -163,7 +163,7 @@
                             {{ form.document_file.label }}
                         </label>
                         {{ form.document_file }}
-                        {% if lesson.document_file %}
+                        {% if lesson.document_file and lesson.document_file.name %}
                         <small class="text-green-600 text-xs mt-1 block">
                             <i class="fas fa-check-circle"></i> Arquivo atual: {{ lesson.document_file.name|slice:":50" }}
                         </small>

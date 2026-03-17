@@ -218,7 +218,7 @@ video::-webkit-media-controls-panel {
                         {% endif %}
                     </div>
                 </div>
-                {% elif lesson.video_file %}
+                {% elif lesson.video_file and lesson.video_file.name %}
                 <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 relative" id="videoContainer">
                     <!-- Informação de debug oculta -->
                     <div id="videoDebugInfo" class="hidden bg-yellow-100 p-4 text-xs text-gray-700">
@@ -268,7 +268,7 @@ video::-webkit-media-controls-panel {
             
             {% elif lesson.lesson_type == 'document' %}
                 <!-- Documento -->
-                {% if lesson.document_file %}
+                {% if lesson.document_file and lesson.document_file.name %}
                 <div class="bg-gray-50 rounded-xl p-6 mb-6 text-center">
                     <i class="fas fa-file-pdf text-red-500 text-6xl mb-4"></i>
                     <h3 class="text-xl font-bold text-gray-800 mb-2">Documento Anexado</h3>
@@ -474,7 +474,7 @@ video::-webkit-media-controls-panel {
                 </div>
                 {% endif %}
                 
-                {% if lesson.media_file %}
+                {% if lesson.media_file and lesson.media_file.name %}
                 <div class="mt-6">
                     <img src="{{ lesson.media_file.url }}" alt="{{ lesson.title }}" class="rounded-xl shadow-lg">
                 </div>
@@ -746,8 +746,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== PDF Slides Viewer =====
     const pdfViewer = document.getElementById('slidesPdfViewer');
     if (pdfViewer) {
-        const pdfUrl = '{{ lesson.document_file.url|default:"" }}';
-        if (pdfUrl) {
+        const pdfUrl = '{% if lesson.document_file and lesson.document_file.name %}{{ lesson.document_file.url }}{% endif %}';
+        if (pdfUrl && pdfUrl.trim()) {
             // Carregar PDF.js via CDN
             const pdfjsScript = document.createElement('script');
             pdfjsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
