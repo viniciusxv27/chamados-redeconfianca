@@ -279,7 +279,7 @@ class User(AbstractUser):
             return True
         if self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
             return True
-        if self.hierarchy == 'PADRAO' and self.groups.filter(name__iexact='GERENTES (CHECKLIST)').exists():
+        if self.hierarchy == 'PADRAO':
             return True
         return False
     
