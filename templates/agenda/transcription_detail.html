@@ -70,6 +70,10 @@
                         class="inline-flex items-center px-4 py-2 bg-white/15 text-white text-sm font-medium rounded-lg hover:bg-white/25 transition border border-white/20">
                     <i class="fas fa-redo mr-2"></i> Retranscrever
                 </button>
+                <button onclick="reprocessFromRaw({{ transcription.pk }}, this)" id="btn-reprocess-raw"
+                        class="inline-flex items-center px-4 py-2 bg-white/10 text-white text-sm font-medium rounded-lg hover:bg-white/20 transition border border-white/20 ml-2 mt-2 sm:mt-0">
+                    <i class="fas fa-file-alt mr-2"></i> Retranscrever com Texto Bruto
+                </button>
                 <p class="text-xs text-indigo-100 mt-2">Prioriza a transcrição Bruta/Completa salva; se não existir, tenta o áudio.</p>
             </div>
 
@@ -220,6 +224,7 @@
                 </div>
                 <div id="formatted-transcription" class="px-5 py-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto">{{ transcription.formatted_transcription }}</div>
                 <div id="raw-transcription" class="hidden px-5 py-4 text-sm text-gray-500 leading-relaxed whitespace-pre-wrap font-mono text-xs max-h-[600px] overflow-y-auto">{{ transcription.raw_transcription }}</div>
+                <textarea id="raw-transcription-textarea" class="hidden w-full border-t border-gray-100 px-5 py-4 text-xs text-gray-600 font-mono focus:ring-indigo-500 focus:border-indigo-500" rows="14">{{ transcription.raw_transcription }}</textarea>
             </div>
         </div>
 
@@ -466,20 +471,30 @@ document.addEventListener('DOMContentLoaded', () => {
 function toggleRaw() {
     const fmt = document.getElementById('formatted-transcription');
     const raw = document.getElementById('raw-transcription');
+    const rawTextarea = document.getElementById('raw-transcription-textarea');
     const btn = document.getElementById('btn-toggle-raw');
-    if (raw.classList.contains('hidden')) {
-        raw.classList.remove('hidden');
+    const showingRaw = rawTextarea
+        ? !rawTextarea.classList.contains('hidden')
+        : !raw.classList.contains('hidden');
+
+    if (!showingRaw) {
+        if (rawTextarea) {
+            rawTextarea.classList.remove('hidden');
+        } else {
+            raw.classList.remove('hidden');
+        }
         fmt.classList.add('hidden');
         btn.innerHTML = '<i class="fas fa-file-alt mr-1"></i> Ver formatada';
     } else {
         raw.classList.add('hidden');
+        if (rawTextarea) rawTextarea.classList.add('hidden');
         fmt.classList.remove('hidden');
         btn.innerHTML = '<i class="fas fa-code mr-1"></i> Ver texto bruto';
     }
 }
 
 // ---- Reprocess transcription ----
-async function reprocessTranscription(transcriptionId, btn) {
+async function reprocessTranscription(transcriptionId, btn, options = {}) {
     if (!btn) return;
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
@@ -492,6 +507,7 @@ async function reprocessTranscription(transcriptionId, btn) {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': '{{ csrf_token }}',
             },
+            body: JSON.stringify(options),
         });
 
         const contentType = resp.headers.get('content-type') || '';
@@ -521,6 +537,22 @@ async function reprocessTranscription(transcriptionId, btn) {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
     }
+}
+
+async function reprocessFromRaw(transcriptionId, btn) {
+    const rawTextarea = document.getElementById('raw-transcription-textarea');
+    const rawDiv = document.getElementById('raw-transcription');
+    const rawText = rawTextarea ? rawTextarea.value.trim() : (rawDiv ? rawDiv.textContent.trim() : '');
+
+    if (!rawText) {
+        alert('Não há texto bruto para retranscrever.');
+        return;
+    }
+
+    await reprocessTranscription(transcriptionId, btn, {
+        force_raw: true,
+        raw_text: rawText,
+    });
 }
 
 // ---- Assign task to user ----

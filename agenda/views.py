@@ -1197,6 +1197,14 @@ def api_transcription_reprocess(request, pk):
 
     transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
 
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}') if request.body else {}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        payload = {}
+
+    force_raw = bool(payload.get('force_raw'))
+    provided_raw_text = (payload.get('raw_text') or '').strip()
+
     if transcription.status == 'completed':
         # Permitir reprocessar mesmo completas (o usuário quer "priorizar" = refazer)
         pass
@@ -1208,11 +1216,22 @@ def api_transcription_reprocess(request, pk):
     source_text = (transcription.raw_transcription or '').strip()
     formatted_text = (transcription.formatted_transcription or '').strip()
 
+    if provided_raw_text:
+        source_text = provided_raw_text
+        transcription.raw_transcription = provided_raw_text
+        transcription.save(update_fields=['raw_transcription'])
+
     # 1) Priorizar texto já salvo (Bruta/Completa) para evitar depender do áudio.
     if not source_text and formatted_text:
         source_text = formatted_text
         transcription.raw_transcription = formatted_text
         transcription.save(update_fields=['raw_transcription'])
+
+    if force_raw and not source_text:
+        transcription.status = 'error'
+        transcription.error_message = 'Não há texto bruto para retranscrever.'
+        transcription.save(update_fields=['status', 'error_message'])
+        return JsonResponse({'error': 'Não há texto bruto para retranscrever.'}, status=400)
 
     api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
     if not api_key and source_text:
@@ -1235,8 +1254,8 @@ def api_transcription_reprocess(request, pk):
     try:
         client = openai.OpenAI(api_key=api_key)
 
-        # 2) Se não houver texto, tentar áudio salvo no storage (ex: MinIO)
-        if not source_text and transcription.audio_file:
+        # 2) Se não houver texto e não for modo forçado por texto bruto, tentar áudio salvo no storage.
+        if not source_text and not force_raw and transcription.audio_file:
             try:
                 transcription.audio_file.open('rb')
                 audio_data = transcription.audio_file.read()
