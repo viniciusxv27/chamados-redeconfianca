@@ -29,6 +29,52 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 text-indigo-600">
+                    <i class="fas fa-receipt"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Total de Vendas</span>
+            </div>
+            <p class="text-2xl font-bold text-gray-900">{{ total }}</p>
+        </div>
+
+        <div class="bg-white border rounded-xl p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-emerald-100 text-emerald-600">
+                    <i class="fas fa-dollar-sign"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Valor total a contestar</span>
+            </div>
+            <p class="text-2xl font-bold text-emerald-700">R$ {{ total_value|floatformat:2 }}</p>
+        </div>
+
+        <div class="bg-white border rounded-xl p-5 shadow-sm md:col-span-2 lg:col-span-1">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600">
+                    <i class="fas fa-store"></i>
+                </span>
+                <span class="text-sm font-medium text-gray-500">Lojas no gráfico</span>
+            </div>
+            <p class="text-2xl font-bold text-blue-700">{{ chart_labels|length }}</p>
+            <p class="text-xs text-gray-400 mt-1">Top lojas por volume de vendas</p>
+        </div>
+    </div>
+
+    <div class="bg-white border rounded-xl shadow-sm p-4 mb-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">
+            <i class="fas fa-chart-bar mr-2 text-blue-500"></i> Gráfico por Loja (quantidade de vendas)
+        </h2>
+        {% if chart_labels %}
+        <div class="h-80">
+            <canvas id="storesChart"></canvas>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">Sem dados para exibir no gráfico.</p>
+        {% endif %}
+    </div>
+
     {% if contestations %}
     <div class="bg-white border rounded-xl shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
@@ -74,6 +120,9 @@
     {% endif %}
 </div>
 
+{{ chart_labels|json_script:"stores-chart-labels" }}
+{{ chart_totals|json_script:"stores-chart-totals" }}
+
 <script>
 function applyFilialFilter(filial) {
     const url = new URL(window.location);
@@ -84,5 +133,52 @@ function applyFilialFilter(filial) {
     }
     window.location.href = url.toString();
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    const chartCanvas = document.getElementById('storesChart');
+    if (!chartCanvas || typeof Chart === 'undefined') {
+        return;
+    }
+
+    const labelsNode = document.getElementById('stores-chart-labels');
+    const totalsNode = document.getElementById('stores-chart-totals');
+    const labels = labelsNode ? JSON.parse(labelsNode.textContent) : [];
+    const totals = totalsNode ? JSON.parse(totalsNode.textContent) : [];
+
+    if (!labels.length) {
+        return;
+    }
+
+    new Chart(chartCanvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Vendas',
+                data: totals,
+                backgroundColor: 'rgba(37, 99, 235, 0.75)',
+                borderColor: 'rgba(30, 64, 175, 1)',
+                borderWidth: 1,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0,
+                    }
+                }
+            }
+        }
+    });
+});
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}

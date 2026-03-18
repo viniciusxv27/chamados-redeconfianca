@@ -679,11 +679,24 @@ def contested_with_vivo(request):
 
     filiais = qs.values_list('exclusion__filial', flat=True).exclude(exclusion__filial='').distinct().order_by('exclusion__filial')
 
+    total_sales = qs.count()
+    total_value = qs.aggregate(total=Sum('exclusion__receita'))['total'] or 0
+    chart_rows = (
+        qs.values('exclusion__filial')
+        .annotate(total_sales=Count('id'), total_value=Sum('exclusion__receita'))
+        .order_by('-total_sales', 'exclusion__filial')[:15]
+    )
+    chart_labels = [row['exclusion__filial'] or '-' for row in chart_rows]
+    chart_totals = [row['total_sales'] for row in chart_rows]
+
     context = {
         'contestations': qs.order_by('-created_at')[:300],
         'filiais': filiais,
         'filial_filter': filial_filter,
-        'total': qs.count(),
+        'total': total_sales,
+        'total_value': total_value,
+        'chart_labels': chart_labels,
+        'chart_totals': chart_totals,
     }
     return render(request, 'contestacao/contested_with_vivo.html', context)
 
