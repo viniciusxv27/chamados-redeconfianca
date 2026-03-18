@@ -30,6 +30,22 @@ def upload_lesson_media(instance, filename):
     return os.path.join('knowledge_trails', 'lessons', new_filename)
 
 
+def upload_module_logo(instance, filename):
+    """Define o caminho de upload para logo do módulo"""
+    ext = filename.split('.')[-1]
+    instance_id = instance.id if instance.id else 'new'
+    new_filename = f"module_{instance_id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return os.path.join('knowledge_trails', 'modules', new_filename)
+
+
+def upload_lesson_logo(instance, filename):
+    """Define o caminho de upload para logo da lição"""
+    ext = filename.split('.')[-1]
+    instance_id = instance.id if instance.id else 'new'
+    new_filename = f"lesson_logo_{instance_id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return os.path.join('knowledge_trails', 'lessons', 'logos', new_filename)
+
+
 def upload_slide_image(instance, filename):
     """Define o caminho de upload para imagens de slide"""
     ext = filename.split('.')[-1]
@@ -70,6 +86,12 @@ class KnowledgeTrail(models.Model):
         blank=True,
         null=True,
         verbose_name='Ícone da Trilha'
+    )
+    icon_emoji = models.CharField(
+        max_length=10,
+        default='📚',
+        verbose_name='Emoji da Trilha',
+        help_text='Emoji exibido quando não houver imagem de logo'
     )
     color = models.CharField(
         max_length=7,
@@ -205,6 +227,14 @@ class TrailModule(models.Model):
         verbose_name='Emoji do Módulo',
         help_text='Emoji que representa o módulo'
     )
+    logo_image = models.ImageField(
+        upload_to=upload_module_logo,
+        storage=get_lesson_media_storage(),
+        blank=True,
+        null=True,
+        verbose_name='Logo do Módulo',
+        help_text='Imagem exibida no lugar do emoji quando enviada'
+    )
     
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
     
@@ -306,6 +336,20 @@ class Lesson(models.Model):
         null=True,
         verbose_name='Arquivo de Mídia',
         help_text='Outros arquivos (imagens, etc.)'
+    )
+    icon_emoji = models.CharField(
+        max_length=10,
+        default='📖',
+        verbose_name='Emoji da Lição',
+        help_text='Emoji exibido quando não houver imagem de logo'
+    )
+    logo_image = models.ImageField(
+        upload_to=upload_lesson_logo,
+        storage=get_lesson_media_storage(),
+        blank=True,
+        null=True,
+        verbose_name='Logo da Lição',
+        help_text='Imagem exibida no lugar do emoji quando enviada'
     )
     
     # Gamificação

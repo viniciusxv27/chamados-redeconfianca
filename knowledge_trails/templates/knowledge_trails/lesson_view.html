@@ -218,7 +218,7 @@ video::-webkit-media-controls-panel {
                         {% endif %}
                     </div>
                 </div>
-                {% elif lesson.video_file %}
+                {% elif lesson.video_file and lesson.video_file.name %}
                 <div class="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 relative" id="videoContainer">
                     <!-- Informação de debug oculta -->
                     <div id="videoDebugInfo" class="hidden bg-yellow-100 p-4 text-xs text-gray-700">
@@ -268,7 +268,7 @@ video::-webkit-media-controls-panel {
             
             {% elif lesson.lesson_type == 'document' %}
                 <!-- Documento -->
-                {% if lesson.document_file %}
+                {% if lesson.document_file and lesson.document_file.name %}
                 <div class="bg-gray-50 rounded-xl p-6 mb-6 text-center">
                     <i class="fas fa-file-pdf text-red-500 text-6xl mb-4"></i>
                     <h3 class="text-xl font-bold text-gray-800 mb-2">Documento Anexado</h3>
@@ -295,9 +295,11 @@ video::-webkit-media-controls-panel {
                     <!-- Slide Container -->
                     <div class="relative bg-gray-900 rounded-2xl overflow-hidden shadow-2xl" style="min-height: 400px;">
                         {% for slide in slide_images %}
+                        {% if slide.image %}
                         <div class="slide-item {% if forloop.first %}active{% endif %}" data-slide="{{ forloop.counter0 }}" style="{% if not forloop.first %}display:none;{% endif %}">
                             <img src="{{ slide.image.url }}" alt="Slide {{ forloop.counter }}" class="w-full h-auto max-h-[70vh] object-contain mx-auto block">
                         </div>
+                        {% endif %}
                         {% endfor %}
 
                         <!-- Controles de navegação -->
@@ -322,12 +324,25 @@ video::-webkit-media-controls-panel {
                     <!-- Thumbnails -->
                     <div class="mt-4 flex gap-2 overflow-x-auto pb-2" id="slideThumbnails">
                         {% for slide in slide_images %}
+                        {% if slide.image %}
                         <button class="slide-thumb flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden border-2 {% if forloop.first %}border-indigo-500{% else %}border-transparent{% endif %} hover:border-indigo-300 transition-all" data-slide="{{ forloop.counter0 }}">
                             <img src="{{ slide.image.url }}" alt="Thumb {{ forloop.counter }}" class="w-full h-full object-cover">
                         </button>
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </div>
+
+                <!-- Modal de zoom para imagens -->
+                <div id="slideZoomModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4" style="display: none;">
+                    <div class="relative max-w-4xl max-h-[90vh] bg-black rounded-xl shadow-2xl overflow-hidden flex items-center justify-center">
+                        <img id="slideZoomImage" src="" alt="Zoom image" class="max-w-full max-h-[85vh] object-contain">
+                        <button id="slideZoomClose" class="absolute top-4 right-4 bg-white bg-opacity-90 hover:bg-opacity-100 text-gray-800 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-20">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+
                 {% else %}
                 <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
                     <i class="fas fa-exclamation-triangle text-yellow-500 text-4xl mb-3"></i>
@@ -470,7 +485,7 @@ video::-webkit-media-controls-panel {
                 </div>
                 {% endif %}
                 
-                {% if lesson.media_file %}
+                {% if lesson.media_file and lesson.media_file.name %}
                 <div class="mt-6">
                     <img src="{{ lesson.media_file.url }}" alt="{{ lesson.title }}" class="rounded-xl shadow-lg">
                 </div>
@@ -734,6 +749,41 @@ document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('keydown', function(e) {
             if (e.key === 'ArrowLeft') showSlide(currentSlide - 1);
             if (e.key === 'ArrowRight') showSlide(currentSlide + 1);
+            if (e.key === 'Escape') closeSlideZoom();
+        });
+        
+        // ===== Zoom de Imagens =====
+        const slideZoomModal = document.getElementById('slideZoomModal');
+        const slideZoomImage = document.getElementById('slideZoomImage');
+        const slideZoomClose = document.getElementById('slideZoomClose');
+        
+        // Adicionar clique nas imagens dos slides para zoom
+        slides.forEach(slide => {
+            const img = slide.querySelector('img');
+            if (img) {
+                img.style.cursor = 'pointer';
+                img.addEventListener('click', function() {
+                    slideZoomImage.src = img.src;
+                    slideZoomModal.style.display = 'flex';
+                    slideZoomModal.classList.remove('hidden');
+                    document.body.style.overflow = 'hidden';
+                });
+            }
+        });
+        
+        function closeSlideZoom() {
+            slideZoomModal.style.display = 'none';
+            slideZoomModal.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+        
+        slideZoomClose?.addEventListener('click', closeSlideZoom);
+        
+        // Fechar modal ao clicar fora da imagem
+        slideZoomModal?.addEventListener('click', function(e) {
+            if (e.target === slideZoomModal) {
+                closeSlideZoom();
+            }
         });
         
         showSlide(0);
@@ -742,8 +792,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // ===== PDF Slides Viewer =====
     const pdfViewer = document.getElementById('slidesPdfViewer');
     if (pdfViewer) {
-        const pdfUrl = '{{ lesson.document_file.url|default:"" }}';
-        if (pdfUrl) {
+        const pdfUrl = '{% if lesson.document_file and lesson.document_file.name %}{{ lesson.document_file.url }}{% endif %}';
+        if (pdfUrl && pdfUrl.trim()) {
             // Carregar PDF.js via CDN
             const pdfjsScript = document.createElement('script');
             pdfjsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';

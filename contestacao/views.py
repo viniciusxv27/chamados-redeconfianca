@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
 from django.http import JsonResponse
+from django.db import models
 from django.db.models import Count, Min, Q, Sum
 from django.utils import timezone
 
@@ -37,7 +38,38 @@ def _open_contestation_filter():
     return Q(status__in=['pending', 'accepted']) | Q(status='confirmed', payment_status='pending_payment')
 
 
-def _has_open_contestation_for_sector(filial):
+def _normalize_sector_name(sector_name):
+    """Remove 'LOJA' e normaliza o nome do setor para comparação com filial."""
+    if not sector_name:
+        return ''
+    normalized = sector_name.strip().upper()
+    # Remove variações de "LOJA" do início
+    for prefix in ['LOJA ', 'LOJA_', 'LOJA-']:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+    return normalized.strip()
+
+
+def _match_sector_to_filial(user_sectors, filial):
+    """Verifica se a filial_name bate com algum setor do usuário."""
+    if not filial or not user_sectors:
+        return False
+    
+    filial_upper = filial.strip().upper()
+    for sector in user_sectors:
+        sector_norm = _normalize_sector_name(sector)
+        # Tenta diferentes formas de comparação
+        if sector_norm and (
+            filial_upper == sector_norm or
+            filial_upper.endswith(sector_norm) or
+            sector_norm in filial_upper or
+            filial_upper in sector_norm
+        ):
+            return True
+    return False
+
+
+
     if not filial:
         return False
     return Contestation.objects.filter(exclusion__filial__iexact=filial).filter(_open_contestation_filter()).exists()
@@ -130,7 +162,8 @@ def _find_column(df, name):
 @login_required
 def sync_exclusions(request):
     """Sincroniza registros da planilha BASE_EXCLUSAO para o banco de dados."""
-    if not _can_create_contestations(request.user):
+    # Apenas ADMIN+ podem sincronizar
+    if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão para sincronizar.')
         return redirect('contestacao:exclusion_list')
 
@@ -216,12 +249,14 @@ def exclusion_list(request):
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
-        user_sectors_upper = [s.strip().upper() for s in user_sectors if s]
-        if user_sectors_upper:
-            q = Q()
-            for s in user_sectors_upper:
-                q |= Q(filial__iexact=s)
-            qs = qs.filter(q)
+        
+        if user_sectors:
+            # Filtrar registros cuja filial bate com algum setor do usuário
+            matching_ids = []
+            for record in qs:
+                if _match_sector_to_filial(user_sectors, record.filial):
+                    matching_ids.append(record.id)
+            qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
         else:
             qs = qs.none()
 
@@ -236,8 +271,9 @@ def exclusion_list(request):
     if filial_filter:
         qs = qs.filter(filial__iexact=filial_filter)
 
-    pilares = ExclusionRecord.objects.values_list('pilar', flat=True).distinct().order_by('pilar')
-    filiais = ExclusionRecord.objects.values_list('filial', flat=True).distinct().order_by('filial')
+    # Pilares e filiais filtrados pelos setores acessíveis do usuário (para a UI)
+    pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
+    filiais = qs.values_list('filial', flat=True).distinct().order_by('filial')
 
     # IDs que já têm contestação ativa com seus status (rejeitadas ficam livres para novo envio)
     contestations_map = {}
@@ -271,7 +307,8 @@ def exclusion_list(request):
         'contestations_map': contestations_map,
         'locked_sectors': locked_sectors,
         'can_manage': _can_manage_contestations(request.user),
-        'can_sync': _can_create_contestations(request.user),
+        'can_sync': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem sincronizar
+        'can_dashboard': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem acessar dashboard
         'is_superadmin': rank >= HIERARCHY_RANK['SUPERADMIN'],
     }
     return render(request, 'contestacao/exclusion_list.html', context)
@@ -412,21 +449,21 @@ def my_contestations(request):
 
     if rank >= HIERARCHY_RANK['SUPERADMIN']:
         pass  # vê tudo
-    elif rank >= HIERARCHY_RANK['ADMIN']:
-        # Admin vê as de seus setores
+    else:
+        # Admin+ ou PADRAO veem contestações de seus setores
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
-        upper_sectors = [s.strip().upper() for s in user_sectors if s]
-        if upper_sectors:
-            q = Q()
-            for s in upper_sectors:
-                q |= Q(exclusion__filial__iexact=s)
-            qs = qs.filter(q)
+        
+        if user_sectors:
+            # Filtrar contestações cuja filial bate com algum setor do usuário
+            matching_ids = []
+            for record in qs:
+                if _match_sector_to_filial(user_sectors, record.exclusion.filial):
+                    matching_ids.append(record.id)
+            qs = qs.filter(id__in=matching_ids) if matching_ids else qs.filter(requester=request.user)
         else:
             qs = qs.filter(requester=request.user)
-    else:
-        qs = qs.filter(requester=request.user)
 
     status_filter = request.GET.get('status', '')
     if status_filter == 'rejected_pending':
@@ -456,12 +493,13 @@ def manage_contestations(request):
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
-        upper_sectors = [s.strip().upper() for s in user_sectors if s]
-        if upper_sectors:
-            q = Q()
-            for s in upper_sectors:
-                q |= Q(exclusion__filial__iexact=s)
-            base_qs = base_qs.filter(q)
+        if user_sectors:
+            # Filtrar contestações cuja filial bate com algum setor do usuário
+            matching_ids = []
+            for record in base_qs:
+                if _match_sector_to_filial(user_sectors, record.exclusion.filial):
+                    matching_ids.append(record.id)
+            base_qs = base_qs.filter(id__in=matching_ids) if matching_ids else base_qs.none()
         else:
             base_qs = base_qs.none()
 
@@ -803,7 +841,8 @@ def contestation_history(request):
 @login_required
 def dashboard(request):
     """Dashboard de contestações com métricas e totais."""
-    if not _can_create_contestations(request.user):
+    # Apenas ADMIN+ podem acessar o dashboard
+    if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão para acessar o dashboard.')
         return redirect('home')
 
@@ -815,23 +854,28 @@ def dashboard(request):
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
-        upper_sectors = [s.strip().upper() for s in user_sectors if s]
-        if upper_sectors:
-            q = Q()
-            for s in upper_sectors:
-                q |= Q(exclusion__filial__iexact=s)
-            qs = qs.filter(q)
+        if user_sectors:
+            # Filtrar contestações cuja filial bate com algum setor do usuário
+            matching_ids = []
+            for record in qs:
+                if _match_sector_to_filial(user_sectors, record.exclusion.filial):
+                    matching_ids.append(record.id)
+            qs = qs.filter(id__in=matching_ids) if matching_ids else qs.filter(requester=request.user)
         else:
             qs = qs.filter(requester=request.user)
 
     # Total na base (ExclusionRecord) com mesmo filtro de setor
     base_qs = ExclusionRecord.objects.all()
     if rank < HIERARCHY_RANK['SUPERADMIN']:
-        if upper_sectors:
-            bq = Q()
-            for s in upper_sectors:
-                bq |= Q(filial__iexact=s)
-            base_qs = base_qs.filter(bq)
+        user_sectors = list(request.user.sectors.values_list('name', flat=True))
+        if request.user.sector:
+            user_sectors.append(request.user.sector.name)
+        if user_sectors:
+            matching_ids = []
+            for record in base_qs:
+                if _match_sector_to_filial(user_sectors, record.filial):
+                    matching_ids.append(record.id)
+            base_qs = base_qs.filter(id__in=matching_ids) if matching_ids else base_qs.none()
         else:
             base_qs = base_qs.none()
     total_na_base = base_qs.count()

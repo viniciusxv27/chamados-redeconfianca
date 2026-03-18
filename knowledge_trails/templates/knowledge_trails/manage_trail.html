@@ -13,7 +13,11 @@
                 <div class="flex items-center">
                     <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl mr-4"
                          style="background-color: {{ trail.color }}20;">
-                        {{ trail.icon }}
+                        {% if trail.icon %}
+                        <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="w-12 h-12 rounded-xl object-cover">
+                        {% else %}
+                        {{ trail.icon_emoji }}
+                        {% endif %}
                     </div>
                     <div>
                         <h1 class="text-3xl font-bold text-gray-800">Gerenciar Trilha</h1>
@@ -34,6 +38,12 @@
                        class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all">
                         <i class="fas fa-arrow-left mr-1"></i> Voltar
                     </a>
+                    <form method="post" action="{% url 'knowledge_trails:delete_trail' trail.id %}" onsubmit="return confirm('Tem certeza que deseja excluir esta trilha? Se houver progresso de usuários, ela será desativada.');">
+                        {% csrf_token %}
+                        <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all">
+                            <i class="fas fa-trash mr-1"></i> Excluir Trilha
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

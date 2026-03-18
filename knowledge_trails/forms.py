@@ -10,6 +10,8 @@ class LessonForm(forms.ModelForm):
         fields = [
             'title', 
             'description', 
+            'icon_emoji',
+            'logo_image',
             'lesson_type', 
             'content', 
             'video_url', 
@@ -29,6 +31,14 @@ class LessonForm(forms.ModelForm):
                 'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300 resize-none',
                 'rows': 3,
                 'placeholder': 'Descreva o conteúdo desta lição...'
+            }),
+            'icon_emoji': forms.TextInput(attrs={
+                'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300 text-center text-2xl',
+                'placeholder': '📖'
+            }),
+            'logo_image': forms.FileInput(attrs={
+                'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 outline-none transition-all duration-300',
+                'accept': 'image/*'
             }),
             'lesson_type': forms.Select(attrs={
                 'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300'
@@ -69,6 +79,8 @@ class LessonForm(forms.ModelForm):
         labels = {
             'title': 'Título da Lição',
             'description': 'Descrição',
+            'icon_emoji': 'Ícone (Emoji)',
+            'logo_image': 'Logo da Lição (Imagem)',
             'lesson_type': 'Tipo de Lição',
             'content': 'Conteúdo',
             'video_url': 'URL do Vídeo (YouTube, Vimeo, etc)',

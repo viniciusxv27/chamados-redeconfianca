@@ -43,7 +43,11 @@
                     <div class="flex items-center">
                         <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-5xl mr-6"
                              style="background-color: {{ trail.color }}20;">
-                            {{ trail.icon }}
+                            {% if trail.icon %}
+                            <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="w-16 h-16 rounded-xl object-cover">
+                            {% else %}
+                            {{ trail.icon_emoji }}
+                            {% endif %}
                         </div>
                         <div>
                             <h1 class="text-4xl font-bold text-gray-800 mb-2">{{ trail.title }}</h1>

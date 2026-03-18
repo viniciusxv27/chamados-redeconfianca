@@ -23,6 +23,7 @@ urlpatterns = [
     
     # CRUD de Módulos
     path('trail/<int:trail_id>/create-module/', views.create_module, name='create_module'),
+    path('module/<int:module_id>/edit/', views.edit_module, name='edit_module'),
     path('module/<int:module_id>/delete/', views.delete_module, name='delete_module'),
     
     # CRUD de Lições
