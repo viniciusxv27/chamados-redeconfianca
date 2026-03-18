@@ -1,11 +1,12 @@
 import io
+import csv
 import pandas as pd
 import requests
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.db import models
 from django.db.models import Count, Min, Q, Sum
 from django.utils import timezone
@@ -69,10 +70,59 @@ def _match_sector_to_filial(user_sectors, filial):
     return False
 
 
-
+def _has_open_contestation_for_sector(filial):
     if not filial:
         return False
     return Contestation.objects.filter(exclusion__filial__iexact=filial).filter(_open_contestation_filter()).exists()
+
+
+def _apply_sector_visibility_filter(contestation_qs, user):
+    """Aplica visibilidade por setor para usuários abaixo de SUPERADMIN."""
+    rank = HIERARCHY_RANK.get(user.hierarchy, 0)
+    if rank >= HIERARCHY_RANK['SUPERADMIN']:
+        return contestation_qs
+
+    user_sectors = list(user.sectors.values_list('name', flat=True))
+    if user.sector:
+        user_sectors.append(user.sector.name)
+
+    if not user_sectors:
+        return contestation_qs.none()
+
+    matching_ids = []
+    for record in contestation_qs:
+        if _match_sector_to_filial(user_sectors, record.exclusion.filial):
+            matching_ids.append(record.id)
+    return contestation_qs.filter(id__in=matching_ids) if matching_ids else contestation_qs.none()
+
+
+def _approval_mode_label(mode):
+    if mode == 'approved_and_contested':
+        return 'Aprovar e Contestar'
+    if mode == 'approved':
+        return 'Aprovar'
+    return 'N/A'
+
+
+def _status_label(status):
+    mapping = {
+        'pending': 'Pendente',
+        'accepted': 'Aprovada',
+        'rejected': 'Rejeitada',
+        'confirmed': 'Confirmada',
+        'denied': 'Negada',
+    }
+    return mapping.get(status, status or '-')
+
+
+def _payment_status_label(status):
+    mapping = {
+        'not_applicable': 'N/A',
+        'pending_payment': 'Aguardando Pagamento',
+        'paid': 'Pago',
+    }
+    return mapping.get(status, status or '-')
+
 
 
 def _format_avg_duration(total_seconds, count):
@@ -612,6 +662,33 @@ def release_sector_for_retry(request):
 
 
 @login_required
+def contested_with_vivo(request):
+    """Lista vendas com ação 'Aprovar e Contestar' para envio à Vivo."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para gerenciar contestações.')
+        return redirect('contestacao:my_contestations')
+
+    qs = Contestation.objects.filter(approval_mode='approved_and_contested').select_related(
+        'exclusion', 'requester', 'reviewed_by', 'confirmed_by'
+    )
+    qs = _apply_sector_visibility_filter(qs, request.user)
+
+    filial_filter = request.GET.get('filial', '').strip()
+    if filial_filter:
+        qs = qs.filter(exclusion__filial__iexact=filial_filter)
+
+    filiais = qs.values_list('exclusion__filial', flat=True).exclude(exclusion__filial='').distinct().order_by('exclusion__filial')
+
+    context = {
+        'contestations': qs.order_by('-created_at')[:300],
+        'filiais': filiais,
+        'filial_filter': filial_filter,
+        'total': qs.count(),
+    }
+    return render(request, 'contestacao/contested_with_vivo.html', context)
+
+
+@login_required
 def contestation_detail(request, pk):
     """Detalhe de uma contestação."""
     contestation = get_object_or_404(
@@ -967,3 +1044,99 @@ def dashboard(request):
         'avg_payment_time': avg_payment_time,
     }
     return render(request, 'contestacao/dashboard.html', context)
+
+
+@login_required
+def export_contested_sales(request):
+    """Exporta CSV detalhado das vendas contestadas com coluna de botão clicado."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para exportar.')
+        return redirect('contestacao:dashboard')
+
+    qs = Contestation.objects.select_related('exclusion', 'requester', 'reviewed_by').order_by('-created_at')
+    qs = _apply_sector_visibility_filter(qs, request.user)
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="vendas_contestadas.csv"'
+
+    response.write('\ufeff')
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow([
+        'ID Contestacao',
+        'Vendedor',
+        'Filial',
+        'Pilar',
+        'Numero da Venda',
+        'Receita',
+        'Status',
+        'Status Pagamento',
+        'Botao Clicado',
+        'Solicitante',
+        'Gestor',
+        'Data Criacao',
+        'Data Analise',
+        'Data Confirmacao',
+    ])
+
+    for c in qs:
+        writer.writerow([
+            c.pk,
+            c.exclusion.vendedor,
+            c.exclusion.filial,
+            c.exclusion.pilar,
+            c.exclusion.numero_venda,
+            f"{c.exclusion.receita:.2f}",
+            _status_label(c.status),
+            _payment_status_label(c.payment_status),
+            _approval_mode_label(c.approval_mode),
+            c.requester.full_name,
+            c.reviewed_by.full_name if c.reviewed_by else '',
+            c.created_at.strftime('%d/%m/%Y %H:%M') if c.created_at else '',
+            c.reviewed_at.strftime('%d/%m/%Y %H:%M') if c.reviewed_at else '',
+            c.confirmed_at.strftime('%d/%m/%Y %H:%M') if c.confirmed_at else '',
+        ])
+
+    return response
+
+
+@login_required
+def export_contestation_report(request):
+    """Exporta CSV de relatório agregado das contestações com botão clicado."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para exportar.')
+        return redirect('contestacao:dashboard')
+
+    qs = Contestation.objects.select_related('exclusion').order_by('-created_at')
+    qs = _apply_sector_visibility_filter(qs, request.user)
+
+    grouped = (
+        qs.values('exclusion__filial', 'exclusion__pilar', 'status', 'approval_mode')
+        .annotate(total_vendas=Count('id'), receita_total=Sum('exclusion__receita'))
+        .order_by('exclusion__filial', 'exclusion__pilar', 'status', 'approval_mode')
+    )
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="relatorio_contestacoes.csv"'
+
+    response.write('\ufeff')
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow([
+        'Filial',
+        'Pilar',
+        'Status',
+        'Botao Clicado',
+        'Total Vendas',
+        'Receita Total',
+    ])
+
+    for row in grouped:
+        writer.writerow([
+            row['exclusion__filial'] or '-',
+            row['exclusion__pilar'] or '-',
+            _status_label(row['status']),
+            _approval_mode_label(row['approval_mode']),
+            row['total_vendas'] or 0,
+            f"{(row['receita_total'] or 0):.2f}",
+        ])
+
+    return response

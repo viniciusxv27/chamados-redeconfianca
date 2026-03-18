@@ -9,9 +9,17 @@
             <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-chart-bar mr-2 text-teal-600"></i> Dashboard de Contestações</h1>
             <p class="text-sm text-gray-500 mt-1">Visão geral das contestações</p>
         </div>
-        <a href="{% url 'contestacao:exclusion_list' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
-            <i class="fas fa-arrow-left mr-2"></i> Voltar à Base
-        </a>
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'contestacao:export_contested_sales' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-emerald-600 text-white rounded-md hover:bg-emerald-700">
+                <i class="fas fa-file-csv mr-2"></i> Exportar Vendas Contestadas
+            </a>
+            <a href="{% url 'contestacao:export_contestation_report' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <i class="fas fa-chart-line mr-2"></i> Exportar Relatório
+            </a>
+            <a href="{% url 'contestacao:exclusion_list' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                <i class="fas fa-arrow-left mr-2"></i> Voltar à Base
+            </a>
+        </div>
     </div>
 
     <!-- Cards principais -->
