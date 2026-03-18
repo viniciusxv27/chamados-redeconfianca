@@ -63,6 +63,29 @@
     }
     </script>
 
+    <div class="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <form method="post" action="{% url 'contestacao:release_sector_for_retry' %}" class="flex flex-col sm:flex-row sm:items-end gap-2">
+            {% csrf_token %}
+            <div class="flex-1">
+                <label for="setor-release" class="block text-xs text-amber-800 font-semibold mb-1">Liberar setor (loja) para refazer contestação</label>
+                <select id="setor-release" name="setor" class="w-full border border-amber-300 rounded-md px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500" required>
+                    <option value="">Selecione um setor</option>
+                    {% for f in filiais %}
+                    <option value="{{ f }}" {% if selected_sector|upper == f|upper or filial_filter|upper == f|upper %}selected{% endif %}>
+                        {{ f }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="inline-flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700">
+                <i class="fas fa-unlock-alt mr-2"></i> Liberar Refazer
+            </button>
+        </form>
+        <p class="text-xs text-amber-700 mt-2">
+            Esta ação encerra as contestações em andamento do setor selecionado para permitir novo envio.
+        </p>
+    </div>
+
     {% if status_filter == 'pending' %}
     <div class="mb-4">
         <div class="flex items-center justify-between mb-2">

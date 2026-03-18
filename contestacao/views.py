@@ -518,6 +518,62 @@ def manage_contestations(request):
 
 
 @login_required
+def release_sector_for_retry(request):
+    """Libera um setor para refazer contestação, encerrando as contestações em andamento."""
+    if request.method != 'POST':
+        return redirect('contestacao:manage_contestations')
+
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para gerenciar contestações.')
+        return redirect('contestacao:my_contestations')
+
+    sector = request.POST.get('setor', '').strip()
+    if not sector:
+        messages.warning(request, 'Selecione um setor para liberar o refazer da contestação.')
+        return redirect('contestacao:manage_contestations?status=pending')
+
+    rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
+    if rank < HIERARCHY_RANK['SUPERADMIN']:
+        user_sectors = list(request.user.sectors.values_list('name', flat=True))
+        if request.user.sector:
+            user_sectors.append(request.user.sector.name)
+        allowed_sectors = {s.strip().upper() for s in user_sectors if s}
+        if sector.upper() not in allowed_sectors:
+            messages.error(request, f'Você não pode liberar o setor {sector}.')
+            return redirect('contestacao:manage_contestations?status=pending')
+
+    open_qs = Contestation.objects.filter(
+        exclusion__filial__iexact=sector
+    ).filter(_open_contestation_filter())
+
+    released_count = 0
+    now = timezone.now()
+    for c in open_qs.select_related('exclusion'):
+        c.status = 'denied'
+        c.payment_status = 'not_applicable'
+        c.confirmed_by = request.user
+        c.confirmed_at = now
+        c.confirmation_notes = 'Liberada para refazer contestação do setor.'
+        c.save(update_fields=['status', 'payment_status', 'confirmed_by', 'confirmed_at', 'confirmation_notes', 'updated_at'])
+
+        ContestationHistory.objects.create(
+            contestation=c,
+            action='denied',
+            user=request.user,
+            notes='Liberação manual para refazer contestação do setor.',
+            extra_data={'sector_released': sector},
+        )
+        released_count += 1
+
+    if released_count == 0:
+        messages.info(request, f'Nenhuma contestação em andamento encontrada para o setor {sector}.')
+    else:
+        messages.success(request, f'Setor {sector} liberado para refazer contestação ({released_count} registro(s) encerrado(s)).')
+
+    return redirect('contestacao:manage_contestations')
+
+
+@login_required
 def contestation_detail(request, pk):
     """Detalhe de uma contestação."""
     contestation = get_object_or_404(

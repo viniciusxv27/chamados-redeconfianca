@@ -12,6 +12,7 @@ urlpatterns = [
     path('contestar-lote/', views.bulk_create_contestation, name='bulk_create_contestation'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
+    path('gerenciar/liberar-refazer/', views.release_sector_for_retry, name='release_sector_for_retry'),
     path('<int:pk>/', views.contestation_detail, name='contestation_detail'),
     path('<int:pk>/aprovar/', views.approve_contestation, name='approve_contestation'),
     path('<int:pk>/aprovar-e-contestar/', views.approve_and_contest_contestation, name='approve_and_contest_contestation'),
