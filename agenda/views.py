@@ -1277,11 +1277,7 @@ def api_transcription_reprocess(request, pk):
             transcription.save(update_fields=['status', 'error_message'])
             return JsonResponse({'error': 'Sem transcrição bruta/completa ou áudio para processar.'}, status=400)
 
-        # Análise GPT-4o
-        # Evita estouro de contexto em reuniões muito longas no reprocessamento.
-        if len(source_text) > 120000:
-            source_text = source_text[:120000]
-
+        # Análise GPT-4o (mesma estrutura da transcrição normal)
         today_str = timezone.now().strftime('%Y-%m-%d')
         system_prompt = (
             "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
@@ -1289,32 +1285,34 @@ def api_transcription_reprocess(request, pk):
             "RETORNE UM JSON com estas chaves:\n\n"
             '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
             '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
-            '   - "title": Título descritivo do tópico\n'
-            '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line")\n'
+            '   - "title": Título descritivo do tópico (ex: "Abertura e Contexto", "Discussão sobre Vendas")\n'
+            '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line", "fa-users")\n'
             '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
-            '   - "highlights": Lista de frases-chave ou citações importantes\n'
-            '   - "duration_estimate": Estimativa de duração em minutos\n\n'
-            '3. "key_decisions": Lista de decisões. Cada uma com:\n'
+            '   - "highlights": Lista de frases-chave ou citações importantes dessa seção\n'
+            '   - "duration_estimate": Estimativa de duração em minutos dessa seção\n\n'
+            '3. "key_decisions": Lista de decisões tomadas na reunião. Cada uma com:\n'
             '   - "decision": Texto da decisão\n'
-            '   - "context": Breve contexto\n'
+            '   - "context": Breve contexto de por que foi decidido\n'
             '   - "impact": "high", "medium" ou "low"\n\n'
             '4. "action_items": Lista de itens de ação. Cada um com:\n'
             '   - "task": Descrição da tarefa\n'
-            '   - "responsible": Nome do responsável (ou "A definir")\n'
-            '   - "deadline": Prazo ISO date ou null\n'
+            '   - "responsible": Nome do responsável (se mencionado, senão "A definir")\n'
+            '   - "deadline": Prazo mencionado ou sugerido (ISO date ou null)\n'
             '   - "priority": "high", "medium" ou "low"\n\n'
-            '5. "participants_identified": Lista de nomes de participantes.\n\n'
-            '6. "sentiment": "positive", "neutral", "negative" ou "mixed".\n\n'
+            '5. "participants_identified": Lista de nomes de pessoas mencionadas/participantes detectados na conversa.\n\n'
+            '6. "sentiment": Sentimento geral da reunião: "positive", "neutral", "negative" ou "mixed".\n\n'
             '7. "meeting_type_detected": "standup", "planning", "review", "brainstorm", '
             '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
-            '8. "tags": Lista de 3-8 tags relevantes.\n\n'
-            '9. "formatted": Transcrição completa formatada com parágrafos e identificação de falantes.\n\n'
-            '10. "suggested_events": Lista de compromissos futuros. Cada um com:\n'
-            '    - "title": Título\n'
+            '8. "tags": Lista de 3-8 palavras-chave/tags relevantes da reunião.\n\n'
+            '9. "formatted": Transcrição completa formatada com parágrafos, pontuação, e identificação de '
+            'falantes quando possível. Use marcadores como "**Participante:**" quando detectar troca de falante.\n\n'
+            '10. "suggested_events": Lista de compromissos futuros mencionados. Cada um com:\n'
+            '    - "title": Título do evento sugerido\n'
             '    - "description": Descrição\n'
             f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
-            "IMPORTANTE: Divida a reunião em pelo menos 3 seções se possível. "
-            "Responda APENAS com JSON válido, sem markdown, sem ```.\n"
+            "IMPORTANTE: Divida a reunião em pelo menos 3 seções se possível (abertura, desenvolvimento, encerramento). "
+            "Se a reunião tiver diversos assuntos, crie uma seção para cada. "
+            "Responda APENAS com JSON válido, sem markdown, sem ```."
         )
 
         gpt_response = client.chat.completions.create(
