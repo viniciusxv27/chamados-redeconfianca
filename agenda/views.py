@@ -1368,9 +1368,11 @@ def api_transcription_reprocess(request, pk):
             transcription.calendar_event_created = cal_event
             transcription.save(update_fields=['calendar_event_created'])
 
-        # Criar tarefas se ainda não existem
-        if not transcription.tasks_created.exists():
-            _create_tasks_from_transcription(transcription, request.user)
+        # Recriar plano de ação para manter consistência com a transcrição normal.
+        # Mantém tarefas antigas no banco, mas remove o vínculo desta transcrição
+        # e cria novamente a partir dos action_items atuais.
+        transcription.tasks_created.clear()
+        _create_tasks_from_transcription(transcription, request.user)
 
         return JsonResponse({
             'ok': True,
