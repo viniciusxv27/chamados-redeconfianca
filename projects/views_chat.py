@@ -2031,9 +2031,22 @@ def change_chat_category(request, chat_id):
         new_category = get_object_or_404(SupportCategory, id=category_id)
         
         old_category_name = chat.category.name if chat.category else 'Nenhuma'
+        old_title = (chat.title or '').strip()
+
+        # Mantém o prefixo do título e substitui apenas o trecho após "-" pela nova categoria.
+        if old_title:
+            if '-' in old_title:
+                title_prefix = old_title.split('-', 1)[0].strip()
+                new_title = f'{title_prefix} - {new_category.name}' if title_prefix else new_category.name
+            else:
+                new_title = f'{old_title} - {new_category.name}'
+        else:
+            new_title = new_category.name
+
         chat.category = new_category
         chat.sector = new_category.sector
-        chat.save()
+        chat.title = new_title
+        chat.save(update_fields=['category', 'sector', 'title'])
         
         # Criar mensagem de alteração
         SupportChatMessage.objects.create(
@@ -2046,6 +2059,7 @@ def change_chat_category(request, chat_id):
         return JsonResponse({
             'success': True,
             'message': f'Categoria alterada para {new_category.name}',
+            'title': chat.title,
             'category': {
                 'id': new_category.id,
                 'name': new_category.name
@@ -2102,20 +2116,45 @@ def support_metrics_api(request):
         total_tickets = tickets.count()
         closed_tickets = tickets.filter(status='FECHADO').count()
         
-        # Tempo médio para assumir atendimento (da abertura até started_at)
-        assigned_with_time = tickets.filter(started_at__isnull=False)
-        if assigned_with_time.exists():
-            total_time = 0
-            count = 0
-            for ticket in assigned_with_time:
-                hours = (ticket.started_at - ticket.created_at).total_seconds() / 3600
-                if hours > 0:  # Garantir que não há valores negativos
-                    total_time += hours
-                    count += 1
-            avg_time = total_time / count if count > 0 else 0
-            avg_time_str = f"{int(avg_time)}h"
+        # Tempo médio para assumir atendimento (da abertura até primeira assunção).
+        # Usa started_at quando existir e fallback para a primeira mensagem interna
+        # de "Atendimento assumido" em tickets antigos.
+        assignment_candidates = tickets.filter(
+            Q(started_at__isnull=False) | Q(assigned_to__isnull=False)
+        ).prefetch_related('messages')
+
+        total_assignment_seconds = 0
+        assignment_count = 0
+        for ticket in assignment_candidates:
+            assignment_time = ticket.started_at
+
+            if not assignment_time:
+                first_assignment_message = next(
+                    (
+                        msg for msg in ticket.messages.all()
+                        if msg.is_internal and 'atendimento assumido' in (msg.message or '').lower()
+                    ),
+                    None
+                )
+                if first_assignment_message:
+                    assignment_time = first_assignment_message.created_at
+
+            if assignment_time and assignment_time > ticket.created_at:
+                total_assignment_seconds += (assignment_time - ticket.created_at).total_seconds()
+                assignment_count += 1
+
+        if assignment_count > 0:
+            avg_assignment_minutes = round((total_assignment_seconds / assignment_count) / 60)
+            hours = avg_assignment_minutes // 60
+            minutes = avg_assignment_minutes % 60
+            if hours > 0 and minutes > 0:
+                avg_time_str = f'{hours}h {minutes}min'
+            elif hours > 0:
+                avg_time_str = f'{hours}h'
+            else:
+                avg_time_str = f'{minutes}min'
         else:
-            avg_time_str = "0h"
+            avg_time_str = '0min'
         
         # Taxa de satisfação (baseado em avaliações)
         from django.db.models import Avg
@@ -2301,6 +2340,7 @@ def poll_dashboard_updates(request):
     has_updates = False
     new_tickets = []
     new_messages = []
+    new_transfers = []
     
     if last_check_time:
         new_chats = SupportChat.objects.filter(
@@ -2368,6 +2408,28 @@ def poll_dashboard_updates(request):
                         'message': msg.message[:100] + '...' if len(msg.message) > 100 else msg.message,
                         'created_at': timezone.localtime(msg.created_at).isoformat()
                     })
+
+        # Verificar transferências recebidas para o agente atual
+        transfer_messages = SupportChatMessage.objects.filter(
+            chat__assigned_to=request.user,
+            created_at__gt=last_check_time,
+            is_internal=True,
+            message__icontains='ticket transferido'
+        ).exclude(
+            user=request.user
+        ).select_related('chat', 'user').order_by('-created_at')[:10]
+
+        if transfer_messages.exists():
+            has_updates = True
+            for msg in transfer_messages:
+                new_transfers.append({
+                    'id': msg.id,
+                    'chat_id': msg.chat.id,
+                    'chat_title': msg.chat.title,
+                    'from_user_name': msg.user.get_full_name(),
+                    'message': msg.message,
+                    'created_at': timezone.localtime(msg.created_at).isoformat()
+                })
     
     # Estatísticas atualizadas
     stats = {
@@ -2385,6 +2447,7 @@ def poll_dashboard_updates(request):
         'has_updates': has_updates,
         'new_tickets': new_tickets,
         'new_messages': new_messages,
+        'new_transfers': new_transfers,
         'stats': stats,
         'timestamp': timezone.now().isoformat()
     })

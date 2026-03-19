@@ -848,6 +848,32 @@ function pollForUpdates() {
                             startTitleBlink(data.new_messages.length, 'mensagem');
                         }
                     }
+
+                    // Notificação para tickets transferidos para o agente atual
+                    if (data.new_transfers && data.new_transfers.length > 0) {
+                        console.log('[Polling] Transferências recebidas:', data.new_transfers.length);
+
+                        data.new_transfers.forEach(transfer => {
+                            showToast(`🔄 Ticket transferido para você: ${transfer.chat_title}`, 'success', 6000);
+
+                            sendBrowserNotification(
+                                '🔄 Ticket Transferido para Você',
+                                `${transfer.from_user_name} transferiu: ${transfer.chat_title}`,
+                                {
+                                    tag: `transfer-${transfer.id}`,
+                                    requireInteraction: true,
+                                    onClick: () => openTicketModal(transfer.chat_id)
+                                }
+                            );
+                        });
+
+                        // Toca um som para destacar a transferência recebida
+                        playNotificationSound();
+
+                        if (document.hidden) {
+                            startTitleBlink(data.new_transfers.length, 'ticket');
+                        }
+                    }
                 }
             }
         })
