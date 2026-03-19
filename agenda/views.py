@@ -111,6 +111,142 @@ def _extract_json_payload(text):
         return json.loads(match.group(0))
 
 
+def _ensure_list(value):
+    """Garante lista para campos JSON, aceitando alguns formatos comuns de retorno da IA."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        for key in ('items', 'data', 'values', 'results'):
+            candidate = value.get(key)
+            if isinstance(candidate, list):
+                return candidate
+    return []
+
+
+def _normalize_transcription_analysis(payload, source_text):
+    """Normaliza o payload da IA para os campos esperados pelo portal."""
+    payload = payload or {}
+
+    formatted = payload.get('formatted') or payload.get('formatted_transcription') or source_text
+    summary = payload.get('summary') or ''
+    sections = _ensure_list(payload.get('sections'))
+    key_decisions = _ensure_list(payload.get('key_decisions'))
+    action_items = _ensure_list(payload.get('action_items'))
+    participants = _ensure_list(payload.get('participants_identified'))
+    tags = _ensure_list(payload.get('tags'))
+    suggested_events = _ensure_list(payload.get('suggested_events'))
+
+    sentiment = payload.get('sentiment') or 'neutral'
+    if sentiment not in {'positive', 'neutral', 'negative', 'mixed'}:
+        sentiment = 'neutral'
+
+    meeting_type = payload.get('meeting_type_detected') or 'general'
+    if meeting_type not in {'standup', 'planning', 'review', 'brainstorm', 'oneonone', 'kickoff', 'status', 'decision', 'general'}:
+        meeting_type = 'general'
+
+    return {
+        'formatted_transcription': formatted,
+        'summary': summary,
+        'sections': sections,
+        'key_decisions': key_decisions,
+        'action_items': action_items,
+        'participants_identified': participants,
+        'sentiment': sentiment,
+        'meeting_type_detected': meeting_type,
+        'tags': tags,
+        'suggested_events': suggested_events,
+    }
+
+
+def _build_transcription_system_prompt(today_str, compact=False):
+    """Prompt de análise estruturada da transcrição."""
+    formatted_instruction = (
+        '9. "formatted": Transcrição formatada em parágrafos com identificação de falantes quando possível.\n\n'
+        if not compact else
+        '9. "formatted": Versão formatada e resumida da transcrição (máximo de 3500 caracteres).\n\n'
+    )
+
+    return (
+        "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
+        "Analise a transcrição da reunião e retorne um JSON estruturado com a seguinte análise completa:\n\n"
+        "RETORNE UM JSON com estas chaves:\n\n"
+        '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
+        '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
+        '   - "title": Título descritivo do tópico\n'
+        '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line")\n'
+        '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
+        '   - "highlights": Lista de frases-chave ou citações importantes\n'
+        '   - "duration_estimate": Estimativa de duração em minutos\n\n'
+        '3. "key_decisions": Lista de decisões. Cada uma com:\n'
+        '   - "decision": Texto da decisão\n'
+        '   - "context": Breve contexto\n'
+        '   - "impact": "high", "medium" ou "low"\n\n'
+        '4. "action_items": Lista de itens de ação. Cada um com:\n'
+        '   - "task": Descrição da tarefa\n'
+        '   - "responsible": Nome do responsável (ou "A definir")\n'
+        '   - "deadline": Prazo ISO date ou null\n'
+        '   - "priority": "high", "medium" ou "low"\n\n'
+        '5. "participants_identified": Lista de nomes de participantes.\n\n'
+        '6. "sentiment": "positive", "neutral", "negative" ou "mixed".\n\n'
+        '7. "meeting_type_detected": "standup", "planning", "review", "brainstorm", '
+        '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
+        '8. "tags": Lista de 3-8 tags relevantes.\n\n'
+        f'{formatted_instruction}'
+        '10. "suggested_events": Lista de compromissos futuros. Cada um com:\n'
+        '    - "title": Título\n'
+        '    - "description": Descrição\n'
+        f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
+        "Responda APENAS com JSON válido, sem markdown, sem ```."
+    )
+
+
+def _generate_transcription_analysis(client, meeting_title, source_text):
+    """Executa análise de IA com retry quando a resposta vier truncada ou inválida."""
+    clipped_text = (source_text or '').strip()
+    if len(clipped_text) > 120000:
+        clipped_text = clipped_text[:120000]
+
+    today_str = timezone.now().strftime('%Y-%m-%d')
+    attempts = [
+        {
+            'system_prompt': _build_transcription_system_prompt(today_str, compact=False),
+            'max_tokens': 6000,
+        },
+        {
+            'system_prompt': _build_transcription_system_prompt(today_str, compact=True),
+            'max_tokens': 3500,
+        },
+    ]
+
+    last_error = None
+    for attempt in attempts:
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": attempt['system_prompt']},
+                    {"role": "user", "content": f"Transcrição da reunião '{meeting_title}':\n\n{clipped_text}"},
+                ],
+                temperature=0.2,
+                max_tokens=attempt['max_tokens'],
+                response_format={"type": "json_object"},
+            )
+
+            choice = resp.choices[0]
+            content = (choice.message.content or '').strip()
+            parsed = _extract_json_payload(content)
+
+            # Se veio truncada, tenta novamente no modo compacto.
+            if getattr(choice, 'finish_reason', None) == 'length' and attempt is attempts[0]:
+                raise ValueError('Resposta da IA truncada por limite de tokens.')
+
+            return _normalize_transcription_analysis(parsed, clipped_text)
+        except Exception as err:
+            last_error = err
+
+    raise last_error or ValueError('Falha ao analisar transcrição com IA.')
+
+
 # =========================================================================
 # CALENDÁRIO PRINCIPAL
 # =========================================================================
@@ -784,68 +920,19 @@ def api_transcription_upload(request):
 
         transcription.raw_transcription = raw_text
 
-        # 2. Análise avançada com GPT-4o
-        today_str = timezone.now().strftime('%Y-%m-%d')
-        system_prompt = (
-            "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
-            "Analise a transcrição da reunião e retorne um JSON estruturado com a seguinte análise completa:\n\n"
-            "RETORNE UM JSON com estas chaves:\n\n"
-            '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
-            '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
-            '   - "title": Título descritivo do tópico (ex: "Abertura e Contexto", "Discussão sobre Vendas")\n'
-            '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line", "fa-users")\n'
-            '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
-            '   - "highlights": Lista de frases-chave ou citações importantes dessa seção\n'
-            '   - "duration_estimate": Estimativa de duração em minutos dessa seção\n\n'
-            '3. "key_decisions": Lista de decisões tomadas na reunião. Cada uma com:\n'
-            '   - "decision": Texto da decisão\n'
-            '   - "context": Breve contexto de por que foi decidido\n'
-            '   - "impact": "high", "medium" ou "low"\n\n'
-            '4. "action_items": Lista de itens de ação. Cada um com:\n'
-            '   - "task": Descrição da tarefa\n'
-            '   - "responsible": Nome do responsável (se mencionado, senão "A definir")\n'
-            '   - "deadline": Prazo mencionado ou sugerido (ISO date ou null)\n'
-            '   - "priority": "high", "medium" ou "low"\n\n'
-            '5. "participants_identified": Lista de nomes de pessoas mencionadas/participantes detectados na conversa.\n\n'
-            '6. "sentiment": Sentimento geral da reunião: "positive", "neutral", "negative" ou "mixed".\n\n'
-            '7. "meeting_type_detected": Tipo detectado: "standup", "planning", "review", "brainstorm", '
-            '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
-            '8. "tags": Lista de 3-8 palavras-chave/tags relevantes da reunião.\n\n'
-            '9. "formatted": Transcrição completa formatada com parágrafos, pontuação, e identificação de '
-            'falantes quando possível. Use marcadores como "**Participante:**" quando detectar troca de falante.\n\n'
-            '10. "suggested_events": Lista de compromissos futuros mencionados. Cada um com:\n'
-            '    - "title": Título do evento sugerido\n'
-            '    - "description": Descrição\n'
-            f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
-            "IMPORTANTE: Divida a reunião em pelo menos 3 seções se possível (abertura, desenvolvimento, encerramento). "
-            "Se a reunião tiver diversos assuntos, crie uma seção para cada. "
-            "Responda APENAS com JSON válido, sem markdown, sem ```."
-        )
+        # 2. Análise avançada com IA (com retry e normalização)
+        analysis = _generate_transcription_analysis(client, title, raw_text)
 
-        gpt_response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Transcrição da reunião '{title}':\n\n{raw_text}"}
-            ],
-            temperature=0.2,
-            max_tokens=4096,
-            response_format={"type": "json_object"},
-        )
-
-        gpt_text = gpt_response.choices[0].message.content.strip()
-        parsed = _extract_json_payload(gpt_text)
-
-        transcription.formatted_transcription = parsed.get('formatted', raw_text)
-        transcription.summary = parsed.get('summary', '')
-        transcription.sections = parsed.get('sections', [])
-        transcription.key_decisions = parsed.get('key_decisions', [])
-        transcription.action_items = parsed.get('action_items', [])
-        transcription.participants_identified = parsed.get('participants_identified', [])
-        transcription.sentiment = parsed.get('sentiment', 'neutral')
-        transcription.meeting_type_detected = parsed.get('meeting_type_detected', 'general')
-        transcription.tags = parsed.get('tags', [])
-        transcription.suggested_events = parsed.get('suggested_events', [])
+        transcription.formatted_transcription = analysis['formatted_transcription']
+        transcription.summary = analysis['summary']
+        transcription.sections = analysis['sections']
+        transcription.key_decisions = analysis['key_decisions']
+        transcription.action_items = analysis['action_items']
+        transcription.participants_identified = analysis['participants_identified']
+        transcription.sentiment = analysis['sentiment']
+        transcription.meeting_type_detected = analysis['meeting_type_detected']
+        transcription.tags = analysis['tags']
+        transcription.suggested_events = analysis['suggested_events']
         transcription.status = 'completed'
         transcription.save()
 
@@ -1277,70 +1364,20 @@ def api_transcription_reprocess(request, pk):
             transcription.save(update_fields=['status', 'error_message'])
             return JsonResponse({'error': 'Sem transcrição bruta/completa ou áudio para processar.'}, status=400)
 
-        # Análise GPT-4o (mesma estrutura da transcrição normal)
-        today_str = timezone.now().strftime('%Y-%m-%d')
-        system_prompt = (
-            "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
-            "Analise a transcrição da reunião e retorne um JSON estruturado com a seguinte análise completa:\n\n"
-            "RETORNE UM JSON com estas chaves:\n\n"
-            '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
-            '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
-            '   - "title": Título descritivo do tópico (ex: "Abertura e Contexto", "Discussão sobre Vendas")\n'
-            '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line", "fa-users")\n'
-            '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
-            '   - "highlights": Lista de frases-chave ou citações importantes dessa seção\n'
-            '   - "duration_estimate": Estimativa de duração em minutos dessa seção\n\n'
-            '3. "key_decisions": Lista de decisões tomadas na reunião. Cada uma com:\n'
-            '   - "decision": Texto da decisão\n'
-            '   - "context": Breve contexto de por que foi decidido\n'
-            '   - "impact": "high", "medium" ou "low"\n\n'
-            '4. "action_items": Lista de itens de ação. Cada um com:\n'
-            '   - "task": Descrição da tarefa\n'
-            '   - "responsible": Nome do responsável (se mencionado, senão "A definir")\n'
-            '   - "deadline": Prazo mencionado ou sugerido (ISO date ou null)\n'
-            '   - "priority": "high", "medium" ou "low"\n\n'
-            '5. "participants_identified": Lista de nomes de pessoas mencionadas/participantes detectados na conversa.\n\n'
-            '6. "sentiment": Sentimento geral da reunião: "positive", "neutral", "negative" ou "mixed".\n\n'
-            '7. "meeting_type_detected": "standup", "planning", "review", "brainstorm", '
-            '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
-            '8. "tags": Lista de 3-8 palavras-chave/tags relevantes da reunião.\n\n'
-            '9. "formatted": Transcrição completa formatada com parágrafos, pontuação, e identificação de '
-            'falantes quando possível. Use marcadores como "**Participante:**" quando detectar troca de falante.\n\n'
-            '10. "suggested_events": Lista de compromissos futuros mencionados. Cada um com:\n'
-            '    - "title": Título do evento sugerido\n'
-            '    - "description": Descrição\n'
-            f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
-            "IMPORTANTE: Divida a reunião em pelo menos 3 seções se possível (abertura, desenvolvimento, encerramento). "
-            "Se a reunião tiver diversos assuntos, crie uma seção para cada. "
-            "Responda APENAS com JSON válido, sem markdown, sem ```."
-        )
+        analysis = _generate_transcription_analysis(client, transcription.title, source_text)
 
-        gpt_response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Transcrição da reunião '{transcription.title}':\n\n{source_text}"}
-            ],
-            temperature=0.2,
-            max_tokens=4096,
-            response_format={"type": "json_object"},
-        )
-
-        gpt_text = gpt_response.choices[0].message.content.strip()
-        parsed = _extract_json_payload(gpt_text)
-
-        transcription.formatted_transcription = parsed.get('formatted', source_text)
+        transcription.formatted_transcription = analysis['formatted_transcription']
         if not transcription.raw_transcription:
             transcription.raw_transcription = source_text
-        transcription.summary = parsed.get('summary', '')
-        transcription.sections = parsed.get('sections', [])
-        transcription.key_decisions = parsed.get('key_decisions', [])
-        transcription.action_items = parsed.get('action_items', [])
-        transcription.participants_identified = parsed.get('participants_identified', [])
-        transcription.sentiment = parsed.get('sentiment', 'neutral')
-        transcription.meeting_type_detected = parsed.get('meeting_type_detected', 'general')
-        transcription.tags = parsed.get('tags', [])
-        transcription.suggested_events = parsed.get('suggested_events', [])
+        transcription.summary = analysis['summary']
+        transcription.sections = analysis['sections']
+        transcription.key_decisions = analysis['key_decisions']
+        transcription.action_items = analysis['action_items']
+        transcription.participants_identified = analysis['participants_identified']
+        transcription.sentiment = analysis['sentiment']
+        transcription.meeting_type_detected = analysis['meeting_type_detected']
+        transcription.tags = analysis['tags']
+        transcription.suggested_events = analysis['suggested_events']
         transcription.status = 'completed'
         transcription.save()
 
