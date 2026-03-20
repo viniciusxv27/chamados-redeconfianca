@@ -158,6 +158,36 @@
         </div>
     </div>
 
+    <div class="mb-4 rounded-lg border p-3 {% if contestation_blocked %}border-red-200 bg-red-50{% else %}border-emerald-200 bg-emerald-50{% endif %}">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="text-sm {% if contestation_blocked %}text-red-700{% else %}text-emerald-700{% endif %}">
+                {% if sync_has_data %}
+                    {% if contestation_blocked %}
+                    <span class="font-semibold"><i class="fas fa-lock mr-1"></i> Contestações bloqueadas:</span>
+                    período de 3 dias após sincronização expirou.
+                    {% else %}
+                    <span class="font-semibold"><i class="fas fa-unlock mr-1"></i> Janela de contestação ativa:</span>
+                    prazo válido até {{ sync_deadline_at|date:"d/m/Y H:i" }}.
+                    {% endif %}
+                {% else %}
+                <span class="font-semibold"><i class="fas fa-lock mr-1"></i> Contestações bloqueadas:</span>
+                sincronize a planilha para liberar novos envios.
+                {% endif %}
+            </div>
+            <div class="text-xs font-semibold {% if contestation_blocked %}text-red-700{% else %}text-emerald-700{% endif %}">
+                {% if sync_has_data %}
+                <i class="fas fa-hourglass-half mr-1"></i>
+                Tempo restante:
+                <span id="syncCountdown"
+                      data-deadline="{% if sync_deadline_at %}{{ sync_deadline_at|date:'c' }}{% endif %}"
+                      data-expired-label="Expirado">{{ sync_remaining_label }}</span>
+                {% else %}
+                Aguardando primeira sincronização
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <!-- Filtros -->
     <form method="get" class="bg-white rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-end shadow-sm" style="border: 1px solid #d0d0d0 !important;">
         <div class="flex-1 min-w-[200px]">
@@ -258,7 +288,11 @@
                                 <span class="text-xs font-medium" style="color: #f59e0b"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                                 {% endif %}
                             {% else %}
-                            {% if r.filial|upper in locked_sectors %}
+                            {% if contestation_blocked %}
+                            <span class="text-xs font-medium text-red-600" title="Sincronize novamente a planilha para liberar novas contestações.">
+                                <i class="fas fa-lock mr-1"></i>Contestação bloqueada
+                            </span>
+                            {% elif r.filial|upper in locked_sectors %}
                             <span class="text-xs font-medium text-red-600" title="Já existe contestação em andamento neste setor.">
                                 <i class="fas fa-lock mr-1"></i>Setor bloqueado
                             </span>
@@ -277,7 +311,7 @@
                         </td>
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
-                    {% if not info and r.filial|upper not in locked_sectors %}
+                    {% if not info and r.filial|upper not in locked_sectors and not contestation_blocked %}
                     <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
                         <td colspan="9" class="px-4 py-4">
                             <div class="reason-content bg-white rounded-lg p-5 shadow-sm" style="background-color: #ffffff !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
@@ -360,7 +394,9 @@
                 <span class="text-xs font-medium" style="color: #f59e0b"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                 {% endif %}
             {% else %}
-                {% if r.filial|upper in locked_sectors %}
+                {% if contestation_blocked %}
+                <span class="text-xs font-medium text-red-600"><i class="fas fa-lock mr-1"></i>Contestação bloqueada</span>
+                {% elif r.filial|upper in locked_sectors %}
                 <span class="text-xs font-medium text-red-600"><i class="fas fa-lock mr-1"></i>Setor bloqueado</span>
                 {% else %}
                 <div class="grid grid-cols-2 gap-2 mt-3">
@@ -454,6 +490,42 @@ window.pendingFiles = {};
 window.pendingFileMeta = {};
 window.bulkDetailsExpanded = false;
 window.contestationStorageKey = 'contestacao_pending_request_{{ request.user.id }}';
+window.contestationBlocked = {% if contestation_blocked %}true{% else %}false{% endif %};
+
+window.startSyncCountdown = function() {
+    const el = document.getElementById('syncCountdown');
+    if (!el || !el.dataset.deadline) return;
+
+    const deadline = new Date(el.dataset.deadline);
+    const expiredLabel = el.dataset.expiredLabel || 'Expirado';
+    if (Number.isNaN(deadline.getTime())) return;
+
+    const render = () => {
+        let totalSeconds = Math.floor((deadline.getTime() - Date.now()) / 1000);
+        if (totalSeconds <= 0) {
+            el.textContent = expiredLabel;
+            window.contestationBlocked = true;
+            return;
+        }
+
+        const days = Math.floor(totalSeconds / 86400);
+        totalSeconds -= days * 86400;
+        const hours = Math.floor(totalSeconds / 3600);
+        totalSeconds -= hours * 3600;
+        const minutes = Math.floor(totalSeconds / 60);
+
+        if (days > 0) {
+            el.textContent = `${days}d ${hours}h ${minutes}m`;
+        } else if (hours > 0) {
+            el.textContent = `${hours}h ${minutes}m`;
+        } else {
+            el.textContent = `${minutes}m`;
+        }
+    };
+
+    render();
+    setInterval(render, 30000);
+};
 
 window.fileToDataUrl = function(file) {
     return new Promise((resolve, reject) => {
@@ -595,6 +667,11 @@ window.closeReasonBox = function(id) {
 };
 
 window.confirmReason = async function(id) {
+    if (window.contestationBlocked) {
+        alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novos envios.');
+        return;
+    }
+
     const textareas = document.querySelectorAll('.reason-input[data-id="' + id + '"]');
     let reason = '';
     textareas.forEach(ta => { if (ta.value.trim()) reason = ta.value.trim(); });
@@ -761,6 +838,11 @@ window.toggleBulkDetails = function() {
 };
 
 window.submitAllContestations = function() {
+    if (window.contestationBlocked) {
+        alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novos envios.');
+        return;
+    }
+
     const ids = Object.keys(window.pendingReasons);
     if (ids.length === 0) return;
 
@@ -811,6 +893,8 @@ window.submitAllContestations = function() {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
+    window.startSyncCountdown();
+
     const toggleBtn = document.getElementById('btnToggleBulkDetails');
     if (toggleBtn) {
         toggleBtn.addEventListener('click', window.toggleBulkDetails);

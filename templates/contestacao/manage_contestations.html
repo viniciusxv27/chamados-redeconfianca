@@ -109,6 +109,15 @@
                 <p class="text-sm font-bold text-gray-900 mt-1">{{ item.exclusion__filial }}</p>
                 <p class="text-xs text-yellow-700 mt-1">{{ item.total }} pendente{{ item.total|pluralize:"s" }}</p>
                 {% if item.earliest %}<p class="text-xs text-gray-400 mt-1"><i class="fas fa-clock mr-1"></i>Abertura: {{ item.earliest|date:"d/m/Y H:i" }}</p>{% endif %}
+                {% if item.deadline %}
+                <p class="text-xs mt-1 {% if item.is_expired %}text-red-600{% else %}text-amber-700{% endif %}">
+                    <i class="fas fa-hourglass-half mr-1"></i>
+                    Prazo 1 dia:
+                    <span class="sector-deadline-countdown"
+                          data-deadline="{{ item.deadline|date:'c' }}"
+                          data-expired-label="Expirado">{{ item.remaining_label }}</span>
+                </p>
+                {% endif %}
             </a>
             {% endfor %}
         </div>
@@ -316,6 +325,49 @@ document.addEventListener('DOMContentLoaded', function () {
 {% endif %}
 
 <script>
+function startSectorDeadlineCounters() {
+    const counters = Array.from(document.querySelectorAll('.sector-deadline-countdown'));
+    if (!counters.length) return;
+
+    const render = () => {
+        const now = new Date();
+        counters.forEach((el) => {
+            const deadlineRaw = el.dataset.deadline;
+            const deadline = deadlineRaw ? new Date(deadlineRaw) : null;
+            const expiredLabel = el.dataset.expiredLabel || 'Expirado';
+            if (!deadline || Number.isNaN(deadline.getTime())) {
+                el.textContent = expiredLabel;
+                return;
+            }
+
+            let totalSeconds = Math.floor((deadline.getTime() - now.getTime()) / 1000);
+            if (totalSeconds <= 0) {
+                el.textContent = expiredLabel;
+                return;
+            }
+
+            const days = Math.floor(totalSeconds / 86400);
+            totalSeconds -= days * 86400;
+            const hours = Math.floor(totalSeconds / 3600);
+            totalSeconds -= hours * 3600;
+            const minutes = Math.floor(totalSeconds / 60);
+
+            if (days > 0) {
+                el.textContent = `${days}d ${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+                el.textContent = `${hours}h ${minutes}m`;
+            } else {
+                el.textContent = `${minutes}m`;
+            }
+        });
+    };
+
+    render();
+    setInterval(render, 30000);
+}
+
+document.addEventListener('DOMContentLoaded', startSectorDeadlineCounters);
+
 function injectNoteAndFile(form, notesId, fileId) {
     const notesEl = document.getElementById(notesId);
     if (notesEl) {

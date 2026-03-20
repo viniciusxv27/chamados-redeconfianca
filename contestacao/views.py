@@ -24,6 +24,8 @@ HIERARCHY_RANK = {
 }
 
 DEFAULT_EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
+SYNC_VALIDITY_DAYS = 3
+SECTOR_PENDING_DEADLINE_DAYS = 1
 
 
 def _can_manage_contestations(user):
@@ -131,6 +133,52 @@ def _format_avg_duration(total_seconds, count):
     avg_seconds = total_seconds / count
     avg_hours = int(avg_seconds // 3600)
     return f'{avg_hours}h'
+
+
+def _format_remaining_duration(total_seconds):
+    total_seconds = max(int(total_seconds), 0)
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+
+    if days > 0:
+        return f'{days}d {hours}h {minutes}m'
+    if hours > 0:
+        return f'{hours}h {minutes}m'
+    return f'{minutes}m'
+
+
+def _get_last_sync_at():
+    last_sync = ContestationHistory.objects.filter(action='synced').only('created_at').order_by('-created_at').first()
+    return last_sync.created_at if last_sync else None
+
+
+def _get_sync_window_state():
+    now = timezone.now()
+    last_sync_at = _get_last_sync_at()
+    if not last_sync_at:
+        return {
+            'has_sync': False,
+            'is_blocked': True,
+            'is_expired': True,
+            'last_sync_at': None,
+            'sync_deadline_at': None,
+            'remaining_seconds': 0,
+            'remaining_label': 'Expirado',
+        }
+
+    sync_deadline_at = last_sync_at + timezone.timedelta(days=SYNC_VALIDITY_DAYS)
+    remaining_seconds = int((sync_deadline_at - now).total_seconds())
+    is_expired = remaining_seconds <= 0
+    return {
+        'has_sync': True,
+        'is_blocked': is_expired,
+        'is_expired': is_expired,
+        'last_sync_at': last_sync_at,
+        'sync_deadline_at': sync_deadline_at,
+        'remaining_seconds': max(remaining_seconds, 0),
+        'remaining_label': _format_remaining_duration(remaining_seconds) if remaining_seconds > 0 else 'Expirado',
+    }
 
 
 def _get_excel_download_url(share_url):
@@ -343,6 +391,7 @@ def exclusion_list(request):
 
     total_records = qs.count()
     total_receita = qs.aggregate(total=Sum('receita'))['total'] or 0
+    sync_state = _get_sync_window_state()
 
     context = {
         'records': qs[:200],
@@ -360,6 +409,13 @@ def exclusion_list(request):
         'can_sync': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem sincronizar
         'can_dashboard': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem acessar dashboard
         'is_superadmin': rank >= HIERARCHY_RANK['SUPERADMIN'],
+        'contestation_blocked': sync_state['is_blocked'],
+        'sync_has_data': sync_state['has_sync'],
+        'sync_is_expired': sync_state['is_expired'],
+        'sync_last_at': sync_state['last_sync_at'],
+        'sync_deadline_at': sync_state['sync_deadline_at'],
+        'sync_remaining_seconds': sync_state['remaining_seconds'],
+        'sync_remaining_label': sync_state['remaining_label'],
     }
     return render(request, 'contestacao/exclusion_list.html', context)
 
@@ -369,6 +425,14 @@ def create_contestation(request, exclusion_id):
     """Cria uma nova contestação para um registro de exclusão."""
     if not _can_create_contestations(request.user):
         messages.error(request, 'Sem permissão para contestar.')
+        return redirect('contestacao:exclusion_list')
+
+    sync_state = _get_sync_window_state()
+    if sync_state['is_blocked']:
+        if sync_state['has_sync']:
+            messages.error(request, 'Período de 3 dias após a última sincronização expirou. Sincronize a planilha para liberar novas contestações.')
+        else:
+            messages.error(request, 'É necessário sincronizar a planilha antes de criar novas contestações.')
         return redirect('contestacao:exclusion_list')
 
     exclusion = get_object_or_404(ExclusionRecord, pk=exclusion_id)
@@ -418,6 +482,14 @@ def bulk_create_contestation(request):
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método não permitido.'}, status=405)
+
+    sync_state = _get_sync_window_state()
+    if sync_state['is_blocked']:
+        if sync_state['has_sync']:
+            error_msg = 'Período de 3 dias após a última sincronização expirou. Sincronize a planilha para liberar novas contestações.'
+        else:
+            error_msg = 'É necessário sincronizar a planilha antes de criar novas contestações.'
+        return JsonResponse({'success': False, 'error': error_msg}, status=400)
 
     try:
         count = int(request.POST.get('count', 0))
@@ -572,8 +644,24 @@ def manage_contestations(request):
         base_qs.filter(status='pending')
         .values('exclusion__filial')
         .annotate(total=Count('id'), earliest=Min('created_at'))
-        .order_by('exclusion__filial')
+        .order_by('earliest', 'exclusion__filial')
     )
+
+    now = timezone.now()
+    pending_sector_cards_data = []
+    for item in pending_sector_cards:
+        earliest = item.get('earliest')
+        deadline = (earliest + timezone.timedelta(days=SECTOR_PENDING_DEADLINE_DAYS)) if earliest else None
+        remaining_seconds = int((deadline - now).total_seconds()) if deadline else 0
+        pending_sector_cards_data.append({
+            'exclusion__filial': item.get('exclusion__filial'),
+            'total': item.get('total', 0),
+            'earliest': earliest,
+            'deadline': deadline,
+            'remaining_seconds': max(remaining_seconds, 0),
+            'remaining_label': _format_remaining_duration(remaining_seconds) if remaining_seconds > 0 else 'Expirado',
+            'is_expired': remaining_seconds <= 0,
+        })
     if status_filter == 'pending':
         if selected_sector:
             qs = qs.filter(exclusion__filial__iexact=selected_sector)
@@ -599,7 +687,7 @@ def manage_contestations(request):
         'pending_count': pending_count,
         'confirmed_count': confirmed_count,
         'awaiting_manager_count': awaiting_manager_count,
-        'pending_sector_cards': pending_sector_cards,
+        'pending_sector_cards': pending_sector_cards_data,
         'selected_sector': selected_sector,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
