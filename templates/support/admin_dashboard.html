@@ -105,7 +105,9 @@
 
     .support-chat-row {
         display: flex;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
+        align-items: flex-end;
+        gap: 8px;
     }
 
     .support-chat-row.incoming {
@@ -117,37 +119,109 @@
     }
 
     .support-chat-bubble {
-        max-width: 78%;
-        padding: 10px 12px;
-        border-radius: 14px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        position: relative;
+        max-width: 74%;
+        padding: 9px 11px;
+        border-radius: 12px;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
         word-break: break-word;
     }
 
     .support-chat-row.incoming .support-chat-bubble {
         background: #ffffff;
         border: 1px solid #E5E7EB;
-        border-top-left-radius: 6px;
+        border-top-left-radius: 4px;
         color: #111827;
     }
 
+    .support-chat-row.incoming .support-chat-bubble::before {
+        content: '';
+        position: absolute;
+        left: -7px;
+        top: 0;
+        width: 0;
+        height: 0;
+        border-top: 10px solid #ffffff;
+        border-right: 8px solid transparent;
+    }
+
     .support-chat-row.outgoing .support-chat-bubble {
-        background: linear-gradient(135deg, #2563EB, #1D4ED8);
+        background: #DCF8C6;
+        border: 1px solid #CDEBB2;
         color: #ffffff;
-        border-top-right-radius: 6px;
+        border-top-right-radius: 4px;
+        color: #1F2937;
+    }
+
+    .support-chat-row.outgoing .support-chat-bubble::before {
+        content: '';
+        position: absolute;
+        right: -7px;
+        top: 0;
+        width: 0;
+        height: 0;
+        border-top: 10px solid #DCF8C6;
+        border-left: 8px solid transparent;
     }
 
     .support-chat-meta {
-        margin-top: 6px;
-        font-size: 11px;
-        opacity: 0.8;
+        margin-top: 4px;
+        font-size: 10px;
+        opacity: 0.7;
+        text-align: right;
     }
 
     .support-info-card {
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 10px;
+        position: relative;
+        background: #ffffff;
+        border: 1px solid #DDE7F3;
+        border-radius: 12px;
         padding: 12px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+
+    .support-info-card::before {
+        content: '';
+        position: absolute;
+        left: -8px;
+        top: 14px;
+        width: 0;
+        height: 0;
+        border-top: 8px solid transparent;
+        border-bottom: 8px solid transparent;
+        border-right: 8px solid #DDE7F3;
+    }
+
+    .support-info-card::after {
+        content: '';
+        position: absolute;
+        left: -7px;
+        top: 14px;
+        width: 0;
+        height: 0;
+        border-top: 8px solid transparent;
+        border-bottom: 8px solid transparent;
+        border-right: 8px solid #ffffff;
+    }
+
+    .whatsapp-wall {
+        background-color: #E5DDD5;
+        background-image: radial-gradient(circle at 25px 25px, rgba(255, 255, 255, 0.16) 2px, transparent 0), radial-gradient(circle at 75px 75px, rgba(255, 255, 255, 0.12) 2px, transparent 0);
+        background-size: 100px 100px;
+    }
+
+    .chat-avatar-dot {
+        width: 26px;
+        height: 26px;
+        border-radius: 9999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        flex-shrink: 0;
+        color: #ffffff;
+        background: #6B7280;
     }
 
     /* Cronômetro */
@@ -1501,7 +1575,7 @@ function renderTicketDetails(data, forceScroll = false) {
                     </span>
                 </div>
 
-                <div class="flex-1 overflow-y-scroll p-4 min-h-0 bg-slate-50" id="chatMessages" style="scrollbar-width: thin; scrollbar-color: #CBD5E0 #F7FAFC;">
+                <div class="flex-1 overflow-y-scroll p-4 min-h-0 whatsapp-wall" id="chatMessages" style="scrollbar-width: thin; scrollbar-color: #CBD5E0 #F7FAFC;">
                     ${renderChatMessages(data.messages)}
                 </div>
 
@@ -1547,7 +1621,7 @@ function renderTicketDetails(data, forceScroll = false) {
             <div class="w-1/3 bg-gray-50 p-4 overflow-y-auto">
                 <div class="space-y-3">
                     <div class="support-info-card">
-                        <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Dados do Cliente</h5>
+                        <h5 class="text-xs font-bold text-blue-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-user-circle"></i>Dados do Cliente</h5>
                         <div class="space-y-2">
                             <div>
                                 <label class="block text-xs font-medium text-gray-700">Cliente</label>
@@ -1565,7 +1639,7 @@ function renderTicketDetails(data, forceScroll = false) {
                     </div>
 
                     <div class="support-info-card">
-                        <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Dados do Atendimento</h5>
+                        <h5 class="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-headset"></i>Dados do Atendimento</h5>
                         <div class="space-y-2">
                             <div>
                                 <label class="block text-xs font-medium text-gray-700">Setor</label>
@@ -1623,7 +1697,7 @@ function renderTicketDetails(data, forceScroll = false) {
                     </div>
 
                     <div class="support-info-card">
-                        <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Ações</h5>
+                        <h5 class="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-bolt"></i>Ações</h5>
                         <div class="space-y-2">
                             ${canAssign ? `
                             <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm transition-colors">
@@ -1692,9 +1766,11 @@ function renderChatMessages(messages) {
         }
 
         const rowClass = msg.is_own ? 'outgoing' : 'incoming';
+        const senderInitial = (msg.user && msg.user.name ? msg.user.name.charAt(0).toUpperCase() : 'U');
 
         return `
             <div class="support-chat-row ${rowClass}">
+                ${!msg.is_own ? `<span class="chat-avatar-dot" title="${escapeHtml(msg.user.name)}">${senderInitial}</span>` : ''}
                 <div class="support-chat-bubble">
                     <p class="text-sm whitespace-pre-wrap">${escapeHtml(msg.message)}</p>
                     ${filesHtml}
