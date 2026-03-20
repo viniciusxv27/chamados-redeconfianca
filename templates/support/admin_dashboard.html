@@ -37,6 +37,9 @@
     /* Garantir que a barra de rolagem seja sempre visível */
     #chatMessages {
         overflow-y: scroll !important;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
     }
     
     /* Estilização para as listas de categorias e agentes */
@@ -105,6 +108,7 @@
 
     .support-chat-row {
         display: flex;
+        width: 100%;
         margin-bottom: 10px;
         align-items: flex-end;
         gap: 8px;
@@ -120,11 +124,15 @@
 
     .support-chat-bubble {
         position: relative;
-        max-width: 74%;
+        display: inline-block;
+        width: fit-content;
+        max-width: min(74%, 680px);
+        min-width: 120px;
         padding: 9px 11px;
-        border-radius: 12px;
+        border-radius: 13px;
         box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
         word-break: break-word;
+        line-height: 1.45;
     }
 
     .support-chat-row.incoming .support-chat-bubble {
@@ -148,9 +156,8 @@
     .support-chat-row.outgoing .support-chat-bubble {
         background: #DCF8C6;
         border: 1px solid #CDEBB2;
-        color: #ffffff;
-        border-top-right-radius: 4px;
         color: #1F2937;
+        border-top-right-radius: 4px;
     }
 
     .support-chat-row.outgoing .support-chat-bubble::before {
@@ -169,6 +176,15 @@
         font-size: 10px;
         opacity: 0.7;
         text-align: right;
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .support-chat-text {
+        white-space: pre-wrap;
+        font-size: 13px;
     }
 
     .support-info-card {
@@ -1772,9 +1788,12 @@ function renderChatMessages(messages) {
             <div class="support-chat-row ${rowClass}">
                 ${!msg.is_own ? `<span class="chat-avatar-dot" title="${escapeHtml(msg.user.name)}">${senderInitial}</span>` : ''}
                 <div class="support-chat-bubble">
-                    <p class="text-sm whitespace-pre-wrap">${escapeHtml(msg.message)}</p>
+                    <div class="support-chat-text">${escapeHtml(msg.message)}</div>
                     ${filesHtml}
-                    <p class="support-chat-meta">${msg.user.name} - ${msg.created_at}</p>
+                    <div class="support-chat-meta">
+                        <span>${msg.user.name}</span>
+                        <span>${msg.created_at}</span>
+                    </div>
                 </div>
             </div>
         `;
