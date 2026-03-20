@@ -103,6 +103,53 @@
     .msg-right { text-align: right; }
     .msg-right .msg-bubble { display: inline-block; max-width: 75%; }
 
+    .support-chat-row {
+        display: flex;
+        margin-bottom: 12px;
+    }
+
+    .support-chat-row.incoming {
+        justify-content: flex-start;
+    }
+
+    .support-chat-row.outgoing {
+        justify-content: flex-end;
+    }
+
+    .support-chat-bubble {
+        max-width: 78%;
+        padding: 10px 12px;
+        border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        word-break: break-word;
+    }
+
+    .support-chat-row.incoming .support-chat-bubble {
+        background: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-top-left-radius: 6px;
+        color: #111827;
+    }
+
+    .support-chat-row.outgoing .support-chat-bubble {
+        background: linear-gradient(135deg, #2563EB, #1D4ED8);
+        color: #ffffff;
+        border-top-right-radius: 6px;
+    }
+
+    .support-chat-meta {
+        margin-top: 6px;
+        font-size: 11px;
+        opacity: 0.8;
+    }
+
+    .support-info-card {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        padding: 12px;
+    }
+
     /* Cronômetro */
     .timer-badge {
         display: inline-flex;
@@ -284,7 +331,7 @@
 
 <!-- Modal de Ticket -->
 <div id="ticketModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col mx-4">
+    <div class="bg-white rounded-lg w-full max-w-6xl h-[84vh] flex flex-col mx-4">
         <div class="flex items-center justify-between p-4 border-b">
             <h3 class="text-lg font-semibold" id="ticketModalTitle">Detalhes do Ticket</h3>
             <button onclick="closeTicketModal()" class="text-gray-400 hover:text-gray-600">
@@ -740,6 +787,9 @@ const isCurrentUserAgent = {{ is_support_agent|yesno:"true,false" }};
 let originalTitle = document.title;
 let blinkTitleInterval = null;
 let lastCheckTimestamp = new Date().toISOString(); // Variável global para polling
+let activeModalChatId = null;
+let activeModalLastMessageId = 0;
+let activeModalPollInterval = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== Dashboard de Suporte Carregado ===');
@@ -1340,13 +1390,18 @@ function updateTicketCounts(tickets) {
 function openTicketModal(ticketId) {
     document.getElementById('ticketModal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
-    
-    // Carregar detalhes do ticket
+
+    activeModalChatId = ticketId;
+    fetchAndRenderTicketDetails(ticketId, true);
+    startTicketModalPolling(ticketId);
+}
+
+function fetchAndRenderTicketDetails(ticketId, forceScroll = false) {
     fetch(`/projects/support/chat/${ticketId}/`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                renderTicketDetails(data);
+                renderTicketDetails(data, forceScroll);
             } else {
                 alert('Erro ao carregar ticket: ' + data.error);
             }
@@ -1360,10 +1415,67 @@ function openTicketModal(ticketId) {
 function closeTicketModal() {
     document.getElementById('ticketModal').classList.add('hidden');
     document.body.style.overflow = '';
+    stopTicketModalPolling();
+    activeModalChatId = null;
+    activeModalLastMessageId = 0;
 }
 
-function renderTicketDetails(data) {
+function startTicketModalPolling(chatId) {
+    stopTicketModalPolling();
+    activeModalPollInterval = setInterval(() => {
+        if (!activeModalChatId || activeModalChatId !== chatId) {
+            return;
+        }
+        pollOpenTicketMessages();
+    }, 2500);
+}
+
+function stopTicketModalPolling() {
+    if (activeModalPollInterval) {
+        clearInterval(activeModalPollInterval);
+        activeModalPollInterval = null;
+    }
+}
+
+function pollOpenTicketMessages() {
+    if (!activeModalChatId) return;
+
+    fetch(`/projects/support/chat/${activeModalChatId}/poll/?last_message_id=${activeModalLastMessageId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) return;
+
+            if (data.messages && data.messages.length > 0) {
+                const container = document.getElementById('chatMessages');
+                if (!container) return;
+
+                const shouldAutoScroll = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
+                container.insertAdjacentHTML('beforeend', renderChatMessages(data.messages));
+
+                activeModalLastMessageId = Math.max(activeModalLastMessageId, ...data.messages.map(m => m.id));
+
+                if (shouldAutoScroll) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+
+            if (data.chat_status) {
+                const statusBadge = document.getElementById('ticketModalStatusBadge');
+                if (statusBadge) {
+                    const statusColor = getStatusColor(data.chat_status);
+                    statusBadge.className = `inline-block px-2 py-1 rounded-full text-xs font-medium bg-${statusColor}-100 text-${statusColor}-800`;
+                    statusBadge.textContent = data.chat_status_display;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erro no polling do modal:', error);
+        });
+}
+
+function renderTicketDetails(data, forceScroll = false) {
     const content = document.getElementById('ticketModalContent');
+    const modalTitle = document.getElementById('ticketModalTitle');
     
     // Verificar se o usuário é agente de suporte
     const isAgent = data.is_support_agent || false;
@@ -1371,144 +1483,28 @@ function renderTicketDetails(data) {
     const isAssignedToMe = data.chat.assigned_to && data.chat.assigned_to.id === currentUserId;
     const canAssign = data.can_assume || false;  // Usa o valor calculado pelo backend
     
+    if (modalTitle) {
+        modalTitle.textContent = `Ticket #${data.chat.protocol || data.chat.id} - ${data.chat.title}`;
+    }
+
     content.innerHTML = `
         <div class="flex h-full">
-            <!-- Info do ticket -->
-            <div class="w-1/3 border-r bg-gray-50 p-4 overflow-y-auto">
-                <div class="space-y-4">
+            <!-- Chat (esquerda) -->
+            <div class="w-2/3 flex flex-col min-h-0 border-r bg-white">
+                <div class="px-4 py-3 border-b bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between">
                     <div>
-                        <h4 class="font-semibold text-gray-900">${data.chat.title}</h4>
-                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-${getStatusColor(data.chat.status)}-100 text-${getStatusColor(data.chat.status)}-800">
-                            ${data.chat.get_status_display}
-                        </span>
+                        <p class="text-sm font-semibold text-gray-900">Conversa do Atendimento</p>
+                        <p class="text-xs text-gray-600">Acompanhe mensagens em tempo real</p>
                     </div>
-                    
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Cliente</label>
-                        <p class="text-sm text-gray-900">${data.chat.user.get_full_name}</p>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Login</label>
-                        <p class="text-sm text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">${data.chat.user.login_code || '-'}</p>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">PDV</label>
-                        <p class="text-sm text-gray-900">${data.chat.user.pdv || '-'}</p>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Setor</label>
-                        <p class="text-sm text-gray-900">${data.chat.sector ? data.chat.sector.name : 'N/A'}</p>
-                    </div>
-                    
-                    ${data.chat.category ? `
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Categoria</label>
-                        <div class="flex items-center justify-between">
-                            <p class="text-sm text-gray-900">${data.chat.category.name}</p>
-                            ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
-                            <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" 
-                                    class="text-blue-500 hover:text-blue-700 text-xs" title="Alterar categoria">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            ` : ''}
-                        </div>
-                    </div>
-                    ` : `
-                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Categoria</label>
-                        <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" 
-                                class="text-blue-500 hover:text-blue-700 text-sm">
-                            <i class="fas fa-plus mr-1"></i>Definir categoria
-                        </button>
-                    </div>
-                    ` : ''}
-                    `}
-                    
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Prioridade</label>
-                        <span class="priority-badge priority-${data.chat.priority}">${data.chat.get_priority_display}</span>
-                    </div>
-                    
-                    ${data.chat.assigned_to ? `
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Atendente</label>
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-2">
-                                <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name}</p>
-                                ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">(Você)</span>' : ''}
-                            </div>
-                            ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
-                            <button onclick="openTransferModal(${data.chat.id})" 
-                                    class="text-orange-500 hover:text-orange-700 text-xs" title="Transferir">
-                                <i class="fas fa-exchange-alt"></i>
-                            </button>
-                            ` : ''}
-                        </div>
-                    </div>
-                    ` : ''}
-                    
-                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' && !data.chat.assigned_to ? `
-                    <div>
-                        <label class="block text-xs font-medium text-gray-700">Atendente</label>
-                        <button onclick="openTransferModal(${data.chat.id})" 
-                                class="text-blue-500 hover:text-blue-700 text-sm">
-                            <i class="fas fa-user-plus mr-1"></i>Atribuir agente
-                        </button>
-                    </div>
-                    ` : ''}
-                    
-                    ${canAssign ? `
-                    <div class="pt-4 border-t">
-                        <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm transition-colors">
-                            <i class="fas fa-hand-paper mr-2"></i>Assumir Atendimento
-                        </button>
-                    </div>
-                    ` : ''}
-                    
-                    ${isAssignedToMe && (data.chat.status === 'AGUARDANDO' || data.chat.status === 'ABERTO') ? `
-                    <div class="pt-4 border-t">
-                        <button onclick="startChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
-                            <i class="fas fa-play-circle mr-2"></i>Começar Atendimento
-                        </button>
-                    </div>
-                    ` : ''}
-                    
-                    ${isAssignedToMe && data.chat.status !== 'FECHADO' ? `
-                    <div class="pt-4 border-t space-y-2">
-                        ${data.chat.status === 'EM_ANDAMENTO' ? `
-                        <button onclick="resolveChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
-                            <i class="fas fa-check-circle mr-2"></i>Finalizar Atendimento
-                        </button>
-                        ` : ''}
-                        ${data.chat.status === 'FECHADO' ? `
-                        <button onclick="closeChat(${data.chat.id})" class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded text-sm transition-colors">
-                            <i class="fas fa-times-circle mr-2"></i>Fechar Ticket
-                        </button>
-                        ` : ''}
-                    </div>
-                    ` : ''}
-                    
-                    ${(data.is_superadmin || data.is_supervisor_or_higher) ? `
-                    <div class="pt-4 border-t">
-                        <button onclick="deleteTicket(${data.chat.id}, '${data.chat.title.replace(/'/g, "\\'").replace(/"/g, '\\&quot;')}'); closeTicketModal();" 
-                                class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm transition-colors">
-                            <i class="fas fa-trash mr-2"></i>Excluir Ticket
-                        </button>
-                    </div>
-                    ` : ''}
+                    <span id="ticketModalStatusBadge" class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-${getStatusColor(data.chat.status)}-100 text-${getStatusColor(data.chat.status)}-800">
+                        ${data.chat.get_status_display}
+                    </span>
                 </div>
-            </div>
-            
-            <!-- Chat -->
-            <div class="flex-1 flex flex-col min-h-0">
-                <div class="flex-1 overflow-y-scroll p-4 min-h-0" id="chatMessages" style="scrollbar-width: thin; scrollbar-color: #CBD5E0 #F7FAFC;">
+
+                <div class="flex-1 overflow-y-scroll p-4 min-h-0 bg-slate-50" id="chatMessages" style="scrollbar-width: thin; scrollbar-color: #CBD5E0 #F7FAFC;">
                     ${renderChatMessages(data.messages)}
                 </div>
-                
+
                 <div class="border-t p-4 flex-shrink-0 bg-white">
                     ${isAssignedToMe && data.chat.status === 'EM_ANDAMENTO' ? `
                     <div class="flex justify-start mb-3">
@@ -1546,21 +1542,134 @@ function renderTicketDetails(data) {
                     </div>
                 </div>
             </div>
+
+            <!-- Sidebar (direita) -->
+            <div class="w-1/3 bg-gray-50 p-4 overflow-y-auto">
+                <div class="space-y-3">
+                    <div class="support-info-card">
+                        <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Dados do Cliente</h5>
+                        <div class="space-y-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Cliente</label>
+                                <p class="text-sm text-gray-900">${data.chat.user.get_full_name}</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Login</label>
+                                <p class="text-sm text-gray-900 font-mono bg-white px-2 py-1 rounded border">${data.chat.user.login_code || '-'}</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">PDV</label>
+                                <p class="text-sm text-gray-900">${data.chat.user.pdv || '-'}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="support-info-card">
+                        <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Dados do Atendimento</h5>
+                        <div class="space-y-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Setor</label>
+                                <p class="text-sm text-gray-900">${data.chat.sector ? data.chat.sector.name : 'N/A'}</p>
+                            </div>
+
+                            ${data.chat.category ? `
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Categoria</label>
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-sm text-gray-900">${data.chat.category.name}</p>
+                                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                                    <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" class="text-blue-500 hover:text-blue-700 text-xs" title="Alterar categoria">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            ` : `
+                            ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Categoria</label>
+                                <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" class="text-blue-500 hover:text-blue-700 text-sm">
+                                    <i class="fas fa-plus mr-1"></i>Definir categoria
+                                </button>
+                            </div>
+                            ` : ''}
+                            `}
+
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Prioridade</label>
+                                <span class="priority-badge priority-${data.chat.priority}">${data.chat.get_priority_display}</span>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Atendente</label>
+                                ${data.chat.assigned_to ? `
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name} ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">(Você)</span>' : ''}</p>
+                                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                                    <button onclick="openTransferModal(${data.chat.id})" class="text-orange-500 hover:text-orange-700 text-xs" title="Transferir">
+                                        <i class="fas fa-exchange-alt"></i>
+                                    </button>
+                                    ` : ''}
+                                </div>
+                                ` : `
+                                ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                                <button onclick="openTransferModal(${data.chat.id})" class="text-blue-500 hover:text-blue-700 text-sm">
+                                    <i class="fas fa-user-plus mr-1"></i>Atribuir agente
+                                </button>
+                                ` : '<p class="text-sm text-gray-500">Não atribuído</p>'}
+                                `}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="support-info-card">
+                        <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Ações</h5>
+                        <div class="space-y-2">
+                            ${canAssign ? `
+                            <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                                <i class="fas fa-hand-paper mr-2"></i>Assumir Atendimento
+                            </button>
+                            ` : ''}
+
+                            ${isAssignedToMe && (data.chat.status === 'AGUARDANDO' || data.chat.status === 'ABERTO') ? `
+                            <button onclick="startChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                                <i class="fas fa-play-circle mr-2"></i>Começar Atendimento
+                            </button>
+                            ` : ''}
+
+                            ${isAssignedToMe && data.chat.status === 'EM_ANDAMENTO' ? `
+                            <button onclick="resolveChat(${data.chat.id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded text-sm transition-colors">
+                                <i class="fas fa-check-circle mr-2"></i>Finalizar Atendimento
+                            </button>
+                            ` : ''}
+
+                            ${(data.is_superadmin || data.is_supervisor_or_higher) ? `
+                            <button onclick="deleteTicket(${data.chat.id}, '${data.chat.title.replace(/'/g, "\\'").replace(/"/g, '\\&quot;')}'); closeTicketModal();" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                                <i class="fas fa-trash mr-2"></i>Excluir Ticket
+                            </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
+
+    if (data.messages && data.messages.length > 0) {
+        activeModalLastMessageId = Math.max(...data.messages.map(m => m.id));
+    } else {
+        activeModalLastMessageId = 0;
+    }
+
+    if (forceScroll) {
+        const chatMessagesEl = document.getElementById('chatMessages');
+        if (chatMessagesEl) {
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        }
+    }
 }
 
 function renderChatMessages(messages) {
-    // Criar mapa de cores para usuários (exceto o usuário logado)
-    const userColors = {};
-    let colorIndex = 0;
-    messages.forEach(msg => {
-        if (!msg.is_own && !userColors.hasOwnProperty(msg.user.id)) {
-            userColors[msg.user.id] = colorIndex % 8;
-            colorIndex++;
-        }
-    });
-    
     return messages.map(msg => {
         // Renderizar arquivos se existirem
         let filesHtml = '';
@@ -1575,24 +1684,21 @@ function renderChatMessages(messages) {
                 } else if (file.type === 'AUDIO') {
                     return `<audio src="${file.url}" controls class="w-full mt-2"></audio>`;
                 } else {
-                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 hover:underline text-white">
+                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 hover:underline ${msg.is_own ? 'text-white' : 'text-blue-600'}">
                         <i class="fas fa-file mr-2"></i>${file.name} (${formatFileSize(file.size)})
                     </a>`;
                 }
             }).join('');
         }
-        
-        // Determinar posição e cor
-        const isRight = msg.is_own;
-        const colorClass = isRight ? '' : `msg-color-${userColors[msg.user.id]}`;
-        const bgClass = isRight ? 'bg-blue-500 text-white' : colorClass;
-        
+
+        const rowClass = msg.is_own ? 'outgoing' : 'incoming';
+
         return `
-            <div class="mb-4 ${isRight ? 'msg-right' : 'msg-left'}">
-                <div class="msg-bubble inline-block max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bgClass}">
+            <div class="support-chat-row ${rowClass}">
+                <div class="support-chat-bubble">
                     <p class="text-sm whitespace-pre-wrap">${escapeHtml(msg.message)}</p>
                     ${filesHtml}
-                    <p class="text-xs opacity-75 mt-1">${msg.user.name} - ${msg.created_at}</p>
+                    <p class="support-chat-meta">${msg.user.name} - ${msg.created_at}</p>
                 </div>
             </div>
         `;
@@ -1702,7 +1808,7 @@ function sendSupportMessage(chatId) {
                 showToast('Imagem enviada com sucesso!', 'success');
                 messageInput.value = '';
                 clearPastedImage(chatId);
-                openTicketModal(chatId);
+                fetchAndRenderTicketDetails(chatId, true);
             } else {
                 showToast('Erro ao enviar imagem: ' + data.error, 'error');
             }
@@ -1733,8 +1839,8 @@ function sendSupportMessage(chatId) {
     .then(data => {
         if (data.success) {
             messageInput.value = '';
-            // Recarregar o chat para mostrar a nova mensagem
-            openTicketModal(chatId);
+            // Atualizar conteúdo do modal sem fechar/reabrir
+            fetchAndRenderTicketDetails(chatId, true);
         } else {
             showToast('Erro ao enviar mensagem: ' + data.error, 'error');
         }
@@ -1773,8 +1879,8 @@ function handleFileUpload(chatId, input) {
         if (data.success) {
             showToast('Arquivo enviado com sucesso!', 'success');
             input.value = '';
-            // Recarregar o chat para mostrar o arquivo
-            openTicketModal(chatId);
+            // Atualizar conteúdo do modal sem fechar/reabrir
+            fetchAndRenderTicketDetails(chatId, true);
         } else {
             showToast('Erro ao enviar arquivo: ' + data.error, 'error');
         }
