@@ -1790,16 +1790,24 @@ function renderChatMessages(messages) {
             }).join('');
         }
 
-        const rowClass = msg.is_own ? 'outgoing' : 'incoming';
         const senderInitial = (msg.user && msg.user.name ? msg.user.name.charAt(0).toUpperCase() : 'U');
+        const rowStyle = msg.is_own
+            ? 'display:flex; justify-content:flex-end; align-items:flex-end; gap:8px; width:100%; margin-bottom:10px;'
+            : 'display:flex; justify-content:flex-start; align-items:flex-end; gap:8px; width:100%; margin-bottom:10px;';
+        const bubbleStyle = msg.is_own
+            ? 'display:inline-block; max-width:78%; background:#DCF8C6; color:#1F2937; border:1px solid #CDEBB2; border-radius:16px 6px 16px 16px; padding:10px 12px; box-shadow:0 1px 1px rgba(0,0,0,.12); line-height:1.45; word-break:break-word;'
+            : 'display:inline-block; max-width:78%; background:#ffffff; color:#111827; border:1px solid #E5E7EB; border-radius:6px 16px 16px 16px; padding:10px 12px; box-shadow:0 1px 1px rgba(0,0,0,.12); line-height:1.45; word-break:break-word;';
+        const metaStyle = msg.is_own
+            ? 'margin-top:4px; font-size:10px; opacity:.7; display:flex; justify-content:flex-end; gap:6px; align-items:center;'
+            : 'margin-top:4px; font-size:10px; opacity:.7; display:flex; justify-content:flex-start; gap:6px; align-items:center;';
 
         return `
-            <div class="support-chat-row ${rowClass}">
+            <div style="${rowStyle}">
                 ${!msg.is_own ? `<span class="chat-avatar-dot" title="${escapeHtml(msg.user.name)}">${senderInitial}</span>` : ''}
-                <div class="support-chat-bubble">
-                    <div class="support-chat-text">${escapeHtml(msg.message)}</div>
+                <div style="${bubbleStyle}">
+                    <div style="white-space:pre-wrap; font-size:13px;">${escapeHtml(msg.message)}</div>
                     ${filesHtml}
-                    <div class="support-chat-meta">
+                    <div style="${metaStyle}">
                         <span>${msg.user.name}</span>
                         <span>${msg.created_at}</span>
                     </div>
