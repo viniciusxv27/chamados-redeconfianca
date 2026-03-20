@@ -125,12 +125,10 @@
     .support-chat-bubble {
         position: relative;
         display: inline-block;
-        width: fit-content;
-        max-width: min(74%, 680px);
-        min-width: 120px;
-        padding: 9px 11px;
-        border-radius: 13px;
-        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        max-width: 78%;
+        padding: 10px 12px;
+        border-radius: 16px;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
         word-break: break-word;
         line-height: 1.45;
     }
@@ -138,7 +136,7 @@
     .support-chat-row.incoming .support-chat-bubble {
         background: #ffffff;
         border: 1px solid #E5E7EB;
-        border-top-left-radius: 4px;
+        border-top-left-radius: 6px;
         color: #111827;
     }
 
@@ -157,7 +155,7 @@
         background: #DCF8C6;
         border: 1px solid #CDEBB2;
         color: #1F2937;
-        border-top-right-radius: 4px;
+        border-top-right-radius: 6px;
     }
 
     .support-chat-row.outgoing .support-chat-bubble::before {
@@ -175,16 +173,27 @@
         margin-top: 4px;
         font-size: 10px;
         opacity: 0.7;
-        text-align: right;
         display: flex;
         justify-content: flex-end;
         gap: 6px;
         align-items: center;
     }
 
+    .support-chat-row.incoming .support-chat-meta {
+        justify-content: flex-start;
+    }
+
     .support-chat-text {
         white-space: pre-wrap;
         font-size: 13px;
+    }
+
+    .support-chat-bubble a {
+        word-break: break-all;
+    }
+
+    .support-chat-row.outgoing .support-chat-bubble a {
+        color: #1F2937;
     }
 
     .support-info-card {
@@ -1774,7 +1783,7 @@ function renderChatMessages(messages) {
                 } else if (file.type === 'AUDIO') {
                     return `<audio src="${file.url}" controls class="w-full mt-2"></audio>`;
                 } else {
-                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 hover:underline ${msg.is_own ? 'text-white' : 'text-blue-600'}">
+                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 hover:underline ${msg.is_own ? 'text-gray-800' : 'text-blue-600'}">
                         <i class="fas fa-file mr-2"></i>${file.name} (${formatFileSize(file.size)})
                     </a>`;
                 }
