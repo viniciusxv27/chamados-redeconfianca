@@ -2,6 +2,7 @@ import io
 import csv
 import unicodedata
 import datetime
+from decimal import Decimal, InvalidOperation
 import pandas as pd
 import requests
 from django.shortcuts import render, redirect, get_object_or_404
@@ -897,6 +898,54 @@ def manage_global_contestation_managers(request):
         config.contestacao_global_managers.add(target_user)
         messages.success(request, f'{target_user.full_name} liberado para gerenciar tudo em contestação.')
 
+    return redirect('contestacao:manage_contestations')
+
+
+@login_required
+def update_contested_sale_value(request, pk):
+    """Permite ao gestor atualizar o valor (receita) da venda contestada."""
+    if request.method != 'POST':
+        return redirect('contestacao:manage_contestations')
+
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para alterar valor da venda.')
+        return redirect('contestacao:manage_contestations')
+
+    contestation = get_object_or_404(Contestation.objects.select_related('exclusion'), pk=pk)
+
+    # Garante que o usuário só altere valores dentro do escopo permitido.
+    allowed_qs = _apply_sector_visibility_filter(Contestation.objects.filter(pk=contestation.pk), request.user)
+    if not allowed_qs.exists():
+        messages.error(request, 'Você não pode alterar o valor desta contestação.')
+        return redirect('contestacao:manage_contestations')
+
+    raw_value = (request.POST.get('new_receita') or '').strip()
+    if not raw_value:
+        messages.warning(request, 'Informe o novo valor da venda.')
+        return redirect('contestacao:manage_contestations')
+
+    normalized = raw_value.replace('R$', '').replace(' ', '')
+    if ',' in normalized:
+        normalized = normalized.replace('.', '').replace(',', '.')
+
+    try:
+        new_value = Decimal(normalized)
+    except (InvalidOperation, ValueError):
+        messages.error(request, 'Valor inválido. Use um número válido, por exemplo: 1234,56')
+        return redirect('contestacao:manage_contestations')
+
+    if new_value < 0:
+        messages.error(request, 'O valor não pode ser negativo.')
+        return redirect('contestacao:manage_contestations')
+
+    old_value = contestation.exclusion.receita
+    contestation.exclusion.receita = new_value
+    contestation.exclusion.save(update_fields=['receita'])
+
+    messages.success(
+        request,
+        f'Valor da venda da contestação #{contestation.pk} atualizado de R$ {old_value:.2f} para R$ {new_value:.2f}.'
+    )
     return redirect('contestacao:manage_contestations')
 
 

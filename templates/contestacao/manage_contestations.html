@@ -251,6 +251,17 @@
                         {% endif %}
                         {% if c.exclusion.plano_produto %}<p class="text-xs text-gray-400">{{ c.exclusion.plano_produto }}</p>{% endif %}
                         {% if c.exclusion.observacao %}<p class="text-xs text-orange-500"><i class="fas fa-info-circle mr-1"></i>Motivo: {{ c.exclusion.observacao|truncatewords:15 }}</p>{% endif %}
+
+                        <form method="post" action="{% url 'contestacao:update_contested_sale_value' c.pk %}" class="mt-2 flex flex-wrap items-center gap-2">
+                            {% csrf_token %}
+                            <label for="new-receita-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Editar valor:</label>
+                            <input id="new-receita-{{ c.pk }}" name="new_receita" type="text" value="{{ c.exclusion.receita|floatformat:2 }}"
+                                   class="w-28 border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500"
+                                   inputmode="decimal" placeholder="0,00">
+                            <button type="submit" class="inline-flex items-center px-2 py-1 bg-indigo-600 text-white text-xs font-medium rounded-md hover:bg-indigo-700">
+                                <i class="fas fa-pen mr-1"></i> Atualizar
+                            </button>
+                        </form>
                     </div>
                     <div class="flex flex-col items-end gap-1">
                         <span class="text-xs text-gray-400">{{ c.created_at|date:"d/m/Y H:i" }}</span>
