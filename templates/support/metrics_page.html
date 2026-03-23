@@ -106,7 +106,7 @@
     <!-- Conteúdo das métricas -->
     <div id="metricsContent">
         <!-- KPIs -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4 mb-6">
             <div class="kpi-card bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 p-4 sm:p-5 rounded-xl text-center">
                 <div class="kpi-value text-2xl sm:text-3xl font-bold text-blue-600" id="metricTotalTickets">0</div>
                 <div class="text-xs sm:text-sm text-blue-800/70 mt-1 font-medium">Total de Tickets</div>
@@ -118,16 +118,26 @@
                 <div class="mt-2"><i class="fas fa-check-circle text-green-400"></i></div>
             </div>
             <div class="kpi-card bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200 p-4 sm:p-5 rounded-xl text-center">
-                <div class="kpi-value text-2xl sm:text-3xl font-bold text-yellow-600" id="metricAvgTime">0h</div>
-                <div class="text-xs sm:text-sm text-yellow-800/70 mt-1 font-medium">Tempo médio para assumir atendimento</div>
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-yellow-600" id="metricAvgFirstResponseTime">0min</div>
+                <div class="text-xs sm:text-sm text-yellow-800/70 mt-1 font-medium">Resposta média</div>
                 <div class="mt-2"><i class="fas fa-clock text-yellow-400"></i></div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 p-4 sm:p-5 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-orange-600" id="metricAvgHandlingTime">0min</div>
+                <div class="text-xs sm:text-sm text-orange-800/70 mt-1 font-medium">Tempo médio de atendimento</div>
+                <div class="mt-2"><i class="fas fa-stopwatch text-orange-400"></i></div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200 p-4 sm:p-5 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-cyan-600" id="metricAvgWaitTime">0min</div>
+                <div class="text-xs sm:text-sm text-cyan-800/70 mt-1 font-medium">Tempo de espera</div>
+                <div class="mt-2"><i class="fas fa-hourglass-half text-cyan-400"></i></div>
             </div>
             <div class="kpi-card bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 p-4 sm:p-5 rounded-xl text-center">
                 <div class="kpi-value text-2xl sm:text-3xl font-bold text-purple-600" id="metricSatisfaction">N/A</div>
                 <div class="text-xs sm:text-sm text-purple-800/70 mt-1 font-medium">Satisfação</div>
                 <div class="mt-2"><i class="fas fa-star text-purple-400"></i></div>
             </div>
-            <div class="kpi-card bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 p-4 sm:p-5 rounded-xl text-center col-span-2 sm:col-span-1">
+            <div class="kpi-card bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 p-4 sm:p-5 rounded-xl text-center col-span-2 sm:col-span-1 lg:col-span-1">
                 <div class="kpi-value text-2xl sm:text-3xl font-bold text-indigo-600" id="metricAvgPerDay">0</div>
                 <div class="text-xs sm:text-sm text-indigo-800/70 mt-1 font-medium">Média/Dia</div>
                 <div class="mt-2"><i class="fas fa-chart-line text-indigo-400"></i></div>
@@ -429,7 +439,9 @@ function updateMetricsDisplay(metrics) {
     // KPIs
     document.getElementById('metricTotalTickets').textContent = metrics.total_tickets || 0;
     document.getElementById('metricClosed').textContent = metrics.closed_tickets || 0;
-    document.getElementById('metricAvgTime').textContent = metrics.avg_assignment_time || metrics.avg_resolution_time || '0h';
+    document.getElementById('metricAvgFirstResponseTime').textContent = metrics.avg_first_response_time || '0min';
+    document.getElementById('metricAvgHandlingTime').textContent = metrics.avg_handling_time || '0min';
+    document.getElementById('metricAvgWaitTime').textContent = metrics.avg_wait_time || metrics.avg_assignment_time || '0min';
     const satVal = metrics.satisfaction_rate || 'N/A';
     document.getElementById('metricSatisfaction').textContent = satVal + (String(satVal).includes('%') || satVal === 'N/A' ? '' : '%');
     document.getElementById('metricAvgPerDay').textContent = metrics.avg_per_day || 0;

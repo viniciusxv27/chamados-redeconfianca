@@ -283,6 +283,20 @@ def create_support_chat(request):
             'success': False, 
             'error': 'Olá, seja bem vindo ao CANAL DE SUPORTE A LOJAS. Nosso horário de atendimento por aqui é de Segunda a Sexta das 9hs às 18hs, sábado das 9hs às 13hs.'
         })
+
+    # Bloquear abertura de novo ticket enquanto existir ticket fechado sem avaliação
+    pending_rating_chat = SupportChat.objects.filter(
+        user=request.user,
+        status='FECHADO'
+    ).filter(
+        rating__isnull=True
+    ).order_by('-closed_at', '-created_at').first()
+
+    if pending_rating_chat:
+        return JsonResponse({
+            'success': False,
+            'error': 'Você precisa avaliar o último atendimento antes de abrir um novo ticket de suporte.'
+        })
     
     title = request.POST.get('title', '').strip()
     message = request.POST.get('message', '').strip()
@@ -2116,19 +2130,33 @@ def support_metrics_api(request):
         total_tickets = tickets.count()
         closed_tickets = tickets.filter(status='FECHADO').count()
         
-        # Tempo médio para assumir atendimento (da abertura até primeira assunção).
-        # Usa started_at quando existir e fallback para a primeira mensagem interna
-        # de "Atendimento assumido" em tickets antigos.
-        assignment_candidates = tickets.filter(
+        # Helpers de tempo
+        def format_seconds_to_human(total_seconds):
+            if not total_seconds or total_seconds <= 0:
+                return '0min'
+
+            total_minutes = int(round(total_seconds / 60))
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+
+            if hours > 0 and minutes > 0:
+                return f'{hours}h {minutes}min'
+            if hours > 0:
+                return f'{hours}h'
+            return f'{minutes}min'
+
+        # Tempo médio de espera (abertura -> início do atendimento)
+        # Usa started_at quando existir e fallback para mensagem interna de assunção.
+        wait_candidates = tickets.filter(
             Q(started_at__isnull=False) | Q(assigned_to__isnull=False)
         ).prefetch_related('messages')
 
-        total_assignment_seconds = 0
-        assignment_count = 0
-        for ticket in assignment_candidates:
-            assignment_time = ticket.started_at
+        total_wait_seconds = 0
+        wait_count = 0
+        for ticket in wait_candidates:
+            start_time = ticket.started_at
 
-            if not assignment_time:
+            if not start_time:
                 first_assignment_message = next(
                     (
                         msg for msg in ticket.messages.all()
@@ -2137,24 +2165,39 @@ def support_metrics_api(request):
                     None
                 )
                 if first_assignment_message:
-                    assignment_time = first_assignment_message.created_at
+                    start_time = first_assignment_message.created_at
 
-            if assignment_time and assignment_time > ticket.created_at:
-                total_assignment_seconds += (assignment_time - ticket.created_at).total_seconds()
-                assignment_count += 1
+            if start_time and start_time > ticket.created_at:
+                total_wait_seconds += (start_time - ticket.created_at).total_seconds()
+                wait_count += 1
 
-        if assignment_count > 0:
-            avg_assignment_minutes = round((total_assignment_seconds / assignment_count) / 60)
-            hours = avg_assignment_minutes // 60
-            minutes = avg_assignment_minutes % 60
-            if hours > 0 and minutes > 0:
-                avg_time_str = f'{hours}h {minutes}min'
-            elif hours > 0:
-                avg_time_str = f'{hours}h'
-            else:
-                avg_time_str = f'{minutes}min'
-        else:
-            avg_time_str = '0min'
+        avg_wait_time = format_seconds_to_human((total_wait_seconds / wait_count) if wait_count > 0 else 0)
+
+        # Tempo médio de primeira resposta (abertura -> primeira resposta do agente)
+        response_candidates = tickets.filter(agent_first_response_at__isnull=False)
+        total_response_seconds = 0
+        response_count = 0
+        for ticket in response_candidates:
+            if ticket.agent_first_response_at and ticket.agent_first_response_at > ticket.created_at:
+                total_response_seconds += (ticket.agent_first_response_at - ticket.created_at).total_seconds()
+                response_count += 1
+
+        avg_first_response_time = format_seconds_to_human((total_response_seconds / response_count) if response_count > 0 else 0)
+
+        # Tempo médio de atendimento (início do atendimento -> fechamento)
+        handling_candidates = tickets.filter(
+            status='FECHADO',
+            closed_at__isnull=False,
+            started_at__isnull=False
+        )
+        total_handling_seconds = 0
+        handling_count = 0
+        for ticket in handling_candidates:
+            if ticket.closed_at > ticket.started_at:
+                total_handling_seconds += (ticket.closed_at - ticket.started_at).total_seconds()
+                handling_count += 1
+
+        avg_handling_time = format_seconds_to_human((total_handling_seconds / handling_count) if handling_count > 0 else 0)
         
         # Taxa de satisfação (baseado em avaliações)
         from django.db.models import Avg
@@ -2271,8 +2314,11 @@ def support_metrics_api(request):
             'metrics': {
                 'total_tickets': total_tickets,
                 'closed_tickets': closed_tickets,
-                'avg_assignment_time': avg_time_str,
-                'avg_resolution_time': avg_time_str,
+                'avg_first_response_time': avg_first_response_time,
+                'avg_handling_time': avg_handling_time,
+                'avg_wait_time': avg_wait_time,
+                'avg_assignment_time': avg_wait_time,
+                'avg_resolution_time': avg_handling_time,
                 'satisfaction_rate': satisfaction_rate,
                 'avg_per_day': avg_per_day,
                 'by_agent': agents_stats,
