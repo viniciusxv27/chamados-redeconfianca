@@ -2410,6 +2410,196 @@
             }
         };
 
+        // Estado temporário para reprocessar abertura de ticket após avaliação pendente
+        window.pendingSupportChatPayload = null;
+
+        function createSupportChatRequest(formData, formElement) {
+            fetch('/projects/support/chat/create/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                console.log('Create chat response:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Create chat data:', data);
+                if (data.success) {
+                    // Clear form
+                    formElement.reset();
+                    document.getElementById('categoryDiv').classList.add('hidden');
+
+                    // Mostrar notificação de sucesso
+                    const message = data.queue_position
+                        ? `Chat criado com sucesso! Protocolo: ${data.protocol}. Você está na posição ${data.queue_position} da fila.`
+                        : `Chat criado com sucesso! Protocolo: ${data.protocol}`;
+
+                    if (typeof showToast === 'function') {
+                        showToast(message, 'success');
+                    } else {
+                        alert(message);
+                    }
+
+                    // Switch to my chats and load the new chat
+                    window.switchTab('my');
+                    window.loadMyChats();
+                    setTimeout(() => window.openChat(data.chat_id), 1000);
+                    return;
+                }
+
+                // Fluxo especial: avaliação pendente antes de abrir novo ticket
+                if (data.pending_rating_required && data.pending_chat && data.pending_chat.id) {
+                    window.pendingSupportChatPayload = {
+                        formData: new FormData(formData),
+                        formElement: formElement,
+                        pendingChat: data.pending_chat
+                    };
+                    openPendingSupportRatingModal(data.pending_chat);
+                    return;
+                }
+
+                alert('Erro ao criar chat: ' + data.error);
+            })
+            .catch(error => {
+                console.error('Error creating chat:', error);
+                alert('Erro ao criar chat de suporte');
+            });
+        }
+
+        function closePendingSupportRatingModal() {
+            const modal = document.getElementById('pendingSupportRatingModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        function openPendingSupportRatingModal(pendingChat) {
+            closePendingSupportRatingModal();
+
+            const modal = document.createElement('div');
+            modal.id = 'pendingSupportRatingModal';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-[120] flex items-center justify-center p-4';
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Avalie seu último atendimento</h3>
+                        <button type="button" id="closePendingSupportRatingModal" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">Antes de abrir um novo ticket, você precisa avaliar o atendimento anterior.</p>
+                    <p class="text-sm text-gray-700 mb-4"><strong>Ticket:</strong> ${pendingChat.title || 'Atendimento de suporte'} ${pendingChat.protocol ? `(${pendingChat.protocol})` : ''}</p>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Nota</label>
+                        <div id="pendingRatingStars" class="flex items-center gap-2 text-2xl">
+                            <button type="button" data-rating="1" class="pending-star text-gray-300 hover:text-yellow-400">★</button>
+                            <button type="button" data-rating="2" class="pending-star text-gray-300 hover:text-yellow-400">★</button>
+                            <button type="button" data-rating="3" class="pending-star text-gray-300 hover:text-yellow-400">★</button>
+                            <button type="button" data-rating="4" class="pending-star text-gray-300 hover:text-yellow-400">★</button>
+                            <button type="button" data-rating="5" class="pending-star text-gray-300 hover:text-yellow-400">★</button>
+                        </div>
+                        <p id="pendingRatingLabel" class="text-xs text-gray-500 mt-2">Selecione de 1 a 5 estrelas</p>
+                    </div>
+
+                    <div class="mb-5">
+                        <label for="pendingSupportFeedback" class="block text-sm font-medium text-gray-700 mb-2">Comentário (opcional)</label>
+                        <textarea id="pendingSupportFeedback" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Conte como foi seu atendimento"></textarea>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2">
+                        <button type="button" id="cancelPendingSupportRating" class="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Cancelar</button>
+                        <button type="button" id="submitPendingSupportRating" class="px-4 py-2 text-sm rounded-md bg-blue-500 text-white hover:bg-blue-600">Avaliar e continuar</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            let selectedRating = 0;
+            const labels = {
+                1: 'Muito insatisfeito',
+                2: 'Insatisfeito',
+                3: 'Regular',
+                4: 'Satisfeito',
+                5: 'Muito satisfeito'
+            };
+
+            const stars = modal.querySelectorAll('.pending-star');
+            const labelEl = modal.querySelector('#pendingRatingLabel');
+
+            function paintStars(rating) {
+                stars.forEach(star => {
+                    const value = Number(star.getAttribute('data-rating'));
+                    star.classList.toggle('text-yellow-400', value <= rating);
+                    star.classList.toggle('text-gray-300', value > rating);
+                });
+                labelEl.textContent = rating ? labels[rating] : 'Selecione de 1 a 5 estrelas';
+            }
+
+            stars.forEach(star => {
+                star.addEventListener('click', () => {
+                    selectedRating = Number(star.getAttribute('data-rating'));
+                    paintStars(selectedRating);
+                });
+            });
+
+            modal.querySelector('#closePendingSupportRatingModal').addEventListener('click', closePendingSupportRatingModal);
+            modal.querySelector('#cancelPendingSupportRating').addEventListener('click', closePendingSupportRatingModal);
+
+            modal.querySelector('#submitPendingSupportRating').addEventListener('click', () => {
+                if (!selectedRating) {
+                    if (typeof showToast === 'function') {
+                        showToast('Selecione uma nota para continuar', 'error');
+                    } else {
+                        alert('Selecione uma nota para continuar');
+                    }
+                    return;
+                }
+
+                const feedback = (modal.querySelector('#pendingSupportFeedback').value || '').trim();
+
+                fetch(`/projects/support/chat/${pendingChat.id}/rate/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                    },
+                    body: JSON.stringify({
+                        rating: selectedRating,
+                        feedback: feedback
+                    })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (!result.success) {
+                        throw new Error(result.error || 'Erro ao avaliar atendimento');
+                    }
+
+                    closePendingSupportRatingModal();
+
+                    const pendingPayload = window.pendingSupportChatPayload;
+                    window.pendingSupportChatPayload = null;
+
+                    if (typeof showToast === 'function') {
+                        showToast('Avaliação registrada. Abrindo seu novo ticket...', 'success');
+                    }
+
+                    if (pendingPayload && pendingPayload.formData && pendingPayload.formElement) {
+                        createSupportChatRequest(pendingPayload.formData, pendingPayload.formElement);
+                    }
+                })
+                .catch(err => {
+                    console.error('Erro ao enviar avaliação pendente:', err);
+                    if (typeof showToast === 'function') {
+                        showToast('Não foi possível registrar a avaliação: ' + err.message, 'error');
+                    } else {
+                        alert('Não foi possível registrar a avaliação: ' + err.message);
+                    }
+                });
+            });
+        }
+
         // Debug function to test chat functionality
         window.testSupportChat = function() {
             console.log('Testing support chat functions...');
@@ -2550,44 +2740,7 @@
                 formData.append('message', messageInput.value);
                 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
-                fetch('/projects/support/chat/create/', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    console.log('Create chat response:', response.status);
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Create chat data:', data);
-                    if (data.success) {
-                        // Clear form
-                        this.reset();
-                        document.getElementById('categoryDiv').classList.add('hidden');
-                        
-                        // Mostrar notificação de sucesso
-                        const message = data.queue_position 
-                            ? `Chat criado com sucesso! Protocolo: ${data.protocol}. Você está na posição ${data.queue_position} da fila.`
-                            : `Chat criado com sucesso! Protocolo: ${data.protocol}`;
-                        
-                        if (typeof showToast === 'function') {
-                            showToast(message, 'success');
-                        } else {
-                            alert(message);
-                        }
-                        
-                        // Switch to my chats and load the new chat
-                        window.switchTab('my');
-                        window.loadMyChats();
-                        setTimeout(() => window.openChat(data.chat_id), 1000);
-                    } else {
-                        alert('Erro ao criar chat: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error creating chat:', error);
-                    alert('Erro ao criar chat de suporte');
-                });
+                createSupportChatRequest(formData, this);
             });
 
             // Load my chats
