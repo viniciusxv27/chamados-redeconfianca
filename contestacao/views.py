@@ -12,7 +12,7 @@ from django.db.models import Count, Min, Q, Sum
 from django.utils import timezone
 
 from .models import ExclusionRecord, Contestation, ContestationHistory
-from users.models import SystemConfig
+from users.models import SystemConfig, User
 
 
 HIERARCHY_RANK = {
@@ -30,7 +30,26 @@ SECTOR_PENDING_DEADLINE_DAYS = 1
 
 def _can_manage_contestations(user):
     rank = HIERARCHY_RANK.get(user.hierarchy, 0)
-    return rank >= HIERARCHY_RANK['ADMIN']
+    if rank >= HIERARCHY_RANK['ADMIN']:
+        return True
+    return _has_global_contestation_access(user)
+
+
+def _has_global_contestation_access(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        config = SystemConfig.get_config()
+        return config.contestacao_global_managers.filter(pk=user.pk).exists()
+    except Exception:
+        return False
+
+
+def _can_view_all_contestation_scope(user):
+    rank = HIERARCHY_RANK.get(user.hierarchy, 0)
+    return rank >= HIERARCHY_RANK['SUPERADMIN'] or _has_global_contestation_access(user)
 
 
 def _can_create_contestations(user):
@@ -81,7 +100,7 @@ def _has_open_contestation_for_sector(filial):
 def _apply_sector_visibility_filter(contestation_qs, user):
     """Aplica visibilidade por setor para usuários abaixo de SUPERADMIN."""
     rank = HIERARCHY_RANK.get(user.hierarchy, 0)
-    if rank >= HIERARCHY_RANK['SUPERADMIN']:
+    if rank >= HIERARCHY_RANK['SUPERADMIN'] or _has_global_contestation_access(user):
         return contestation_qs
 
     user_sectors = list(user.sectors.values_list('name', flat=True))
@@ -101,7 +120,7 @@ def _apply_sector_visibility_filter(contestation_qs, user):
 def _apply_exclusion_visibility_filter(exclusion_qs, user):
     """Aplica visibilidade por setor para registros de exclusão."""
     rank = HIERARCHY_RANK.get(user.hierarchy, 0)
-    if rank >= HIERARCHY_RANK['SUPERADMIN']:
+    if rank >= HIERARCHY_RANK['SUPERADMIN'] or _has_global_contestation_access(user):
         return exclusion_qs
 
     user_sectors = list(user.sectors.values_list('name', flat=True))
@@ -363,7 +382,8 @@ def exclusion_list(request):
 
     # Superadmin vê tudo; outros filtram por setor
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
-    if rank < HIERARCHY_RANK['SUPERADMIN']:
+    can_view_all_scope = _can_view_all_contestation_scope(request.user)
+    if not can_view_all_scope:
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
@@ -428,7 +448,7 @@ def exclusion_list(request):
         'can_manage': _can_manage_contestations(request.user),
         'can_sync': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem sincronizar
         'can_dashboard': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem acessar dashboard
-        'is_superadmin': rank >= HIERARCHY_RANK['SUPERADMIN'],
+        'is_superadmin': can_view_all_scope,
         'contestation_blocked': sync_state['is_blocked'],
         'sync_has_data': sync_state['has_sync'],
         'sync_is_expired': sync_state['is_expired'],
@@ -589,7 +609,7 @@ def my_contestations(request):
     qs = Contestation.objects.select_related('exclusion', 'requester', 'reviewed_by')
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
 
-    if rank >= HIERARCHY_RANK['SUPERADMIN']:
+    if rank >= HIERARCHY_RANK['SUPERADMIN'] or _has_global_contestation_access(request.user):
         pass  # vê tudo
     else:
         # Admin+ ou PADRAO veem contestações de seus setores
@@ -631,7 +651,8 @@ def manage_contestations(request):
     base_qs = Contestation.objects.select_related('exclusion', 'requester', 'reviewed_by', 'confirmed_by')
 
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
-    if rank < HIERARCHY_RANK['SUPERADMIN']:
+    can_view_all_scope = _can_view_all_contestation_scope(request.user)
+    if not can_view_all_scope:
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
@@ -713,6 +734,21 @@ def manage_contestations(request):
     }
     info_only_no_submission_cards = sorted(all_filiais_set - filiais_com_contestacao_set)
 
+    can_assign_global_managers = rank >= HIERARCHY_RANK['SUPERADMIN']
+    global_manager_users = []
+    available_manager_users = []
+    if can_assign_global_managers:
+        config = SystemConfig.get_config()
+        global_manager_users = list(
+            config.contestacao_global_managers.filter(is_active=True).order_by('first_name', 'last_name')
+        )
+        global_manager_ids = [u.id for u in global_manager_users]
+        available_manager_users = list(
+            User.objects.filter(is_active=True)
+            .exclude(id__in=global_manager_ids)
+            .order_by('first_name', 'last_name', 'email')
+        )
+
     context = {
         'contestations': qs[:100],
         'status_filter': status_filter,
@@ -724,8 +760,46 @@ def manage_contestations(request):
         'pending_sector_cards': pending_sector_cards_data,
         'info_only_no_submission_cards': info_only_no_submission_cards,
         'selected_sector': selected_sector,
+        'can_assign_global_managers': can_assign_global_managers,
+        'global_manager_users': global_manager_users,
+        'available_manager_users': available_manager_users,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
+
+
+@login_required
+def manage_global_contestation_managers(request):
+    """Gerencia usuários liberados para gerenciar contestação globalmente."""
+    if request.method != 'POST':
+        return redirect('contestacao:manage_contestations')
+
+    rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
+    if rank < HIERARCHY_RANK['SUPERADMIN']:
+        messages.error(request, 'Sem permissão para liberar gestores globais da contestação.')
+        return redirect('contestacao:manage_contestations')
+
+    action = request.POST.get('action_type', '').strip()
+    user_id = request.POST.get('user_id', '').strip()
+    if not user_id:
+        messages.warning(request, 'Selecione um usuário.')
+        return redirect('contestacao:manage_contestations')
+
+    try:
+        target_user = User.objects.get(pk=int(user_id), is_active=True)
+    except (TypeError, ValueError, User.DoesNotExist):
+        messages.error(request, 'Usuário inválido.')
+        return redirect('contestacao:manage_contestations')
+
+    config = SystemConfig.get_config()
+
+    if action == 'remove':
+        config.contestacao_global_managers.remove(target_user)
+        messages.success(request, f'{target_user.full_name} removido da gestão global de contestação.')
+    else:
+        config.contestacao_global_managers.add(target_user)
+        messages.success(request, f'{target_user.full_name} liberado para gerenciar tudo em contestação.')
+
+    return redirect('contestacao:manage_contestations')
 
 
 @login_required
@@ -1061,9 +1135,10 @@ def dashboard(request):
 
     qs = Contestation.objects.select_related('exclusion')
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
+    can_view_all_scope = _can_view_all_contestation_scope(request.user)
 
     # Filtro por setor (mesma lógica do exclusion_list)
-    if rank < HIERARCHY_RANK['SUPERADMIN']:
+    if not can_view_all_scope:
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)
@@ -1079,7 +1154,7 @@ def dashboard(request):
 
     # Total na base (ExclusionRecord) com mesmo filtro de setor
     base_qs = ExclusionRecord.objects.all()
-    if rank < HIERARCHY_RANK['SUPERADMIN']:
+    if not can_view_all_scope:
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
             user_sectors.append(request.user.sector.name)

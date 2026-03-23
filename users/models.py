@@ -45,6 +45,13 @@ class SystemConfig(models.Model):
         help_text="URL de compartilhamento do OneDrive para base de exclusão",
         default="https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
     )
+    contestacao_global_managers = models.ManyToManyField(
+        'User',
+        blank=True,
+        related_name='contestacao_global_access_configs',
+        verbose_name='Gestores Globais de Contestação',
+        help_text='Usuários liberados para gerenciar tudo em /contestacao'
+    )
     
     # Metadados
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
