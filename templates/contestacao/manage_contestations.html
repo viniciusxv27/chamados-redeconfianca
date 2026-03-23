@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load contestacao_extras %}
 
 {% block title %}Gerenciar Contestações{% endblock %}
 
@@ -242,7 +243,12 @@
                         </div>
                         <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> &middot; {{ c.exclusion.filial }} &middot; {{ c.exclusion.pilar }} &middot; <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
                         {% if c.exclusion.numero_venda %}<p class="text-xs text-gray-500">Nº da Venda: <span class="font-mono">{{ c.exclusion.numero_venda }}</span></p>{% endif %}
-                        {% if c.exclusion.cpf_cnpj %}<p class="text-xs text-gray-500">CPF: {{ c.exclusion.cpf_cnpj }}{% if c.exclusion.numero_acesso %} &middot; Nº: {{ c.exclusion.numero_acesso }}{% endif %}</p>{% endif %}
+                        {% if c.exclusion.cpf_cnpj or c.exclusion.numero_acesso %}
+                        <p class="text-xs text-gray-500">
+                            {% if c.exclusion.cpf_cnpj %}CPF: {{ c.exclusion.cpf_cnpj|digits_only }}{% endif %}
+                            {% if c.exclusion.numero_acesso %}{% if c.exclusion.cpf_cnpj %} &middot; {% endif %}Nº: {{ c.exclusion.numero_acesso|digits_only }}{% endif %}
+                        </p>
+                        {% endif %}
                         {% if c.exclusion.plano_produto %}<p class="text-xs text-gray-400">{{ c.exclusion.plano_produto }}</p>{% endif %}
                         {% if c.exclusion.observacao %}<p class="text-xs text-orange-500"><i class="fas fa-info-circle mr-1"></i>Motivo: {{ c.exclusion.observacao|truncatewords:15 }}</p>{% endif %}
                     </div>
@@ -389,6 +395,43 @@ document.addEventListener('DOMContentLoaded', function () {
 {% endif %}
 
 <script>
+function showManageToast(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: #2563eb; color: white; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999; font-size: 0.85rem;';
+    toast.innerHTML = `<i class="fas fa-paperclip mr-1"></i>${message}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2200);
+}
+
+function attachPastedFileToReviewInput(noteInput, fileInput) {
+    noteInput.addEventListener('paste', function (event) {
+        const clipboardItems = event.clipboardData && event.clipboardData.items
+            ? Array.from(event.clipboardData.items)
+            : [];
+
+        if (!clipboardItems.length) {
+            return;
+        }
+
+        const fileItem = clipboardItems.find((item) => item.kind === 'file');
+        if (!fileItem) {
+            return;
+        }
+
+        const pastedFile = fileItem.getAsFile();
+        if (!pastedFile) {
+            return;
+        }
+
+        const dt = new DataTransfer();
+        dt.items.add(pastedFile);
+        fileInput.files = dt.files;
+
+        const labelName = pastedFile.name || 'arquivo-colado';
+        showManageToast(`Anexo colado: ${labelName}`);
+    });
+}
+
 function startSectorDeadlineCounters() {
     const counters = Array.from(document.querySelectorAll('.sector-deadline-countdown'));
     if (!counters.length) return;
@@ -431,6 +474,17 @@ function startSectorDeadlineCounters() {
 }
 
 document.addEventListener('DOMContentLoaded', startSectorDeadlineCounters);
+document.addEventListener('DOMContentLoaded', function () {
+    const noteInputs = Array.from(document.querySelectorAll('input[id^="notes-"]'));
+    noteInputs.forEach((noteInput) => {
+        const contestationId = noteInput.id.replace('notes-', '');
+        const fileInput = document.getElementById(`review-file-${contestationId}`);
+        if (!fileInput) {
+            return;
+        }
+        attachPastedFileToReviewInput(noteInput, fileInput);
+    });
+});
 
 function injectNoteAndFile(form, notesId, fileId) {
     const notesEl = document.getElementById(notesId);
