@@ -227,12 +227,12 @@
             <table class="w-full table-fixed divide-y divide-gray-200 text-[11px]">
                 <thead style="background-color: var(--light-gray); border-bottom: 2px solid var(--primary)">
                     <tr>
-                        <th class="w-[18%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Vendedor / Cliente</th>
+                        <th class="w-[16%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Vendedor / Cliente</th>
                         <th class="w-[20%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Venda / Loja / Pilar</th>
-                        <th class="w-[24%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Documento / Acesso / IMEI</th>
-                        <th class="w-[20%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Receita / Plano</th>
-                        <th class="w-[10%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Motivo</th>
-                        <th class="w-[8%] px-3 py-3 text-center text-[10px] font-semibold text-gray-700 uppercase">Ação</th>
+                        <th class="w-[23%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Documento / Acesso / IMEI</th>
+                        <th class="w-[19%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Receita / Plano</th>
+                        <th class="w-[8%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Motivo</th>
+                        <th class="w-[14%] px-3 py-3 text-center text-[10px] font-semibold text-gray-700 uppercase">Ação</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-400">
@@ -308,11 +308,11 @@
                                 <i class="fas fa-lock mr-1"></i>Setor bloqueado
                             </span>
                             {% else %}
-                            <div class="inline-flex items-center gap-1.5">
-                                <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35 !important; color: white !important; padding: 0.625rem 1rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.75rem !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: inline-flex !important; align-items: center !important;" id="btn-{{ r.pk }}">
+                            <div class="flex flex-col gap-1.5 w-full items-stretch">
+                                <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35 !important; color: white !important; padding: 0.45rem 0.5rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.72rem !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; white-space: nowrap !important;" id="btn-{{ r.pk }}">
                                     <i class="fas fa-check mr-1"></i> Sim
                                 </button>
-                                <button type="button" onclick="markNotContestable({{ r.pk }})" style="background-color: #d1d5db !important; color: #1f2937 !important; padding: 0.625rem 1rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.75rem !important; font-weight: 600 !important; cursor: pointer !important; display: inline-flex !important; align-items: center !important;" aria-label="Não">
+                                <button type="button" onclick="markNotContestable({{ r.pk }})" style="background-color: #d1d5db !important; color: #1f2937 !important; padding: 0.45rem 0.5rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.72rem !important; font-weight: 600 !important; cursor: pointer !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; white-space: nowrap !important;" aria-label="Não">
                                     <i class="fas fa-times mr-1"></i> Não
                                 </button>
                             </div>
