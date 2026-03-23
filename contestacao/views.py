@@ -1,5 +1,6 @@
 import io
 import csv
+import unicodedata
 import pandas as pd
 import requests
 from django.shortcuts import render, redirect, get_object_or_404
@@ -104,6 +105,27 @@ def _match_sector_to_filial(user_sectors, filial):
         ):
             return True
     return False
+
+
+def _normalize_person_name(value):
+    if not value:
+        return ''
+    normalized = unicodedata.normalize('NFKD', str(value))
+    ascii_only = ''.join(ch for ch in normalized if not unicodedata.combining(ch))
+    return ' '.join(ascii_only.upper().strip().split())
+
+
+def _build_user_name_candidates(user):
+    candidates = []
+    full_name = getattr(user, 'full_name', '')
+    if full_name:
+        candidates.append(full_name)
+    composed = f'{user.first_name} {user.last_name}'.strip()
+    if composed:
+        candidates.append(composed)
+    if getattr(user, 'username', ''):
+        candidates.append(user.username)
+    return {_normalize_person_name(name) for name in candidates if _normalize_person_name(name)}
 
 
 def _has_open_contestation_for_sector(filial):
@@ -331,12 +353,14 @@ def sync_exclusions(request):
     vendedor_col = _find_column(df, 'VENDEDOR')
     receita_col = _find_column(df, 'RECEITA')
     pilar_col = _find_column(df, 'PILAR')
+    gerente_col = _find_column(df, 'GERENTE')
     coord_col = _find_column(df, 'COORDENACAO') or _find_column(df, 'COORDENAÇÃO') or _find_column(df, 'COORDENADOR')
     nvenda_col = _find_column(df, 'Nº DA VENDA') or _find_column(df, 'N DA VENDA') or _find_column(df, 'NUMERO_VENDA')
     data_col = _find_column(df, 'DATA')
     cliente_col = _find_column(df, 'NOME CLIENTE') or _find_column(df, 'CLIENTE')
     cpf_col = _find_column(df, 'CPF/CNPJ') or _find_column(df, 'CPF')
     plano_col = _find_column(df, 'PLANO/PRODUTO') or _find_column(df, 'PLANO') or _find_column(df, 'PRODUTO')
+    imei_col = _find_column(df, 'IMEI')
     acesso_col = _find_column(df, 'NUMERO ACESSO') or _find_column(df, 'NUMERO_ACESSO')
     obs_col = _find_column(df, 'OBSERVAÇÃO') or _find_column(df, 'OBSERVACAO') or _find_column(df, 'OBS')
 
@@ -366,12 +390,14 @@ def sync_exclusions(request):
             vendedor=vendedor_val,
             receita=receita_val,
             pilar=str(row.get(pilar_col, '')).strip(),
+            gerente=str(row.get(gerente_col, '')).strip() if gerente_col else '',
             coordenacao=str(row.get(coord_col, '')).strip() if coord_col else '',
             numero_venda=str(row.get(nvenda_col, '')).strip() if nvenda_col else '',
             data_venda=str(row.get(data_col, '')).strip() if data_col else '',
             nome_cliente=str(row.get(cliente_col, '')).strip() if cliente_col else '',
             cpf_cnpj=str(row.get(cpf_col, '')).strip() if cpf_col else '',
             plano_produto=str(row.get(plano_col, '')).strip() if plano_col else '',
+            imei=str(row.get(imei_col, '')).strip() if imei_col else '',
             numero_acesso=str(row.get(acesso_col, '')).strip() if acesso_col else '',
             observacao=str(row.get(obs_col, '')).strip() if obs_col else '',
         ))
@@ -399,19 +425,31 @@ def exclusion_list(request):
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
     can_view_all_scope = _can_view_all_contestation_scope(request.user)
     if not can_view_all_scope:
-        user_sectors = list(request.user.sectors.values_list('name', flat=True))
-        if request.user.sector:
-            user_sectors.append(request.user.sector.name)
-        
-        if user_sectors:
-            # Filtrar registros cuja filial bate com algum setor do usuário
-            matching_ids = []
-            for record in qs:
-                if _match_sector_to_filial(user_sectors, record.filial):
-                    matching_ids.append(record.id)
-            qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
+        if request.user.hierarchy == 'PADRAO':
+            user_name_candidates = _build_user_name_candidates(request.user)
+            if user_name_candidates:
+                matching_ids = []
+                for record in qs:
+                    gerente_name = _normalize_person_name(record.gerente)
+                    if gerente_name and gerente_name in user_name_candidates:
+                        matching_ids.append(record.id)
+                qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
+            else:
+                qs = qs.none()
         else:
-            qs = qs.none()
+            user_sectors = list(request.user.sectors.values_list('name', flat=True))
+            if request.user.sector:
+                user_sectors.append(request.user.sector.name)
+
+            if user_sectors:
+                # Filtrar registros cuja filial bate com algum setor do usuário
+                matching_ids = []
+                for record in qs:
+                    if _match_sector_to_filial(user_sectors, record.filial):
+                        matching_ids.append(record.id)
+                qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
+            else:
+                qs = qs.none()
 
     # Filtros da query string
     search = request.GET.get('q', '').strip()

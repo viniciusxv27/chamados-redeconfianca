@@ -234,6 +234,7 @@
                         <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Pilar</th>
                         <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">CPF</th>
                         <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Numero</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">IMEI</th>
                         <th class="px-4 py-3 text-right text-[10px] font-semibold text-gray-700 uppercase">Receita</th>
                         <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Plano/Produto</th>
                         <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Motivo</th>
@@ -269,6 +270,7 @@
                             </div>
                         </td>
                         <td class="px-4 py-2 text-[11px] text-gray-600">{{ r.numero_acesso|default:'-' }}</td>
+                        <td class="px-4 py-2 text-[11px] text-gray-600 font-mono">{{ r.imei|default:'-' }}</td>
                         <td class="px-4 py-2 text-[11px] text-right font-mono text-gray-900 record-receita">R$ {{ r.receita|floatformat:2 }}</td>
                         <td class="px-4 py-2 text-[11px] text-gray-500 max-w-[180px] truncate record-produto" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
                         <td class="px-4 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:8 }}</td>
@@ -324,7 +326,7 @@
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info and r.filial|upper not in locked_sectors and not contestation_blocked %}
                     <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
-                        <td colspan="11" class="px-4 py-4">
+                        <td colspan="12" class="px-4 py-4">
                             <div class="reason-content bg-white rounded-lg p-5 shadow-sm" style="background-color: #ffffff !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
                                 <div style="display: grid; grid-template-columns: 1.8fr 1fr; gap: 1.5rem;">
                                     <div>
@@ -384,6 +386,7 @@
                 </span>
                 {% endif %}
                 {% if r.numero_acesso %}<span class="text-xs text-gray-600">Nº: {{ r.numero_acesso }}</span>{% endif %}
+                {% if r.imei %}<span class="text-xs text-gray-600">IMEI: {{ r.imei }}</span>{% endif %}
             </div>
             {% if r.plano_produto %}<p class="text-xs text-gray-500 truncate mb-1">Plano/Produto: {{ r.plano_produto }}</p>{% endif %}
             {% if r.observacao %}<p class="text-xs truncate mb-3 font-medium" style="color: var(--primary)" title="{{ r.observacao }}"><i class="fas fa-info-circle mr-1"></i>{{ r.observacao|truncatewords:10 }}</p>{% endif %}
