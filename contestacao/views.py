@@ -578,11 +578,9 @@ def create_contestation(request, exclusion_id):
     exclusion = get_object_or_404(ExclusionRecord, pk=exclusion_id)
 
     # Verificar se já existe contestação em andamento
-    existing = Contestation.objects.filter(
-        exclusion=exclusion, status__in=['pending', 'accepted', 'confirmed']
-    ).first()
+    existing = Contestation.objects.filter(exclusion=exclusion).filter(_open_contestation_filter()).first()
     if existing:
-        messages.warning(request, 'Já existe uma contestação pendente para este registro.')
+        messages.warning(request, 'Já existe uma contestação em andamento para este registro.')
         return redirect('contestacao:exclusion_list')
 
     if _has_open_contestation_for_sector(exclusion.filial):
@@ -656,10 +654,9 @@ def bulk_create_contestation(request):
 
     # Filter out already contested
     already_contested = set(
-        Contestation.objects.filter(
-            exclusion_id__in=exclusion_ids,
-            status__in=['pending', 'accepted', 'confirmed'],
-        ).values_list('exclusion_id', flat=True)
+        Contestation.objects.filter(exclusion_id__in=exclusion_ids)
+        .filter(_open_contestation_filter())
+        .values_list('exclusion_id', flat=True)
     )
 
     open_sectors = set(
