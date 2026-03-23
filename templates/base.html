@@ -2449,8 +2449,13 @@
 
                 // Fluxo especial: avaliação pendente antes de abrir novo ticket
                 if (data.pending_rating_required && data.pending_chat && data.pending_chat.id) {
+                    const clonedFormData = new FormData();
+                    for (const [key, value] of formData.entries()) {
+                        clonedFormData.append(key, value);
+                    }
+
                     window.pendingSupportChatPayload = {
-                        formData: new FormData(formData),
+                        formData: clonedFormData,
                         formElement: formElement,
                         pendingChat: data.pending_chat
                     };
