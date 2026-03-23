@@ -284,26 +284,6 @@ def create_support_chat(request):
             'error': 'Olá, seja bem vindo ao CANAL DE SUPORTE A LOJAS. Nosso horário de atendimento por aqui é de Segunda a Sexta das 9hs às 18hs, sábado das 9hs às 13hs.'
         })
 
-    # Bloquear abertura de novo ticket enquanto existir ticket fechado sem avaliação
-    pending_rating_chat = SupportChat.objects.filter(
-        user=request.user,
-        status='FECHADO'
-    ).filter(
-        rating__isnull=True
-    ).order_by('-closed_at', '-created_at').first()
-
-    if pending_rating_chat:
-        return JsonResponse({
-            'success': False,
-            'error': 'Você precisa avaliar o último atendimento antes de abrir um novo ticket de suporte.',
-            'pending_rating_required': True,
-            'pending_chat': {
-                'id': pending_rating_chat.id,
-                'title': pending_rating_chat.title,
-                'protocol': getattr(pending_rating_chat, 'protocol', None)
-            }
-        })
-    
     title = request.POST.get('title', '').strip()
     message = request.POST.get('message', '').strip()
     sector_id = request.POST.get('sector_id')
