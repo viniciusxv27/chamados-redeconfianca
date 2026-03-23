@@ -23,6 +23,8 @@ HIERARCHY_RANK = {
     'SUPERADMIN': 4,
 }
 
+QUALITY_ISLAND_SECTOR_ID = 8
+
 DEFAULT_EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
 SYNC_VALIDITY_DAYS = 3
 SECTOR_PENDING_DEADLINE_DAYS = 1
@@ -50,6 +52,19 @@ def _has_global_contestation_access(user):
 def _can_view_all_contestation_scope(user):
     rank = HIERARCHY_RANK.get(user.hierarchy, 0)
     return rank >= HIERARCHY_RANK['SUPERADMIN'] or _has_global_contestation_access(user)
+
+
+def _can_assign_global_contestation_managers(user):
+    rank = HIERARCHY_RANK.get(user.hierarchy, 0)
+    if rank >= HIERARCHY_RANK['SUPERADMIN']:
+        return True
+    if not user or not user.is_authenticated:
+        return False
+
+    # Liberação adicional para o setor Ilha de Qualidade (ID 8).
+    if user.sector_id == QUALITY_ISLAND_SECTOR_ID:
+        return True
+    return user.sectors.filter(pk=QUALITY_ISLAND_SECTOR_ID).exists()
 
 
 def _can_create_contestations(user):
@@ -734,7 +749,7 @@ def manage_contestations(request):
     }
     info_only_no_submission_cards = sorted(all_filiais_set - filiais_com_contestacao_set)
 
-    can_assign_global_managers = rank >= HIERARCHY_RANK['SUPERADMIN']
+    can_assign_global_managers = _can_assign_global_contestation_managers(request.user)
     global_manager_users = []
     available_manager_users = []
     if can_assign_global_managers:
@@ -773,8 +788,7 @@ def manage_global_contestation_managers(request):
     if request.method != 'POST':
         return redirect('contestacao:manage_contestations')
 
-    rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
-    if rank < HIERARCHY_RANK['SUPERADMIN']:
+    if not _can_assign_global_contestation_managers(request.user):
         messages.error(request, 'Sem permissão para liberar gestores globais da contestação.')
         return redirect('contestacao:manage_contestations')
 
