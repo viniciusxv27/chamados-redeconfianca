@@ -72,6 +72,20 @@ def _can_create_contestations(user):
     return user.can_create_contestations()
 
 
+def _can_access_contestation_module(user):
+    if not user or not user.is_authenticated:
+        return False
+    if _can_create_contestations(user):
+        return True
+    if user.hierarchy in ['ADMINISTRATIVO', 'ADMIN', 'SUPERADMIN']:
+        return True
+    if _has_global_contestation_access(user):
+        return True
+    if user.sector_id == QUALITY_ISLAND_SECTOR_ID:
+        return True
+    return user.sectors.filter(pk=QUALITY_ISLAND_SECTOR_ID).exists()
+
+
 def _open_contestation_filter():
     return Q(status__in=['pending', 'accepted']) | Q(status='confirmed', payment_status='pending_payment')
 
@@ -415,7 +429,7 @@ def sync_exclusions(request):
 @login_required
 def exclusion_list(request):
     """Lista os registros de exclusão — filtrados por filial/setor do usuário."""
-    if not _can_create_contestations(request.user):
+    if not _can_access_contestation_module(request.user):
         messages.error(request, 'Sem permissão para acessar contestações.')
         return redirect('home')
 

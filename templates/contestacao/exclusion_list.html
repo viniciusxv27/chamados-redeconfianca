@@ -223,33 +223,29 @@
     {% if records %}
     <!-- Tabela desktop -->
     <div class="hidden sm:block bg-white rounded-lg overflow-hidden shadow-sm" style="border: 1px solid #d0d0d0 !important;">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-[11px]">
+        <div>
+            <table class="w-full table-fixed divide-y divide-gray-200 text-[11px]">
                 <thead style="background-color: var(--light-gray); border-bottom: 2px solid var(--primary)">
                     <tr>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Vendedor</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Nome Cliente</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Nº Venda</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Filial</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Pilar</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">CPF</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Numero</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">IMEI</th>
-                        <th class="px-4 py-3 text-right text-[10px] font-semibold text-gray-700 uppercase">Receita</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Plano/Produto</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Motivo</th>
-                        <th class="px-4 py-3 text-center text-[10px] font-semibold text-gray-700 uppercase">Ação</th>
+                        <th class="w-[18%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Vendedor / Cliente</th>
+                        <th class="w-[20%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Venda / Loja / Pilar</th>
+                        <th class="w-[24%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Documento / Acesso / IMEI</th>
+                        <th class="w-[20%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Receita / Plano</th>
+                        <th class="w-[10%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Motivo</th>
+                        <th class="w-[8%] px-3 py-3 text-center text-[10px] font-semibold text-gray-700 uppercase">Ação</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-400">
                     {% for r in records %}
                     {% cycle 'line-white' 'line-light-gray' as zebra_class silent %}
                     <tr class="data-row {{ zebra_class }} transition-colors" id="row-{{ r.pk }}">
-                        <td class="px-4 py-2 text-[11px] text-gray-900 font-medium record-vendedor">{{ r.vendedor }}</td>
-                        <td class="px-4 py-2 text-[11px] text-gray-700 max-w-[180px] truncate">{{ r.nome_cliente|default:'-' }}</td>
-                        <td class="px-4 py-2 text-[11px] text-gray-700 font-mono">{{ r.numero_venda|default:'-' }}</td>
-                        <td class="px-4 py-2 text-[11px] text-gray-600 record-filial">{{ r.filial }}</td>
-                        <td class="px-4 py-2">
+                        <td class="px-3 py-2 align-top">
+                            <p class="text-[11px] text-gray-900 font-medium record-vendedor truncate" title="{{ r.vendedor }}">{{ r.vendedor }}</p>
+                            <p class="text-[11px] text-gray-600 truncate" title="{{ r.nome_cliente|default:'-' }}">{{ r.nome_cliente|default:'-' }}</p>
+                        </td>
+                        <td class="px-3 py-2 align-top">
+                            <p class="text-[11px] text-gray-700 font-mono">{{ r.numero_venda|default:'-' }}</p>
+                            <p class="text-[11px] text-gray-600 record-filial truncate" title="{{ r.filial }}">{{ r.filial }}</p>
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
                                 {% if r.pilar == 'MOVEL' %}bg-blue-100 text-blue-700
                                 {% elif r.pilar == 'FIXA' %}bg-green-100 text-green-700
@@ -259,7 +255,7 @@
                                 {% else %}bg-gray-100 text-gray-700{% endif %}"
                                 {% if r.pilar == 'ELETRONICOS' %}style="background-color: var(--primary)"{% endif %}>{{ r.pilar }}</span>
                         </td>
-                        <td class="px-4 py-2 text-[11px] text-gray-600">
+                        <td class="px-3 py-2 align-top text-[11px] text-gray-600">
                             <div class="inline-flex items-center gap-1">
                                 <span>{{ r.cpf_cnpj|default:'-' }}</span>
                                 {% if r.cpf_cnpj %}
@@ -268,13 +264,15 @@
                                 </button>
                                 {% endif %}
                             </div>
+                            <p class="mt-0.5 text-[11px] text-gray-600 truncate" title="{{ r.numero_acesso|default:'-' }}">Nº: {{ r.numero_acesso|default:'-' }}</p>
+                            <p class="text-[11px] text-gray-600 font-mono truncate" title="{{ r.imei|default:'-' }}">IMEI: {{ r.imei|default:'-' }}</p>
                         </td>
-                        <td class="px-4 py-2 text-[11px] text-gray-600">{{ r.numero_acesso|default:'-' }}</td>
-                        <td class="px-4 py-2 text-[11px] text-gray-600 font-mono">{{ r.imei|default:'-' }}</td>
-                        <td class="px-4 py-2 text-[11px] text-right font-mono text-gray-900 record-receita">R$ {{ r.receita|floatformat:2 }}</td>
-                        <td class="px-4 py-2 text-[11px] text-gray-500 max-w-[180px] truncate record-produto" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</td>
-                        <td class="px-4 py-2 text-[11px] text-gray-500 max-w-[180px] truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:8 }}</td>
-                        <td class="px-4 py-3 text-center">
+                        <td class="px-3 py-2 align-top">
+                            <p class="text-[11px] text-gray-900 font-mono record-receita">R$ {{ r.receita|floatformat:2 }}</p>
+                            <p class="text-[11px] text-gray-500 truncate record-produto" title="{{ r.plano_produto }}">{{ r.plano_produto|default:'-' }}</p>
+                        </td>
+                        <td class="px-3 py-2 align-top text-[11px] text-gray-500 truncate" title="{{ r.observacao }}">{{ r.observacao|default:'-'|truncatewords:4 }}</td>
+                        <td class="px-3 py-2 text-center align-middle">
                             {% with info=contestations_map|get_item:r.pk %}
                             {% if info %}
                                 {% if info.status == 'pending' %}
