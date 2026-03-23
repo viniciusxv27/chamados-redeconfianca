@@ -98,6 +98,26 @@ def _apply_sector_visibility_filter(contestation_qs, user):
     return contestation_qs.filter(id__in=matching_ids) if matching_ids else contestation_qs.none()
 
 
+def _apply_exclusion_visibility_filter(exclusion_qs, user):
+    """Aplica visibilidade por setor para registros de exclusão."""
+    rank = HIERARCHY_RANK.get(user.hierarchy, 0)
+    if rank >= HIERARCHY_RANK['SUPERADMIN']:
+        return exclusion_qs
+
+    user_sectors = list(user.sectors.values_list('name', flat=True))
+    if user.sector:
+        user_sectors.append(user.sector.name)
+
+    if not user_sectors:
+        return exclusion_qs.none()
+
+    matching_ids = []
+    for record in exclusion_qs:
+        if _match_sector_to_filial(user_sectors, record.filial):
+            matching_ids.append(record.id)
+    return exclusion_qs.filter(id__in=matching_ids) if matching_ids else exclusion_qs.none()
+
+
 def _approval_mode_label(mode):
     if mode == 'approved_and_contested':
         return 'Aprovar e Contestar'
@@ -679,6 +699,20 @@ def manage_contestations(request):
         status__in=['accepted', 'rejected'], confirmed_by__isnull=True
     ).count()
 
+    exclusions_qs = _apply_exclusion_visibility_filter(ExclusionRecord.objects.all(), request.user)
+    if filial_filter:
+        exclusions_qs = exclusions_qs.filter(filial__iexact=filial_filter)
+
+    all_filiais_set = {
+        str(f).strip() for f in exclusions_qs.values_list('filial', flat=True)
+        if str(f).strip()
+    }
+    filiais_com_contestacao_set = {
+        str(f).strip() for f in base_qs.values_list('exclusion__filial', flat=True)
+        if str(f).strip()
+    }
+    info_only_no_submission_cards = sorted(all_filiais_set - filiais_com_contestacao_set)
+
     context = {
         'contestations': qs[:100],
         'status_filter': status_filter,
@@ -688,6 +722,7 @@ def manage_contestations(request):
         'confirmed_count': confirmed_count,
         'awaiting_manager_count': awaiting_manager_count,
         'pending_sector_cards': pending_sector_cards_data,
+        'info_only_no_submission_cards': info_only_no_submission_cards,
         'selected_sector': selected_sector,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
