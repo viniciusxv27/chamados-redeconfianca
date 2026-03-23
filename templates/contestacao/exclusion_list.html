@@ -245,6 +245,7 @@
                         </td>
                         <td class="px-3 py-2 align-top">
                             <p class="text-[11px] text-gray-700 font-mono">{{ r.numero_venda|default:'-' }}</p>
+                            {% if r.data_venda %}<p class="text-[11px] text-gray-600">Data: {{ r.data_venda }}</p>{% endif %}
                             <p class="text-[11px] text-gray-600 record-filial truncate" title="{{ r.filial }}">{{ r.filial }}</p>
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
                                 {% if r.pilar == 'MOVEL' %}bg-blue-100 text-blue-700
@@ -374,6 +375,7 @@
                 <span class="text-xs text-gray-600">{{ r.filial }}</span>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{ r.pilar }}</span>
                 {% if r.numero_venda %}<span class="text-xs text-gray-600">Venda: {{ r.numero_venda }}</span>{% endif %}
+                {% if r.data_venda %}<span class="text-xs text-gray-600">Data: {{ r.data_venda }}</span>{% endif %}
                 {% if r.nome_cliente %}<span class="text-xs text-gray-600">Cliente: {{ r.nome_cliente }}</span>{% endif %}
                 {% if r.cpf_cnpj %}
                 <span class="text-xs text-gray-600 inline-flex items-center gap-1">

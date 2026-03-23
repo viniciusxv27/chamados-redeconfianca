@@ -1,6 +1,7 @@
 import io
 import csv
 import unicodedata
+import datetime
 import pandas as pd
 import requests
 from django.shortcuts import render, redirect, get_object_or_404
@@ -140,6 +141,37 @@ def _build_user_name_candidates(user):
     if getattr(user, 'username', ''):
         candidates.append(user.username)
     return {_normalize_person_name(name) for name in candidates if _normalize_person_name(name)}
+
+
+def _format_sale_date_value(raw_value):
+    """Normaliza DATA da planilha para exibição consistente na aplicação."""
+    if raw_value is None:
+        return ''
+
+    if isinstance(raw_value, float) and pd.isna(raw_value):
+        return ''
+
+    if isinstance(raw_value, pd.Timestamp):
+        parsed_dt = raw_value.to_pydatetime()
+    elif isinstance(raw_value, datetime.datetime):
+        parsed_dt = raw_value
+    elif isinstance(raw_value, datetime.date):
+        parsed_dt = datetime.datetime.combine(raw_value, datetime.time.min)
+    else:
+        raw_str = str(raw_value).strip()
+        if not raw_str or raw_str.lower() == 'nan':
+            return ''
+
+        parsed_series = pd.to_datetime([raw_str], errors='coerce', dayfirst=True)
+        parsed = parsed_series[0] if len(parsed_series) else pd.NaT
+        if pd.isna(parsed):
+            return raw_str
+        parsed_dt = parsed.to_pydatetime()
+
+    has_time = parsed_dt.time() != datetime.time.min
+    if has_time:
+        return parsed_dt.strftime('%d/%m/%Y %H:%M')
+    return parsed_dt.strftime('%d/%m/%Y')
 
 
 def _has_open_contestation_for_sector(filial):
@@ -407,7 +439,7 @@ def sync_exclusions(request):
             gerente=str(row.get(gerente_col, '')).strip() if gerente_col else '',
             coordenacao=str(row.get(coord_col, '')).strip() if coord_col else '',
             numero_venda=str(row.get(nvenda_col, '')).strip() if nvenda_col else '',
-            data_venda=str(row.get(data_col, '')).strip() if data_col else '',
+            data_venda=_format_sale_date_value(row.get(data_col, '')) if data_col else '',
             nome_cliente=str(row.get(cliente_col, '')).strip() if cliente_col else '',
             cpf_cnpj=str(row.get(cpf_col, '')).strip() if cpf_col else '',
             plano_produto=str(row.get(plano_col, '')).strip() if plano_col else '',
