@@ -485,6 +485,9 @@
                     <button type="button" id="btnToggleBulkDetails" class="px-3 py-1.5 text-sm text-white hover:text-gray-100 font-semibold rounded-md" style="background-color: #c2410c">
                         <i class="fas fa-chevron-down mr-1"></i> Ver detalhes
                     </button>
+                    <button type="button" id="btnRepairCart" onclick="repairCartNow()" class="px-3 py-1.5 text-sm text-white hover:text-white font-medium rounded-md" style="background-color: #7c2d12">
+                        <i class="fas fa-wrench mr-1"></i> Reparar carrinho
+                    </button>
                     <button type="button" onclick="clearAllReasons()" class="px-3 py-1.5 text-sm text-white hover:text-white font-medium rounded-md" style="background-color: #ea580c">
                         <i class="fas fa-trash-alt mr-1"></i> Limpar
                     </button>
@@ -1118,6 +1121,52 @@ window.renderBar = function() {
 window.toggleBulkDetails = function() {
     window.bulkDetailsExpanded = !window.bulkDetailsExpanded;
     window.renderBar();
+};
+
+window.repairCartNow = async function() {
+    const ids = Object.keys(window.pendingReasons || {});
+    if (!ids.length) {
+        window.showToast('Carrinho vazio. Nada para reparar.', 'info');
+        return;
+    }
+
+    const btn = document.getElementById('btnRepairCart');
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Reparando...';
+    }
+
+    let repairedSummary = false;
+    let repairedFiles = false;
+
+    try {
+        repairedSummary = await window.fetchMissingSummaries(ids);
+    } catch (_) {
+        repairedSummary = false;
+    }
+
+    try {
+        const beforeCount = ids.filter((id) => !!window.pendingFiles[id]).length;
+        await window.ensurePendingFilesBeforeSubmit(ids);
+        const afterCount = ids.filter((id) => !!window.pendingFiles[id]).length;
+        repairedFiles = afterCount > beforeCount;
+    } catch (_) {
+        repairedFiles = false;
+    }
+
+    window.renderBar();
+
+    if (repairedSummary || repairedFiles) {
+        window.showToast('Carrinho reparado com sucesso.', 'success');
+    } else {
+        window.showToast('Nenhum ajuste necessário no carrinho.', 'info');
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
 };
 
 window.submitAllContestations = async function() {
