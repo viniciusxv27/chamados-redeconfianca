@@ -974,6 +974,28 @@ window.clearAllReasons = function() {
     window.renderBar();
 };
 
+window.bindBulkAttachmentInputs = function(container) {
+    if (!container) return;
+    container.querySelectorAll('.bulk-file-input').forEach((input) => {
+        input.addEventListener('change', async function() {
+            const id = this.dataset.id;
+            if (!id || !this.files || this.files.length === 0) return;
+
+            const file = this.files[0];
+            window.pendingFiles[id] = file;
+            window.applyDraftFileToInputs(id, file);
+            try {
+                await window.saveDraftFile(id, file);
+                await window.persistPendingDraft();
+            } catch (_) {
+                // Mantém fluxo funcionando mesmo sem storage persistente.
+            }
+            window.showToast('Anexo adicionado no carrinho: ' + file.name, 'success');
+            window.renderBar();
+        });
+    });
+};
+
 window.renderBar = function() {
     const ids = Object.keys(window.pendingReasons);
     const bar = document.getElementById('bulkBar');
@@ -989,7 +1011,10 @@ window.renderBar = function() {
             const summary = window.getRecordSummary(id);
             const reason = (window.pendingReasons[id] || '').trim();
             const shortReason = reason.length > 120 ? reason.slice(0, 120) + '...' : reason;
-            const fileName = window.pendingFiles[id] ? window.pendingFiles[id].name : 'Sem arquivo';
+            const hasFile = !!window.pendingFiles[id];
+            const fileName = hasFile ? window.pendingFiles[id].name : 'Sem arquivo';
+            const attachLabel = hasFile ? 'Trocar anexo' : 'Adicionar anexo';
+            const fileStatusClass = hasFile ? 'text-gray-600' : 'text-red-600 font-semibold';
 
             const item = document.createElement('div');
             item.className = 'bulk-detail-item text-xs';
@@ -997,10 +1022,17 @@ window.renderBar = function() {
                 <div class="font-semibold text-sm text-gray-900">${summary.vendedor} <span class="text-gray-600">(${summary.filial})</span></div>
                 <div class="mt-1 text-gray-700">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
                 <div class="mt-1 text-gray-700">Motivo: ${shortReason || '-'}</div>
-                <div class="mt-1 text-gray-600">Evidência: ${fileName}</div>
+                <div class="mt-1 ${fileStatusClass}">Evidência: ${fileName}</div>
+                <div class="mt-2">
+                    <label class="inline-flex items-center px-2 py-1 rounded border border-orange-300 bg-orange-50 text-orange-700 cursor-pointer hover:bg-orange-100">
+                        <i class="fas fa-paperclip mr-1"></i>${attachLabel}
+                        <input type="file" class="bulk-file-input" data-id="${id}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
+                    </label>
+                </div>
             `;
             detailsList.appendChild(item);
         });
+        window.bindBulkAttachmentInputs(detailsList);
     }
 
     if (count === 0) {
