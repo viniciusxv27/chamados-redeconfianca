@@ -515,6 +515,7 @@ window.contestationBlocked = {% if contestation_blocked %}true{% else %}false{% 
 window.hiddenRecordsStorageKey = 'contestacao_hidden_records_{{ request.user.id }}';
 window.hiddenRecords = {};
 window.reasonDrafts = {};
+window.pendingSummaries = {};
 window.contestationDraftDbName = 'contestacaoDraftsDb';
 window.contestationDraftStore = 'draftFiles';
 window.contestationDraftDbVersion = 1;
@@ -689,6 +690,7 @@ window.persistPendingDraft = async function() {
     const payload = {
         reasons: window.pendingReasons,
         drafts: window.reasonDrafts,
+        summaries: window.pendingSummaries,
     };
 
     localStorage.setItem(window.contestationStorageKey, JSON.stringify(payload));
@@ -713,6 +715,7 @@ window.restorePendingDraft = async function() {
             const parsed = JSON.parse(raw);
             window.pendingReasons = parsed.reasons || {};
             window.reasonDrafts = parsed.drafts || {};
+            window.pendingSummaries = parsed.summaries || {};
         } catch (_) {
             localStorage.removeItem(window.contestationStorageKey);
         }
@@ -752,6 +755,47 @@ window.restorePendingDraft = async function() {
         });
     } catch (_) {
         // Mantém funcionamento mesmo sem suporte a IndexedDB.
+    }
+};
+
+window.fetchMissingSummaries = async function(ids) {
+    const filteredIds = ids.filter((id) => {
+        const s = window.pendingSummaries[id];
+        return !s || !s.vendedor || s.vendedor === '-' || !s.valor || s.valor === '-';
+    });
+    if (!filteredIds.length) return false;
+
+    try {
+        const resp = await fetch('{% url "contestacao:contestation_cart_items_summary" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+            body: JSON.stringify({ ids: filteredIds }),
+        });
+        const data = await resp.json();
+        if (!data || !data.success || !data.items) {
+            return false;
+        }
+
+        let updated = false;
+        Object.entries(data.items).forEach(([id, summary]) => {
+            window.pendingSummaries[id] = {
+                vendedor: summary.vendedor || '-',
+                filial: summary.filial || '-',
+                valor: summary.valor || '-',
+                produto: summary.produto || '-',
+            };
+            updated = true;
+        });
+        if (updated) {
+            await window.persistPendingDraft();
+        }
+        return updated;
+    } catch (_) {
+        // Mantém funcionamento mesmo com falha de rede.
+        return false;
     }
 };
 
@@ -829,6 +873,9 @@ window.getRecordSummary = function(id) {
         };
     }
 
+    if (window.pendingSummaries[id]) {
+        return window.pendingSummaries[id];
+    }
     return { vendedor: '-', filial: '-', valor: '-', produto: '-' };
 };
 
@@ -884,6 +931,13 @@ window.confirmReason = async function(id) {
     window.pendingReasons[id] = reason;
     delete window.reasonDrafts[id];
     window.pendingFiles[id] = file;
+    const summary = window.getRecordSummary(id);
+    window.pendingSummaries[id] = {
+        vendedor: summary.vendedor || '-',
+        filial: summary.filial || '-',
+        valor: summary.valor || '-',
+        produto: summary.produto || '-',
+    };
     window.closeReasonBox(id);
 
     window.setButtonAdded(id);
@@ -920,6 +974,7 @@ window.cancelReason = function(id) {
     if (window.pendingReasons[id]) {
         delete window.pendingReasons[id];
         delete window.pendingFiles[id];
+        delete window.pendingSummaries[id];
         window.resetButton(id);
         window.removeDraftFile(id).catch(() => {});
         window.persistPendingDraft().catch(() => {});
@@ -963,6 +1018,7 @@ window.clearAllReasons = function() {
     Object.keys(window.pendingReasons).forEach(id => {
         delete window.pendingReasons[id];
         delete window.pendingFiles[id];
+        delete window.pendingSummaries[id];
         window.resetButton(id);
         // Clear textareas and file inputs
         document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
@@ -998,6 +1054,12 @@ window.bindBulkAttachmentInputs = function(container) {
 
 window.renderBar = function() {
     const ids = Object.keys(window.pendingReasons);
+    window.fetchMissingSummaries(ids).then((updated) => {
+        // Re-render rápido para preencher itens antigos que estavam com '-'.
+        if (updated && Object.keys(window.pendingReasons).length > 0) {
+            window.renderBar();
+        }
+    });
     const bar = document.getElementById('bulkBar');
     const details = document.getElementById('bulkDetails');
     const detailsList = document.getElementById('bulkDetailsList');
@@ -1154,6 +1216,12 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleBtn.addEventListener('click', window.toggleBulkDetails);
     }
     window.restorePendingDraft().then(() => {
+        window.fetchMissingSummaries(Object.keys(window.pendingReasons || {})).then((updated) => {
+            if (!updated) {
+                return;
+            }
+            window.renderBar();
+        });
         window.renderBar();
     });
 

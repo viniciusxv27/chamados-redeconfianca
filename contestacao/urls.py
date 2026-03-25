@@ -10,6 +10,7 @@ urlpatterns = [
     path('historico/', views.contestation_history, name='contestation_history'),
     path('contestar/<int:exclusion_id>/', views.create_contestation, name='create_contestation'),
     path('contestar-lote/', views.bulk_create_contestation, name='bulk_create_contestation'),
+    path('carrinho/resumo-itens/', views.contestation_cart_items_summary, name='contestation_cart_items_summary'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
     path('gerenciar/atualizar-valor/<int:pk>/', views.update_contested_sale_value, name='update_contested_sale_value'),

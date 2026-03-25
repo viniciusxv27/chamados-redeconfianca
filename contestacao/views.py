@@ -1,5 +1,6 @@
 import io
 import csv
+import json
 import unicodedata
 import datetime
 from decimal import Decimal, InvalidOperation
@@ -206,6 +207,38 @@ def _apply_exclusion_visibility_filter(exclusion_qs, user):
     rank = HIERARCHY_RANK.get(user.hierarchy, 0)
     if rank >= HIERARCHY_RANK['SUPERADMIN'] or _has_global_contestation_access(user):
         return exclusion_qs
+
+    user_sectors = list(user.sectors.values_list('name', flat=True))
+    if user.sector:
+        user_sectors.append(user.sector.name)
+
+    if not user_sectors:
+        return exclusion_qs.none()
+
+    matching_ids = []
+    for record in exclusion_qs:
+        if _match_sector_to_filial(user_sectors, record.filial):
+            matching_ids.append(record.id)
+    return exclusion_qs.filter(id__in=matching_ids) if matching_ids else exclusion_qs.none()
+
+
+def _apply_exclusion_scope_for_user(exclusion_qs, user):
+    """Aplica o mesmo escopo de visibilidade usado na exclusion_list."""
+    can_view_all_scope = _can_view_all_contestation_scope(user)
+    if can_view_all_scope:
+        return exclusion_qs
+
+    if user.hierarchy == 'PADRAO':
+        user_name_candidates = _build_user_name_candidates(user)
+        if not user_name_candidates:
+            return exclusion_qs.none()
+
+        matching_ids = []
+        for record in exclusion_qs:
+            gerente_name = _normalize_person_name(record.gerente)
+            if gerente_name and gerente_name in user_name_candidates:
+                matching_ids.append(record.id)
+        return exclusion_qs.filter(id__in=matching_ids) if matching_ids else exclusion_qs.none()
 
     user_sectors = list(user.sectors.values_list('name', flat=True))
     if user.sector:
@@ -471,32 +504,7 @@ def exclusion_list(request):
     # Superadmin vê tudo; outros filtram por setor
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
     can_view_all_scope = _can_view_all_contestation_scope(request.user)
-    if not can_view_all_scope:
-        if request.user.hierarchy == 'PADRAO':
-            user_name_candidates = _build_user_name_candidates(request.user)
-            if user_name_candidates:
-                matching_ids = []
-                for record in qs:
-                    gerente_name = _normalize_person_name(record.gerente)
-                    if gerente_name and gerente_name in user_name_candidates:
-                        matching_ids.append(record.id)
-                qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
-            else:
-                qs = qs.none()
-        else:
-            user_sectors = list(request.user.sectors.values_list('name', flat=True))
-            if request.user.sector:
-                user_sectors.append(request.user.sector.name)
-
-            if user_sectors:
-                # Filtrar registros cuja filial bate com algum setor do usuário
-                matching_ids = []
-                for record in qs:
-                    if _match_sector_to_filial(user_sectors, record.filial):
-                        matching_ids.append(record.id)
-                qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
-            else:
-                qs = qs.none()
+    qs = _apply_exclusion_scope_for_user(qs, request.user)
 
     # Filtros da query string
     search = request.GET.get('q', '').strip()
@@ -558,6 +566,44 @@ def exclusion_list(request):
         'sync_remaining_label': sync_state['remaining_label'],
     }
     return render(request, 'contestacao/exclusion_list.html', context)
+
+
+@login_required
+def contestation_cart_items_summary(request):
+    """Retorna dados resumidos para recuperar itens do carrinho por IDs."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método não permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão.'}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    raw_ids = payload.get('ids') or []
+    valid_ids = []
+    for raw in raw_ids:
+        try:
+            valid_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    if not valid_ids:
+        return JsonResponse({'success': True, 'items': {}})
+
+    scoped_qs = _apply_exclusion_scope_for_user(ExclusionRecord.objects.filter(pk__in=valid_ids), request.user)
+    items = {}
+    for r in scoped_qs:
+        items[str(r.pk)] = {
+            'vendedor': r.vendedor or '-',
+            'filial': r.filial or '-',
+            'valor': f'R$ {r.receita:.2f}',
+            'produto': r.plano_produto or '-',
+        }
+
+    return JsonResponse({'success': True, 'items': items})
 
 
 @login_required
