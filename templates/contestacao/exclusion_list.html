@@ -514,6 +514,84 @@ window.contestationStorageKey = 'contestacao_pending_request_{{ request.user.id 
 window.contestationBlocked = {% if contestation_blocked %}true{% else %}false{% endif %};
 window.hiddenRecordsStorageKey = 'contestacao_hidden_records_{{ request.user.id }}';
 window.hiddenRecords = {};
+window.reasonDrafts = {};
+window.contestationDraftDbName = 'contestacaoDraftsDb';
+window.contestationDraftStore = 'draftFiles';
+window.contestationDraftDbVersion = 1;
+
+window.openDraftDb = function() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            reject(new Error('IndexedDB indisponivel'));
+            return;
+        }
+        const req = indexedDB.open(window.contestationDraftDbName, window.contestationDraftDbVersion);
+        req.onupgradeneeded = function(event) {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(window.contestationDraftStore)) {
+                db.createObjectStore(window.contestationDraftStore, { keyPath: 'id' });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('Falha ao abrir IndexedDB'));
+    });
+};
+
+window.saveDraftFile = async function(id, file) {
+    if (!file || !window.indexedDB) return;
+    const db = await window.openDraftDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(window.contestationDraftStore, 'readwrite');
+        const store = tx.objectStore(window.contestationDraftStore);
+        store.put({
+            id: String(id),
+            file: file,
+            name: file.name,
+            type: file.type,
+            updatedAt: Date.now(),
+        });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('Falha ao salvar anexo em rascunho'));
+    });
+    db.close();
+};
+
+window.removeDraftFile = async function(id) {
+    if (!window.indexedDB) return;
+    const db = await window.openDraftDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(window.contestationDraftStore, 'readwrite');
+        tx.objectStore(window.contestationDraftStore).delete(String(id));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('Falha ao remover anexo em rascunho'));
+    });
+    db.close();
+};
+
+window.getAllDraftFiles = async function() {
+    if (!window.indexedDB) return [];
+    const db = await window.openDraftDb();
+    const records = await new Promise((resolve, reject) => {
+        const tx = db.transaction(window.contestationDraftStore, 'readonly');
+        const req = tx.objectStore(window.contestationDraftStore).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error || new Error('Falha ao ler anexos salvos'));
+    });
+    db.close();
+    return records;
+};
+
+window.clearAllDraftFiles = async function() {
+    if (!window.indexedDB) return;
+    const db = await window.openDraftDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(window.contestationDraftStore, 'readwrite');
+        tx.objectStore(window.contestationDraftStore).clear();
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('Falha ao limpar anexos salvos'));
+    });
+    db.close();
+};
 
 window.showToast = function(message, type = 'success') {
     const colors = {
@@ -594,40 +672,70 @@ window.startSyncCountdown = function() {
 };
 
 window.persistPendingDraft = async function() {
-    // Salva apenas motivos para evitar limites de armazenamento do navegador com anexos grandes.
+    // Salva rascunho de motivos e itens confirmados no navegador.
     const payload = {
         reasons: window.pendingReasons,
+        drafts: window.reasonDrafts,
     };
 
     localStorage.setItem(window.contestationStorageKey, JSON.stringify(payload));
 };
 
+window.applyDraftFileToInputs = function(id, file) {
+    if (!file) return;
+    const inputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"]');
+    if (!inputs.length) return;
+    inputs.forEach((input) => {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+    });
+    window.pendingFiles[id] = file;
+};
+
 window.restorePendingDraft = async function() {
     const raw = localStorage.getItem(window.contestationStorageKey);
-    if (!raw) {
-        return;
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            window.pendingReasons = parsed.reasons || {};
+            window.reasonDrafts = parsed.drafts || {};
+        } catch (_) {
+            localStorage.removeItem(window.contestationStorageKey);
+        }
     }
 
-    try {
-        const parsed = JSON.parse(raw);
-        const reasons = parsed.reasons || {};
+    const textIds = new Set([
+        ...Object.keys(window.pendingReasons || {}),
+        ...Object.keys(window.reasonDrafts || {}),
+    ]);
 
-        for (const id of Object.keys(reasons)) {
-            if (!document.getElementById('row-' + id) && !document.getElementById('card-' + id)) {
-                continue;
-            }
-
-            const reason = (reasons[id] || '').trim();
-            if (!reason) {
-                continue;
-            }
-
-            document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => {
-                ta.value = reason;
-            });
+    textIds.forEach((id) => {
+        if (!document.getElementById('row-' + id) && !document.getElementById('card-' + id)) {
+            return;
         }
+        const reason = (window.pendingReasons[id] || window.reasonDrafts[id] || '').trim();
+        if (!reason) return;
+        document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach((ta) => {
+            ta.value = reason;
+        });
+        if (window.pendingReasons[id]) {
+            window.setButtonAdded(id);
+        }
+    });
+
+    try {
+        const draftFiles = await window.getAllDraftFiles();
+        draftFiles.forEach((record) => {
+            const id = String(record.id || '');
+            if (!id || !record.file) return;
+            if (!document.getElementById('row-' + id) && !document.getElementById('card-' + id)) {
+                return;
+            }
+            window.applyDraftFileToInputs(id, record.file);
+        });
     } catch (_) {
-        localStorage.removeItem(window.contestationStorageKey);
+        // Mantém funcionamento mesmo sem suporte a IndexedDB.
     }
 };
 
@@ -733,12 +841,16 @@ window.confirmReason = async function(id) {
     let file = null;
     const fileInputs = document.querySelectorAll('.evidence-input[data-id="' + id + '"]');
     fileInputs.forEach(fi => { if (fi.files && fi.files.length > 0) file = fi.files[0]; });
+    if (!file && window.pendingFiles[id]) {
+        file = window.pendingFiles[id];
+    }
     if (!file) {
         alert('Anexe a evidência (obrigatório).');
         return;
     }
 
     window.pendingReasons[id] = reason;
+    delete window.reasonDrafts[id];
     window.pendingFiles[id] = file;
     window.closeReasonBox(id);
 
@@ -746,6 +858,7 @@ window.confirmReason = async function(id) {
 
     window.showToast('Anexo enviado e contestação adicionada ao pedido.', 'success');
     try {
+        await window.saveDraftFile(id, file);
         await window.persistPendingDraft();
     } catch (_) {
         // Sem bloqueio de uso caso o navegador negue armazenamento local.
@@ -776,6 +889,7 @@ window.cancelReason = function(id) {
         delete window.pendingReasons[id];
         delete window.pendingFiles[id];
         window.resetButton(id);
+        window.removeDraftFile(id).catch(() => {});
         window.persistPendingDraft().catch(() => {});
         window.renderBar();
     }
@@ -821,7 +935,9 @@ window.clearAllReasons = function() {
         // Clear textareas and file inputs
         document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
         document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach(fi => fi.value = '');
+        window.removeDraftFile(id).catch(() => {});
     });
+    window.reasonDrafts = {};
     window.persistPendingDraft().catch(() => {});
     window.renderBar();
 };
@@ -919,6 +1035,7 @@ window.submitAllContestations = function() {
     .then(data => {
         if (data.success) {
             localStorage.removeItem(window.contestationStorageKey);
+            window.clearAllDraftFiles().catch(() => {});
             window.location.href = '{% url "contestacao:my_contestations" %}';
         } else {
             alert(data.error || 'Erro ao enviar contestações.');
@@ -938,9 +1055,23 @@ document.addEventListener('DOMContentLoaded', function() {
     window.loadHiddenRecords();
     window.applyHiddenRecords();
 
+    document.querySelectorAll('.reason-input').forEach((input) => {
+        input.addEventListener('input', function() {
+            const id = this.dataset.id;
+            if (!id) return;
+            window.reasonDrafts[id] = this.value || '';
+            window.persistPendingDraft().catch(() => {});
+        });
+    });
+
     document.querySelectorAll('.evidence-input').forEach((input) => {
         input.addEventListener('change', function() {
+            const id = this.dataset.id;
             if (this.files && this.files.length > 0) {
+                if (id) {
+                    window.pendingFiles[id] = this.files[0];
+                    window.saveDraftFile(id, this.files[0]).catch(() => {});
+                }
                 window.showToast('Anexo selecionado: ' + this.files[0].name, 'success');
             }
         });
@@ -952,6 +1083,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     window.restorePendingDraft().then(() => {
         window.renderBar();
+    });
+
+    window.addEventListener('beforeunload', function (event) {
+        const hasPending = Object.keys(window.pendingReasons || {}).length > 0;
+        const hasDraftText = Object.values(window.reasonDrafts || {}).some((v) => (v || '').trim().length > 0);
+        if (hasPending || hasDraftText) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
     });
 });
 </script>

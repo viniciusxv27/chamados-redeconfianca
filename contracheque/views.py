@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db.models import Q
 
 from io import BytesIO
+from django.core.files.base import ContentFile
 
 from .models import Payslip, IncomeReport
 from .pdf_parser import extract_payslip_data, extract_all_payslips, normalize_name, extract_single_page_pdf, extract_all_income_reports
@@ -76,9 +77,17 @@ def payslip_pdf(request, pk):
     from django.http import HttpResponse
 
     # Verificar se há arquivo vinculado
-    if not payslip.pdf_file:
+    if not payslip.pdf_file or not payslip.pdf_file.name:
         messages.error(request, 'PDF não disponível para este contracheque.')
         return redirect('contracheque:payslip_detail', pk=payslip.pk)
+
+    # Evita redirecionar para URL quebrada quando objeto não existe no storage.
+    try:
+        if not payslip.pdf_file.storage.exists(payslip.pdf_file.name):
+            messages.error(request, 'Arquivo PDF não encontrado no armazenamento. Reimporte o contracheque.')
+            return redirect('contracheque:payslip_detail', pk=payslip.pk)
+    except Exception:
+        pass
 
     # Tentar ler o conteúdo do PDF (funciona tanto com S3 quanto filesystem local)
     pdf_content = None
@@ -211,19 +220,37 @@ def api_import_payslip(request):
             'error': f'Já existe contracheque para {target_user.full_name} em {dict(Payslip.MONTH_CHOICES)[month]}/{year}. Delete o existente antes de reimportar.'
         }, status=409)
 
+    pdf_bytes = pdf_file.read()
+    pdf_file.seek(0)
+
     # Extrair dados do PDF
-    pdf_data = extract_payslip_data(pdf_file)
+    pdf_data = extract_payslip_data(BytesIO(pdf_bytes))
     if 'error' in pdf_data:
         # Cria mesmo assim, mas sem dados extraídos
         pdf_data_clean = {}
     else:
         pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in ('error',)}
 
+    # Corte automático: sempre salva página individual quando houver múltiplas páginas.
+    page_number = 0
+    pdf_content_to_save = pdf_bytes
+    try:
+        single_page_bytes = extract_single_page_pdf(pdf_bytes, page_number)
+        if single_page_bytes:
+            pdf_content_to_save = single_page_bytes
+    except Exception:
+        # fallback para PDF original
+        pdf_content_to_save = pdf_bytes
+
+    individual_pdf_name = f"contracheque_{target_user.pk}_{year}_{month:02d}.pdf"
+    content_file = ContentFile(pdf_content_to_save, name=individual_pdf_name)
+
     payslip = Payslip(
         user=target_user,
         month=month,
         year=year,
-        pdf_file=pdf_file,
+        pdf_file=content_file,
+        pdf_page_number=page_number,
         uploaded_by=request.user,
         **pdf_data_clean,
     )
@@ -382,7 +409,6 @@ def api_bulk_import(request):
             pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in ('error',)}
 
             # Extrair página individual do PDF para este funcionário
-            from django.core.files.base import ContentFile
             individual_pdf_name = f"contracheque_{target_user.pk}_{year}_{month:02d}.pdf"
 
             if len(all_payslips) == 1:

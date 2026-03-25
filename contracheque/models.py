@@ -1,4 +1,5 @@
 import os
+import uuid
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -6,8 +7,9 @@ from django.utils import timezone
 
 def upload_payslip_pdf(instance, filename):
     ext = filename.rsplit('.', 1)[-1].lower()
-    new_name = f"contracheque_{instance.user_id}_{instance.year}_{instance.month:02d}.{ext}"
-    return os.path.join('contracheques', str(instance.year), new_name)
+    unique_token = uuid.uuid4().hex[:10]
+    new_name = f"contracheque_{instance.user_id}_{instance.year}_{instance.month:02d}_{unique_token}.{ext}"
+    return os.path.join('contracheques', str(instance.year), f"{instance.month:02d}", str(instance.user_id), new_name)
 
 
 class Payslip(models.Model):
