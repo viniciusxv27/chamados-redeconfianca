@@ -13,6 +13,7 @@ from django.core.cache import cache
 from django.http import JsonResponse, HttpResponse
 from django.db import models
 from django.db.models import Count, Min, Q, Sum
+from django.core.paginator import Paginator
 from django.utils import timezone
 
 from .models import ExclusionRecord, Contestation, ContestationHistory
@@ -541,8 +542,13 @@ def exclusion_list(request):
     total_receita = qs.aggregate(total=Sum('receita'))['total'] or 0
     sync_state = _get_sync_window_state()
 
+    paginator = Paginator(qs, 50)
+    page_number = request.GET.get('page')
+    records_page = paginator.get_page(page_number)
+
     context = {
-        'records': qs[:200],
+        'records': records_page,
+        'page_obj': records_page,
         'pilares': pilares,
         'filiais': filiais,
         'search': search,
@@ -593,7 +599,9 @@ def contestation_cart_items_summary(request):
     if not valid_ids:
         return JsonResponse({'success': True, 'items': {}})
 
-    scoped_qs = _apply_exclusion_scope_for_user(ExclusionRecord.objects.filter(pk__in=valid_ids), request.user)
+    # Recuperação por ID para reparar carrinhos antigos/inconsistentes,
+    # independente de filtros atuais da listagem.
+    scoped_qs = ExclusionRecord.objects.filter(pk__in=valid_ids)
     items = {}
     for r in scoped_qs:
         items[str(r.pk)] = {
@@ -603,7 +611,10 @@ def contestation_cart_items_summary(request):
             'produto': r.plano_produto or '-',
         }
 
-    return JsonResponse({'success': True, 'items': items})
+    found_ids = {int(k) for k in items.keys()}
+    missing_ids = [rid for rid in valid_ids if rid not in found_ids]
+
+    return JsonResponse({'success': True, 'items': items, 'missing_ids': missing_ids})
 
 
 @login_required

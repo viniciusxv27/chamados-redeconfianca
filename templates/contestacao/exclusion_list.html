@@ -459,6 +459,40 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <nav aria-label="Navegação de páginas" class="mt-6">
+        <div class="flex items-center justify-center gap-1 flex-wrap">
+            {% if page_obj.has_previous %}
+                <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value|urlencode }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}"
+                   class="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+                    Anterior
+                </a>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <span class="px-3 py-1.5 text-sm rounded-md bg-orange-600 text-white font-semibold">{{ num }}</span>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value|urlencode }}&{% endif %}{% endfor %}page={{ num }}"
+                       class="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+                        {{ num }}
+                    </a>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+                <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value|urlencode }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}"
+                   class="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+                    Próxima
+                </a>
+            {% endif %}
+        </div>
+        <p class="text-center text-xs text-gray-500 mt-2">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </p>
+    </nav>
+    {% endif %}
     {% else %}
     <div class="text-center py-16 text-gray-400">
         <i class="fas fa-database text-5xl mb-4"></i>
@@ -1157,8 +1191,17 @@ window.repairCartNow = async function() {
 
     window.renderBar();
 
+    const unresolvedIds = ids.filter((id) => {
+        const summary = window.pendingSummaries[id] || {};
+        const vendedor = (summary.vendedor || '').trim();
+        const valor = (summary.valor || '').trim();
+        return !vendedor || vendedor === '-' || !valor || valor === '-';
+    });
+
     if (repairedSummary || repairedFiles) {
         window.showToast('Carrinho reparado com sucesso.', 'success');
+    } else if (unresolvedIds.length > 0) {
+        window.showToast('Ainda há itens sem dados. Tente reparar novamente em alguns segundos.', 'warning');
     } else {
         window.showToast('Nenhum ajuste necessário no carrinho.', 'info');
     }
