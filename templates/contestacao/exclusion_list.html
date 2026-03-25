@@ -581,6 +581,19 @@ window.getAllDraftFiles = async function() {
     return records;
 };
 
+window.getDraftFileById = async function(id) {
+    if (!window.indexedDB) return null;
+    const db = await window.openDraftDb();
+    const record = await new Promise((resolve, reject) => {
+        const tx = db.transaction(window.contestationDraftStore, 'readonly');
+        const req = tx.objectStore(window.contestationDraftStore).get(String(id));
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error || new Error('Falha ao ler anexo salvo'));
+    });
+    db.close();
+    return record;
+};
+
 window.clearAllDraftFiles = async function() {
     if (!window.indexedDB) return;
     const db = await window.openDraftDb();
@@ -729,13 +742,32 @@ window.restorePendingDraft = async function() {
         draftFiles.forEach((record) => {
             const id = String(record.id || '');
             if (!id || !record.file) return;
-            if (!document.getElementById('row-' + id) && !document.getElementById('card-' + id)) {
-                return;
+
+            // Mantém no pedido mesmo que o item não esteja visível no filtro atual.
+            window.pendingFiles[id] = record.file;
+
+            if (document.getElementById('row-' + id) || document.getElementById('card-' + id)) {
+                window.applyDraftFileToInputs(id, record.file);
             }
-            window.applyDraftFileToInputs(id, record.file);
         });
     } catch (_) {
         // Mantém funcionamento mesmo sem suporte a IndexedDB.
+    }
+};
+
+window.ensurePendingFilesBeforeSubmit = async function(ids) {
+    for (const id of ids) {
+        if (window.pendingFiles[id]) {
+            continue;
+        }
+        try {
+            const record = await window.getDraftFileById(id);
+            if (record && record.file) {
+                window.pendingFiles[id] = record.file;
+            }
+        } catch (_) {
+            // Ignora e deixa validação final tratar ausência de arquivo.
+        }
     }
 };
 
@@ -994,7 +1026,7 @@ window.toggleBulkDetails = function() {
     window.renderBar();
 };
 
-window.submitAllContestations = function() {
+window.submitAllContestations = async function() {
     if (window.contestationBlocked) {
         alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novos envios.');
         return;
@@ -1002,6 +1034,14 @@ window.submitAllContestations = function() {
 
     const ids = Object.keys(window.pendingReasons);
     if (ids.length === 0) return;
+
+    await window.ensurePendingFilesBeforeSubmit(ids);
+
+    const missingFiles = ids.filter((id) => !window.pendingFiles[id]);
+    if (missingFiles.length > 0) {
+        alert('Alguns itens do pedido estão sem anexo disponível no navegador. Reabra esses itens e anexe novamente antes de enviar.');
+        return;
+    }
 
     const btn = document.getElementById('btnSubmitAll');
     
