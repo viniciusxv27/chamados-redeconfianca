@@ -560,6 +560,8 @@ window.contestationDraftDbVersion = 1;
 window.csrfToken = '{{ csrf_token }}';
 window.serverDraftSyncInFlight = {};
 window.reasonSyncTimers = {};
+window.serverDraftUnavailable = false;
+window.serverDraftWarned = false;
 
 window.openDraftDb = function() {
     return new Promise((resolve, reject) => {
@@ -738,6 +740,10 @@ window.persistPendingDraft = async function() {
 };
 
 window.saveDraftItemOnServer = async function(id, reason, file) {
+    if (window.serverDraftUnavailable) {
+        return;
+    }
+
     const formData = new FormData();
     formData.append('exclusion_id', id);
     formData.append('reason', reason || '');
@@ -754,6 +760,14 @@ window.saveDraftItemOnServer = async function(id, reason, file) {
     });
 
     const data = await resp.json();
+    if (resp.status === 404) {
+        window.serverDraftUnavailable = true;
+        if (!window.serverDraftWarned) {
+            window.serverDraftWarned = true;
+            window.showToast('Rascunho no servidor indisponivel no momento. Seus dados seguem salvos localmente.', 'warning');
+        }
+        throw new Error('Endpoint de rascunho indisponivel (404).');
+    }
     if (!resp.ok || !data.success) {
         throw new Error((data && data.error) || 'Falha ao salvar rascunho no servidor.');
     }
@@ -773,28 +787,46 @@ window.saveDraftItemOnServer = async function(id, reason, file) {
 };
 
 window.removeDraftItemOnServer = async function(id) {
+    if (window.serverDraftUnavailable) {
+        return;
+    }
+
     const formData = new FormData();
     formData.append('exclusion_id', id);
 
-    await fetch('{% url "contestacao:cart_draft_delete" %}', {
+    const resp = await fetch('{% url "contestacao:cart_draft_delete" %}', {
         method: 'POST',
         headers: {
             'X-CSRFToken': window.csrfToken,
         },
         body: formData,
     });
+    if (resp.status === 404) {
+        window.serverDraftUnavailable = true;
+    }
 };
 
 window.clearServerDraft = async function() {
-    await fetch('{% url "contestacao:cart_draft_clear" %}', {
+    if (window.serverDraftUnavailable) {
+        return;
+    }
+
+    const resp = await fetch('{% url "contestacao:cart_draft_clear" %}', {
         method: 'POST',
         headers: {
             'X-CSRFToken': window.csrfToken,
         },
     });
+    if (resp.status === 404) {
+        window.serverDraftUnavailable = true;
+    }
 };
 
 window.loadServerDraft = async function() {
+    if (window.serverDraftUnavailable) {
+        return;
+    }
+
     try {
         const resp = await fetch('{% url "contestacao:cart_draft_list" %}', {
             method: 'GET',
@@ -802,6 +834,15 @@ window.loadServerDraft = async function() {
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
+        if (resp.status === 404) {
+            window.serverDraftUnavailable = true;
+            if (!window.serverDraftWarned) {
+                window.serverDraftWarned = true;
+                window.showToast('Servidor ainda sem rota de rascunho. Carrinho local preservado.', 'warning');
+            }
+            return;
+        }
+
         const data = await resp.json();
         if (!resp.ok || !data.success || !Array.isArray(data.items)) {
             return;
