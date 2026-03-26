@@ -1106,8 +1106,25 @@ def support_metrics_page(request):
     if not (is_supervisor_or_higher or is_support_agent):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('core:home')
-    
-    return render(request, 'support/metrics_page.html')
+
+    is_superadmin = request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN'
+    sectors = []
+    agents = []
+
+    if is_superadmin:
+        from users.models import Sector
+
+        sectors = Sector.objects.all().order_by('name')
+        agents = SupportAgent.objects.filter(is_active=True).select_related('user').order_by(
+            'user__first_name',
+            'user__last_name'
+        )
+
+    return render(request, 'support/metrics_page.html', {
+        'is_superadmin': is_superadmin,
+        'metrics_sectors': sectors,
+        'metrics_agents': agents,
+    })
 
 
 def export_metrics_report(request):
@@ -2089,6 +2106,8 @@ def support_metrics_api(request):
     try:
         start_date = request.GET.get('start_date')
         end_date = request.GET.get('end_date')
+        sector_id = request.GET.get('sector_id')
+        agent_id = request.GET.get('agent_id')
         
         if not start_date or not end_date:
             return JsonResponse({'success': False, 'error': 'Datas obrigatórias'}, status=400)
@@ -2098,12 +2117,24 @@ def support_metrics_api(request):
         start = datetime.strptime(start_date, '%Y-%m-%d')
         end = datetime.strptime(end_date, '%Y-%m-%d')
         end = end + timedelta(days=1)  # Incluir o dia final completo
-        
-        # Filtrar por setores do usuário
-        if request.user.hierarchy == 'SUPERADMIN':
+
+        # Filtrar por setores do usuário e permitir filtros extras para SUPERADMIN
+        is_superadmin = request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN'
+        from users.models import Sector as SectorModel
+
+        user_sector_ids = set(request.user.sectors.values_list('id', flat=True))
+        if request.user.sector_id:
+            user_sector_ids.add(request.user.sector_id)
+
+        user_sectors = SectorModel.objects.filter(id__in=user_sector_ids)
+
+        if is_superadmin:
             base_filter = Q()
+            if sector_id and sector_id != 'all':
+                base_filter &= Q(sector_id=sector_id)
+            if agent_id and agent_id != 'all':
+                base_filter &= Q(assigned_to_id=agent_id)
         else:
-            user_sectors = request.user.sectors.all()
             base_filter = Q(sector__in=user_sectors)
         
         # Tickets no período
@@ -2196,10 +2227,10 @@ def support_metrics_api(request):
         
         # Métricas por agente
         agents_stats = []
-        agents = SupportAgent.objects.filter(is_active=True)
-        
-        if request.user.hierarchy != 'SUPERADMIN':
-            agents = agents.filter(user__sectors__in=user_sectors).distinct()
+        agents = SupportAgent.objects.filter(
+            is_active=True,
+            user_id__in=tickets.values_list('assigned_to_id', flat=True)
+        ).select_related('user').distinct()
         
         for agent in agents:
             agent_tickets = tickets.filter(assigned_to=agent.user)
@@ -2220,10 +2251,9 @@ def support_metrics_api(request):
         
         # Métricas por categoria
         categories_stats = []
-        categories = SupportCategory.objects.all()
-        
-        if request.user.hierarchy != 'SUPERADMIN':
-            categories = categories.filter(sector__in=user_sectors)
+        categories = SupportCategory.objects.filter(
+            id__in=tickets.exclude(category__isnull=True).values_list('category_id', flat=True)
+        ).select_related('sector').distinct()
         
         for category in categories:
             cat_tickets = tickets.filter(category=category)
@@ -2245,7 +2275,7 @@ def support_metrics_api(request):
         # Métricas por setor (abertura por setor)
         from users.models import Sector as SectorModel
         sectors_stats = []
-        if request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN':
+        if is_superadmin:
             all_sectors = SectorModel.objects.all()
         else:
             all_sectors = user_sectors
