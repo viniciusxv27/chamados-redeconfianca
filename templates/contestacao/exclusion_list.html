@@ -1455,6 +1455,47 @@ window.bindBulkAttachmentInputs = function(container) {
     });
 };
 
+window.bindBulkReasonInputs = function(container) {
+    if (!container) return;
+    container.querySelectorAll('.bulk-reason-input').forEach((input) => {
+        input.addEventListener('input', function() {
+            const id = this.dataset.id;
+            if (!id) return;
+            const newReason = (this.value || '').trim();
+            if (!newReason) {
+                return;
+            }
+
+            window.pendingReasons[id] = newReason;
+            delete window.reasonDrafts[id];
+            window.persistPendingDraft().catch(() => {});
+            window.setButtonAdded(id);
+        });
+
+        input.addEventListener('blur', async function() {
+            const id = this.dataset.id;
+            if (!id) return;
+            const newReason = (this.value || '').trim();
+            if (!newReason) {
+                this.value = window.pendingReasons[id] || '';
+                return;
+            }
+
+            window.pendingReasons[id] = newReason;
+            delete window.reasonDrafts[id];
+
+            try {
+                await window.saveDraftItemOnServer(id, newReason, null);
+            } catch (_) {
+                // Mantem alteracao local mesmo se o servidor estiver indisponivel.
+            }
+
+            await window.persistPendingDraft();
+            window.renderBar();
+        });
+    });
+};
+
 window.renderBar = function() {
     const ids = Object.keys(window.pendingReasons);
     window.fetchMissingSummaries(ids).then((updated) => {
@@ -1491,7 +1532,11 @@ window.renderBar = function() {
                     <div class="min-w-0 flex-1">
                         <div class="font-semibold text-sm text-gray-900">${summary.vendedor} <span class="text-gray-600">(${summary.filial})</span></div>
                         <div class="mt-1 text-gray-700">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
-                        <div class="mt-1 text-gray-700">Motivo: ${shortReason || '-'}</div>
+                        <div class="mt-1 text-gray-700">Motivo atual: ${shortReason || '-'}</div>
+                        <div class="mt-2">
+                            <label class="block text-[11px] font-semibold text-gray-600 mb-1">Editar motivo</label>
+                            <textarea class="bulk-reason-input w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-orange-500 focus:border-orange-500" data-id="${id}" rows="2" placeholder="Digite o motivo da contestacao">${reason}</textarea>
+                        </div>
                         <div class="mt-1 ${fileStatusClass}">Evidência: ${fileName}</div>
                         <div class="mt-2">
                             <label class="inline-flex items-center px-2 py-1 rounded border border-orange-300 bg-orange-50 text-orange-700 cursor-pointer hover:bg-orange-100">
@@ -1508,6 +1553,7 @@ window.renderBar = function() {
             detailsList.appendChild(item);
         });
         window.bindBulkAttachmentInputs(detailsList);
+        window.bindBulkReasonInputs(detailsList);
     }
 
     if (count === 0) {
