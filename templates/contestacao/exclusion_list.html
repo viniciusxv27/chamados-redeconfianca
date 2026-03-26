@@ -1281,16 +1281,30 @@ window.setButtonAdded = function(id) {
 window.cancelReason = function(id) {
     window.closeReasonBox(id);
     if (window.pendingReasons[id]) {
-        delete window.pendingReasons[id];
-        delete window.pendingFiles[id];
-        delete window.pendingSummaries[id];
-        window.resetButton(id);
-        window.removeDraftFile(id).catch(() => {});
-        delete window.pendingServerAttachments[id];
-        window.removeDraftItemOnServer(id).catch(() => {});
-        window.persistPendingDraft().catch(() => {});
-        window.renderBar();
+        window.removeItemFromCart(id);
     }
+};
+
+window.removeItemFromCart = function(id) {
+    delete window.pendingReasons[id];
+    delete window.pendingFiles[id];
+    delete window.pendingSummaries[id];
+    delete window.reasonDrafts[id];
+    delete window.pendingServerAttachments[id];
+
+    window.resetButton(id);
+
+    document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach((ta) => {
+        ta.value = '';
+    });
+    document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach((fi) => {
+        fi.value = '';
+    });
+
+    window.removeDraftFile(id).catch(() => {});
+    window.removeDraftItemOnServer(id).catch(() => {});
+    window.persistPendingDraft().catch(() => {});
+    window.renderBar();
 };
 
 window.markNotContestable = function(id) {
@@ -1404,15 +1418,22 @@ window.renderBar = function() {
             const item = document.createElement('div');
             item.className = 'bulk-detail-item text-xs';
             item.innerHTML = `
-                <div class="font-semibold text-sm text-gray-900">${summary.vendedor} <span class="text-gray-600">(${summary.filial})</span></div>
-                <div class="mt-1 text-gray-700">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
-                <div class="mt-1 text-gray-700">Motivo: ${shortReason || '-'}</div>
-                <div class="mt-1 ${fileStatusClass}">Evidência: ${fileName}</div>
-                <div class="mt-2">
-                    <label class="inline-flex items-center px-2 py-1 rounded border border-orange-300 bg-orange-50 text-orange-700 cursor-pointer hover:bg-orange-100">
-                        <i class="fas fa-paperclip mr-1"></i>${attachLabel}
-                        <input type="file" class="bulk-file-input" data-id="${id}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
-                    </label>
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                        <div class="font-semibold text-sm text-gray-900">${summary.vendedor} <span class="text-gray-600">(${summary.filial})</span></div>
+                        <div class="mt-1 text-gray-700">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
+                        <div class="mt-1 text-gray-700">Motivo: ${shortReason || '-'}</div>
+                        <div class="mt-1 ${fileStatusClass}">Evidência: ${fileName}</div>
+                        <div class="mt-2">
+                            <label class="inline-flex items-center px-2 py-1 rounded border border-orange-300 bg-orange-50 text-orange-700 cursor-pointer hover:bg-orange-100">
+                                <i class="fas fa-paperclip mr-1"></i>${attachLabel}
+                                <input type="file" class="bulk-file-input" data-id="${id}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
+                            </label>
+                        </div>
+                    </div>
+                    <button type="button" class="ml-2 inline-flex items-center px-2 py-1 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 whitespace-nowrap" onclick="window.removeItemFromCart('${id}')" title="Excluir item do carrinho">
+                        <i class="fas fa-trash-alt mr-1"></i> Excluir
+                    </button>
                 </div>
             `;
             detailsList.appendChild(item);
