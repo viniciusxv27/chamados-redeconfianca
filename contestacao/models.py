@@ -192,3 +192,44 @@ class ContestationHistory(models.Model):
 
     def __str__(self):
         return f'{self.get_action_display()} – {self.user} ({self.created_at:%d/%m/%Y %H:%M})'
+
+
+class ContestationCartDraft(models.Model):
+    """Rascunho persistente do carrinho de contestacao por usuario e registro."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='contestation_cart_drafts',
+        verbose_name='Usuario',
+    )
+    exclusion = models.ForeignKey(
+        ExclusionRecord,
+        on_delete=models.CASCADE,
+        related_name='contestation_cart_drafts',
+        verbose_name='Registro de Exclusao',
+    )
+    reason = models.TextField(blank=True, default='', verbose_name='Motivo')
+    attachment = models.FileField(
+        upload_to='contestacoes/rascunhos/%Y/%m/',
+        storage=get_media_storage(),
+        blank=True,
+        null=True,
+        verbose_name='Anexo de Rascunho',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'Rascunho de Carrinho de Contestacao'
+        verbose_name_plural = 'Rascunhos de Carrinho de Contestacao'
+        ordering = ['-updated_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'exclusion'], name='uniq_contestation_cart_draft_user_exclusion'),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'updated_at']),
+        ]
+
+    def __str__(self):
+        return f'Rascunho #{self.pk} - {self.user_id}/{self.exclusion_id}'

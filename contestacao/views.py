@@ -16,7 +16,7 @@ from django.db.models import Count, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
 
-from .models import ExclusionRecord, Contestation, ContestationHistory
+from .models import ExclusionRecord, Contestation, ContestationHistory, ContestationCartDraft
 from users.models import SystemConfig, User
 
 
@@ -281,6 +281,23 @@ def _payment_status_label(status):
         'paid': 'Pago',
     }
     return mapping.get(status, status or '-')
+
+
+def _serialize_cart_draft_item(draft):
+    exclusion = draft.exclusion
+    return {
+        'exclusion_id': exclusion.pk,
+        'reason': draft.reason or '',
+        'has_attachment': bool(draft.attachment),
+        'attachment_name': draft.attachment.name.split('/')[-1] if draft.attachment else '',
+        'summary': {
+            'vendedor': exclusion.vendedor or '-',
+            'filial': exclusion.filial or '-',
+            'valor': f'R$ {exclusion.receita:.2f}',
+            'produto': exclusion.plano_produto or '-',
+        },
+        'updated_at': draft.updated_at.isoformat() if draft.updated_at else None,
+    }
 
 
 
@@ -618,6 +635,105 @@ def contestation_cart_items_summary(request):
 
 
 @login_required
+def cart_draft_list(request):
+    """Lista os itens de carrinho salvos no servidor para o usuario atual."""
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Metodo nao permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
+
+    drafts = ContestationCartDraft.objects.select_related('exclusion').filter(user=request.user).order_by('-updated_at')
+
+    scoped_exclusions = _apply_exclusion_scope_for_user(
+        ExclusionRecord.objects.filter(pk__in=drafts.values_list('exclusion_id', flat=True)),
+        request.user,
+    )
+    allowed_ids = set(scoped_exclusions.values_list('pk', flat=True))
+
+    items = []
+    for draft in drafts:
+        if draft.exclusion_id in allowed_ids:
+            items.append(_serialize_cart_draft_item(draft))
+
+    return JsonResponse({'success': True, 'items': items})
+
+
+@login_required
+def cart_draft_upsert(request):
+    """Cria ou atualiza um item do carrinho no servidor (motivo + anexo)."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Metodo nao permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
+
+    exclusion_id_raw = request.POST.get('exclusion_id')
+    reason = (request.POST.get('reason') or '').strip()
+    attachment = request.FILES.get('attachment')
+
+    try:
+        exclusion_id = int(exclusion_id_raw)
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Registro invalido.'}, status=400)
+
+    scoped_exclusions = _apply_exclusion_scope_for_user(
+        ExclusionRecord.objects.filter(pk=exclusion_id),
+        request.user,
+    )
+    exclusion = scoped_exclusions.first()
+    if not exclusion:
+        return JsonResponse({'success': False, 'error': 'Registro nao encontrado no seu escopo.'}, status=404)
+
+    draft, _ = ContestationCartDraft.objects.get_or_create(
+        user=request.user,
+        exclusion=exclusion,
+        defaults={'reason': reason},
+    )
+
+    # Atualiza somente quando o cliente enviar novos dados.
+    if reason:
+        draft.reason = reason
+    if attachment:
+        draft.attachment = attachment
+    draft.save()
+
+    return JsonResponse({'success': True, 'item': _serialize_cart_draft_item(draft)})
+
+
+@login_required
+def cart_draft_delete(request):
+    """Remove um item especifico do carrinho salvo no servidor."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Metodo nao permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
+
+    exclusion_id_raw = request.POST.get('exclusion_id')
+    try:
+        exclusion_id = int(exclusion_id_raw)
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Registro invalido.'}, status=400)
+
+    deleted, _ = ContestationCartDraft.objects.filter(user=request.user, exclusion_id=exclusion_id).delete()
+    return JsonResponse({'success': True, 'deleted': deleted > 0})
+
+
+@login_required
+def cart_draft_clear(request):
+    """Limpa todos os itens do carrinho salvo no servidor para o usuario atual."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Metodo nao permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
+
+    deleted, _ = ContestationCartDraft.objects.filter(user=request.user).delete()
+    return JsonResponse({'success': True, 'deleted': deleted})
+
+
+@login_required
 def create_contestation(request, exclusion_id):
     """Cria uma nova contestação para um registro de exclusão."""
     if not _can_create_contestations(request.user):
@@ -696,18 +812,38 @@ def bulk_create_contestation(request):
 
     # Parse items from FormData
     items = []
+    requested_ids = set()
     for i in range(count):
         eid = request.POST.get(f'exclusion_id_{i}')
+        use_server_file = (request.POST.get(f'use_server_file_{i}') or '').strip() in ['1', 'true', 'True', 'yes', 'on']
         reason = request.POST.get(f'reason_{i}', '').strip()
         attachment = request.FILES.get(f'file_{i}')
-        if eid and reason and attachment:
-            items.append({'exclusion_id': int(eid), 'reason': reason, 'attachment': attachment})
+        if not eid:
+            continue
+        try:
+            eid_int = int(eid)
+        except (TypeError, ValueError):
+            continue
+
+        requested_ids.add(eid_int)
+        if not reason:
+            continue
+
+        items.append({
+            'exclusion_id': eid_int,
+            'reason': reason,
+            'attachment': attachment,
+            'use_server_file': use_server_file,
+        })
 
     if not items:
         return JsonResponse({'success': False, 'error': 'Nenhum item válido. Motivo e evidência são obrigatórios.'}, status=400)
 
     exclusion_ids = [item['exclusion_id'] for item in items]
     exclusions_by_id = {e.pk: e for e in ExclusionRecord.objects.filter(pk__in=exclusion_ids)}
+    draft_map = {
+        d.exclusion_id: d for d in ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=exclusion_ids)
+    }
 
     # Filter out already contested
     already_contested = set(
@@ -723,11 +859,18 @@ def bulk_create_contestation(request):
     open_sectors = {str(sector).strip().upper() for sector in open_sectors if sector}
 
     created_count = 0
+    created_ids = []
     for item in items:
         eid = item['exclusion_id']
         reason = item['reason']
         attachment = item['attachment']
+        if item.get('use_server_file') and not attachment:
+            draft_item = draft_map.get(eid)
+            if draft_item and draft_item.attachment:
+                attachment = draft_item.attachment
         if eid not in exclusions_by_id or eid in already_contested:
+            continue
+        if not attachment:
             continue
         exclusion = exclusions_by_id[eid]
         if str(exclusion.filial).strip().upper() in open_sectors:
@@ -746,9 +889,15 @@ def bulk_create_contestation(request):
             extra_data={'exclusion_id': exclusion.pk, 'vendedor': exclusion.vendedor, 'bulk': True},
         )
         created_count += 1
+        created_ids.append(eid)
+        already_contested.add(eid)
+        if exclusion.filial:
+            open_sectors.add(str(exclusion.filial).strip().upper())
 
     if created_count == 0:
-        return JsonResponse({'success': False, 'error': 'Nenhuma contestação pôde ser criada (já existem contestações em andamento para os setores selecionados).'})
+        return JsonResponse({'success': False, 'error': 'Nenhuma contestacao pode ser criada. Verifique se os itens possuem motivo e evidencia salvos.'})
+
+    ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=created_ids).delete()
 
     return JsonResponse({'success': True, 'created': created_count})
 

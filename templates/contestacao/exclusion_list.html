@@ -546,6 +546,7 @@
 window.pendingReasons = {};
 // Stores evidence files: { exclusion_id: File }
 window.pendingFiles = {};
+window.pendingServerAttachments = {};
 window.bulkDetailsExpanded = false;
 window.contestationStorageKey = 'contestacao_pending_request_{{ request.user.id }}';
 window.contestationBlocked = {% if contestation_blocked %}true{% else %}false{% endif %};
@@ -556,6 +557,9 @@ window.pendingSummaries = {};
 window.contestationDraftDbName = 'contestacaoDraftsDb';
 window.contestationDraftStore = 'draftFiles';
 window.contestationDraftDbVersion = 1;
+window.csrfToken = '{{ csrf_token }}';
+window.serverDraftSyncInFlight = {};
+window.reasonSyncTimers = {};
 
 window.openDraftDb = function() {
     return new Promise((resolve, reject) => {
@@ -731,6 +735,178 @@ window.persistPendingDraft = async function() {
     };
 
     localStorage.setItem(window.contestationStorageKey, JSON.stringify(payload));
+};
+
+window.saveDraftItemOnServer = async function(id, reason, file) {
+    const formData = new FormData();
+    formData.append('exclusion_id', id);
+    formData.append('reason', reason || '');
+    if (file) {
+        formData.append('attachment', file);
+    }
+
+    const resp = await fetch('{% url "contestacao:cart_draft_upsert" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.csrfToken,
+        },
+        body: formData,
+    });
+
+    const data = await resp.json();
+    if (!resp.ok || !data.success) {
+        throw new Error((data && data.error) || 'Falha ao salvar rascunho no servidor.');
+    }
+
+    const item = data.item || {};
+    if (item.has_attachment) {
+        window.pendingServerAttachments[String(id)] = item.attachment_name || 'Arquivo salvo no servidor';
+    }
+    if (item.summary) {
+        window.pendingSummaries[String(id)] = {
+            vendedor: item.summary.vendedor || '-',
+            filial: item.summary.filial || '-',
+            valor: item.summary.valor || '-',
+            produto: item.summary.produto || '-',
+        };
+    }
+};
+
+window.removeDraftItemOnServer = async function(id) {
+    const formData = new FormData();
+    formData.append('exclusion_id', id);
+
+    await fetch('{% url "contestacao:cart_draft_delete" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.csrfToken,
+        },
+        body: formData,
+    });
+};
+
+window.clearServerDraft = async function() {
+    await fetch('{% url "contestacao:cart_draft_clear" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.csrfToken,
+        },
+    });
+};
+
+window.loadServerDraft = async function() {
+    try {
+        const resp = await fetch('{% url "contestacao:cart_draft_list" %}', {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success || !Array.isArray(data.items)) {
+            return;
+        }
+
+        data.items.forEach((item) => {
+            const id = String(item.exclusion_id || '');
+            if (!id) return;
+
+            const reason = (item.reason || '').trim();
+            if (reason) {
+                window.pendingReasons[id] = reason;
+                delete window.reasonDrafts[id];
+            }
+
+            if (item.summary) {
+                window.pendingSummaries[id] = {
+                    vendedor: item.summary.vendedor || '-',
+                    filial: item.summary.filial || '-',
+                    valor: item.summary.valor || '-',
+                    produto: item.summary.produto || '-',
+                };
+            }
+
+            if (item.has_attachment) {
+                window.pendingServerAttachments[id] = item.attachment_name || 'Arquivo salvo no servidor';
+            }
+
+            document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach((ta) => {
+                if (!ta.value.trim() && reason) {
+                    ta.value = reason;
+                }
+            });
+
+            if (window.pendingReasons[id] && (window.pendingFiles[id] || window.pendingServerAttachments[id])) {
+                window.setButtonAdded(id);
+            }
+        });
+
+        await window.persistPendingDraft();
+    } catch (_) {
+        // Mantem operacao local caso API indisponivel.
+    }
+};
+
+window.syncSingleDraftToServer = async function(id) {
+    const key = String(id || '');
+    if (!key) return;
+    if (window.serverDraftSyncInFlight[key]) return;
+
+    const reason = (window.pendingReasons[key] || window.reasonDrafts[key] || '').trim();
+    let file = window.pendingFiles[key] || null;
+
+    // Tenta recuperar o arquivo local antigo caso ainda esteja apenas no IndexedDB.
+    if (!file) {
+        try {
+            const record = await window.getDraftFileById(key);
+            if (record && record.file) {
+                file = record.file;
+                window.pendingFiles[key] = file;
+            }
+        } catch (_) {
+            // Sem bloqueio se nao conseguir ler o IndexedDB.
+        }
+    }
+
+    // So sincroniza se houver motivo, arquivo local ou arquivo ja conhecido no servidor.
+    if (!reason && !file && !window.pendingServerAttachments[key]) {
+        return;
+    }
+
+    window.serverDraftSyncInFlight[key] = true;
+    try {
+        await window.saveDraftItemOnServer(key, reason, file);
+    } catch (_) {
+        // Mantem funcionamento local em caso de falha temporaria de rede.
+    } finally {
+        delete window.serverDraftSyncInFlight[key];
+    }
+};
+
+window.syncLocalDraftToServer = async function() {
+    const ids = new Set([
+        ...Object.keys(window.pendingReasons || {}),
+        ...Object.keys(window.reasonDrafts || {}),
+    ]);
+
+    if (!ids.size) {
+        return;
+    }
+
+    for (const id of ids) {
+        await window.syncSingleDraftToServer(id);
+    }
+};
+
+window.scheduleReasonSync = function(id) {
+    const key = String(id || '');
+    if (!key) return;
+    if (window.reasonSyncTimers[key]) {
+        clearTimeout(window.reasonSyncTimers[key]);
+    }
+    window.reasonSyncTimers[key] = setTimeout(() => {
+        window.syncSingleDraftToServer(key);
+    }, 700);
 };
 
 window.applyDraftFileToInputs = function(id, file) {
@@ -960,7 +1136,7 @@ window.confirmReason = async function(id) {
     if (!file && window.pendingFiles[id]) {
         file = window.pendingFiles[id];
     }
-    if (!file) {
+    if (!file && !window.pendingServerAttachments[id]) {
         alert('Anexe a evidência (obrigatório).');
         return;
     }
@@ -981,10 +1157,13 @@ window.confirmReason = async function(id) {
 
     window.showToast('Anexo enviado e contestação adicionada ao pedido.', 'success');
     try {
-        await window.saveDraftFile(id, file);
+        if (file) {
+            await window.saveDraftFile(id, file);
+        }
+        await window.saveDraftItemOnServer(id, reason, file || null);
         await window.persistPendingDraft();
     } catch (_) {
-        // Sem bloqueio de uso caso o navegador negue armazenamento local.
+        window.showToast('Item salvo localmente. Nao foi possivel sincronizar com o servidor agora.', 'warning');
     }
     window.renderBar();
 };
@@ -1014,6 +1193,8 @@ window.cancelReason = function(id) {
         delete window.pendingSummaries[id];
         window.resetButton(id);
         window.removeDraftFile(id).catch(() => {});
+        delete window.pendingServerAttachments[id];
+        window.removeDraftItemOnServer(id).catch(() => {});
         window.persistPendingDraft().catch(() => {});
         window.renderBar();
     }
@@ -1056,12 +1237,19 @@ window.clearAllReasons = function() {
         delete window.pendingReasons[id];
         delete window.pendingFiles[id];
         delete window.pendingSummaries[id];
+        delete window.serverDraftSyncInFlight[id];
+        if (window.reasonSyncTimers[id]) {
+            clearTimeout(window.reasonSyncTimers[id]);
+            delete window.reasonSyncTimers[id];
+        }
         window.resetButton(id);
         // Clear textareas and file inputs
         document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach(ta => ta.value = '');
         document.querySelectorAll('.evidence-input[data-id="' + id + '"]').forEach(fi => fi.value = '');
         window.removeDraftFile(id).catch(() => {});
+        delete window.pendingServerAttachments[id];
     });
+    window.clearServerDraft().catch(() => {});
     window.reasonDrafts = {};
     window.persistPendingDraft().catch(() => {});
     window.renderBar();
@@ -1076,9 +1264,11 @@ window.bindBulkAttachmentInputs = function(container) {
 
             const file = this.files[0];
             window.pendingFiles[id] = file;
+            delete window.pendingServerAttachments[id];
             window.applyDraftFileToInputs(id, file);
             try {
                 await window.saveDraftFile(id, file);
+                await window.saveDraftItemOnServer(id, (window.pendingReasons[id] || window.reasonDrafts[id] || '').trim(), file);
                 await window.persistPendingDraft();
             } catch (_) {
                 // Mantém fluxo funcionando mesmo sem storage persistente.
@@ -1111,9 +1301,12 @@ window.renderBar = function() {
             const reason = (window.pendingReasons[id] || '').trim();
             const shortReason = reason.length > 120 ? reason.slice(0, 120) + '...' : reason;
             const hasFile = !!window.pendingFiles[id];
-            const fileName = hasFile ? window.pendingFiles[id].name : 'Sem arquivo';
+            const hasServerFile = !hasFile && !!window.pendingServerAttachments[id];
+            const fileName = hasFile
+                ? window.pendingFiles[id].name
+                : (hasServerFile ? ('Servidor: ' + window.pendingServerAttachments[id]) : 'Sem arquivo');
             const attachLabel = hasFile ? 'Trocar anexo' : 'Adicionar anexo';
-            const fileStatusClass = hasFile ? 'text-gray-600' : 'text-red-600 font-semibold';
+            const fileStatusClass = (hasFile || hasServerFile) ? 'text-gray-600' : 'text-red-600 font-semibold';
 
             const item = document.createElement('div');
             item.className = 'bulk-detail-item text-xs';
@@ -1224,7 +1417,8 @@ window.submitAllContestations = async function() {
     await window.ensurePendingFilesBeforeSubmit(ids);
 
     const missingFiles = ids.filter((id) => !window.pendingFiles[id]);
-    if (missingFiles.length > 0) {
+    const missingWithServerFallback = missingFiles.filter((id) => !window.pendingServerAttachments[id]);
+    if (missingWithServerFallback.length > 0) {
         alert('Alguns itens do pedido estão sem anexo disponível no navegador. Reabra esses itens e anexe novamente antes de enviar.');
         return;
     }
@@ -1246,6 +1440,8 @@ window.submitAllContestations = async function() {
         formData.append('reason_' + i, window.pendingReasons[id]);
         if (window.pendingFiles[id]) {
             formData.append('file_' + i, window.pendingFiles[id]);
+        } else if (window.pendingServerAttachments[id]) {
+            formData.append('use_server_file_' + i, '1');
         }
     });
     formData.append('count', ids.length);
@@ -1262,6 +1458,7 @@ window.submitAllContestations = async function() {
         if (data.success) {
             localStorage.removeItem(window.contestationStorageKey);
             window.clearAllDraftFiles().catch(() => {});
+            window.clearServerDraft().catch(() => {});
             window.location.href = '{% url "contestacao:my_contestations" %}';
         } else {
             alert(data.error || 'Erro ao enviar contestações.');
@@ -1287,6 +1484,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!id) return;
             window.reasonDrafts[id] = this.value || '';
             window.persistPendingDraft().catch(() => {});
+            window.scheduleReasonSync(id);
         });
     });
 
@@ -1296,7 +1494,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.files && this.files.length > 0) {
                 if (id) {
                     window.pendingFiles[id] = this.files[0];
+                    delete window.pendingServerAttachments[id];
                     window.saveDraftFile(id, this.files[0]).catch(() => {});
+                    window.saveDraftItemOnServer(id, (window.pendingReasons[id] || window.reasonDrafts[id] || '').trim(), this.files[0]).catch(() => {});
                 }
                 window.showToast('Anexo selecionado: ' + this.files[0].name, 'success');
             }
@@ -1308,13 +1508,17 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleBtn.addEventListener('click', window.toggleBulkDetails);
     }
     window.restorePendingDraft().then(() => {
-        window.fetchMissingSummaries(Object.keys(window.pendingReasons || {})).then((updated) => {
-            if (!updated) {
-                return;
-            }
-            window.renderBar();
+        window.syncLocalDraftToServer().then(() => {
+            window.loadServerDraft().then(() => {
+                window.fetchMissingSummaries(Object.keys(window.pendingReasons || {})).then((updated) => {
+                    if (!updated) {
+                        return;
+                    }
+                    window.renderBar();
+                });
+                window.renderBar();
+            });
         });
-        window.renderBar();
     });
 
     window.addEventListener('beforeunload', function (event) {
