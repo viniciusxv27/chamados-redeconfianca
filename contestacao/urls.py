@@ -14,6 +14,7 @@ urlpatterns = [
     path('carrinho/rascunho/salvar/', views.cart_draft_upsert, name='cart_draft_upsert'),
     path('carrinho/rascunho/remover/', views.cart_draft_delete, name='cart_draft_delete'),
     path('carrinho/rascunho/limpar/', views.cart_draft_clear, name='cart_draft_clear'),
+    path('carrinho/rascunho/compactar/', views.cart_draft_compact, name='cart_draft_compact'),
     path('carrinho/resumo-itens/', views.contestation_cart_items_summary, name='contestation_cart_items_summary'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),

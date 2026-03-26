@@ -734,6 +734,72 @@ def cart_draft_clear(request):
 
 
 @login_required
+def cart_draft_compact(request):
+    """Mantem no maximo 44 itens no carrinho, priorizando IDs vindos do cliente."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Metodo nao permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    requested_ids = payload.get('ids') or []
+    max_items_raw = payload.get('max_items', 44)
+    try:
+        max_items = int(max_items_raw)
+    except (TypeError, ValueError):
+        max_items = 44
+    max_items = max(1, min(max_items, 200))
+
+    preferred_ids = []
+    for raw in requested_ids:
+        try:
+            rid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if rid not in preferred_ids:
+            preferred_ids.append(rid)
+
+    user_drafts_qs = ContestationCartDraft.objects.filter(user=request.user).order_by('-updated_at', '-id')
+    draft_map = {d.exclusion_id: d for d in user_drafts_qs}
+
+    keep_ids = []
+    for rid in preferred_ids:
+        if rid in draft_map and rid not in keep_ids:
+            keep_ids.append(rid)
+        if len(keep_ids) >= max_items:
+            break
+
+    if len(keep_ids) < max_items:
+        for draft in user_drafts_qs:
+            rid = draft.exclusion_id
+            if rid in keep_ids:
+                continue
+            keep_ids.append(rid)
+            if len(keep_ids) >= max_items:
+                break
+
+    existing_ids = list(draft_map.keys())
+    keep_set = set(keep_ids)
+    delete_ids = [rid for rid in existing_ids if rid not in keep_set]
+
+    deleted_count = 0
+    if delete_ids:
+        deleted_count, _ = ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=delete_ids).delete()
+
+    return JsonResponse({
+        'success': True,
+        'kept': len(keep_ids),
+        'deleted': deleted_count,
+        'keep_ids': keep_ids,
+    })
+
+
+@login_required
 def create_contestation(request, exclusion_id):
     """Cria uma nova contestação para um registro de exclusão."""
     if not _can_create_contestations(request.user):

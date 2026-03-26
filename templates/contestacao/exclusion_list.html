@@ -562,6 +562,7 @@ window.serverDraftSyncInFlight = {};
 window.reasonSyncTimers = {};
 window.serverDraftUnavailable = false;
 window.serverDraftWarned = false;
+window.serverDraftMaxItems = 44;
 
 window.openDraftDb = function() {
     return new Promise((resolve, reject) => {
@@ -885,6 +886,57 @@ window.loadServerDraft = async function() {
         await window.persistPendingDraft();
     } catch (_) {
         // Mantem operacao local caso API indisponivel.
+    }
+};
+
+window.compactServerDraftToMax = async function(preferredIds) {
+    if (window.serverDraftUnavailable) {
+        return null;
+    }
+
+    try {
+        const resp = await fetch('{% url "contestacao:cart_draft_compact" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.csrfToken,
+            },
+            body: JSON.stringify({
+                ids: preferredIds || [],
+                max_items: window.serverDraftMaxItems,
+            }),
+        });
+
+        if (resp.status === 404) {
+            window.serverDraftUnavailable = true;
+            return null;
+        }
+
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+            return null;
+        }
+        return data;
+    } catch (_) {
+        return null;
+    }
+};
+
+window.syncLocalStorageDraftPriority = async function() {
+    const preferredIds = Object.keys(window.pendingReasons || {});
+    if (!preferredIds.length) {
+        return;
+    }
+
+    // Primeiro sincroniza motivo/anexo do rascunho local com o servidor.
+    for (const id of preferredIds) {
+        await window.syncSingleDraftToServer(id);
+    }
+
+    // Em seguida compacta no servidor para manter apenas 44 itens, priorizando o carrinho local do usuario.
+    const compactResult = await window.compactServerDraftToMax(preferredIds);
+    if (compactResult && compactResult.deleted > 0) {
+        window.showToast('Carrinho no servidor ajustado para 44 itens com prioridade do seu rascunho local.', 'info');
     }
 };
 
