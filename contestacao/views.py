@@ -1389,6 +1389,16 @@ def dashboard(request):
         .order_by('-total')
     )
 
+    base_por_pilar = {
+        row['pilar'] or '': row['total']
+        for row in base_qs.values('pilar').annotate(total=Count('id'))
+    }
+    por_pilar = list(por_pilar)
+    for item in por_pilar:
+        pilar_key = item.get('exclusion__pilar') or ''
+        total_base = base_por_pilar.get(pilar_key, 0)
+        item['poderiam_ser_contestadas'] = max(total_base - item['total'], 0)
+
     # Métricas por filial
     por_filial = (
         qs.values('exclusion__filial')
@@ -1399,6 +1409,16 @@ def dashboard(request):
         )
         .order_by('-total')
     )
+
+    base_por_filial = {
+        row['filial'] or '': row['total']
+        for row in base_qs.values('filial').annotate(total=Count('id'))
+    }
+    por_filial = list(por_filial)
+    for item in por_filial:
+        filial_key = item.get('exclusion__filial') or ''
+        total_base = base_por_filial.get(filial_key, 0)
+        item['poderiam_ser_contestadas'] = max(total_base - item['total'], 0)
 
     # Métricas por status
     por_status = qs.values('status').annotate(total=Count('id')).order_by('-total')
@@ -1460,7 +1480,7 @@ def dashboard(request):
 
 @login_required
 def export_contested_sales(request):
-    """Exporta CSV detalhado das vendas contestadas com coluna de botão clicado."""
+    """Exporta CSV detalhado com modelo da base de exclusão + colunas da contestação."""
     if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão para exportar.')
         return redirect('contestacao:dashboard')
@@ -1474,38 +1494,72 @@ def export_contested_sales(request):
     response.write('\ufeff')
     writer = csv.writer(response, delimiter=';')
     writer.writerow([
-        'ID Contestacao',
+        'FILIAL',
         'Vendedor',
-        'Filial',
+        'RECEITA',
         'Pilar',
-        'Numero da Venda',
-        'Receita',
-        'Status',
+        'Gerente',
+        'Coordenacao',
+        'Nº da Venda',
+        'Data da Venda',
+        'Nome Cliente',
+        'CPF/CNPJ',
+        'Plano/Produto',
+        'IMEI',
+        'Numero Acesso',
+        'Observacao',
+        'ID Contestacao',
+        'Motivo Contestacao',
+        'Parecer Gestor',
+        'Parecer Gerente',
+        'Ha Evidencia (Solicitante)',
+        'Ha Evidencia (Gestor)',
+        'Anexo Veio Errado',
+        'Status Contestacao',
         'Status Pagamento',
         'Botao Clicado',
         'Solicitante',
         'Gestor',
+        'Confirmado Por',
         'Data Criacao',
         'Data Analise',
         'Data Confirmacao',
+        'Data Pagamento',
     ])
 
     for c in qs:
         writer.writerow([
-            c.pk,
-            c.exclusion.vendedor,
             c.exclusion.filial,
-            c.exclusion.pilar,
-            c.exclusion.numero_venda,
+            c.exclusion.vendedor,
             f"{c.exclusion.receita:.2f}",
+            c.exclusion.pilar,
+            c.exclusion.gerente,
+            c.exclusion.coordenacao,
+            c.exclusion.numero_venda,
+            c.exclusion.data_venda,
+            c.exclusion.nome_cliente,
+            c.exclusion.cpf_cnpj,
+            c.exclusion.plano_produto,
+            c.exclusion.imei,
+            c.exclusion.numero_acesso,
+            c.exclusion.observacao,
+            c.pk,
+            c.reason,
+            c.review_notes,
+            c.confirmation_notes,
+            'Sim' if c.attachment else 'Nao',
+            'Sim' if c.review_attachment else 'Nao',
+            'Sim' if c.attachment_wrong else 'Nao',
             _status_label(c.status),
             _payment_status_label(c.payment_status),
             _approval_mode_label(c.approval_mode),
             c.requester.full_name,
             c.reviewed_by.full_name if c.reviewed_by else '',
+            c.confirmed_by.full_name if c.confirmed_by else '',
             c.created_at.strftime('%d/%m/%Y %H:%M') if c.created_at else '',
             c.reviewed_at.strftime('%d/%m/%Y %H:%M') if c.reviewed_at else '',
             c.confirmed_at.strftime('%d/%m/%Y %H:%M') if c.confirmed_at else '',
+            c.paid_at.strftime('%d/%m/%Y %H:%M') if c.paid_at else '',
         ])
 
     return response
