@@ -982,35 +982,59 @@ def manage_contestations(request):
     elif status_filter:
         qs = qs.filter(status=status_filter)
 
-    # Em "Pendentes", mostrar cards de setor e listar apenas quando setor for selecionado.
-    selected_sector = request.GET.get('setor', '').strip()
-    pending_sector_cards = (
-        base_qs.filter(status='pending')
-        .values('exclusion__filial')
-        .annotate(total=Count('id'), earliest=Min('created_at'))
-        .order_by('earliest', 'exclusion__filial')
-    )
+    sector_card_statuses = {'pending', 'awaiting_manager', 'confirmed', 'rejected', 'denied'}
 
-    now = timezone.now()
+    # Para os status com cards de setor, listar apenas quando setor for selecionado.
+    selected_sector = request.GET.get('setor', '').strip()
+    sector_cards_enabled = status_filter in sector_card_statuses
+    sector_cards_base_qs = qs
     pending_sector_cards_data = []
-    for item in pending_sector_cards:
-        earliest = item.get('earliest')
-        deadline = (earliest + timezone.timedelta(days=SECTOR_PENDING_DEADLINE_DAYS)) if earliest else None
-        remaining_seconds = int((deadline - now).total_seconds()) if deadline else 0
-        pending_sector_cards_data.append({
-            'exclusion__filial': item.get('exclusion__filial'),
-            'total': item.get('total', 0),
-            'earliest': earliest,
-            'deadline': deadline,
-            'remaining_seconds': max(remaining_seconds, 0),
-            'remaining_label': _format_remaining_duration(remaining_seconds) if remaining_seconds > 0 else 'Expirado',
-            'is_expired': remaining_seconds <= 0,
-        })
-    if status_filter == 'pending':
+
+    if sector_cards_enabled:
+        pending_sector_cards = (
+            sector_cards_base_qs
+            .values('exclusion__filial')
+            .annotate(total=Count('id'), earliest=Min('created_at'))
+            .order_by('earliest', 'exclusion__filial')
+        )
+
+        now = timezone.now()
+        for item in pending_sector_cards:
+            earliest = item.get('earliest')
+            deadline = None
+            remaining_seconds = 0
+            remaining_label = ''
+            is_expired = False
+
+            if status_filter == 'pending' and earliest:
+                deadline = earliest + timezone.timedelta(days=SECTOR_PENDING_DEADLINE_DAYS)
+                remaining_seconds = int((deadline - now).total_seconds())
+                remaining_label = _format_remaining_duration(remaining_seconds) if remaining_seconds > 0 else 'Expirado'
+                is_expired = remaining_seconds <= 0
+
+            pending_sector_cards_data.append({
+                'exclusion__filial': item.get('exclusion__filial'),
+                'total': item.get('total', 0),
+                'earliest': earliest,
+                'deadline': deadline,
+                'remaining_seconds': max(remaining_seconds, 0),
+                'remaining_label': remaining_label,
+                'is_expired': is_expired,
+            })
+
+    if sector_cards_enabled:
         if selected_sector:
             qs = qs.filter(exclusion__filial__iexact=selected_sector)
         else:
             qs = qs.none()
+
+    sector_cards_title_map = {
+        'pending': 'Setores com pendências',
+        'awaiting_manager': 'Setores aguardando gerente',
+        'confirmed': 'Setores para pagamento',
+        'rejected': 'Setores com rejeitadas',
+        'denied': 'Setores negados',
+    }
     
     # Get list of filiais for dropdown
     filiais = base_qs.values_list(
@@ -1061,6 +1085,8 @@ def manage_contestations(request):
         'confirmed_count': confirmed_count,
         'awaiting_manager_count': awaiting_manager_count,
         'pending_sector_cards': pending_sector_cards_data,
+        'sector_cards_enabled': sector_cards_enabled,
+        'sector_cards_title': sector_cards_title_map.get(status_filter, 'Setores'),
         'info_only_no_submission_cards': info_only_no_submission_cards,
         'selected_sector': selected_sector,
         'can_assign_global_managers': can_assign_global_managers,
