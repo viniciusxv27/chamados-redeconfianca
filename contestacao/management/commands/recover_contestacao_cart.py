@@ -72,6 +72,7 @@ class Command(BaseCommand):
         parser.add_argument('--user-id', type=int, help='Recupera para um usuario especifico.')
         parser.add_argument('--user-email', type=str, help='Recupera para um usuario especifico por email.')
         parser.add_argument('--limit', type=int, default=0, help='Limita quantidade de vendas processadas (0 = sem limite).')
+        parser.add_argument('--target-items', type=int, default=0, help='Completa o carrinho ate N itens (sem apagar existentes).')
         parser.add_argument('--dry-run', action='store_true', help='Somente simula, sem gravar no banco.')
 
     def handle(self, *args, **options):
@@ -79,7 +80,11 @@ class Command(BaseCommand):
         user_id = options.get('user_id')
         user_email = options.get('user_email')
         limit = options.get('limit') or 0
+        target_items = options.get('target_items') or 0
         dry_run = bool(options.get('dry_run'))
+
+        if target_items and not (user_id or user_email):
+            raise CommandError('Use --target-items junto com --user-id ou --user-email para evitar preenchimento indevido em massa.')
 
         try:
             sector = Sector.objects.get(pk=sector_id)
@@ -125,17 +130,49 @@ class Command(BaseCommand):
             }
             history_map, contestation_map = get_recovery_maps_for_user(user, exclusion_ids)
 
+            donor_reason = ''
+            donor_attachment = None
+            for draft in existing_drafts.values():
+                if not donor_reason and draft.reason:
+                    donor_reason = draft.reason.strip()
+                if not donor_attachment and draft.attachment:
+                    donor_attachment = draft.attachment
+                if donor_reason and donor_attachment:
+                    break
+            if not donor_reason:
+                for data in contestation_map.values():
+                    candidate = (data.get('reason') or '').strip()
+                    if candidate:
+                        donor_reason = candidate
+                        break
+            if not donor_attachment:
+                for data in contestation_map.values():
+                    candidate_attachment = data.get('attachment')
+                    if candidate_attachment:
+                        donor_attachment = candidate_attachment
+                        break
+
+            current_total = len(existing_drafts)
+
             for exclusion in exclusions:
+                if target_items and current_total >= target_items:
+                    break
+
                 reason = history_map.get(exclusion.pk, '')
                 if not reason:
                     reason = (contestation_map.get(exclusion.pk, {}) or {}).get('reason', '')
                 if not reason:
                     reason = (exclusion.observacao or '').strip()
                 if not reason:
+                    reason = donor_reason or 'Recuperacao automatica do carrinho existente.'
+
+                if not reason:
                     skipped += 1
                     continue
 
                 attachment = (contestation_map.get(exclusion.pk, {}) or {}).get('attachment')
+                if not attachment:
+                    attachment = donor_attachment
                 draft = existing_drafts.get(exclusion.pk)
                 was_created = draft is None
                 if was_created:
@@ -164,6 +201,7 @@ class Command(BaseCommand):
                     draft.save()
                     created += 1
                     existing_drafts[exclusion.pk] = draft
+                    current_total += 1
                 elif changed:
                     draft.save(update_fields=['reason', 'attachment', 'updated_at'])
                     updated += 1
