@@ -1840,7 +1840,7 @@ def manage_webhooks_view(request):
 @login_required
 def system_config_view(request):
     """Gerenciar configurações do sistema (links das planilhas Excel)"""
-    from users.models import SystemConfig
+    from users.models import SystemConfig, CommissionSpreadsheetVersion
     
     # Apenas superadmin pode acessar
     if request.user.hierarchy != 'SUPERADMIN':
@@ -1848,13 +1848,52 @@ def system_config_view(request):
         return redirect('dashboard')
     
     config = SystemConfig.get_config()
+    ref_year, ref_month = CommissionSpreadsheetVersion.get_reference_month_year(base_date=timezone.now())
+
+    active_version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
+    commission_versions = CommissionSpreadsheetVersion.objects.select_related('updated_by').all()[:24]
     
     if request.method == 'POST':
-        # Atualizar configurações
-        config.excel_comissao_url = request.POST.get('excel_comissao_url', '').strip()
-        config.excel_vendas_url = request.POST.get('excel_vendas_url', '').strip()
-        config.excel_base_pagamento_url = request.POST.get('excel_base_pagamento_url', '').strip()
-        config.excel_base_exclusao_url = request.POST.get('excel_base_exclusao_url', '').strip()
+        selected_month = request.POST.get('version_month', '').strip()
+        selected_year = request.POST.get('version_year', '').strip()
+
+        try:
+            selected_month_int = int(selected_month)
+            selected_year_int = int(selected_year)
+        except (TypeError, ValueError):
+            messages.error(request, 'Informe mês e ano válidos para a versão do comissionamento.')
+            return redirect('system_config')
+
+        if selected_month_int < 1 or selected_month_int > 12:
+            messages.error(request, 'Mês inválido. Use um valor entre 1 e 12.')
+            return redirect('system_config')
+
+        commission_urls = {
+            'excel_comissao_url': request.POST.get('excel_comissao_url', '').strip(),
+            'excel_vendas_url': request.POST.get('excel_vendas_url', '').strip(),
+            'excel_base_pagamento_url': request.POST.get('excel_base_pagamento_url', '').strip(),
+            'excel_base_exclusao_url': request.POST.get('excel_base_exclusao_url', '').strip(),
+        }
+
+        if not all(commission_urls.values()):
+            messages.error(request, 'Preencha todas as URLs de comissionamento para salvar a versão.')
+            return redirect('system_config')
+
+        version_obj, created = CommissionSpreadsheetVersion.objects.update_or_create(
+            year=selected_year_int,
+            month=selected_month_int,
+            defaults={
+                **commission_urls,
+                'updated_by': request.user,
+            }
+        )
+
+        # Mantém estes campos como fallback para instalações sem versão cadastrada.
+        config.excel_comissao_url = commission_urls['excel_comissao_url']
+        config.excel_vendas_url = commission_urls['excel_vendas_url']
+        config.excel_base_pagamento_url = commission_urls['excel_base_pagamento_url']
+        config.excel_base_exclusao_url = commission_urls['excel_base_exclusao_url']
+        config.excel_contestacao_base_exclusao_url = request.POST.get('excel_contestacao_base_exclusao_url', '').strip()
         config.updated_by = request.user
         config.save()
         
@@ -1865,14 +1904,49 @@ def system_config_view(request):
             'comissao_REMUNERAÇÃO GERENTE_file_content', 
             'base_pagamento_file_content',
             'base_exclusao_file_content',
+            'contestacao_base_exclusao_content',
             'vendas_file_content',
         ])
         
-        messages.success(request, 'Configurações atualizadas com sucesso! O cache foi limpo.')
+        operation = 'atualizada' if not created else 'criada'
+        messages.success(
+            request,
+            f'Versão {selected_month_int:02d}/{selected_year_int} {operation} com sucesso. O cache foi limpo.'
+        )
         return redirect('system_config')
+
+    if active_version:
+        commission_form = {
+            'excel_comissao_url': active_version.excel_comissao_url,
+            'excel_vendas_url': active_version.excel_vendas_url,
+            'excel_base_pagamento_url': active_version.excel_base_pagamento_url,
+            'excel_base_exclusao_url': active_version.excel_base_exclusao_url,
+            'version_month': active_version.month,
+            'version_year': active_version.year,
+        }
+    else:
+        commission_form = {
+            'excel_comissao_url': config.excel_comissao_url,
+            'excel_vendas_url': config.excel_vendas_url,
+            'excel_base_pagamento_url': config.excel_base_pagamento_url,
+            'excel_base_exclusao_url': config.excel_base_exclusao_url,
+            'version_month': ref_month,
+            'version_year': ref_year,
+        }
     
     context = {
         'config': config,
+        'commission_form': commission_form,
+        'commission_versions': commission_versions,
+        'active_version': active_version,
+        'reference_month': ref_month,
+        'reference_year': ref_year,
+        'month_choices': [
+            (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
+            (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
+            (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro'),
+        ],
+        'year_choices': list(range(ref_year - 3, ref_year + 3)),
         'user': request.user,
     }
     return render(request, 'admin/system_config.html', context)

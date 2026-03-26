@@ -433,7 +433,11 @@ def _download_exclusion_spreadsheet():
     """Baixa a planilha BASE_EXCLUSAO e retorna um DataFrame."""
     try:
         config = SystemConfig.get_config()
-        url = config.excel_base_exclusao_url or DEFAULT_EXCEL_BASE_EXCLUSAO_URL
+        url = (
+            config.excel_contestacao_base_exclusao_url
+            or config.excel_base_exclusao_url
+            or DEFAULT_EXCEL_BASE_EXCLUSAO_URL
+        )
     except Exception:
         url = DEFAULT_EXCEL_BASE_EXCLUSAO_URL
 

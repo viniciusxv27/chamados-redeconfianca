@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from decimal import Decimal
 from core.utils import upload_user_profile_photo
 
@@ -41,8 +42,14 @@ class SystemConfig(models.Model):
     )
     excel_base_exclusao_url = models.URLField(
         max_length=500,
-        verbose_name="Planilha BASE_EXCLUSAO",
-        help_text="URL de compartilhamento do OneDrive para base de exclusão",
+        verbose_name="Planilha BASE_EXCLUSAO (Comissionamento)",
+        help_text="URL de compartilhamento do OneDrive para base de exclusão do comissionamento",
+        default="https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
+    )
+    excel_contestacao_base_exclusao_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha BASE_EXCLUSAO (Contestação)",
+        help_text="URL de compartilhamento do OneDrive para base de exclusão da contestação",
         default="https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
     )
     contestacao_global_managers = models.ManyToManyField(
@@ -81,6 +88,71 @@ class SystemConfig(models.Model):
         """Retorna a instância de configuração (cria se não existir)"""
         config, created = cls.objects.get_or_create(pk=1)
         return config
+
+
+class CommissionSpreadsheetVersion(models.Model):
+    """Versões das planilhas de comissionamento por mês/ano de referência."""
+
+    year = models.PositiveSmallIntegerField(verbose_name="Ano de Referência")
+    month = models.PositiveSmallIntegerField(verbose_name="Mês de Referência")
+
+    excel_comissao_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha de Comissionamento",
+        help_text="URL de compartilhamento do OneDrive para a planilha de comissões",
+    )
+    excel_vendas_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha de Vendas e Metas",
+        help_text="URL de compartilhamento do OneDrive para vendas e metas",
+    )
+    excel_base_pagamento_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha BASE_PAGAMENTO",
+        help_text="URL de compartilhamento do OneDrive para base de pagamento",
+    )
+    excel_base_exclusao_url = models.URLField(
+        max_length=500,
+        verbose_name="Planilha BASE_EXCLUSAO (Comissionamento)",
+        help_text="URL de compartilhamento do OneDrive para base de exclusão do comissionamento",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
+    updated_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='commission_version_updates',
+        verbose_name="Atualizado por"
+    )
+
+    class Meta:
+        verbose_name = "Versão de Planilha de Comissionamento"
+        verbose_name_plural = "Versões de Planilhas de Comissionamento"
+        ordering = ['-year', '-month']
+        constraints = [
+            models.UniqueConstraint(fields=['year', 'month'], name='unique_commission_version_by_month_year')
+        ]
+
+    def __str__(self):
+        return f"{self.month:02d}/{self.year}"
+
+    @staticmethod
+    def get_reference_month_year(base_date=None):
+        """Regra de referência: sempre 2 meses atrás."""
+        current = (base_date or timezone.now()).date()
+        month = current.month - 2
+        year = current.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        return year, month
+
+    @classmethod
+    def get_reference_version(cls, base_date=None):
+        year, month = cls.get_reference_month_year(base_date=base_date)
+        return cls.objects.filter(year=year, month=month).first()
 
 
 def get_media_storage():

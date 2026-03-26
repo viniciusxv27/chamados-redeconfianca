@@ -16,10 +16,11 @@ from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q
+from django.utils import timezone
 import json
 import pandas as pd
 from io import BytesIO
-from users.models import User, Sector, SystemConfig
+from users.models import User, Sector, SystemConfig, CommissionSpreadsheetVersion
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -43,11 +44,28 @@ def get_excel_urls():
     """
     try:
         config = SystemConfig.get_config()
+        ref_year, ref_month = CommissionSpreadsheetVersion.get_reference_month_year(base_date=timezone.now())
+        version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
+
+        if version:
+            return {
+                'comissao': version.excel_comissao_url,
+                'vendas': version.excel_vendas_url,
+                'base_pagamento': version.excel_base_pagamento_url,
+                'base_exclusao': version.excel_base_exclusao_url,
+                'version_year': version.year,
+                'version_month': version.month,
+                'version_id': version.id,
+            }
+
         return {
             'comissao': config.excel_comissao_url or DEFAULT_EXCEL_COMISSAO_URL,
             'vendas': config.excel_vendas_url or DEFAULT_EXCEL_VENDAS_URL,
             'base_pagamento': config.excel_base_pagamento_url or DEFAULT_EXCEL_BASE_PAGAMENTO_URL,
             'base_exclusao': config.excel_base_exclusao_url or DEFAULT_EXCEL_BASE_EXCLUSAO_URL,
+            'version_year': ref_year,
+            'version_month': ref_month,
+            'version_id': None,
         }
     except Exception:
         # Se der erro ao acessar banco, usar valores padrão
@@ -56,6 +74,9 @@ def get_excel_urls():
             'vendas': DEFAULT_EXCEL_VENDAS_URL,
             'base_pagamento': DEFAULT_EXCEL_BASE_PAGAMENTO_URL,
             'base_exclusao': DEFAULT_EXCEL_BASE_EXCLUSAO_URL,
+            'version_year': None,
+            'version_month': None,
+            'version_id': None,
         }
 
 
