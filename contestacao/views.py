@@ -300,6 +300,71 @@ def _serialize_cart_draft_item(draft):
     }
 
 
+def _parse_currency_to_decimal(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    text = text.replace('R$', '').replace(' ', '')
+    text = text.replace('.', '').replace(',', '.')
+    try:
+        return Decimal(text)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _resolve_exclusion_for_draft_item(user, exclusion_id=None, summary=None):
+    """Tenta resolver um item local para uma venda existente no escopo do usuário."""
+    scoped_qs = _apply_exclusion_scope_for_user(ExclusionRecord.objects.all(), user)
+
+    if exclusion_id:
+        try:
+            exclusion_id_int = int(exclusion_id)
+        except (TypeError, ValueError):
+            exclusion_id_int = None
+        if exclusion_id_int:
+            by_id = scoped_qs.filter(pk=exclusion_id_int).first()
+            if by_id:
+                return by_id
+
+    summary = summary or {}
+    vendedor = (summary.get('vendedor') or '').strip()
+    filial = (summary.get('filial') or '').strip()
+    produto = (summary.get('produto') or '').strip()
+    valor = _parse_currency_to_decimal(summary.get('valor'))
+
+    if not vendedor and not filial and not produto and valor is None:
+        return None
+
+    candidates = scoped_qs
+    if vendedor and vendedor != '-':
+        candidates = candidates.filter(vendedor__iexact=vendedor)
+    if filial and filial != '-':
+        candidates = candidates.filter(filial__iexact=filial)
+    if produto and produto != '-':
+        candidates = candidates.filter(plano_produto__iexact=produto)
+    if valor is not None:
+        candidates = candidates.filter(receita=valor)
+
+    resolved = candidates.order_by('-imported_at', '-id').first()
+    if resolved:
+        return resolved
+
+    # Fallback mais tolerante para produto com pequenas variacoes de escrita.
+    candidates = scoped_qs
+    if vendedor and vendedor != '-':
+        candidates = candidates.filter(vendedor__iexact=vendedor)
+    if filial and filial != '-':
+        candidates = candidates.filter(filial__iexact=filial)
+    if produto and produto != '-':
+        candidates = candidates.filter(plano_produto__icontains=produto[:40])
+    if valor is not None:
+        candidates = candidates.filter(receita=valor)
+
+    return candidates.order_by('-imported_at', '-id').first()
+
+
 
 def _format_avg_duration(total_seconds, count):
     if count <= 0:
@@ -731,6 +796,63 @@ def cart_draft_clear(request):
 
     deleted, _ = ContestationCartDraft.objects.filter(user=request.user).delete()
     return JsonResponse({'success': True, 'deleted': deleted})
+
+
+@login_required
+def cart_draft_sync(request):
+    """Sincroniza rascunhos locais com o servidor, reconciliando IDs com vendas existentes."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Metodo nao permitido.'}, status=405)
+
+    if not _can_access_contestation_module(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    raw_items = payload.get('items') or []
+    if not isinstance(raw_items, list):
+        return JsonResponse({'success': False, 'error': 'Payload invalido.'}, status=400)
+
+    synced = []
+    unresolved = []
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+
+        local_id = item.get('exclusion_id')
+        reason = (item.get('reason') or '').strip()
+        summary = item.get('summary') or {}
+        exclusion = _resolve_exclusion_for_draft_item(request.user, exclusion_id=local_id, summary=summary)
+
+        if not exclusion:
+            unresolved.append({'local_id': local_id})
+            continue
+
+        draft, _ = ContestationCartDraft.objects.get_or_create(
+            user=request.user,
+            exclusion=exclusion,
+            defaults={'reason': reason},
+        )
+
+        if reason:
+            draft.reason = reason
+            draft.save(update_fields=['reason', 'updated_at'])
+
+        synced.append({
+            'local_id': local_id,
+            'resolved_exclusion_id': exclusion.pk,
+            'has_attachment': bool(draft.attachment),
+        })
+
+    return JsonResponse({
+        'success': True,
+        'synced': synced,
+        'unresolved': unresolved,
+    })
 
 
 @login_required

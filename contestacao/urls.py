@@ -11,6 +11,7 @@ urlpatterns = [
     path('contestar/<int:exclusion_id>/', views.create_contestation, name='create_contestation'),
     path('contestar-lote/', views.bulk_create_contestation, name='bulk_create_contestation'),
     path('carrinho/rascunho/', views.cart_draft_list, name='cart_draft_list'),
+    path('carrinho/rascunho/sincronizar/', views.cart_draft_sync, name='cart_draft_sync'),
     path('carrinho/rascunho/salvar/', views.cart_draft_upsert, name='cart_draft_upsert'),
     path('carrinho/rascunho/remover/', views.cart_draft_delete, name='cart_draft_delete'),
     path('carrinho/rascunho/limpar/', views.cart_draft_clear, name='cart_draft_clear'),

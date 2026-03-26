@@ -986,7 +986,76 @@ window.syncLocalDraftToServer = async function() {
         return;
     }
 
-    for (const id of ids) {
+    // Primeiro sincroniza em lote os rascunhos de texto para reconciliar IDs locais com vendas existentes no servidor.
+    if (!window.serverDraftUnavailable) {
+        try {
+            const items = Array.from(ids).map((id) => ({
+                exclusion_id: id,
+                reason: (window.pendingReasons[id] || window.reasonDrafts[id] || '').trim(),
+                summary: window.pendingSummaries[id] || window.getRecordSummary(id) || {},
+            }));
+
+            const resp = await fetch('{% url "contestacao:cart_draft_sync" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': window.csrfToken,
+                },
+                body: JSON.stringify({ items: items }),
+            });
+
+            if (resp.status === 404) {
+                window.serverDraftUnavailable = true;
+                if (!window.serverDraftWarned) {
+                    window.serverDraftWarned = true;
+                    window.showToast('Rascunho no servidor indisponivel no momento. Seus dados seguem salvos localmente.', 'warning');
+                }
+            } else {
+                const data = await resp.json();
+                if (resp.ok && data && data.success && Array.isArray(data.synced)) {
+                    data.synced.forEach((row) => {
+                        const localId = String(row.local_id || '');
+                        const resolvedId = String(row.resolved_exclusion_id || '');
+                        if (!localId || !resolvedId || localId === resolvedId) {
+                            return;
+                        }
+
+                        // Move o rascunho local para o ID real quando o servidor reconciliar a venda.
+                        if (window.pendingReasons[localId]) {
+                            window.pendingReasons[resolvedId] = window.pendingReasons[localId];
+                            delete window.pendingReasons[localId];
+                        }
+                        if (window.reasonDrafts[localId]) {
+                            window.reasonDrafts[resolvedId] = window.reasonDrafts[localId];
+                            delete window.reasonDrafts[localId];
+                        }
+                        if (window.pendingSummaries[localId]) {
+                            window.pendingSummaries[resolvedId] = window.pendingSummaries[localId];
+                            delete window.pendingSummaries[localId];
+                        }
+                        if (window.pendingFiles[localId]) {
+                            window.pendingFiles[resolvedId] = window.pendingFiles[localId];
+                            delete window.pendingFiles[localId];
+                        }
+                        if (window.pendingServerAttachments[localId]) {
+                            window.pendingServerAttachments[resolvedId] = window.pendingServerAttachments[localId];
+                            delete window.pendingServerAttachments[localId];
+                        }
+                    });
+                    await window.persistPendingDraft();
+                }
+            }
+        } catch (_) {
+            // Mantem funcionando localmente se a sincronizacao em lote falhar.
+        }
+    }
+
+    const syncedIds = new Set([
+        ...Object.keys(window.pendingReasons || {}),
+        ...Object.keys(window.reasonDrafts || {}),
+    ]);
+
+    for (const id of syncedIds) {
         await window.syncSingleDraftToServer(id);
     }
 };
