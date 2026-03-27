@@ -1382,6 +1382,23 @@ def update_contested_sale_value(request, pk):
         return redirect('contestacao:manage_contestations')
 
     old_value = contestation.exclusion.receita
+    if old_value == new_value:
+        messages.info(request, f'O valor da contestação #{contestation.pk} já está em R$ {new_value:.2f}.')
+        return redirect('contestacao:manage_contestations')
+
+    if not contestation.sale_value_was_edited:
+        contestation.sale_value_original = old_value
+    contestation.sale_value_was_edited = True
+    contestation.sale_value_edited_by = request.user
+    contestation.sale_value_edited_at = timezone.now()
+    contestation.save(update_fields=[
+        'sale_value_original',
+        'sale_value_was_edited',
+        'sale_value_edited_by',
+        'sale_value_edited_at',
+        'updated_at',
+    ])
+
     contestation.exclusion.receita = new_value
     contestation.exclusion.save(update_fields=['receita'])
 
@@ -1389,6 +1406,48 @@ def update_contested_sale_value(request, pk):
         request,
         f'Valor da venda da contestação #{contestation.pk} atualizado de R$ {old_value:.2f} para R$ {new_value:.2f}.'
     )
+    return redirect('contestacao:manage_contestations')
+
+
+@login_required
+def update_contestation_manage(request, pk):
+    """Permite ao gestor editar dados da contestação na tela de gerenciamento."""
+    if request.method != 'POST':
+        return redirect('contestacao:manage_contestations')
+
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para editar a contestação.')
+        return redirect('contestacao:manage_contestations')
+
+    contestation = get_object_or_404(Contestation, pk=pk)
+
+    allowed_qs = _apply_sector_visibility_filter(Contestation.objects.filter(pk=contestation.pk), request.user)
+    if not allowed_qs.exists():
+        messages.error(request, 'Você não pode editar esta contestação.')
+        return redirect('contestacao:manage_contestations')
+
+    reason = (request.POST.get('reason') or '').strip()
+    attachment = request.FILES.get('attachment')
+
+    if not reason:
+        messages.warning(request, 'Informe o motivo da contestação para salvar as alterações.')
+        return redirect('contestacao:manage_contestations')
+
+    changed_fields = []
+    if contestation.reason != reason:
+        contestation.reason = reason
+        changed_fields.append('reason')
+
+    if attachment:
+        contestation.attachment = attachment
+        changed_fields.append('attachment')
+
+    if changed_fields:
+        contestation.save(update_fields=changed_fields + ['updated_at'])
+        messages.success(request, f'Contestação #{contestation.pk} atualizada com sucesso.')
+    else:
+        messages.info(request, f'Nenhuma alteração detectada na contestação #{contestation.pk}.')
+
     return redirect('contestacao:manage_contestations')
 
 
@@ -1910,6 +1969,10 @@ def export_contested_sales(request):
         'Data Analise',
         'Data Confirmacao',
         'Data Pagamento',
+        'Venda Editada',
+        'Valor Original Venda',
+        'Editada Por',
+        'Data Edicao Venda',
     ])
 
     for c in qs:
@@ -1945,6 +2008,10 @@ def export_contested_sales(request):
             c.reviewed_at.strftime('%d/%m/%Y %H:%M') if c.reviewed_at else '',
             c.confirmed_at.strftime('%d/%m/%Y %H:%M') if c.confirmed_at else '',
             c.paid_at.strftime('%d/%m/%Y %H:%M') if c.paid_at else '',
+            'Sim' if c.sale_value_was_edited else 'Nao',
+            f"{c.sale_value_original:.2f}" if c.sale_value_original is not None else '',
+            c.sale_value_edited_by.full_name if c.sale_value_edited_by else '',
+            c.sale_value_edited_at.strftime('%d/%m/%Y %H:%M') if c.sale_value_edited_at else '',
         ])
 
     return response

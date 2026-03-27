@@ -19,6 +19,7 @@ urlpatterns = [
     path('carrinho/resumo-itens/', views.contestation_cart_items_summary, name='contestation_cart_items_summary'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
+    path('gerenciar/editar/<int:pk>/', views.update_contestation_manage, name='update_contestation_manage'),
     path('gerenciar/atualizar-valor/<int:pk>/', views.update_contested_sale_value, name='update_contested_sale_value'),
     path('gerenciar/liberar-gestor-global/', views.manage_global_contestation_managers, name='manage_global_contestation_managers'),
     path('gerenciar/liberar-refazer/', views.release_sector_for_retry, name='release_sector_for_retry'),

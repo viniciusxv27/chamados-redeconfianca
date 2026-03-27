@@ -242,7 +242,12 @@
                             {% endif %}
                         </div>
                         <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> &middot; {{ c.exclusion.filial }} &middot; {{ c.exclusion.pilar }} &middot; <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
-                        {% if c.exclusion.numero_venda %}<p class="text-xs text-gray-500">Nº da Venda: <span class="font-mono">{{ c.exclusion.numero_venda }}</span></p>{% endif %}
+                        {% if c.exclusion.numero_venda or c.exclusion.imei %}
+                        <p class="text-xs text-gray-500">
+                            {% if c.exclusion.numero_venda %}Nº da Venda: <span class="font-mono">{{ c.exclusion.numero_venda }}</span>{% endif %}
+                            {% if c.exclusion.imei %}{% if c.exclusion.numero_venda %} &middot; {% endif %}IMEI: <span class="font-mono">{{ c.exclusion.imei }}</span>{% endif %}
+                        </p>
+                        {% endif %}
                         {% if c.exclusion.cpf_cnpj or c.exclusion.numero_acesso %}
                         <p class="text-xs text-gray-500">
                             {% if c.exclusion.cpf_cnpj %}CPF: {{ c.exclusion.cpf_cnpj|digits_only }}{% endif %}
@@ -260,6 +265,23 @@
                                    inputmode="decimal" placeholder="0,00">
                             <button type="submit" class="inline-flex items-center px-2 py-1 bg-indigo-600 text-white text-xs font-medium rounded-md hover:bg-indigo-700">
                                 <i class="fas fa-pen mr-1"></i> Atualizar
+                            </button>
+                        </form>
+
+                        <form method="post" action="{% url 'contestacao:update_contestation_manage' c.pk %}" enctype="multipart/form-data" class="mt-2 bg-gray-50 border border-gray-200 rounded-md p-2 space-y-2">
+                            {% csrf_token %}
+                            <div>
+                                <label for="edit-reason-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Editar motivo da contestação:</label>
+                                <textarea id="edit-reason-{{ c.pk }}" name="reason" rows="2"
+                                          class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">{{ c.reason }}</textarea>
+                            </div>
+                            <div>
+                                <label for="edit-attachment-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Substituir anexo (opcional):</label>
+                                <input id="edit-attachment-{{ c.pk }}" name="attachment" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                                       class="mt-1 block text-xs text-gray-500 border border-gray-300 rounded-md px-2 py-1">
+                            </div>
+                            <button type="submit" class="inline-flex items-center px-2 py-1 bg-slate-700 text-white text-xs font-medium rounded-md hover:bg-slate-800">
+                                <i class="fas fa-save mr-1"></i> Salvar edição da contestação
                             </button>
                         </form>
                     </div>

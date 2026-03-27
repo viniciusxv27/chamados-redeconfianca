@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from decimal import Decimal
 
 from core.storage import get_media_storage
 
@@ -99,6 +100,23 @@ class Contestation(models.Model):
     confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da Confirmação')
     confirmation_notes = models.TextField(blank=True, default='', verbose_name='Observações da Confirmação')
     paid_at = models.DateTimeField(null=True, blank=True, verbose_name='Data do Pagamento')
+    sale_value_was_edited = models.BooleanField(default=False, verbose_name='Venda editada')
+    sale_value_original = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor original da venda'
+    )
+    sale_value_edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contestations_sale_value_edited',
+        verbose_name='Venda editada por'
+    )
+    sale_value_edited_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da edição da venda')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
 
