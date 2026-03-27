@@ -111,14 +111,18 @@ class Contestation(models.Model):
         return f'Contestação #{self.pk} – {self.exclusion.vendedor} ({self.get_status_display()})'
 
     def approve(self, reviewer, notes='', approval_mode='approved', attachment=None):
-        """Gestor aprova — aguarda confirmação do gerente."""
-        self.status = 'accepted'
+        """Gestor aprova e envia direto para pagamento."""
+        self.status = 'confirmed'
+        self.payment_status = 'pending_payment'
         self.reviewed_by = reviewer
         self.review_notes = notes
         self.approval_mode = approval_mode
         if attachment:
             self.review_attachment = attachment
-        self.reviewed_at = timezone.now()
+        now = timezone.now()
+        self.reviewed_at = now
+        self.confirmed_by = reviewer
+        self.confirmed_at = now
         self.save()
 
     def reject(self, reviewer, notes='', attachment=None):
@@ -132,7 +136,7 @@ class Contestation(models.Model):
         self.save()
 
     def confirm(self, requester, notes=''):
-        """Gerente dá de acordo após decisão do gestor."""
+        """Gerente dá de acordo após rejeição do gestor."""
         if self.status == 'accepted':
             self.status = 'confirmed'
             self.payment_status = 'pending_payment'

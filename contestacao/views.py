@@ -1170,7 +1170,7 @@ def manage_contestations(request):
     status_filter = request.GET.get('status', 'pending')
     qs = base_qs
     if status_filter == 'awaiting_manager':
-        qs = qs.filter(status__in=['accepted', 'rejected'], confirmed_by__isnull=True)
+        qs = qs.filter(status='rejected', confirmed_by__isnull=True)
     elif status_filter:
         qs = qs.filter(status=status_filter)
 
@@ -1233,11 +1233,27 @@ def manage_contestations(request):
         'exclusion__filial', flat=True
     ).exclude(exclusion__filial='').distinct().order_by('exclusion__filial')
 
-    pending_count = base_qs.filter(status='pending').count()
-    confirmed_count = base_qs.filter(status='confirmed', payment_status='pending_payment').count()
-    awaiting_manager_count = base_qs.filter(
-        status__in=['accepted', 'rejected'], confirmed_by__isnull=True
-    ).count()
+    pending_qs = base_qs.filter(status='pending')
+    awaiting_manager_qs = base_qs.filter(status='rejected', confirmed_by__isnull=True)
+    confirmed_qs = base_qs.filter(status='confirmed', payment_status='pending_payment')
+    rejected_qs = base_qs.filter(status='rejected')
+    denied_qs = base_qs.filter(status='denied')
+
+    def _status_metrics(queryset):
+        lines = queryset.count()
+        sectors = queryset.exclude(exclusion__filial='').values('exclusion__filial').distinct().count()
+        return {'lines': lines, 'sectors': sectors}
+
+    pending_metrics = _status_metrics(pending_qs)
+    awaiting_manager_metrics = _status_metrics(awaiting_manager_qs)
+    confirmed_metrics = _status_metrics(confirmed_qs)
+    rejected_metrics = _status_metrics(rejected_qs)
+    denied_metrics = _status_metrics(denied_qs)
+    all_metrics = _status_metrics(base_qs)
+
+    pending_count = pending_metrics['lines']
+    confirmed_count = confirmed_metrics['lines']
+    awaiting_manager_count = awaiting_manager_metrics['lines']
 
     exclusions_qs = _apply_exclusion_visibility_filter(ExclusionRecord.objects.all(), request.user)
     if filial_filter:
@@ -1276,6 +1292,12 @@ def manage_contestations(request):
         'pending_count': pending_count,
         'confirmed_count': confirmed_count,
         'awaiting_manager_count': awaiting_manager_count,
+        'pending_metrics': pending_metrics,
+        'awaiting_manager_metrics': awaiting_manager_metrics,
+        'confirmed_metrics': confirmed_metrics,
+        'rejected_metrics': rejected_metrics,
+        'denied_metrics': denied_metrics,
+        'all_metrics': all_metrics,
         'pending_sector_cards': pending_sector_cards_data,
         'sector_cards_enabled': sector_cards_enabled,
         'sector_cards_title': sector_cards_title_map.get(status_filter, 'Setores'),
@@ -1488,7 +1510,7 @@ def contestation_detail(request, pk):
 
 @login_required
 def approve_contestation(request, pk):
-    """Gestor aprova a contestação — aguarda confirmação do gerente."""
+    """Gestor aprova a contestação e envia direto para pagamento."""
     if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contestacao:manage_contestations')
@@ -1499,13 +1521,13 @@ def approve_contestation(request, pk):
     ContestationHistory.objects.create(
         contestation=c, action='approved', user=request.user, notes=notes,
     )
-    messages.success(request, f'Contestação #{c.pk} aprovada! Aguardando confirmação do gerente.')
+    messages.success(request, f'Contestação #{c.pk} aprovada e enviada para pagamento.')
     return redirect('contestacao:manage_contestations')
 
 
 @login_required
 def approve_and_contest_contestation(request, pk):
-    """Gestor aprova e marca como 'Aprovar e Contestar' para relatório."""
+    """Gestor aprova como 'Aprovar e Contestar' e envia direto para pagamento."""
     if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contestacao:manage_contestations')
@@ -1519,7 +1541,7 @@ def approve_and_contest_contestation(request, pk):
         user=request.user,
         notes=notes,
     )
-    messages.success(request, f'Contestação #{c.pk} aprovada como "Aprovar e Contestar".')
+    messages.success(request, f'Contestação #{c.pk} aprovada como "Aprovar e Contestar" e enviada para pagamento.')
     return redirect('contestacao:manage_contestations')
 
 
@@ -1564,28 +1586,24 @@ def toggle_attachment_wrong(request, pk):
 
 @login_required
 def confirm_contestation(request, pk):
-    """Gerente dá de acordo após decisão do gestor (aprovação ou rejeição)."""
-    c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
+    """Gerente dá de acordo apenas quando a contestação foi rejeitada."""
+    c = get_object_or_404(Contestation, pk=pk, status='rejected')
     if c.requester != request.user:
         messages.error(request, 'Apenas o solicitante pode dar de acordo nesta contestação.')
         return redirect('contestacao:my_contestations')
-    was_accepted = c.status == 'accepted'
     notes = request.POST.get('confirmation_notes', '')
     c.confirm(request.user, notes)
     ContestationHistory.objects.create(
         contestation=c, action='confirmed', user=request.user, notes=notes,
     )
-    if was_accepted:
-        messages.success(request, f'Contestação #{c.pk} confirmada! Aguardando pagamento.')
-    else:
-        messages.success(request, f'De acordo registrado na contestação #{c.pk}.')
+    messages.success(request, f'De acordo registrado na contestação #{c.pk}.')
     return redirect('contestacao:my_contestations')
 
 
 @login_required
 def deny_contestation(request, pk):
     """Gerente discorda da decisão do gestor."""
-    c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
+    c = get_object_or_404(Contestation, pk=pk, status='rejected')
     if c.requester != request.user:
         messages.error(request, 'Apenas o solicitante pode contestar esta decisão.')
         return redirect('contestacao:my_contestations')
