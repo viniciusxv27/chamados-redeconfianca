@@ -1174,7 +1174,7 @@ def manage_contestations(request):
     elif status_filter:
         qs = qs.filter(status=status_filter)
 
-    sector_card_statuses = {'pending', 'awaiting_manager', 'confirmed', 'rejected', 'denied'}
+    sector_card_statuses = {'', 'pending', 'awaiting_manager', 'confirmed', 'rejected', 'denied'}
 
     # Para os status com cards de setor, listar apenas quando setor for selecionado.
     selected_sector = request.GET.get('setor', '').strip()
@@ -1221,6 +1221,7 @@ def manage_contestations(request):
             qs = qs.none()
 
     sector_cards_title_map = {
+        '': 'Setores (todas as contestações)',
         'pending': 'Setores com pendências',
         'awaiting_manager': 'Setores aguardando gerente',
         'confirmed': 'Setores para pagamento',
@@ -1298,6 +1299,9 @@ def manage_contestations(request):
         'rejected_metrics': rejected_metrics,
         'denied_metrics': denied_metrics,
         'all_metrics': all_metrics,
+        'status_choices': Contestation.STATUS_CHOICES,
+        'payment_choices': Contestation.PAYMENT_CHOICES,
+        'approval_mode_choices': Contestation.APPROVAL_MODE_CHOICES,
         'pending_sector_cards': pending_sector_cards_data,
         'sector_cards_enabled': sector_cards_enabled,
         'sector_cards_title': sector_cards_title_map.get(status_filter, 'Setores'),
@@ -1411,7 +1415,7 @@ def update_contested_sale_value(request, pk):
 
 @login_required
 def update_contestation_manage(request, pk):
-    """Permite ao gestor editar dados da contestação na tela de gerenciamento."""
+    """Permite ao gestor editar administrativamente o objeto de contestação."""
     if request.method != 'POST':
         return redirect('contestacao:manage_contestations')
 
@@ -1426,21 +1430,104 @@ def update_contestation_manage(request, pk):
         messages.error(request, 'Você não pode editar esta contestação.')
         return redirect('contestacao:manage_contestations')
 
+    status = (request.POST.get('status') or '').strip()
+    payment_status = (request.POST.get('payment_status') or '').strip()
+    approval_mode = (request.POST.get('approval_mode') or '').strip()
     reason = (request.POST.get('reason') or '').strip()
-    attachment = request.FILES.get('attachment')
+    review_notes = (request.POST.get('review_notes') or '').strip()
+    confirmation_notes = (request.POST.get('confirmation_notes') or '').strip()
+    attachment_wrong = (request.POST.get('attachment_wrong') or '').lower() in ['1', 'true', 'on', 'yes']
 
-    if not reason:
-        messages.warning(request, 'Informe o motivo da contestação para salvar as alterações.')
+    valid_statuses = {choice[0] for choice in Contestation.STATUS_CHOICES}
+    valid_payments = {choice[0] for choice in Contestation.PAYMENT_CHOICES}
+    valid_approval_modes = {choice[0] for choice in Contestation.APPROVAL_MODE_CHOICES}
+
+    if status not in valid_statuses:
+        messages.error(request, 'Status inválido.')
         return redirect('contestacao:manage_contestations')
 
+    if payment_status not in valid_payments:
+        messages.error(request, 'Status de pagamento inválido.')
+        return redirect('contestacao:manage_contestations')
+
+    if approval_mode not in valid_approval_modes:
+        messages.error(request, 'Modo de aprovação inválido.')
+        return redirect('contestacao:manage_contestations')
+
+    def _parse_dtlocal(value):
+        text = (value or '').strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M')
+        except ValueError:
+            return None
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+
+    reviewed_at = _parse_dtlocal(request.POST.get('reviewed_at'))
+    confirmed_at = _parse_dtlocal(request.POST.get('confirmed_at'))
+    paid_at = _parse_dtlocal(request.POST.get('paid_at'))
+
+    attachment = request.FILES.get('attachment')
+    review_attachment = request.FILES.get('review_attachment')
+
     changed_fields = []
+
+    if contestation.status != status:
+        contestation.status = status
+        changed_fields.append('status')
+
+    if contestation.payment_status != payment_status:
+        contestation.payment_status = payment_status
+        changed_fields.append('payment_status')
+
+    if contestation.approval_mode != approval_mode:
+        contestation.approval_mode = approval_mode
+        changed_fields.append('approval_mode')
+
     if contestation.reason != reason:
         contestation.reason = reason
         changed_fields.append('reason')
 
+    if contestation.review_notes != review_notes:
+        contestation.review_notes = review_notes
+        changed_fields.append('review_notes')
+
+    if contestation.confirmation_notes != confirmation_notes:
+        contestation.confirmation_notes = confirmation_notes
+        changed_fields.append('confirmation_notes')
+
+    if contestation.attachment_wrong != attachment_wrong:
+        contestation.attachment_wrong = attachment_wrong
+        changed_fields.append('attachment_wrong')
+
+    if contestation.reviewed_at != reviewed_at:
+        contestation.reviewed_at = reviewed_at
+        changed_fields.append('reviewed_at')
+
+    if contestation.confirmed_at != confirmed_at:
+        contestation.confirmed_at = confirmed_at
+        changed_fields.append('confirmed_at')
+
+    if contestation.paid_at != paid_at:
+        contestation.paid_at = paid_at
+        changed_fields.append('paid_at')
+
     if attachment:
         contestation.attachment = attachment
         changed_fields.append('attachment')
+
+    if review_attachment:
+        contestation.review_attachment = review_attachment
+        changed_fields.append('review_attachment')
+
+    if contestation.reviewed_at and contestation.reviewed_by is None:
+        contestation.reviewed_by = request.user
+        changed_fields.append('reviewed_by')
+
+    if contestation.confirmed_at and contestation.confirmed_by is None:
+        contestation.confirmed_by = request.user
+        changed_fields.append('confirmed_by')
 
     if changed_fields:
         contestation.save(update_fields=changed_fields + ['updated_at'])

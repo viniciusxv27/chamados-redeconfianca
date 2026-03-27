@@ -270,16 +270,82 @@
 
                         <form method="post" action="{% url 'contestacao:update_contestation_manage' c.pk %}" enctype="multipart/form-data" class="mt-2 bg-gray-50 border border-gray-200 rounded-md p-2 space-y-2">
                             {% csrf_token %}
+                            <p class="text-xs font-semibold text-gray-700">Edição administrativa da contestação</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div>
+                                    <label for="edit-status-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Status</label>
+                                    <select id="edit-status-{{ c.pk }}" name="status" class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                                        {% for value, label in status_choices %}
+                                        <option value="{{ value }}" {% if c.status == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="edit-payment-status-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Status pagamento</label>
+                                    <select id="edit-payment-status-{{ c.pk }}" name="payment_status" class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                                        {% for value, label in payment_choices %}
+                                        <option value="{{ value }}" {% if c.payment_status == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="edit-approval-mode-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Botão clicado</label>
+                                    <select id="edit-approval-mode-{{ c.pk }}" name="approval_mode" class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                                        {% for value, label in approval_mode_choices %}
+                                        <option value="{{ value }}" {% if c.approval_mode == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
                             <div>
                                 <label for="edit-reason-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Editar motivo da contestação:</label>
                                 <textarea id="edit-reason-{{ c.pk }}" name="reason" rows="2"
                                           class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">{{ c.reason }}</textarea>
                             </div>
                             <div>
+                                <label for="edit-review-notes-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Review notes</label>
+                                <textarea id="edit-review-notes-{{ c.pk }}" name="review_notes" rows="2"
+                                          class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">{{ c.review_notes }}</textarea>
+                            </div>
+                            <div>
+                                <label for="edit-confirmation-notes-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Confirmation notes</label>
+                                <textarea id="edit-confirmation-notes-{{ c.pk }}" name="confirmation_notes" rows="2"
+                                          class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">{{ c.confirmation_notes }}</textarea>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div>
+                                    <label for="edit-reviewed-at-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Data análise</label>
+                                    <input id="edit-reviewed-at-{{ c.pk }}" name="reviewed_at" type="datetime-local"
+                                           value="{% if c.reviewed_at %}{{ c.reviewed_at|date:'Y-m-d\\TH:i' }}{% endif %}"
+                                           class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="edit-confirmed-at-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Data confirmação</label>
+                                    <input id="edit-confirmed-at-{{ c.pk }}" name="confirmed_at" type="datetime-local"
+                                           value="{% if c.confirmed_at %}{{ c.confirmed_at|date:'Y-m-d\\TH:i' }}{% endif %}"
+                                           class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="edit-paid-at-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Data pagamento</label>
+                                    <input id="edit-paid-at-{{ c.pk }}" name="paid_at" type="datetime-local"
+                                           value="{% if c.paid_at %}{{ c.paid_at|date:'Y-m-d\\TH:i' }}{% endif %}"
+                                           class="mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                            </div>
+                            <div>
                                 <label for="edit-attachment-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Substituir anexo (opcional):</label>
                                 <input id="edit-attachment-{{ c.pk }}" name="attachment" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
                                        class="mt-1 block text-xs text-gray-500 border border-gray-300 rounded-md px-2 py-1">
                             </div>
+                            <div>
+                                <label for="edit-review-attachment-{{ c.pk }}" class="text-xs text-gray-500 font-medium">Substituir anexo do gestor (opcional):</label>
+                                <input id="edit-review-attachment-{{ c.pk }}" name="review_attachment" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                                       class="mt-1 block text-xs text-gray-500 border border-gray-300 rounded-md px-2 py-1">
+                            </div>
+                            <label class="inline-flex items-center text-xs text-gray-700">
+                                <input type="checkbox" name="attachment_wrong" class="rounded border-gray-300 text-red-600 focus:ring-red-500 mr-2" {% if c.attachment_wrong %}checked{% endif %}>
+                                Anexo veio errado
+                            </label>
                             <button type="submit" class="inline-flex items-center px-2 py-1 bg-slate-700 text-white text-xs font-medium rounded-md hover:bg-slate-800">
                                 <i class="fas fa-save mr-1"></i> Salvar edição da contestação
                             </button>
