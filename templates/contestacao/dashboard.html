@@ -157,8 +157,8 @@
                     <thead>
                         <tr>
                             <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Pilar</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
                             <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Poderiam ser contestadas</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Contestadas</th>
                             <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Aceitos</th>
                             <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Recusados</th>
                         </tr>
@@ -167,8 +167,8 @@
                         {% for item in por_pilar %}
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2.5 text-sm font-medium text-gray-900">{{ item.exclusion__pilar|default:'-' }}</td>
-                            <td class="px-4 py-2.5 text-sm text-center text-gray-700">{{ item.total }}</td>
                             <td class="px-4 py-2.5 text-sm text-center text-indigo-600 font-medium">{{ item.poderiam_ser_contestadas }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-gray-700">{{ item.total }}</td>
                             <td class="px-4 py-2.5 text-sm text-center text-green-600 font-medium">{{ item.aceitos }}</td>
                             <td class="px-4 py-2.5 text-sm text-center text-red-600 font-medium">{{ item.recusados }}</td>
                         </tr>
@@ -190,8 +190,8 @@
                     <thead>
                         <tr>
                             <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Filial</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
                             <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Poderiam ser contestadas</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Contestadas</th>
                             <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Aceitos</th>
                             <th class="px-4 py-2.5 text-center text-xs font-medium text-gray-500 uppercase">Recusados</th>
                         </tr>
@@ -200,8 +200,8 @@
                         {% for item in por_filial %}
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2.5 text-sm font-medium text-gray-900">{{ item.exclusion__filial|default:'-' }}</td>
-                            <td class="px-4 py-2.5 text-sm text-center text-gray-700">{{ item.total }}</td>
                             <td class="px-4 py-2.5 text-sm text-center text-indigo-600 font-medium">{{ item.poderiam_ser_contestadas }}</td>
+                            <td class="px-4 py-2.5 text-sm text-center text-gray-700">{{ item.total }}</td>
                             <td class="px-4 py-2.5 text-sm text-center text-green-600 font-medium">{{ item.aceitos }}</td>
                             <td class="px-4 py-2.5 text-sm text-center text-red-600 font-medium">{{ item.recusados }}</td>
                         </tr>
