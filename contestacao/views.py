@@ -1732,24 +1732,28 @@ def toggle_attachment_wrong(request, pk):
 
 @login_required
 def confirm_contestation(request, pk):
-    """Gerente dá de acordo apenas quando a contestação foi rejeitada."""
-    c = get_object_or_404(Contestation, pk=pk, status='rejected')
+    """Gerente dá de acordo para fluxos legados (accepted) e rejeições (rejected)."""
+    c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
     if c.requester != request.user:
         messages.error(request, 'Apenas o solicitante pode dar de acordo nesta contestação.')
         return redirect('contestacao:my_contestations')
+    was_accepted = c.status == 'accepted'
     notes = request.POST.get('confirmation_notes', '')
     c.confirm(request.user, notes)
     ContestationHistory.objects.create(
         contestation=c, action='confirmed', user=request.user, notes=notes,
     )
-    messages.success(request, f'De acordo registrado na contestação #{c.pk}.')
+    if was_accepted:
+        messages.success(request, f'Contestação #{c.pk} confirmada e enviada para pagamento.')
+    else:
+        messages.success(request, f'De acordo registrado na contestação #{c.pk}.')
     return redirect('contestacao:my_contestations')
 
 
 @login_required
 def deny_contestation(request, pk):
     """Gerente discorda da decisão do gestor."""
-    c = get_object_or_404(Contestation, pk=pk, status='rejected')
+    c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
     if c.requester != request.user:
         messages.error(request, 'Apenas o solicitante pode contestar esta decisão.')
         return redirect('contestacao:my_contestations')
