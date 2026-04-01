@@ -42,6 +42,11 @@ def _get_experience_window_alerts_for_dp():
         if days_since_admission < 0:
             continue
 
+        primary_sector = user.primary_sector
+        sector_name = primary_sector.name if primary_sector else user.sectors_display
+        if not sector_name or sector_name == 'Nenhum setor':
+            sector_name = 'Sem setor'
+
         if days_since_admission <= 45:
             window_name = '1a janela (45 dias)'
             days_remaining = 45 - days_since_admission
@@ -60,6 +65,7 @@ def _get_experience_window_alerts_for_dp():
         item = {
             'user_id': user.id,
             'full_name': user.full_name or user.email,
+            'sector_name': sector_name,
             'window_name': window_name,
             'days_remaining': days_remaining,
             'window_end_date': window_end_date,
