@@ -66,6 +66,7 @@ def _get_experience_window_alerts_for_dp():
             'user_id': user.id,
             'full_name': user.full_name or user.email,
             'sector_name': sector_name,
+            'admission_date': user.admission_date,
             'window_name': window_name,
             'days_remaining': days_remaining,
             'window_end_date': window_end_date,
