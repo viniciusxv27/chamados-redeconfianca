@@ -22,9 +22,10 @@ from core.middleware import log_action
 
 
 def _get_experience_window_alerts_for_dp():
-    """Retorna usuários com janela de experiência próxima do encerramento (<= 10 dias)."""
+    """Retorna usuários com janela de experiência ativa (1a e 2a), destacando alertas (<= 10 dias)."""
     today = timezone.localdate()
-    alerts = []
+    first_window_active = []
+    second_window_active = []
 
     users = User.objects.filter(
         is_active=True,
@@ -33,6 +34,8 @@ def _get_experience_window_alerts_for_dp():
     ).filter(
         Q(demission_date__isnull=True) | Q(demission_date__gte=today)
     ).order_by('admission_date', 'first_name', 'last_name')
+
+    print(f"DEBUG: Found {users.count()} users with experience window")
 
     for user in users:
         days_since_admission = (today - user.admission_date).days
@@ -43,24 +46,48 @@ def _get_experience_window_alerts_for_dp():
             window_name = '1a janela (45 dias)'
             days_remaining = 45 - days_since_admission
             window_end_date = user.admission_date + timedelta(days=45)
+            window_key = 'FIRST'
         elif days_since_admission <= 90:
             window_name = '2a janela (90 dias)'
             days_remaining = 90 - days_since_admission
             window_end_date = user.admission_date + timedelta(days=90)
+            window_key = 'SECOND'
         else:
             continue
 
-        if 0 <= days_remaining <= 10:
-            alerts.append({
-                'user_id': user.id,
-                'full_name': user.full_name or user.email,
-                'window_name': window_name,
-                'days_remaining': days_remaining,
-                'window_end_date': window_end_date,
-            })
+        print(f"DEBUG: User {user.id} - {user.full_name} has {days_remaining} days remaining in {window_name}")
 
-    alerts.sort(key=lambda item: (item['days_remaining'], item['full_name']))
-    return alerts
+        item = {
+            'user_id': user.id,
+            'full_name': user.full_name or user.email,
+            'window_name': window_name,
+            'days_remaining': days_remaining,
+            'window_end_date': window_end_date,
+            'is_last_10_days_alert': 0 <= days_remaining <= 10,
+        }
+
+        if item['is_last_10_days_alert']:
+            print(f"DEBUG: Adding alert for user {user.id} - {user.full_name}, days remaining: {days_remaining}")
+
+        if window_key == 'FIRST':
+            first_window_active.append(item)
+        else:
+            second_window_active.append(item)
+
+    first_window_active.sort(
+        key=lambda item: (not item['is_last_10_days_alert'], item['days_remaining'], item['full_name'])
+    )
+    second_window_active.sort(
+        key=lambda item: (not item['is_last_10_days_alert'], item['days_remaining'], item['full_name'])
+    )
+
+    return {
+        'first_window_active': first_window_active,
+        'second_window_active': second_window_active,
+        'alerts_count': sum(
+            1 for item in (first_window_active + second_window_active) if item['is_last_10_days_alert']
+        ),
+    }
 
 
 @login_required
@@ -98,15 +125,38 @@ def home_feed(request):
     page_number = request.GET.get('page')
     communications = paginator.get_page(page_number)
 
-    show_experience_window_popup = request.user.groups.filter(id=5).exists()
-    experience_window_alerts = _get_experience_window_alerts_for_dp() if show_experience_window_popup else []
+    show_experience_window_popup = (
+        request.user.sector_id == 13
+        or request.user.sectors.filter(id=13).exists() 
+        or request.user.sector_id == 36
+        or request.user.sectors.filter(id=36).exists()
+        or request.user.sector_id == 4
+        or request.user.sectors.filter(id=4).exists()
+        or request.user.sector_id == 3
+        or request.user.sectors.filter(id=3).exists()
+        or request.user.sector_id == 2
+        or request.user.sectors.filter(id=2).exists()
+    )
+    experience_window_data = _get_experience_window_alerts_for_dp() if show_experience_window_popup else {
+        'first_window_active': [],
+        'second_window_active': [],
+        'alerts_count': 0,
+    }
     
     context = {
         'pinned_communications': pinned_communications,
         'communications': communications,
         'recent_compliments': recent_compliments,
-        'show_experience_window_popup': show_experience_window_popup and bool(experience_window_alerts),
-        'experience_window_alerts': experience_window_alerts,
+        'show_experience_window_popup': show_experience_window_popup and (
+            bool(experience_window_data['first_window_active'])
+            or bool(experience_window_data['second_window_active'])
+        ),
+        'experience_window_alerts': (
+            experience_window_data['first_window_active'] + experience_window_data['second_window_active']
+        ),
+        'experience_window_first_active': experience_window_data['first_window_active'],
+        'experience_window_second_active': experience_window_data['second_window_active'],
+        'experience_window_alerts_count': experience_window_data['alerts_count'],
     }
     return render(request, 'home.html', context)
 

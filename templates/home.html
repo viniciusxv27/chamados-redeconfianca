@@ -26,6 +26,28 @@
 
 <!-- Mobile Optimization -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<style>
+    #experience-window-modal {
+        opacity: 0;
+        transition: opacity 220ms ease;
+    }
+
+    #experience-window-modal.is-visible {
+        opacity: 1;
+    }
+
+    #experience-window-modal .experience-window-card {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
+    }
+
+    #experience-window-modal.is-visible .experience-window-card {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -41,7 +63,7 @@
     <div id="experience-window-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black bg-opacity-50" id="experience-window-backdrop"></div>
         <div class="relative flex min-h-full items-center justify-center p-4">
-            <div class="w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+            <div class="experience-window-card w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 bg-orange-50">
                     <div class="flex items-center justify-between">
                         <h3 class="text-lg font-semibold text-gray-900">
@@ -52,25 +74,64 @@
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
-                    <p class="text-sm text-gray-600 mt-1">Usuários com até 10 dias para encerrar a 1a ou 2a janela.</p>
+                    <p class="text-sm text-gray-600 mt-1">1a (45 dias) e 2a (90 dias) janelas ativas. Alertas destacados nos últimos 10 dias.</p>
+                    <div class="mt-3 inline-flex items-center rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-semibold">
+                        {{ experience_window_alerts_count }} alerta{{ experience_window_alerts_count|pluralize }} nos últimos 10 dias
+                    </div>
                 </div>
-                <div class="max-h-96 overflow-y-auto">
-                    <ul class="divide-y divide-gray-100">
-                        {% for alert in experience_window_alerts %}
-                        <li class="px-6 py-4">
-                            <div class="flex items-start justify-between gap-4">
-                                <div>
-                                    <p class="font-medium text-gray-900">{{ alert.full_name }}</p>
-                                    <p class="text-sm text-gray-600">{{ alert.window_name }}</p>
-                                    <p class="text-xs text-gray-500">Encerramento: {{ alert.window_end_date|date:"d/m/Y" }}</p>
+                <div class="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-6">
+                    <section>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-bold uppercase tracking-wide text-gray-700">2a Janela Ativa (90 dias)</h4>
+                            <span class="text-xs font-medium text-gray-500">{{ experience_window_second_active|length }} colaborador{{ experience_window_second_active|length|pluralize:"es" }}</span>
+                        </div>
+                        {% if experience_window_second_active %}
+                        <ul class="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+                            {% for alert in experience_window_second_active %}
+                            <li class="px-4 py-3">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="font-medium text-gray-900">{{ alert.full_name }}</p>
+                                        <p class="text-xs text-gray-500">Encerramento: {{ alert.window_end_date|date:"d/m/Y" }}</p>
+                                    </div>
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {% if alert.is_last_10_days_alert and alert.days_remaining <= 3 %}bg-red-100 text-red-700{% elif alert.is_last_10_days_alert %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-700{% endif %}">
+                                        {{ alert.days_remaining }} dia{{ alert.days_remaining|pluralize }}
+                                    </span>
                                 </div>
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {% if alert.days_remaining <= 3 %}bg-red-100 text-red-700{% else %}bg-yellow-100 text-yellow-700{% endif %}">
-                                    {{ alert.days_remaining }} dia{{ alert.days_remaining|pluralize }}
-                                </span>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="text-sm text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">Nenhum colaborador na 2a janela ativa.</div>
+                        {% endif %}
+                    </section>
+                    
+                    <section>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-bold uppercase tracking-wide text-gray-700">1a Janela Ativa (45 dias)</h4>
+                            <span class="text-xs font-medium text-gray-500">{{ experience_window_first_active|length }} colaborador{{ experience_window_first_active|length|pluralize:"es" }}</span>
+                        </div>
+                        {% if experience_window_first_active %}
+                        <ul class="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+                            {% for alert in experience_window_first_active %}
+                            <li class="px-4 py-3">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="font-medium text-gray-900">{{ alert.full_name }}</p>
+                                        <p class="text-xs text-gray-500">Encerramento: {{ alert.window_end_date|date:"d/m/Y" }}</p>
+                                    </div>
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {% if alert.is_last_10_days_alert and alert.days_remaining <= 3 %}bg-red-100 text-red-700{% elif alert.is_last_10_days_alert %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-700{% endif %}">
+                                        {{ alert.days_remaining }} dia{{ alert.days_remaining|pluralize }}
+                                    </span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="text-sm text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">Nenhum colaborador na 1a janela ativa.</div>
+                        {% endif %}
+                    </section>
+
                 </div>
                 <div class="px-6 py-3 bg-gray-50 text-right">
                     <button type="button" id="experience-window-ok" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
@@ -460,7 +521,6 @@
 </div>
 
 <script>
-<script>
 // Function to get CSRF token
 function getCsrfToken() {
     // First try from DOM element
@@ -505,15 +565,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const experienceClose = document.getElementById('experience-window-close');
     const experienceOk = document.getElementById('experience-window-ok');
     const experienceBackdrop = document.getElementById('experience-window-backdrop');
+    let isExperienceModalClosing = false;
 
     function closeExperienceModal() {
-        if (experienceModal) {
+        if (!experienceModal || isExperienceModalClosing) return;
+        isExperienceModalClosing = true;
+        experienceModal.classList.remove('is-visible');
+
+        setTimeout(() => {
             experienceModal.classList.add('hidden');
-        }
+            isExperienceModalClosing = false;
+        }, 260);
+    }
+
+    function openExperienceModal() {
+        if (!experienceModal) return;
+        experienceModal.classList.remove('hidden');
+
+        requestAnimationFrame(() => {
+            experienceModal.classList.add('is-visible');
+        });
     }
 
     if (experienceModal) {
-        experienceModal.classList.remove('hidden');
+        openExperienceModal();
         if (experienceClose) experienceClose.addEventListener('click', closeExperienceModal);
         if (experienceOk) experienceOk.addEventListener('click', closeExperienceModal);
         if (experienceBackdrop) experienceBackdrop.addEventListener('click', closeExperienceModal);
