@@ -606,6 +606,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'Nome',
             'Setor',
             'Data de admissao',
+            'Data final da janela',
             'Dias para fim da janela',
         ];
 
@@ -615,6 +616,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 row.full_name,
                 row.sector_name,
                 formatDateToBr(row.admission_date),
+                formatDateToBr(row.window_end_date),
                 row.days_remaining,
             ].map(csvEscape).join(';'));
         });
