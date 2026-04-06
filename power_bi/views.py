@@ -25,7 +25,7 @@ def _is_standard_user(user):
 def _is_gerentes_group_user(user):
     if not _is_standard_user(user):
         return False
-    return any(_normalize_text(group.name) == 'GERENTES' for group in user.groups.all())
+    return any('GERENTES' in _normalize_text(group.name) for group in user.groups.all())
 
 
 def _get_user_store_candidates(user):
@@ -48,21 +48,57 @@ def _get_user_store_candidates(user):
 def _get_user_primary_store(user):
     if getattr(user, 'pdv', None):
         normalized_pdv = _normalize_text(user.pdv)
-        if normalized_pdv:
+        if normalized_pdv and not _is_network_store(normalized_pdv):
             return normalized_pdv
 
     if getattr(user, 'sector', None) and getattr(user.sector, 'name', None):
         normalized_sector = _normalize_text(user.sector.name)
-        if normalized_sector:
+        if normalized_sector and not _is_network_store(normalized_sector):
             return normalized_sector
 
     first_sector = user.sectors.order_by('id').first()
     if first_sector and getattr(first_sector, 'name', None):
         normalized_sector = _normalize_text(first_sector.name)
-        if normalized_sector:
+        if normalized_sector and not _is_network_store(normalized_sector):
             return normalized_sector
 
     return ''
+
+
+def _is_network_store(store_name):
+    normalized = _normalize_text(store_name)
+    if not normalized:
+        return False
+    return (
+        normalized == 'REDE'
+        or normalized.startswith('REDE ')
+        or normalized.endswith(' REDE')
+        or ' TOTAL REDE' in normalized
+        or normalized == 'TOTAL REDE'
+    )
+
+
+def _normalize_store_key(value):
+    normalized = _normalize_text(value)
+    for prefix in ('LOJA ', 'PDV ', 'FILIAL '):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):].strip()
+    return normalized
+
+
+def _stores_match(store_a, store_b):
+    a = _normalize_store_key(store_a)
+    b = _normalize_store_key(store_b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if a in b or b in a:
+        return True
+    a_words = set(a.split())
+    b_words = set(b.split())
+    common = a_words & b_words
+    return len(common) >= 2 or (len(common) == 1 and min(len(a_words), len(b_words)) == 1)
 
 
 def _normalize_text(value):
@@ -197,6 +233,9 @@ def _extract_entries_pdv_real(headers, rows):
         store_name = ''
         if pdv_idx is not None and pdv_idx < len(row):
             store_name = '' if row[pdv_idx] is None else str(row[pdv_idx]).strip()
+
+        if _is_network_store(store_name):
+            continue
 
         row_data = {}
         for col_idx, header in enumerate(headers):
@@ -443,7 +482,7 @@ def goals_list_view(request):
             manager_entry_ids = []
             for entry in entries:
                 entry_store = _normalize_text(entry.store_name)
-                if manager_store and entry_store == manager_store:
+                if manager_store and _stores_match(entry_store, manager_store):
                     manager_entry_ids.append(entry.id)
             entries = entries.filter(id__in=manager_entry_ids)
         else:
@@ -492,7 +531,7 @@ def goals_list_view(request):
     all_pilares = []
     if current_upload and not (is_standard_user or is_gerente_user):
         all_entries = GoalEntry.objects.filter(upload=current_upload)
-        all_stores = sorted({entry.store_name for entry in all_entries if entry.store_name})
+        all_stores = sorted({entry.store_name for entry in all_entries if entry.store_name and not _is_network_store(entry.store_name)})
         all_pilares = sorted({entry.pilar for entry in all_entries if entry.pilar})
 
     cn_total_value = sum((item.goal_value or Decimal('0.00')) for item in cn_entries)
