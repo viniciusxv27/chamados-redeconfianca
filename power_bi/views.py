@@ -19,7 +19,7 @@ def _is_superadmin(user):
 
 
 def _is_standard_user(user):
-    return user.hierarchy == 'PADRAO' and not user.is_superuser
+    return user.hierarchy == 'PADRÃO' and not user.is_superuser
 
 
 def _normalize_text(value):
