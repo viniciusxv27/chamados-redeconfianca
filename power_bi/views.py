@@ -394,6 +394,7 @@ def goals_list_view(request):
     selected_store = '' if (is_standard_user or is_gerente_user) else request.GET.get('store', '').strip()
     selected_pilar = '' if (is_standard_user or is_gerente_user) else request.GET.get('pilar', '').strip()
     selected_cn = request.GET.get('cn', '').strip() if is_gerente_user else ''
+    selected_seller = request.GET.get('seller', '').strip() if not is_cn_user else ''
 
     if current_upload:
         entries = GoalEntry.objects.filter(upload=current_upload).order_by('sheet_type', 'store_name', 'pilar', 'user_name')
@@ -446,8 +447,10 @@ def goals_list_view(request):
     pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if (is_gerente_user or not is_standard_user) else GoalEntry.objects.none()
 
     available_cns = []
+    available_sellers = sorted({entry.user_name for entry in cn_entries if entry.user_name})
+
     if is_gerente_user:
-        available_cns = sorted({entry.user_name for entry in cn_entries if entry.user_name})
+        available_cns = available_sellers
         if available_cns and selected_cn not in available_cns:
             selected_cn = available_cns[0]
         if selected_cn:
@@ -457,6 +460,13 @@ def goals_list_view(request):
                 if _normalize_text(entry.user_name) == selected_cn_normalized
             ]
             cn_entries = cn_entries.filter(id__in=cn_ids)
+    elif selected_seller:
+        selected_seller_normalized = _normalize_text(selected_seller)
+        cn_ids = [
+            entry.id for entry in cn_entries
+            if _normalize_text(entry.user_name) == selected_seller_normalized
+        ]
+        cn_entries = cn_entries.filter(id__in=cn_ids)
 
     all_stores = []
     all_pilares = []
@@ -467,8 +477,12 @@ def goals_list_view(request):
 
     cn_total_value = sum((item.goal_value or Decimal('0.00')) for item in cn_entries)
     pdv_total_value = sum((item.goal_value or Decimal('0.00')) for item in pdv_entries)
-    # PDV representa o total da loja; quando existir, evita duplicidade com soma de CN.
-    total_value = pdv_total_value if pdv_total_value > Decimal('0.00') else cn_total_value
+    # Quando vendedor estiver filtrado, o total nao deve agregar a rede inteira.
+    if selected_cn or selected_seller:
+        total_value = cn_total_value
+    else:
+        # PDV representa o total da loja; quando existir, evita duplicidade com soma de CN.
+        total_value = pdv_total_value if pdv_total_value > Decimal('0.00') else cn_total_value
 
     pilar_cn_map = defaultdict(lambda: Decimal('0.00'))
     pilar_pdv_map = defaultdict(lambda: Decimal('0.00'))
@@ -537,7 +551,9 @@ def goals_list_view(request):
         'is_gerente_user': is_gerente_user,
         'is_cn_user': is_cn_user,
         'selected_cn': selected_cn,
+        'selected_seller': selected_seller,
         'available_cns': available_cns,
+        'available_sellers': available_sellers,
         'total_value': total_value,
         'entries_count': entries.count() if hasattr(entries, 'count') else len(entries),
         'cn_total': cn_total_value,

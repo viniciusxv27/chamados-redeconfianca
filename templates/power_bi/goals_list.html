@@ -160,7 +160,7 @@
 
     {% if not is_standard_user %}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Mes</label>
                 <select name="month" class="w-full border border-gray-300 rounded-lg p-2">
@@ -175,6 +175,16 @@
                 <select name="year" class="w-full border border-gray-300 rounded-lg p-2">
                     {% for upload in uploads %}
                         <option value="{{ upload.year }}" {% if current_upload and upload.year == current_upload.year %}selected{% endif %}>{{ upload.year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Por vendedor</label>
+                <select name="seller" class="w-full border border-gray-300 rounded-lg p-2">
+                    <option value="">Todos</option>
+                    {% for seller in available_sellers %}
+                        <option value="{{ seller }}" {% if selected_seller == seller %}selected{% endif %}>{{ seller }}</option>
                     {% endfor %}
                 </select>
             </div>
