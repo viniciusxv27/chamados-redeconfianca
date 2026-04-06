@@ -14,6 +14,14 @@ def get_lesson_media_storage():
     return None
 
 
+def get_trail_media_storage():
+    """Return media storage backend for trail assets (icons/certificates)."""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
+
 def upload_trail_icon(instance, filename):
     """Define o caminho de upload para ícones de trilha"""
     ext = filename.split('.')[-1]
@@ -83,6 +91,7 @@ class KnowledgeTrail(models.Model):
     # Gamificação
     icon = models.ImageField(
         upload_to=upload_trail_icon,
+        storage=get_trail_media_storage(),
         blank=True,
         null=True,
         verbose_name='Ícone da Trilha'
@@ -124,6 +133,7 @@ class KnowledgeTrail(models.Model):
     )
     certificate_logo = models.ImageField(
         upload_to=upload_certificate_logo,
+        storage=get_trail_media_storage(),
         blank=True,
         null=True,
         verbose_name='Logo para Certificado',

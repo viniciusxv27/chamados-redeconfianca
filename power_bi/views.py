@@ -451,8 +451,8 @@ def goals_list_view(request):
     uploads = GoalUpload.objects.order_by('-year', '-month', '-updated_at')
     current_upload = None
 
-    # CN padrao nao pode aplicar filtros globais; gerente e niveis acima podem escolher competencia.
-    if not is_cn_user and selected_year and selected_month:
+    # Todos os perfis podem escolher a competencia (mes/ano).
+    if selected_year and selected_month:
         current_upload = uploads.filter(year=selected_year, month=selected_month).first()
     if current_upload is None:
         current_upload = uploads.first()
@@ -518,8 +518,6 @@ def goals_list_view(request):
 
     if is_gerente_user:
         available_cns = available_sellers
-        if available_cns and selected_cn not in available_cns:
-            selected_cn = available_cns[0]
         if selected_cn:
             selected_cn_normalized = _normalize_text(selected_cn)
             cn_ids = [
@@ -570,6 +568,38 @@ def goals_list_view(request):
             'total': total,
             'bar_percent': float((total / cn_max_total) * Decimal('100')),
         })
+
+    manager_cn_table_rows = []
+    manager_cn_table_columns = [
+        'SVA',
+        'SEGURO',
+        'MOVEL',
+        'FIXA',
+        'SMARTPHONE',
+        'ELETRONICOS',
+        'ESSENCIAIS',
+    ]
+    if is_gerente_user:
+        by_seller = defaultdict(lambda: defaultdict(lambda: Decimal('0.00')))
+        for item in cn_entries:
+            seller = item.user_name or 'SEM CONSULTOR'
+            pilar = _normalize_text(item.pilar)
+            if item.goal_value is None:
+                continue
+            by_seller[seller][pilar] += item.goal_value
+
+        for seller in sorted(by_seller.keys()):
+            row_total = Decimal('0.00')
+            row = {
+                'seller': seller,
+                'ordered_values': [],
+            }
+            for column in manager_cn_table_columns:
+                value = by_seller[seller].get(column, Decimal('0.00'))
+                row['ordered_values'].append(value)
+                row_total += value
+            row['row_total'] = row_total
+            manager_cn_table_rows.append(row)
 
     pdv_pilar_rows = []
     pdv_max_total = max(pilar_pdv_map.values()) if pilar_pdv_map else Decimal('0.00')
@@ -631,6 +661,8 @@ def goals_list_view(request):
         'pdv_pilar_rows': pdv_pilar_rows,
         'top_consultants': top_consultants,
         'top_stores': top_stores,
+        'manager_cn_table_columns': manager_cn_table_columns,
+        'manager_cn_table_rows': manager_cn_table_rows,
         'now': timezone.now(),
     }
     return render(request, 'power_bi/goals_list.html', context)
