@@ -19,7 +19,30 @@ def _is_superadmin(user):
 
 
 def _is_standard_user(user):
-    return user.hierarchy == 'PADRÃO' and not user.is_superuser
+    return user.hierarchy == 'PADRAO' and not user.is_superuser
+
+
+def _is_gerentes_group_user(user):
+    if not _is_standard_user(user):
+        return False
+    return any(_normalize_text(group.name) == 'GERENTES' for group in user.groups.all())
+
+
+def _get_user_store_candidates(user):
+    candidates = set()
+    if getattr(user, 'pdv', None):
+        normalized_pdv = _normalize_text(user.pdv)
+        if normalized_pdv:
+            candidates.add(normalized_pdv)
+    if getattr(user, 'sector', None) and getattr(user.sector, 'name', None):
+        normalized_sector = _normalize_text(user.sector.name)
+        if normalized_sector:
+            candidates.add(normalized_sector)
+    for sector in user.sectors.all():
+        normalized_sector = _normalize_text(getattr(sector, 'name', ''))
+        if normalized_sector:
+            candidates.add(normalized_sector)
+    return candidates
 
 
 def _normalize_text(value):
@@ -352,6 +375,8 @@ def delete_power_bi_view(request, report_id):
 @login_required
 def goals_list_view(request):
     is_standard_user = _is_standard_user(request.user)
+    is_gerente_user = _is_gerentes_group_user(request.user)
+    is_cn_user = is_standard_user and not is_gerente_user
 
     selected_year = request.GET.get('year')
     selected_month = request.GET.get('month')
@@ -359,20 +384,21 @@ def goals_list_view(request):
     uploads = GoalUpload.objects.order_by('-year', '-month', '-updated_at')
     current_upload = None
 
-    # Usuario PADRAO nao pode aplicar filtros de competencia/loja/pilar.
-    if not is_standard_user and selected_year and selected_month:
+    # CN padrao nao pode aplicar filtros globais; gerente e niveis acima podem escolher competencia.
+    if not is_cn_user and selected_year and selected_month:
         current_upload = uploads.filter(year=selected_year, month=selected_month).first()
     if current_upload is None:
         current_upload = uploads.first()
 
     entries = GoalEntry.objects.none()
-    selected_store = '' if is_standard_user else request.GET.get('store', '').strip()
-    selected_pilar = '' if is_standard_user else request.GET.get('pilar', '').strip()
+    selected_store = '' if (is_standard_user or is_gerente_user) else request.GET.get('store', '').strip()
+    selected_pilar = '' if (is_standard_user or is_gerente_user) else request.GET.get('pilar', '').strip()
+    selected_cn = request.GET.get('cn', '').strip() if is_gerente_user else ''
 
     if current_upload:
         entries = GoalEntry.objects.filter(upload=current_upload).order_by('sheet_type', 'store_name', 'pilar', 'user_name')
 
-        if is_standard_user:
+        if is_cn_user:
             entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
             user_tokens = {
                 _normalize_text(request.user.full_name),
@@ -391,6 +417,14 @@ def goals_list_view(request):
                 if any(token == entry_name for token in user_tokens):
                     filtered_ids.append(entry.id)
             entries = entries.filter(id__in=filtered_ids)
+        elif is_gerente_user:
+            manager_store_candidates = _get_user_store_candidates(request.user)
+            manager_entry_ids = []
+            for entry in entries:
+                entry_store = _normalize_text(entry.store_name)
+                if entry_store and entry_store in manager_store_candidates:
+                    manager_entry_ids.append(entry.id)
+            entries = entries.filter(id__in=manager_entry_ids)
         else:
             if selected_store:
                 store_target = _normalize_text(selected_store)
@@ -409,19 +443,32 @@ def goals_list_view(request):
                 entries = entries.filter(id__in=entry_ids)
 
     cn_entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
-    pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if not is_standard_user else GoalEntry.objects.none()
+    pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if (is_gerente_user or not is_standard_user) else GoalEntry.objects.none()
+
+    available_cns = []
+    if is_gerente_user:
+        available_cns = sorted({entry.user_name for entry in cn_entries if entry.user_name})
+        if available_cns and selected_cn not in available_cns:
+            selected_cn = available_cns[0]
+        if selected_cn:
+            selected_cn_normalized = _normalize_text(selected_cn)
+            cn_ids = [
+                entry.id for entry in cn_entries
+                if _normalize_text(entry.user_name) == selected_cn_normalized
+            ]
+            cn_entries = cn_entries.filter(id__in=cn_ids)
 
     all_stores = []
     all_pilares = []
-    if current_upload and not is_standard_user:
+    if current_upload and not (is_standard_user or is_gerente_user):
         all_entries = GoalEntry.objects.filter(upload=current_upload)
         all_stores = sorted({entry.store_name for entry in all_entries if entry.store_name})
         all_pilares = sorted({entry.pilar for entry in all_entries if entry.pilar})
 
-    total_value = Decimal('0.00')
-    for item in entries:
-        if item.goal_value is not None:
-            total_value += item.goal_value
+    cn_total_value = sum((item.goal_value or Decimal('0.00')) for item in cn_entries)
+    pdv_total_value = sum((item.goal_value or Decimal('0.00')) for item in pdv_entries)
+    # PDV representa o total da loja; quando existir, evita duplicidade com soma de CN.
+    total_value = pdv_total_value if pdv_total_value > Decimal('0.00') else cn_total_value
 
     pilar_cn_map = defaultdict(lambda: Decimal('0.00'))
     pilar_pdv_map = defaultdict(lambda: Decimal('0.00'))
@@ -467,7 +514,7 @@ def goals_list_view(request):
     )[:10]
 
     store_totals = defaultdict(lambda: Decimal('0.00'))
-    if not is_standard_user:
+    if is_gerente_user or not is_standard_user:
         for item in pdv_entries:
             if item.goal_value is None:
                 continue
@@ -487,12 +534,16 @@ def goals_list_view(request):
         'all_stores': all_stores,
         'all_pilares': all_pilares,
         'is_standard_user': is_standard_user,
+        'is_gerente_user': is_gerente_user,
+        'is_cn_user': is_cn_user,
+        'selected_cn': selected_cn,
+        'available_cns': available_cns,
         'total_value': total_value,
         'entries_count': entries.count() if hasattr(entries, 'count') else len(entries),
-        'cn_total': sum((item.goal_value or Decimal('0.00')) for item in cn_entries),
-        'pdv_total': sum((item.goal_value or Decimal('0.00')) for item in pdv_entries),
+        'cn_total': cn_total_value,
+        'pdv_total': pdv_total_value,
         'cn_entries_count': cn_entries.count(),
-        'pdv_entries_count': pdv_entries.count() if not is_standard_user else 0,
+        'pdv_entries_count': pdv_entries.count() if (is_gerente_user or not is_standard_user) else 0,
         'cn_pilar_rows': cn_pilar_rows,
         'pdv_pilar_rows': pdv_pilar_rows,
         'top_consultants': top_consultants,

@@ -101,6 +101,28 @@
         font-weight: 800;
         font-size: 1.1rem;
     }
+
+    .pdv-pillar-card {
+        border: 1px solid #bbf7d0;
+        border-radius: 0.9rem;
+        background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+        padding: 0.85rem 0.9rem;
+    }
+
+    .pdv-pillar-title {
+        font-size: 0.77rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #166534;
+        font-weight: 700;
+    }
+
+    .pdv-pillar-value {
+        margin-top: 0.35rem;
+        color: #047857;
+        font-weight: 800;
+        font-size: 1.1rem;
+    }
 </style>
 {% endblock %}
 
@@ -122,7 +144,7 @@
     </div>
 
     {% if uploads %}
-    {% if is_standard_user %}
+    {% if is_cn_user %}
     <div class="mb-6 rounded-2xl border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-4 sm:p-5">
         <div class="flex items-start gap-3">
             <div class="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -187,17 +209,19 @@
     {% endif %}
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {% if not is_gerente_user %}
         <div class="kpi-card">
             <p class="kpi-label">Meta total</p>
             <h2 class="kpi-value js-currency" data-value="{{ total_value|default:'0' }}">R$ 0,00</h2>
             <p class="text-xs text-gray-500 mt-2">Consolidado do periodo selecionado</p>
         </div>
+        {% endif %}
         <div class="kpi-card">
             <p class="kpi-label">Metas CN</p>
             <h2 class="kpi-value text-blue-700 js-currency" data-value="{{ cn_total|default:'0' }}">R$ 0,00</h2>
             <p class="text-xs text-gray-500 mt-1">{{ cn_entries_count }} linhas</p>
         </div>
-        {% if not is_standard_user %}
+        {% if is_gerente_user or not is_standard_user %}
         <div class="kpi-card">
             <p class="kpi-label">Metas PDV (Loja)</p>
             <h2 class="kpi-value text-emerald-700 js-currency" data-value="{{ pdv_total|default:'0' }}">R$ 0,00</h2>
@@ -216,7 +240,7 @@
             <button type="button" id="toggle-cn" class="goal-toggle-btn active px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium">
                 Painel CN
             </button>
-            {% if not is_standard_user %}
+            {% if is_gerente_user or not is_standard_user %}
             <button type="button" id="toggle-pdv" class="goal-toggle-btn px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium">
                 Painel PDV
             </button>
@@ -230,6 +254,25 @@
                 <h3 class="text-lg font-semibold text-gray-900">Painel CN por pilar</h3>
                 <span class="text-xs text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">CN</span>
             </div>
+
+            {% if is_gerente_user %}
+            <form method="get" class="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">CN da loja</label>
+                    <select name="cn" class="w-full border border-gray-300 rounded-lg p-2">
+                        {% for cn in available_cns %}
+                            <option value="{{ cn }}" {% if selected_cn == cn %}selected{% endif %}>{{ cn }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        Aplicar CN
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+
             <div class="cn-pillar-grid">
                 {% for row in cn_pilar_rows %}
                 <div class="cn-pillar-card">
@@ -266,23 +309,18 @@
         </div>
     </div>
 
-    {% if not is_standard_user %}
+    {% if is_gerente_user or not is_standard_user %}
     <div id="panel-pdv" class="grid grid-cols-1 xl:grid-cols-3 gap-6 hidden">
         <div class="xl:col-span-2 panel-shell p-5">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-gray-900">Painel PDV por pilar</h3>
                 <span class="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">PDV</span>
             </div>
-            <div class="space-y-4">
+            <div class="cn-pillar-grid">
                 {% for row in pdv_pilar_rows %}
-                <div>
-                    <div class="flex items-center justify-between text-sm mb-1">
-                        <span class="font-medium text-gray-700">{{ row.pilar }}</span>
-                        <span class="text-gray-600 js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</span>
-                    </div>
-                    <div class="pillar-track mb-1" style="background:#ecfdf5;">
-                        <div class="bg-emerald-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
-                    </div>
+                <div class="pdv-pillar-card">
+                    <p class="pdv-pillar-title">{{ row.pilar }}</p>
+                    <p class="pdv-pillar-value js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</p>
                 </div>
                 {% empty %}
                 <p class="text-sm text-gray-500">Sem metas PDV para o periodo selecionado.</p>
