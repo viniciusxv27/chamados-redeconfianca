@@ -67,7 +67,10 @@
 
         let loaded = false;
         let fallbackTriggered = false;
+        let monitorIntervalId = null;
         const listUrl = "{% url 'power_bi:list' %}";
+        const INITIAL_TIMEOUT_MS = 7000;
+        const MONITOR_INTERVAL_MS = 1500;
 
         function showEmbed() {
             precheck.classList.add('hidden');
@@ -78,9 +81,49 @@
             window.location.href = listUrl;
         }
 
+        function isLikelyBlockedFrame() {
+            // Tenta identificar erros renderizados localmente pelo navegador
+            // (ex.: "A conexao com login.microsoftonline.com foi recusada").
+            try {
+                const href = frame.contentWindow && frame.contentWindow.location ? String(frame.contentWindow.location.href || '') : '';
+                const doc = frame.contentDocument;
+                const title = doc && doc.title ? String(doc.title) : '';
+                const bodyText = doc && doc.body && doc.body.innerText ? String(doc.body.innerText) : '';
+                const joined = (href + ' ' + title + ' ' + bodyText).toLowerCase();
+
+                if (href === 'about:blank' && loaded) return true;
+                if (joined.includes('login.microsoftonline.com') && joined.includes('recus')) return true;
+                if (joined.includes('login.microsoftonline.com') && joined.includes('refused to connect')) return true;
+                if (joined.includes('microsoftonline') && joined.includes('nao foi possivel exibir')) return true;
+                if (joined.includes('microsoftonline') && joined.includes('refused')) return true;
+            } catch (err) {
+                // Cross-origin em funcionamento normal tende a cair aqui; nao e bloqueio por si so.
+                return false;
+            }
+
+            return false;
+        }
+
+        function startContinuousMonitoring() {
+            if (monitorIntervalId) return;
+
+            monitorIntervalId = setInterval(function () {
+                if (fallbackTriggered) return;
+                if (isLikelyBlockedFrame()) {
+                    triggerFallback();
+                }
+            }, MONITOR_INTERVAL_MS);
+        }
+
         function triggerFallback() {
             if (fallbackTriggered) return;
             fallbackTriggered = true;
+
+            if (monitorIntervalId) {
+                clearInterval(monitorIntervalId);
+                monitorIntervalId = null;
+            }
+
             fallback.classList.remove('hidden');
 
             // Tenta abrir em nova guia e retorna para a lista do Power BI.
@@ -96,7 +139,14 @@
 
         frame.addEventListener('load', function () {
             loaded = true;
+
+            if (isLikelyBlockedFrame()) {
+                triggerFallback();
+                return;
+            }
+
             showEmbed();
+            startContinuousMonitoring();
         });
 
         frame.addEventListener('error', triggerFallback);
@@ -105,7 +155,7 @@
             if (!loaded) {
                 triggerFallback();
             }
-        }, 2500);
+        }, INITIAL_TIMEOUT_MS);
     });
 </script>
 {% endblock %}
