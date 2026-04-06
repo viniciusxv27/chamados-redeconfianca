@@ -40,6 +40,16 @@
                     <p class="text-xs text-gray-500 mt-1">Formato esperado: .xlsx com as duas sheets obrigatorias.</p>
                 </div>
 
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-blue-900">
+                        {{ form.fixa_as_percentage }}
+                        <span>Porcentagem em Fixa</span>
+                    </label>
+                    <p class="text-xs text-blue-700 mt-1">
+                        Quando marcado, o pilar FIXA sera tratado como percentual (2 casas decimais e %), sem somar nos totais em R$.
+                    </p>
+                </div>
+
                 {% if form.errors %}
                 <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
                     {% for field, errors in form.errors.items %}
@@ -66,6 +76,9 @@
                             <div>
                                 <h3 class="font-semibold text-gray-900">{{ upload.month|stringformat:'02d' }}/{{ upload.year }}</h3>
                                 <p class="text-sm text-gray-600 mt-1">Arquivo: {{ upload.source_file_name|default:'-' }}</p>
+                                {% if upload.fixa_as_percentage %}
+                                <p class="text-xs text-blue-700 mt-1">FIXA em percentual (%)</p>
+                                {% endif %}
                                 <p class="text-xs text-gray-500 mt-2">Itens: {{ upload.entries.count }} | Atualizado em {{ upload.updated_at|date:'d/m/Y H:i' }}</p>
                             </div>
 

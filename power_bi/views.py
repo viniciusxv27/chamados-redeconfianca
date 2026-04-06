@@ -124,6 +124,10 @@ def _normalize_sheet_name(value):
     return _normalize_text(value).replace('_', '').replace(' ', '')
 
 
+def _is_fixa_pilar(pilar):
+    return _normalize_text(pilar) == 'FIXA'
+
+
 def _parse_decimal(value):
     if value is None:
         return None
@@ -570,6 +574,8 @@ def goals_list_view(request):
                 ]
                 entries = entries.filter(id__in=entry_ids)
 
+    fixa_as_percentage = bool(getattr(current_upload, 'fixa_as_percentage', False)) if current_upload else False
+
     cn_entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
     pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if (is_gerente_user or not is_standard_user) else GoalEntry.objects.none()
 
@@ -600,8 +606,16 @@ def goals_list_view(request):
         all_stores = sorted({entry.store_name for entry in all_entries if entry.store_name and not _is_network_store(entry.store_name)})
         all_pilares = sorted({entry.pilar for entry in all_entries if entry.pilar})
 
-    cn_total_value = sum((item.goal_value or Decimal('0.00')) for item in cn_entries)
-    pdv_total_value = sum((item.goal_value or Decimal('0.00')) for item in pdv_entries)
+    cn_total_value = sum(
+        (item.goal_value or Decimal('0.00'))
+        for item in cn_entries
+        if not (fixa_as_percentage and _is_fixa_pilar(item.pilar))
+    )
+    pdv_total_value = sum(
+        (item.goal_value or Decimal('0.00'))
+        for item in pdv_entries
+        if not (fixa_as_percentage and _is_fixa_pilar(item.pilar))
+    )
     # Quando vendedor estiver filtrado, o total nao deve agregar a rede inteira.
     if selected_cn or selected_seller:
         total_value = cn_total_value
@@ -611,21 +625,39 @@ def goals_list_view(request):
 
     pilar_cn_map = defaultdict(lambda: Decimal('0.00'))
     pilar_pdv_map = defaultdict(lambda: Decimal('0.00'))
+    pilar_cn_count = defaultdict(int)
+    pilar_pdv_count = defaultdict(int)
     for item in cn_entries:
         if item.goal_value is not None:
             pilar_cn_map[item.pilar or 'SEM PILAR'] += item.goal_value
+            pilar_cn_count[item.pilar or 'SEM PILAR'] += 1
     for item in pdv_entries:
         if item.goal_value is not None:
             pilar_pdv_map[item.pilar or 'SEM PILAR'] += item.goal_value
+            pilar_pdv_count[item.pilar or 'SEM PILAR'] += 1
 
     cn_pilar_rows = []
-    cn_max_total = max(pilar_cn_map.values()) if pilar_cn_map else Decimal('0.00')
+    cn_chart_values = []
+    for pilar_key, pilar_total in pilar_cn_map.items():
+        if fixa_as_percentage and _is_fixa_pilar(pilar_key):
+            count = pilar_cn_count.get(pilar_key, 0)
+            display_value = (pilar_total / count) if count else Decimal('0.00')
+        else:
+            display_value = pilar_total
+        cn_chart_values.append(display_value)
+
+    cn_max_total = max(cn_chart_values) if cn_chart_values else Decimal('0.00')
     cn_max_total = cn_max_total if cn_max_total > Decimal('0.00') else Decimal('1.00')
     for pilar in sorted(pilar_cn_map.keys()):
         total = pilar_cn_map[pilar]
+        is_percentage = fixa_as_percentage and _is_fixa_pilar(pilar)
+        if is_percentage:
+            count = pilar_cn_count.get(pilar, 0)
+            total = (total / count) if count else Decimal('0.00')
         cn_pilar_rows.append({
             'pilar': pilar,
             'total': total,
+            'is_percentage': is_percentage,
             'bar_percent': float((total / cn_max_total) * Decimal('100')),
         })
 
@@ -641,40 +673,66 @@ def goals_list_view(request):
     ]
     if is_gerente_user:
         by_seller = defaultdict(lambda: defaultdict(lambda: Decimal('0.00')))
+        by_seller_count = defaultdict(lambda: defaultdict(int))
         for item in cn_entries:
             seller = item.user_name or 'SEM CONSULTOR'
             pilar = _normalize_text(item.pilar)
             if item.goal_value is None:
                 continue
             by_seller[seller][pilar] += item.goal_value
+            by_seller_count[seller][pilar] += 1
 
         for seller in sorted(by_seller.keys()):
             row_total = Decimal('0.00')
             row = {
                 'seller': seller,
-                'ordered_values': [],
+                'ordered_cells': [],
             }
             for column in manager_cn_table_columns:
                 value = by_seller[seller].get(column, Decimal('0.00'))
-                row['ordered_values'].append(value)
-                row_total += value
+                is_percentage = fixa_as_percentage and _is_fixa_pilar(column)
+                if is_percentage:
+                    count = by_seller_count[seller].get(column, 0)
+                    value = (value / count) if count else Decimal('0.00')
+                row['ordered_cells'].append({
+                    'value': value,
+                    'is_percentage': is_percentage,
+                })
+                if not is_percentage:
+                    row_total += value
             row['row_total'] = row_total
             manager_cn_table_rows.append(row)
 
     pdv_pilar_rows = []
-    pdv_max_total = max(pilar_pdv_map.values()) if pilar_pdv_map else Decimal('0.00')
+    pdv_chart_values = []
+    for pilar_key, pilar_total in pilar_pdv_map.items():
+        if fixa_as_percentage and _is_fixa_pilar(pilar_key):
+            count = pilar_pdv_count.get(pilar_key, 0)
+            display_value = (pilar_total / count) if count else Decimal('0.00')
+        else:
+            display_value = pilar_total
+        pdv_chart_values.append(display_value)
+
+    pdv_max_total = max(pdv_chart_values) if pdv_chart_values else Decimal('0.00')
     pdv_max_total = pdv_max_total if pdv_max_total > Decimal('0.00') else Decimal('1.00')
     for pilar in sorted(pilar_pdv_map.keys()):
         total = pilar_pdv_map[pilar]
+        is_percentage = fixa_as_percentage and _is_fixa_pilar(pilar)
+        if is_percentage:
+            count = pilar_pdv_count.get(pilar, 0)
+            total = (total / count) if count else Decimal('0.00')
         pdv_pilar_rows.append({
             'pilar': pilar,
             'total': total,
+            'is_percentage': is_percentage,
             'bar_percent': float((total / pdv_max_total) * Decimal('100')),
         })
 
     consultant_totals = defaultdict(lambda: Decimal('0.00'))
     for item in cn_entries:
         if item.goal_value is None:
+            continue
+        if fixa_as_percentage and _is_fixa_pilar(item.pilar):
             continue
         consultant_key = item.user_name or 'SEM CONSULTOR'
         consultant_totals[consultant_key] += item.goal_value
@@ -688,6 +746,8 @@ def goals_list_view(request):
     if is_gerente_user or not is_standard_user:
         for item in pdv_entries:
             if item.goal_value is None:
+                continue
+            if fixa_as_percentage and _is_fixa_pilar(item.pilar):
                 continue
             store_key = item.store_name or 'SEM LOJA'
             store_totals[store_key] += item.goal_value
@@ -723,6 +783,7 @@ def goals_list_view(request):
         'top_stores': top_stores,
         'manager_cn_table_columns': manager_cn_table_columns,
         'manager_cn_table_rows': manager_cn_table_rows,
+        'fixa_as_percentage': fixa_as_percentage,
         'now': timezone.now(),
     }
     return render(request, 'power_bi/goals_list.html', context)
@@ -771,6 +832,7 @@ def upload_goals_view(request):
     uploaded_file = form.cleaned_data['file']
     year = form.cleaned_data['year']
     month = form.cleaned_data['month']
+    fixa_as_percentage = form.cleaned_data.get('fixa_as_percentage', False)
 
     try:
         uploaded_file.seek(0)
@@ -790,6 +852,7 @@ def upload_goals_view(request):
     with transaction.atomic():
         upload, _ = GoalUpload.objects.get_or_create(year=year, month=month)
         upload.source_file_name = uploaded_file.name
+        upload.fixa_as_percentage = fixa_as_percentage
         upload.uploaded_by = request.user
         upload.save()
 

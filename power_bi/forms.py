@@ -122,10 +122,15 @@ class GoalUploadForm(forms.ModelForm):
         }),
         label='Arquivo Excel'
     )
+    fixa_as_percentage = forms.BooleanField(
+        required=False,
+        label='Porcentagem em Fixa',
+        widget=forms.CheckboxInput(attrs={'class': 'h-4 w-4 text-primary'})
+    )
 
     class Meta:
         model = GoalUpload
-        fields = ['year', 'month']
+        fields = ['year', 'month', 'fixa_as_percentage']
 
     def clean_month(self):
         return int(self.cleaned_data['month'])

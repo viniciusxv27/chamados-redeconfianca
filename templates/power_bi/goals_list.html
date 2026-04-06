@@ -310,6 +310,12 @@
             </form>
             {% endif %}
 
+            {% if fixa_as_percentage %}
+            <div class="mb-4 text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                Pilar FIXA exibido em percentual com 2 casas decimais. Valores de FIXA nao entram no total em R$.
+            </div>
+            {% endif %}
+
             {% if is_gerente_user %}
             <div class="overflow-x-auto">
                 <table class="manager-cn-table min-w-full text-sm">
@@ -325,8 +331,8 @@
                         {% for row in manager_cn_table_rows %}
                         <tr class="odd:bg-white even:bg-gray-50/40">
                             <td class="px-3 py-2 border-b text-gray-800 font-medium">{{ row.seller }}</td>
-                            {% for value in row.ordered_values %}
-                            <td class="px-3 py-2 border-b text-right text-gray-700 js-currency" data-value="{{ value|default:'0' }}">R$ 0,00</td>
+                            {% for cell in row.ordered_cells %}
+                            <td class="px-3 py-2 border-b text-right text-gray-700 {% if cell.is_percentage %}js-percent{% else %}js-currency{% endif %}" data-value="{{ cell.value|default:'0' }}">{% if cell.is_percentage %}0,00%{% else %}R$ 0,00{% endif %}</td>
                             {% endfor %}
                         </tr>
                         {% empty %}
@@ -342,7 +348,7 @@
                 {% for row in cn_pilar_rows %}
                 <div class="cn-pillar-card">
                     <p class="cn-pillar-title">{{ row.pilar }}</p>
-                    <p class="cn-pillar-value js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</p>
+                    <p class="cn-pillar-value {% if row.is_percentage %}js-percent{% else %}js-currency{% endif %}" data-value="{{ row.total|default:'0' }}">{% if row.is_percentage %}0,00%{% else %}R$ 0,00{% endif %}</p>
                 </div>
                 {% empty %}
                 <p class="text-sm text-gray-500">Sem metas CN para o periodo selecionado.</p>
@@ -388,7 +394,7 @@
                 {% for row in pdv_pilar_rows %}
                 <div class="pdv-pillar-card">
                     <p class="pdv-pillar-title">{{ row.pilar }}</p>
-                    <p class="pdv-pillar-value js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</p>
+                    <p class="pdv-pillar-value {% if row.is_percentage %}js-percent{% else %}js-currency{% endif %}" data-value="{{ row.total|default:'0' }}">{% if row.is_percentage %}0,00%{% else %}R$ 0,00{% endif %}</p>
                 </div>
                 {% empty %}
                 <p class="text-sm text-gray-500">Sem metas PDV para o periodo selecionado.</p>
@@ -466,6 +472,10 @@
         });
 
         const integerFormatter = new Intl.NumberFormat('pt-BR');
+        const percentFormatter = new Intl.NumberFormat('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
 
         document.querySelectorAll('.js-currency').forEach(function (el) {
             const value = parseNumeric(el.dataset.value);
@@ -475,6 +485,11 @@
         document.querySelectorAll('.js-integer').forEach(function (el) {
             const value = parseNumeric(el.dataset.value);
             el.textContent = integerFormatter.format(Math.round(value));
+        });
+
+        document.querySelectorAll('.js-percent').forEach(function (el) {
+            const value = parseNumeric(el.dataset.value);
+            el.textContent = `${percentFormatter.format(value)}%`;
         });
     });
 </script>
