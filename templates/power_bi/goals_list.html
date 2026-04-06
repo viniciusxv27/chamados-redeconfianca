@@ -73,6 +73,34 @@
         background: #fed7aa;
         color: #9a3412;
     }
+
+    .cn-pillar-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.8rem;
+    }
+
+    .cn-pillar-card {
+        border: 1px solid #dbeafe;
+        border-radius: 0.9rem;
+        background: linear-gradient(135deg, #f8fbff, #eef6ff);
+        padding: 0.85rem 0.9rem;
+    }
+
+    .cn-pillar-title {
+        font-size: 0.77rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #475569;
+        font-weight: 700;
+    }
+
+    .cn-pillar-value {
+        margin-top: 0.35rem;
+        color: #1d4ed8;
+        font-weight: 800;
+        font-size: 1.1rem;
+    }
 </style>
 {% endblock %}
 
@@ -202,16 +230,11 @@
                 <h3 class="text-lg font-semibold text-gray-900">Painel CN por pilar</h3>
                 <span class="text-xs text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">CN</span>
             </div>
-            <div class="space-y-4">
+            <div class="cn-pillar-grid">
                 {% for row in cn_pilar_rows %}
-                <div>
-                    <div class="flex items-center justify-between text-sm mb-1">
-                        <span class="font-medium text-gray-700">{{ row.pilar }}</span>
-                        <span class="text-gray-600 js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</span>
-                    </div>
-                    <div class="pillar-track mb-1">
-                        <div class="bg-blue-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
-                    </div>
+                <div class="cn-pillar-card">
+                    <p class="cn-pillar-title">{{ row.pilar }}</p>
+                    <p class="cn-pillar-value js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</p>
                 </div>
                 {% empty %}
                 <p class="text-sm text-gray-500">Sem metas CN para o periodo selecionado.</p>
