@@ -351,30 +351,34 @@ def delete_power_bi_view(request, report_id):
 
 @login_required
 def goals_list_view(request):
+    is_standard_user = _is_standard_user(request.user)
+
     selected_year = request.GET.get('year')
     selected_month = request.GET.get('month')
 
     uploads = GoalUpload.objects.order_by('-year', '-month', '-updated_at')
     current_upload = None
 
-    if selected_year and selected_month:
+    # Usuario PADRAO nao pode aplicar filtros de competencia/loja/pilar.
+    if not is_standard_user and selected_year and selected_month:
         current_upload = uploads.filter(year=selected_year, month=selected_month).first()
     if current_upload is None:
         current_upload = uploads.first()
 
     entries = GoalEntry.objects.none()
-    selected_store = request.GET.get('store', '').strip()
-    selected_pilar = request.GET.get('pilar', '').strip()
+    selected_store = '' if is_standard_user else request.GET.get('store', '').strip()
+    selected_pilar = '' if is_standard_user else request.GET.get('pilar', '').strip()
 
     if current_upload:
         entries = GoalEntry.objects.filter(upload=current_upload).order_by('sheet_type', 'store_name', 'pilar', 'user_name')
 
-        if _is_standard_user(request.user):
+        if is_standard_user:
             entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
             user_tokens = {
                 _normalize_text(request.user.full_name),
                 _normalize_text(request.user.get_full_name()),
                 _normalize_text(request.user.first_name),
+                _normalize_text(request.user.last_name),
                 _normalize_text(request.user.username),
             }
             user_tokens = {token for token in user_tokens if token}
@@ -384,7 +388,7 @@ def goals_list_view(request):
                 entry_name = _normalize_text(entry.user_name)
                 if not entry_name:
                     continue
-                if any(token in entry_name or entry_name in token for token in user_tokens):
+                if any(token == entry_name for token in user_tokens):
                     filtered_ids.append(entry.id)
             entries = entries.filter(id__in=filtered_ids)
         else:
@@ -405,11 +409,11 @@ def goals_list_view(request):
                 entries = entries.filter(id__in=entry_ids)
 
     cn_entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
-    pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if not _is_standard_user(request.user) else GoalEntry.objects.none()
+    pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if not is_standard_user else GoalEntry.objects.none()
 
     all_stores = []
     all_pilares = []
-    if current_upload and not _is_standard_user(request.user):
+    if current_upload and not is_standard_user:
         all_entries = GoalEntry.objects.filter(upload=current_upload)
         all_stores = sorted({entry.store_name for entry in all_entries if entry.store_name})
         all_pilares = sorted({entry.pilar for entry in all_entries if entry.pilar})
@@ -463,7 +467,7 @@ def goals_list_view(request):
     )[:10]
 
     store_totals = defaultdict(lambda: Decimal('0.00'))
-    if not _is_standard_user(request.user):
+    if not is_standard_user:
         for item in pdv_entries:
             if item.goal_value is None:
                 continue
@@ -482,13 +486,13 @@ def goals_list_view(request):
         'selected_pilar': selected_pilar,
         'all_stores': all_stores,
         'all_pilares': all_pilares,
-        'is_standard_user': _is_standard_user(request.user),
+        'is_standard_user': is_standard_user,
         'total_value': total_value,
         'entries_count': entries.count() if hasattr(entries, 'count') else len(entries),
         'cn_total': sum((item.goal_value or Decimal('0.00')) for item in cn_entries),
         'pdv_total': sum((item.goal_value or Decimal('0.00')) for item in pdv_entries),
         'cn_entries_count': cn_entries.count(),
-        'pdv_entries_count': pdv_entries.count() if not _is_standard_user(request.user) else 0,
+        'pdv_entries_count': pdv_entries.count() if not is_standard_user else 0,
         'cn_pilar_rows': cn_pilar_rows,
         'pdv_pilar_rows': pdv_pilar_rows,
         'top_consultants': top_consultants,
