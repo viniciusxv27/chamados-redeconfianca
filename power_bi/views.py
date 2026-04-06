@@ -19,7 +19,7 @@ def _is_superadmin(user):
 
 
 def _is_standard_user(user):
-    return user.hierarchy == 'PADRÃO' and not user.is_superuser
+    return user.hierarchy in ['PADRAO', 'PADRÃO'] and not user.is_superuser
 
 
 def _is_gerentes_group_user(user):
@@ -43,6 +43,26 @@ def _get_user_store_candidates(user):
         if normalized_sector:
             candidates.add(normalized_sector)
     return candidates
+
+
+def _get_user_primary_store(user):
+    if getattr(user, 'pdv', None):
+        normalized_pdv = _normalize_text(user.pdv)
+        if normalized_pdv:
+            return normalized_pdv
+
+    if getattr(user, 'sector', None) and getattr(user.sector, 'name', None):
+        normalized_sector = _normalize_text(user.sector.name)
+        if normalized_sector:
+            return normalized_sector
+
+    first_sector = user.sectors.order_by('id').first()
+    if first_sector and getattr(first_sector, 'name', None):
+        normalized_sector = _normalize_text(first_sector.name)
+        if normalized_sector:
+            return normalized_sector
+
+    return ''
 
 
 def _normalize_text(value):
@@ -419,11 +439,11 @@ def goals_list_view(request):
                     filtered_ids.append(entry.id)
             entries = entries.filter(id__in=filtered_ids)
         elif is_gerente_user:
-            manager_store_candidates = _get_user_store_candidates(request.user)
+            manager_store = _get_user_primary_store(request.user)
             manager_entry_ids = []
             for entry in entries:
                 entry_store = _normalize_text(entry.store_name)
-                if entry_store and entry_store in manager_store_candidates:
+                if manager_store and entry_store == manager_store:
                     manager_entry_ids.append(entry.id)
             entries = entries.filter(id__in=manager_entry_ids)
         else:
