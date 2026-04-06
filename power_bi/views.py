@@ -23,9 +23,17 @@ def _is_standard_user(user):
 
 
 def _is_gerentes_group_user(user):
-    if not _is_standard_user(user):
-        return False
-    return any('GERENTES' in _normalize_text(group.name) for group in user.groups.all())
+    """Verifica se o usuario esta no grupo GERENTES via CommunicationGroup."""
+    try:
+        from communications.models import CommunicationGroup
+
+        gerente_group = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
+        if gerente_group:
+            print(f"[is_user_gerente] Verificando se {user.get_full_name()} esta no grupo GERENTES")
+            return user in gerente_group.members.all()
+    except Exception:
+        pass
+    return False
 
 
 def _get_user_store_candidates(user):
@@ -434,7 +442,7 @@ def delete_power_bi_view(request, report_id):
 @login_required
 def goals_list_view(request):
     is_standard_user = _is_standard_user(request.user)
-    is_gerente_user = _is_gerentes_group_user(request.user)
+    is_gerente_user = is_standard_user and _is_gerentes_group_user(request.user)
     is_cn_user = is_standard_user and not is_gerente_user
 
     selected_year = request.GET.get('year')
