@@ -9,6 +9,70 @@
         color: #fff;
         border-color: #f97316;
     }
+
+    .kpi-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        padding: 1.1rem;
+        background: linear-gradient(145deg, #ffffff, #f8fafc);
+        box-shadow: 0 8px 24px -20px rgba(15, 23, 42, 0.45);
+    }
+
+    .kpi-label {
+        font-size: 0.82rem;
+        color: #6b7280;
+        letter-spacing: 0.01em;
+    }
+
+    .kpi-value {
+        font-size: 1.55rem;
+        line-height: 1.1;
+        font-weight: 800;
+        color: #0f172a;
+        margin-top: 0.35rem;
+    }
+
+    .panel-shell {
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 10px 26px -22px rgba(15, 23, 42, 0.55);
+    }
+
+    .pillar-track {
+        width: 100%;
+        background: #eef2ff;
+        border-radius: 999px;
+        height: 0.62rem;
+        overflow: hidden;
+    }
+
+    .consultant-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 0.6rem;
+    }
+
+    .consultant-pill {
+        width: 1.7rem;
+        height: 1.7rem;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.72rem;
+        font-weight: 700;
+        background: #e2e8f0;
+        color: #334155;
+    }
+
+    .consultant-pill.top {
+        background: #fed7aa;
+        color: #9a3412;
+    }
 </style>
 {% endblock %}
 
@@ -79,25 +143,27 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p class="text-sm text-gray-500">Meta total</p>
-            <h2 class="text-2xl font-bold text-gray-900 mt-1">R$ {{ total_value|floatformat:2 }}</h2>
+        <div class="kpi-card">
+            <p class="kpi-label">Meta total</p>
+            <h2 class="kpi-value js-currency" data-value="{{ total_value|default:'0' }}">R$ 0,00</h2>
+            <p class="text-xs text-gray-500 mt-2">Consolidado do periodo selecionado</p>
         </div>
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p class="text-sm text-gray-500">Metas CN</p>
-            <h2 class="text-2xl font-bold text-blue-700 mt-1">R$ {{ cn_total|floatformat:2 }}</h2>
+        <div class="kpi-card">
+            <p class="kpi-label">Metas CN</p>
+            <h2 class="kpi-value text-blue-700 js-currency" data-value="{{ cn_total|default:'0' }}">R$ 0,00</h2>
             <p class="text-xs text-gray-500 mt-1">{{ cn_entries_count }} linhas</p>
         </div>
         {% if not is_standard_user %}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p class="text-sm text-gray-500">Metas PDV (Loja)</p>
-            <h2 class="text-2xl font-bold text-emerald-700 mt-1">R$ {{ pdv_total|floatformat:2 }}</h2>
+        <div class="kpi-card">
+            <p class="kpi-label">Metas PDV (Loja)</p>
+            <h2 class="kpi-value text-emerald-700 js-currency" data-value="{{ pdv_total|default:'0' }}">R$ 0,00</h2>
             <p class="text-xs text-gray-500 mt-1">{{ pdv_entries_count }} linhas</p>
         </div>
         {% endif %}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p class="text-sm text-gray-500">Total de registros</p>
-            <h2 class="text-2xl font-bold text-gray-900 mt-1">{{ entries_count }}</h2>
+        <div class="kpi-card">
+            <p class="kpi-label">Total de registros</p>
+            <h2 class="kpi-value js-integer" data-value="{{ entries_count|default:'0' }}">0</h2>
+            <p class="text-xs text-gray-500 mt-2">Linhas importadas no dashboard</p>
         </div>
     </div>
 
@@ -115,16 +181,19 @@
     </div>
 
     <div id="panel-cn" class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Painel CN por pilar</h3>
+        <div class="xl:col-span-2 panel-shell p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Painel CN por pilar</h3>
+                <span class="text-xs text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">CN</span>
+            </div>
             <div class="space-y-4">
                 {% for row in cn_pilar_rows %}
                 <div>
                     <div class="flex items-center justify-between text-sm mb-1">
                         <span class="font-medium text-gray-700">{{ row.pilar }}</span>
-                        <span class="text-gray-600">R$ {{ row.total|floatformat:2 }}</span>
+                        <span class="text-gray-600 js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</span>
                     </div>
-                    <div class="w-full bg-gray-100 rounded-full h-2.5 mb-1 overflow-hidden">
+                    <div class="pillar-track mb-1">
                         <div class="bg-blue-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
                     </div>
                 </div>
@@ -134,7 +203,7 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div class="panel-shell p-5">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
                 {% if is_standard_user %}
                 Meu resumo CN
@@ -144,9 +213,12 @@
             </h3>
             <div class="space-y-3">
                 {% for item in top_consultants %}
-                <div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2">
-                    <span class="text-gray-700">{{ item.name }}</span>
-                    <span class="font-semibold text-blue-700">R$ {{ item.total|floatformat:2 }}</span>
+                <div class="consultant-row">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="consultant-pill {% if forloop.counter <= 3 %}top{% endif %}">#{{ forloop.counter }}</span>
+                        <span class="text-gray-700 truncate">{{ item.name }}</span>
+                    </div>
+                    <span class="font-semibold text-blue-700 js-currency" data-value="{{ item.total|default:'0' }}">R$ 0,00</span>
                 </div>
                 {% empty %}
                 <p class="text-sm text-gray-500">Sem metas CN para exibir.</p>
@@ -157,16 +229,19 @@
 
     {% if not is_standard_user %}
     <div id="panel-pdv" class="grid grid-cols-1 xl:grid-cols-3 gap-6 hidden">
-        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Painel PDV por pilar</h3>
+        <div class="xl:col-span-2 panel-shell p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Painel PDV por pilar</h3>
+                <span class="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">PDV</span>
+            </div>
             <div class="space-y-4">
                 {% for row in pdv_pilar_rows %}
                 <div>
                     <div class="flex items-center justify-between text-sm mb-1">
                         <span class="font-medium text-gray-700">{{ row.pilar }}</span>
-                        <span class="text-gray-600">R$ {{ row.total|floatformat:2 }}</span>
+                        <span class="text-gray-600 js-currency" data-value="{{ row.total|default:'0' }}">R$ 0,00</span>
                     </div>
-                    <div class="w-full bg-gray-100 rounded-full h-2.5 mb-1 overflow-hidden">
+                    <div class="pillar-track mb-1" style="background:#ecfdf5;">
                         <div class="bg-emerald-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
                     </div>
                 </div>
@@ -176,13 +251,16 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div class="panel-shell p-5">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Top lojas (PDV)</h3>
             <div class="space-y-3">
                 {% for item in top_stores %}
-                <div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2">
-                    <span class="text-gray-700">{{ item.store }}</span>
-                    <span class="font-semibold text-emerald-700">R$ {{ item.total|floatformat:2 }}</span>
+                <div class="consultant-row">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="consultant-pill {% if forloop.counter <= 3 %}top{% endif %}">#{{ forloop.counter }}</span>
+                        <span class="text-gray-700 truncate">{{ item.store }}</span>
+                    </div>
+                    <span class="font-semibold text-emerald-700 js-currency" data-value="{{ item.total|default:'0' }}">R$ 0,00</span>
                 </div>
                 {% empty %}
                 <p class="text-sm text-gray-500">Sem metas PDV para exibir.</p>
@@ -227,6 +305,32 @@
 
         if (btnCn) btnCn.addEventListener('click', showCn);
         if (btnPdv) btnPdv.addEventListener('click', showPdv);
+
+        function parseNumeric(raw) {
+            if (raw === null || raw === undefined) return 0;
+            const normalized = String(raw).replace(/\s/g, '').replace(',', '.');
+            const value = Number(normalized);
+            return Number.isFinite(value) ? value : 0;
+        }
+
+        const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+
+        const integerFormatter = new Intl.NumberFormat('pt-BR');
+
+        document.querySelectorAll('.js-currency').forEach(function (el) {
+            const value = parseNumeric(el.dataset.value);
+            el.textContent = currencyFormatter.format(value);
+        });
+
+        document.querySelectorAll('.js-integer').forEach(function (el) {
+            const value = parseNumeric(el.dataset.value);
+            el.textContent = integerFormatter.format(Math.round(value));
+        });
     });
 </script>
 {% endblock %}
