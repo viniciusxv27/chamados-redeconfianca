@@ -82,3 +82,68 @@ class PowerBIReport(models.Model):
             return True
 
         return False
+
+
+class GoalUpload(models.Model):
+    year = models.PositiveSmallIntegerField(verbose_name='Ano')
+    month = models.PositiveSmallIntegerField(verbose_name='Mes')
+    source_file_name = models.CharField(max_length=255, blank=True, verbose_name='Arquivo origem')
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='goal_uploads',
+        verbose_name='Enviado por'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Carga de Metas'
+        verbose_name_plural = 'Cargas de Metas'
+        ordering = ['-year', '-month', '-updated_at']
+        constraints = [
+            models.UniqueConstraint(fields=['year', 'month'], name='unique_goal_upload_by_month_year')
+        ]
+
+    def __str__(self):
+        return f'{self.month:02d}/{self.year}'
+
+
+class GoalEntry(models.Model):
+    SHEET_CN_REAL = 'METAS_CN_REAL'
+    SHEET_PDV_REAL = 'META_PDV_REAL'
+    SHEET_CHOICES = [
+        (SHEET_CN_REAL, 'METAS CN REAL'),
+        (SHEET_PDV_REAL, 'META PDV REAL'),
+    ]
+
+    upload = models.ForeignKey(
+        GoalUpload,
+        on_delete=models.CASCADE,
+        related_name='entries',
+        verbose_name='Carga'
+    )
+    sheet_type = models.CharField(max_length=20, choices=SHEET_CHOICES, verbose_name='Sheet')
+    user_name = models.CharField(max_length=255, blank=True, verbose_name='Nome do usuario')
+    store_name = models.CharField(max_length=255, blank=True, verbose_name='Loja')
+    pilar = models.CharField(max_length=255, blank=True, verbose_name='Pilar')
+    goal_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Meta')
+    row_number = models.PositiveIntegerField(default=0, verbose_name='Linha na planilha')
+    row_data = models.JSONField(default=dict, blank=True, verbose_name='Dados da linha')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Item de Meta'
+        verbose_name_plural = 'Itens de Metas'
+        ordering = ['sheet_type', 'row_number']
+        indexes = [
+            models.Index(fields=['sheet_type']),
+            models.Index(fields=['user_name']),
+            models.Index(fields=['store_name']),
+            models.Index(fields=['pilar']),
+        ]
+
+    def __str__(self):
+        return f'{self.upload} - {self.sheet_type} - {self.user_name or self.store_name or "sem identificacao"}'
