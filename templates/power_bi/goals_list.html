@@ -319,7 +319,6 @@
                             {% for col in manager_cn_table_columns %}
                             <th class="px-3 py-2 text-right font-semibold text-gray-700 border-b">{{ col }}</th>
                             {% endfor %}
-                            <th class="px-3 py-2 text-right font-semibold text-gray-700 border-b">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -329,7 +328,6 @@
                             {% for value in row.ordered_values %}
                             <td class="px-3 py-2 border-b text-right text-gray-700 js-currency" data-value="{{ value|default:'0' }}">R$ 0,00</td>
                             {% endfor %}
-                            <td class="px-3 py-2 border-b text-right text-blue-700 font-semibold js-currency" data-value="{{ row.row_total|default:'0' }}">R$ 0,00</td>
                         </tr>
                         {% empty %}
                         <tr>
@@ -353,7 +351,8 @@
             {% endif %}
         </div>
 
-        <div class="{% if is_gerente_user %}manager-cn-summary p-5{% else %}panel-shell p-5{% endif %}">
+        {% if is_standard_user or user.is_superuser %}
+        <div class="{% if user.is_superuser %}manager-cn-summary p-5{% else %}panel-shell p-5{% endif %}">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
                 {% if is_standard_user %}
                 Meu resumo CN
@@ -375,6 +374,7 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
     </div>
 
     {% if is_gerente_user or not is_standard_user %}
