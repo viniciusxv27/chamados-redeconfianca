@@ -261,20 +261,13 @@
         <div class="kpi-card">
             <p class="kpi-label">Metas CN</p>
             <h2 class="kpi-value text-blue-700 js-currency" data-value="{{ cn_total|default:'0' }}">R$ 0,00</h2>
-            <p class="text-xs text-gray-500 mt-1">{{ cn_entries_count }} linhas</p>
         </div>
         {% if is_gerente_user or not is_standard_user %}
         <div class="kpi-card">
             <p class="kpi-label">Metas PDV (Loja)</p>
             <h2 class="kpi-value text-emerald-700 js-currency" data-value="{{ pdv_total|default:'0' }}">R$ 0,00</h2>
-            <p class="text-xs text-gray-500 mt-1">{{ pdv_entries_count }} linhas</p>
         </div>
         {% endif %}
-        <div class="kpi-card">
-            <p class="kpi-label">Total de registros</p>
-            <h2 class="kpi-value js-integer" data-value="{{ entries_count|default:'0' }}">0</h2>
-            <p class="text-xs text-gray-500 mt-2">Linhas importadas no dashboard</p>
-        </div>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
