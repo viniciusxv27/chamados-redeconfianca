@@ -322,9 +322,9 @@ def _build_manage_access_dashboard_context():
 
     by_user = (
         access_logs
-        .values('user_id', 'user__full_name', 'user__username')
+        .values('user_id', 'user__first_name', 'user__last_name', 'user__username')
         .annotate(total_accesses=Count('id'), active_days=Count(TruncDate('accessed_at'), distinct=True))
-        .order_by('-total_accesses', 'user__full_name')[:20]
+        .order_by('-total_accesses', 'user__first_name', 'user__last_name', 'user__username')[:20]
     )
 
     by_day = (

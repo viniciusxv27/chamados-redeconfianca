@@ -84,8 +84,8 @@
                             {% for item in access_by_user %}
                                 <tr class="border-t border-gray-100">
                                     <td class="px-4 py-2 text-gray-800">
-                                        {% if item.user__full_name %}
-                                            {{ item.user__full_name }}
+                                        {% if item.user__first_name or item.user__last_name %}
+                                            {{ item.user__first_name }} {{ item.user__last_name }}
                                         {% else %}
                                             {{ item.user__username }}
                                         {% endif %}

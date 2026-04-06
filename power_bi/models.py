@@ -1,6 +1,6 @@
-from django.contrib.auth.models import Group
 from django.db import models
 
+from communications.models import CommunicationGroup
 from users.models import Sector, User
 
 
@@ -16,7 +16,7 @@ class PowerBIReport(models.Model):
     )
     embed_url = models.URLField(max_length=1000, verbose_name='Link do Power BI (embed)')
     allowed_groups = models.ManyToManyField(
-        Group,
+        CommunicationGroup,
         blank=True,
         related_name='power_bi_reports',
         verbose_name='Grupos permitidos'
@@ -68,7 +68,7 @@ class PowerBIReport(models.Model):
         if self.allowed_users.filter(id=user.id).exists():
             return True
 
-        if self.allowed_groups.filter(id__in=user.groups.values_list('id', flat=True)).exists():
+        if self.allowed_groups.filter(id__in=user.communication_groups.values_list('id', flat=True)).exists():
             return True
 
         user_sector_ids = list(user.sectors.values_list('id', flat=True))

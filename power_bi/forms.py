@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.models import Group
+from communications.models import CommunicationGroup
 
 from users.models import Sector, User
 
@@ -24,7 +24,7 @@ ICON_CHOICES = [
 
 class PowerBIReportForm(forms.ModelForm):
     allowed_groups = forms.ModelMultipleChoiceField(
-        queryset=Group.objects.order_by('name'),
+        queryset=CommunicationGroup.objects.filter(is_active=True).order_by('name'),
         required=False,
         widget=forms.CheckboxSelectMultiple,
         label='Grupos'
