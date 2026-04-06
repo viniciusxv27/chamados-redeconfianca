@@ -10,10 +10,16 @@
                 <h1 class="text-2xl font-bold text-gray-900">{{ report.name }}</h1>
                 <p class="text-sm text-gray-600 mt-1">{{ report.description|default:'Dashboard corporativo Power BI' }}</p>
             </div>
-            <a href="{% url 'power_bi:list' %}" class="inline-flex items-center bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
-                <i class="fas fa-arrow-left mr-2"></i>
-                Voltar
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="{{ report.embed_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-external-link-alt mr-2"></i>
+                    Abrir em nova guia
+                </a>
+                <a href="{% url 'power_bi:list' %}" class="inline-flex items-center bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar
+                </a>
+            </div>
         </div>
     </div>
 
@@ -58,8 +64,11 @@
             fallbackTriggered = true;
             fallback.classList.remove('hidden');
 
-            // Tenta abrir automaticamente; se o navegador bloquear popup, o botao fica disponivel.
-            window.open(fallbackLink.href, '_blank', 'noopener');
+            // Tenta abrir automaticamente; se o navegador bloquear popup, redireciona no mesmo tab.
+            const openedWindow = window.open(fallbackLink.href, '_blank', 'noopener');
+            if (!openedWindow) {
+                window.location.href = fallbackLink.href;
+            }
         }
 
         frame.addEventListener('load', function () {
@@ -72,7 +81,7 @@
             if (!loaded) {
                 triggerFallback();
             }
-        }, 8000);
+        }, 5000);
     });
 </script>
 {% endblock %}
