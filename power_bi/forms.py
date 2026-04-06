@@ -124,7 +124,7 @@ class GoalUploadForm(forms.ModelForm):
     )
     fixa_as_percentage = forms.BooleanField(
         required=False,
-        label='Porcentagem em Fixa',
+        label='Quantidade em Fixa',
         widget=forms.CheckboxInput(attrs={'class': 'h-4 w-4 text-primary'})
     )
 

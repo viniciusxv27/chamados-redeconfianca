@@ -625,39 +625,23 @@ def goals_list_view(request):
 
     pilar_cn_map = defaultdict(lambda: Decimal('0.00'))
     pilar_pdv_map = defaultdict(lambda: Decimal('0.00'))
-    pilar_cn_count = defaultdict(int)
-    pilar_pdv_count = defaultdict(int)
     for item in cn_entries:
         if item.goal_value is not None:
             pilar_cn_map[item.pilar or 'SEM PILAR'] += item.goal_value
-            pilar_cn_count[item.pilar or 'SEM PILAR'] += 1
     for item in pdv_entries:
         if item.goal_value is not None:
             pilar_pdv_map[item.pilar or 'SEM PILAR'] += item.goal_value
-            pilar_pdv_count[item.pilar or 'SEM PILAR'] += 1
 
     cn_pilar_rows = []
-    cn_chart_values = []
-    for pilar_key, pilar_total in pilar_cn_map.items():
-        if fixa_as_percentage and _is_fixa_pilar(pilar_key):
-            count = pilar_cn_count.get(pilar_key, 0)
-            display_value = (pilar_total / count) if count else Decimal('0.00')
-        else:
-            display_value = pilar_total
-        cn_chart_values.append(display_value)
-
-    cn_max_total = max(cn_chart_values) if cn_chart_values else Decimal('0.00')
+    cn_max_total = max(pilar_cn_map.values()) if pilar_cn_map else Decimal('0.00')
     cn_max_total = cn_max_total if cn_max_total > Decimal('0.00') else Decimal('1.00')
     for pilar in sorted(pilar_cn_map.keys()):
         total = pilar_cn_map[pilar]
-        is_percentage = fixa_as_percentage and _is_fixa_pilar(pilar)
-        if is_percentage:
-            count = pilar_cn_count.get(pilar, 0)
-            total = (total / count) if count else Decimal('0.00')
+        is_quantity = fixa_as_percentage and _is_fixa_pilar(pilar)
         cn_pilar_rows.append({
             'pilar': pilar,
             'total': total,
-            'is_percentage': is_percentage,
+            'is_quantity': is_quantity,
             'bar_percent': float((total / cn_max_total) * Decimal('100')),
         })
 
@@ -673,14 +657,12 @@ def goals_list_view(request):
     ]
     if is_gerente_user:
         by_seller = defaultdict(lambda: defaultdict(lambda: Decimal('0.00')))
-        by_seller_count = defaultdict(lambda: defaultdict(int))
         for item in cn_entries:
             seller = item.user_name or 'SEM CONSULTOR'
             pilar = _normalize_text(item.pilar)
             if item.goal_value is None:
                 continue
             by_seller[seller][pilar] += item.goal_value
-            by_seller_count[seller][pilar] += 1
 
         for seller in sorted(by_seller.keys()):
             row_total = Decimal('0.00')
@@ -690,41 +672,26 @@ def goals_list_view(request):
             }
             for column in manager_cn_table_columns:
                 value = by_seller[seller].get(column, Decimal('0.00'))
-                is_percentage = fixa_as_percentage and _is_fixa_pilar(column)
-                if is_percentage:
-                    count = by_seller_count[seller].get(column, 0)
-                    value = (value / count) if count else Decimal('0.00')
+                is_quantity = fixa_as_percentage and _is_fixa_pilar(column)
                 row['ordered_cells'].append({
                     'value': value,
-                    'is_percentage': is_percentage,
+                    'is_quantity': is_quantity,
                 })
-                if not is_percentage:
+                if not is_quantity:
                     row_total += value
             row['row_total'] = row_total
             manager_cn_table_rows.append(row)
 
     pdv_pilar_rows = []
-    pdv_chart_values = []
-    for pilar_key, pilar_total in pilar_pdv_map.items():
-        if fixa_as_percentage and _is_fixa_pilar(pilar_key):
-            count = pilar_pdv_count.get(pilar_key, 0)
-            display_value = (pilar_total / count) if count else Decimal('0.00')
-        else:
-            display_value = pilar_total
-        pdv_chart_values.append(display_value)
-
-    pdv_max_total = max(pdv_chart_values) if pdv_chart_values else Decimal('0.00')
+    pdv_max_total = max(pilar_pdv_map.values()) if pilar_pdv_map else Decimal('0.00')
     pdv_max_total = pdv_max_total if pdv_max_total > Decimal('0.00') else Decimal('1.00')
     for pilar in sorted(pilar_pdv_map.keys()):
         total = pilar_pdv_map[pilar]
-        is_percentage = fixa_as_percentage and _is_fixa_pilar(pilar)
-        if is_percentage:
-            count = pilar_pdv_count.get(pilar, 0)
-            total = (total / count) if count else Decimal('0.00')
+        is_quantity = fixa_as_percentage and _is_fixa_pilar(pilar)
         pdv_pilar_rows.append({
             'pilar': pilar,
             'total': total,
-            'is_percentage': is_percentage,
+            'is_quantity': is_quantity,
             'bar_percent': float((total / pdv_max_total) * Decimal('100')),
         })
 

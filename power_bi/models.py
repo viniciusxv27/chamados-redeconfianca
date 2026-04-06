@@ -88,7 +88,7 @@ class PowerBIReport(models.Model):
 class GoalUpload(models.Model):
     year = models.PositiveSmallIntegerField(verbose_name='Ano')
     month = models.PositiveSmallIntegerField(verbose_name='Mes')
-    fixa_as_percentage = models.BooleanField(default=False, verbose_name='FIXA em percentual')
+    fixa_as_percentage = models.BooleanField(default=False, verbose_name='FIXA em quantidade')
     source_file_name = models.CharField(max_length=255, blank=True, verbose_name='Arquivo origem')
     uploaded_by = models.ForeignKey(
         User,
