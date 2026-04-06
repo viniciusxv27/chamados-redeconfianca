@@ -24,11 +24,19 @@
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" id="bi-embed-container">
+        <div id="bi-precheck" class="p-8 text-center bg-slate-50 border-b border-gray-200">
+            <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-200 text-slate-600 mb-3 animate-pulse">
+                <i class="fas fa-spinner"></i>
+            </div>
+            <p class="text-sm text-gray-700 font-medium">Verificando acesso ao Power BI...</p>
+            <p class="text-xs text-gray-500 mt-1">Se o embed estiver bloqueado, vamos abrir em nova guia e voltar para a lista.</p>
+        </div>
+
         <iframe
             id="bi-embed-frame"
             title="{{ report.name }}"
             src="{{ report.embed_url }}"
-            class="w-full"
+            class="w-full hidden"
             style="height: 78vh; min-height: 560px; border: 0;"
             allowfullscreen="true">
         </iframe>
@@ -36,7 +44,7 @@
         <div id="bi-fallback" class="hidden p-6 border-t border-gray-200 bg-amber-50">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p class="text-sm text-amber-900">
-                    Nao foi possivel carregar o BI incorporado. Vamos abrir em uma nova guia.
+                    Nao foi possivel carregar o BI incorporado. Abrindo em nova guia e retornando para a lista de Power BI.
                 </p>
                 <a id="bi-fallback-link" href="{{ report.embed_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors">
                     <i class="fas fa-external-link-alt mr-2"></i>
@@ -52,27 +60,43 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const frame = document.getElementById('bi-embed-frame');
+        const precheck = document.getElementById('bi-precheck');
         const fallback = document.getElementById('bi-fallback');
         const fallbackLink = document.getElementById('bi-fallback-link');
-        if (!frame || !fallback || !fallbackLink) return;
+        if (!frame || !precheck || !fallback || !fallbackLink) return;
 
         let loaded = false;
         let fallbackTriggered = false;
+        const listUrl = "{% url 'power_bi:list' %}";
+
+        function showEmbed() {
+            precheck.classList.add('hidden');
+            frame.classList.remove('hidden');
+        }
+
+        function redirectBackToList() {
+            window.location.href = listUrl;
+        }
 
         function triggerFallback() {
             if (fallbackTriggered) return;
             fallbackTriggered = true;
             fallback.classList.remove('hidden');
 
-            // Tenta abrir automaticamente; se o navegador bloquear popup, redireciona no mesmo tab.
+            // Tenta abrir em nova guia e retorna para a lista do Power BI.
             const openedWindow = window.open(fallbackLink.href, '_blank', 'noopener');
             if (!openedWindow) {
+                // Se popup for bloqueado, abre no mesmo tab e o usuario ja segue para login.
                 window.location.href = fallbackLink.href;
+                return;
             }
+
+            setTimeout(redirectBackToList, 350);
         }
 
         frame.addEventListener('load', function () {
             loaded = true;
+            showEmbed();
         });
 
         frame.addEventListener('error', triggerFallback);
@@ -81,7 +105,7 @@
             if (!loaded) {
                 triggerFallback();
             }
-        }, 5000);
+        }, 2500);
     });
 </script>
 {% endblock %}
