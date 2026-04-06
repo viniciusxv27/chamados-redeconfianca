@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Power BI{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Gerenciar Power BI</h1>
+                <p class="text-gray-600 mt-1">Apenas SUPERADMIN pode cadastrar e controlar os acessos aos dashboards.</p>
+            </div>
+            <a href="{% url 'power_bi:list' %}" class="inline-flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                <i class="fas fa-chart-line mr-2"></i>
+                Ver modulo Power BI
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                {% if editing_report %}Editar BI{% else %}Novo BI{% endif %}
+            </h2>
+
+            <form method="post" action="{% if editing_report %}{% url 'power_bi:edit' editing_report.id %}{% else %}{% url 'power_bi:create' %}{% endif %}" class="space-y-4">
+                {% csrf_token %}
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                    {{ form.name }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
+                    {{ form.description }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Icone (Font Awesome)</label>
+                    {{ form.icon_class }}
+                    <p class="text-xs text-gray-500 mt-1">Exemplo: fas fa-chart-line</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Link embed do BI</label>
+                    {{ form.embed_url }}
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Ordem</label>
+                        {{ form.sort_order }}
+                    </div>
+                    <div class="flex items-center gap-2 mt-7">
+                        {{ form.is_active }}
+                        <label class="text-sm text-gray-700">Ativo</label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Hierarquias</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        {{ form.allowed_hierarchies }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Grupos</label>
+                    <div class="max-h-40 overflow-auto bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        {{ form.allowed_groups }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Setores</label>
+                    <div class="max-h-40 overflow-auto bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        {{ form.allowed_sectors }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Usuarios especificos</label>
+                    {{ form.allowed_users }}
+                </div>
+
+                {% if form.errors %}
+                    <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="flex items-center gap-3">
+                    <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                        {% if editing_report %}Salvar alteracoes{% else %}Criar BI{% endif %}
+                    </button>
+                    {% if editing_report %}
+                        <a href="{% url 'power_bi:manage' %}" class="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                            Cancelar edicao
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="xl:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">BIs cadastrados</h2>
+
+            <div class="space-y-3">
+                {% for report in reports %}
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-primary"></i>
+                                    <h3 class="font-semibold text-gray-900">{{ report.name }}</h3>
+                                    {% if report.is_active %}
+                                        <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">Ativo</span>
+                                    {% else %}
+                                        <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">Inativo</span>
+                                    {% endif %}
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">{{ report.description|default:'Sem descricao' }}</p>
+                                <p class="text-xs text-gray-500 mt-2">Ordem: {{ report.sort_order }}</p>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <a href="{% url 'power_bi:edit' report.id %}" class="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-200 transition-colors text-sm">
+                                    <i class="fas fa-edit mr-1"></i>Editar
+                                </a>
+                                <form method="post" action="{% url 'power_bi:delete' report.id %}" onsubmit="return confirm('Deseja excluir este BI?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-200 transition-colors text-sm">
+                                        <i class="fas fa-trash mr-1"></i>Excluir
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-500">
+                        Nenhum BI cadastrado ainda.
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Power BI{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Power BI</h1>
+        <p class="text-gray-600 mt-1">Dashboards disponiveis para o seu perfil.</p>
+    </div>
+
+    {% if reports %}
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {% for report in reports %}
+                <a href="{% url 'power_bi:viewer' report.id %}" class="group bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md hover:border-primary/40 transition-all">
+                    <div class="flex items-start justify-between">
+                        <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                            <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                        </div>
+                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
+                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900 mt-4 group-hover:text-primary transition-colors">{{ report.name }}</h2>
+                    <p class="text-sm text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
+                    <div class="mt-4 text-primary text-sm font-medium">Abrir dashboard <i class="fas fa-arrow-right ml-1"></i></div>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
+            <div class="text-4xl text-gray-300 mb-3"><i class="fas fa-chart-line"></i></div>
+            <h2 class="text-lg font-semibold text-gray-800">Nenhum Power BI disponivel</h2>
+            <p class="text-sm text-gray-600 mt-1">Solicite ao seu SUPERADMIN a liberacao do acesso.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

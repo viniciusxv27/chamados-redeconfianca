@@ -13,6 +13,12 @@
                     <p class="text-gray-600 mt-1">Gerencie todos os usuários do sistema</p>
                 </div>
                 <div class="flex items-center space-x-3">
+                    {% if user.hierarchy == 'SUPERADMIN' or user.is_superuser %}
+                    <a href="{% url 'power_bi:manage' %}" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors flex items-center">
+                        <i class="fas fa-chart-line mr-2"></i>
+                        Power BI
+                    </a>
+                    {% endif %}
                     <button onclick="toggleImportColaboradoresModal()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center">
                         <i class="fas fa-users mr-2"></i>
                         Importar Colaboradores

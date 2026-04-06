@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'contestacao',  # Contestação de Exclusões
     'contracheque',  # Contracheques / Recibos de Pagamento
     'experiencia',  # Experiência Vivo
+    'power_bi',  # Dashboards Power BI
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
