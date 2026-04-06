@@ -147,3 +147,32 @@ class GoalEntry(models.Model):
 
     def __str__(self):
         return f'{self.upload} - {self.sheet_type} - {self.user_name or self.store_name or "sem identificacao"}'
+
+
+class PowerBIAccessLog(models.Model):
+    report = models.ForeignKey(
+        PowerBIReport,
+        on_delete=models.CASCADE,
+        related_name='access_logs',
+        verbose_name='Relatorio'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='power_bi_access_logs',
+        verbose_name='Usuario'
+    )
+    accessed_at = models.DateTimeField(auto_now_add=True, verbose_name='Data de acesso')
+
+    class Meta:
+        verbose_name = 'Log de Acesso Power BI'
+        verbose_name_plural = 'Logs de Acesso Power BI'
+        ordering = ['-accessed_at']
+        indexes = [
+            models.Index(fields=['accessed_at']),
+            models.Index(fields=['user', 'accessed_at']),
+            models.Index(fields=['report', 'accessed_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.user} -> {self.report} ({self.accessed_at:%d/%m/%Y %H:%M})'

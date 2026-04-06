@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import GoalEntry, GoalUpload, PowerBIReport
+from .models import GoalEntry, GoalUpload, PowerBIAccessLog, PowerBIReport
 
 
 @admin.register(PowerBIReport)
@@ -23,3 +23,10 @@ class GoalEntryAdmin(admin.ModelAdmin):
     list_display = ('upload', 'sheet_type', 'user_name', 'store_name', 'pilar', 'goal_value')
     list_filter = ('sheet_type', 'upload__year', 'upload__month')
     search_fields = ('user_name', 'store_name', 'pilar')
+
+
+@admin.register(PowerBIAccessLog)
+class PowerBIAccessLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'report', 'accessed_at')
+    list_filter = ('report', 'accessed_at')
+    search_fields = ('user__full_name', 'user__username', 'user__email', 'report__name')

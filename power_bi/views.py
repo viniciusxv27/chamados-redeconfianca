@@ -2,6 +2,8 @@ from decimal import Decimal, InvalidOperation
 import unicodedata
 from collections import defaultdict
 
+from django.db.models import Count
+from django.db.models.functions import TruncDate
 from django.db import transaction
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -11,7 +13,7 @@ from django.utils import timezone
 import openpyxl
 
 from .forms import GoalUploadForm, PowerBIReportForm
-from .models import GoalEntry, GoalUpload, PowerBIReport
+from .models import GoalEntry, GoalUpload, PowerBIAccessLog, PowerBIReport
 
 
 def _is_superadmin(user):
@@ -315,6 +317,50 @@ def _visible_reports_for(user):
     return [report for report in reports if report.is_visible_to(user)]
 
 
+def _build_manage_access_dashboard_context():
+    access_logs = PowerBIAccessLog.objects.select_related('user', 'report')
+
+    by_user = (
+        access_logs
+        .values('user_id', 'user__full_name', 'user__username')
+        .annotate(total_accesses=Count('id'), active_days=Count(TruncDate('accessed_at'), distinct=True))
+        .order_by('-total_accesses', 'user__full_name')[:20]
+    )
+
+    by_day = (
+        access_logs
+        .annotate(day=TruncDate('accessed_at'))
+        .values('day')
+        .annotate(total_accesses=Count('id'), users_count=Count('user_id', distinct=True))
+        .order_by('-day')[:30]
+    )
+
+    by_report = (
+        access_logs
+        .values('report_id', 'report__name')
+        .annotate(total_accesses=Count('id'), users_count=Count('user_id', distinct=True))
+        .order_by('-total_accesses', 'report__name')[:20]
+    )
+
+    latest_accesses = access_logs.order_by('-accessed_at')[:20]
+
+    totals = access_logs.aggregate(
+        total_accesses=Count('id'),
+        unique_users=Count('user_id', distinct=True),
+        reports_accessed=Count('report_id', distinct=True),
+    )
+
+    return {
+        'access_total': totals['total_accesses'] or 0,
+        'access_unique_users': totals['unique_users'] or 0,
+        'access_reports_used': totals['reports_accessed'] or 0,
+        'access_by_user': by_user,
+        'access_by_day': by_day,
+        'access_by_report': by_report,
+        'access_latest': latest_accesses,
+    }
+
+
 @login_required
 def power_bi_list_view(request):
     reports = _visible_reports_for(request.user)
@@ -339,6 +385,11 @@ def power_bi_viewer(request, report_id):
         messages.error(request, 'Voce nao tem permissao para visualizar este BI.')
         return redirect('power_bi:list')
 
+    PowerBIAccessLog.objects.create(
+        report=report,
+        user=request.user,
+    )
+
     return render(
         request,
         'power_bi/viewer.html',
@@ -357,14 +408,17 @@ def manage_power_bi_view(request):
     reports = PowerBIReport.objects.all().prefetch_related('allowed_groups', 'allowed_sectors', 'allowed_users')
     form = PowerBIReportForm()
 
+    context = {
+        'reports': reports,
+        'form': form,
+        'editing_report': None,
+    }
+    context.update(_build_manage_access_dashboard_context())
+
     return render(
         request,
         'power_bi/manage.html',
-        {
-            'reports': reports,
-            'form': form,
-            'editing_report': None,
-        }
+        context
     )
 
 
@@ -384,14 +438,17 @@ def create_power_bi_view(request):
         return redirect('power_bi:manage')
 
     reports = PowerBIReport.objects.all().prefetch_related('allowed_groups', 'allowed_sectors', 'allowed_users')
+    context = {
+        'reports': reports,
+        'form': form,
+        'editing_report': None,
+    }
+    context.update(_build_manage_access_dashboard_context())
+
     return render(
         request,
         'power_bi/manage.html',
-        {
-            'reports': reports,
-            'form': form,
-            'editing_report': None,
-        }
+        context
     )
 
 
@@ -413,14 +470,17 @@ def edit_power_bi_view(request, report_id):
         form = PowerBIReportForm(instance=report)
 
     reports = PowerBIReport.objects.all().prefetch_related('allowed_groups', 'allowed_sectors', 'allowed_users')
+    context = {
+        'reports': reports,
+        'form': form,
+        'editing_report': report,
+    }
+    context.update(_build_manage_access_dashboard_context())
+
     return render(
         request,
         'power_bi/manage.html',
-        {
-            'reports': reports,
-            'form': form,
-            'editing_report': report,
-        }
+        context
     )
 
 

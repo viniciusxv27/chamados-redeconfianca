@@ -45,6 +45,156 @@
         </div>
     </div>
 
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Dashboard de acessos aos BI's</h2>
+            <span class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">Auditoria automatica</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Total de acessos</p>
+                <p class="text-2xl font-bold text-gray-900 mt-1">{{ access_total }}</p>
+            </div>
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Usuarios unicos</p>
+                <p class="text-2xl font-bold text-gray-900 mt-1">{{ access_unique_users }}</p>
+            </div>
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">BI's acessados</p>
+                <p class="text-2xl font-bold text-gray-900 mt-1">{{ access_reports_used }}</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <h3 class="font-semibold text-gray-900 text-sm">Quem acessou e quantas vezes</h3>
+                </div>
+                <div class="max-h-72 overflow-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-white sticky top-0">
+                            <tr class="text-left text-gray-500">
+                                <th class="px-4 py-2">Usuario</th>
+                                <th class="px-4 py-2 text-right">Acessos</th>
+                                <th class="px-4 py-2 text-right">Dias</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in access_by_user %}
+                                <tr class="border-t border-gray-100">
+                                    <td class="px-4 py-2 text-gray-800">
+                                        {% if item.user__full_name %}
+                                            {{ item.user__full_name }}
+                                        {% else %}
+                                            {{ item.user__username }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ item.total_accesses }}</td>
+                                    <td class="px-4 py-2 text-right text-gray-700">{{ item.active_days }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="3" class="px-4 py-6 text-center text-gray-500">Sem acessos registrados ainda.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <h3 class="font-semibold text-gray-900 text-sm">Acessos por BI</h3>
+                </div>
+                <div class="max-h-72 overflow-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-white sticky top-0">
+                            <tr class="text-left text-gray-500">
+                                <th class="px-4 py-2">BI</th>
+                                <th class="px-4 py-2 text-right">Acessos</th>
+                                <th class="px-4 py-2 text-right">Usuarios</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in access_by_report %}
+                                <tr class="border-t border-gray-100">
+                                    <td class="px-4 py-2 text-gray-800">{{ item.report__name }}</td>
+                                    <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ item.total_accesses }}</td>
+                                    <td class="px-4 py-2 text-right text-gray-700">{{ item.users_count }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="3" class="px-4 py-6 text-center text-gray-500">Sem dados de BI ainda.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <h3 class="font-semibold text-gray-900 text-sm">Registro de dias</h3>
+                </div>
+                <div class="max-h-72 overflow-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-white sticky top-0">
+                            <tr class="text-left text-gray-500">
+                                <th class="px-4 py-2">Dia</th>
+                                <th class="px-4 py-2 text-right">Acessos</th>
+                                <th class="px-4 py-2 text-right">Usuarios</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in access_by_day %}
+                                <tr class="border-t border-gray-100">
+                                    <td class="px-4 py-2 text-gray-800">{{ item.day|date:'d/m/Y' }}</td>
+                                    <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ item.total_accesses }}</td>
+                                    <td class="px-4 py-2 text-right text-gray-700">{{ item.users_count }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="3" class="px-4 py-6 text-center text-gray-500">Sem acessos por dia ainda.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <h3 class="font-semibold text-gray-900 text-sm">Ultimos acessos</h3>
+            </div>
+            <div class="max-h-56 overflow-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white sticky top-0">
+                        <tr class="text-left text-gray-500">
+                            <th class="px-4 py-2">Data e hora</th>
+                            <th class="px-4 py-2">Usuario</th>
+                            <th class="px-4 py-2">BI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in access_latest %}
+                            <tr class="border-t border-gray-100">
+                                <td class="px-4 py-2 text-gray-700">{{ log.accessed_at|date:'d/m/Y H:i' }}</td>
+                                <td class="px-4 py-2 text-gray-800">{{ log.user.get_full_name|default:log.user.username }}</td>
+                                <td class="px-4 py-2 text-gray-800">{{ log.report.name }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="3" class="px-4 py-6 text-center text-gray-500">Nenhum acesso registrado.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">

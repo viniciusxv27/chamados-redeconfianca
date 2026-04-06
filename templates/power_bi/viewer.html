@@ -126,15 +126,9 @@
 
             fallback.classList.remove('hidden');
 
-            // Tenta abrir em nova guia e retorna para a lista do Power BI.
-            const openedWindow = window.open(fallbackLink.href, '_blank', 'noopener');
-            if (!openedWindow) {
-                // Se popup for bloqueado, abre no mesmo tab e o usuario ja segue para login.
-                window.location.href = fallbackLink.href;
-                return;
-            }
-
-            setTimeout(redirectBackToList, 350);
+            // Fallback forte: sai do iframe e redireciona no mesmo tab para garantir login/acesso.
+            // Politicas de seguranca do navegador impedem forcar embed quando o provedor bloqueia.
+            window.location.replace(fallbackLink.href);
         }
 
         frame.addEventListener('load', function () {
