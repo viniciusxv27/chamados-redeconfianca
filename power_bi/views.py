@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 import unicodedata
+from collections import defaultdict
 
 from django.db import transaction
 from django.contrib import messages
@@ -61,77 +62,121 @@ def _parse_decimal(value):
         return None
 
 
-def _header_aliases():
-    return {
-        'user_name': ['NOME', 'NOME CN', 'CONSULTOR', 'VENDEDOR', 'COLABORADOR', 'CN'],
-        'store_name': ['LOJA', 'FILIAL', 'PDV', 'PONTO DE VENDA'],
-        'pilar': ['PILAR', 'PRODUTO', 'CATEGORIA'],
-        'goal_value': ['META', 'META REAL', 'VALOR META', 'META R$', 'OBJETIVO'],
-    }
+PILAR_COLUMNS = [
+    ('MOVEL', 'MOVEL'),
+    ('FIXA', 'FIXA'),
+    ('SVA', 'SVA'),
+    ('SEGURO', 'SEGURO'),
+    ('SMARTPHONE', 'SMARTPHONE'),
+    ('ELETRONICOS', 'ELETRONICOS'),
+    ('ESSENCIAIS', 'ESSENCIAIS'),
+]
 
 
-def _resolve_column_indexes(headers):
-    aliases = _header_aliases()
+def _find_index_by_aliases(headers, aliases):
     normalized = [_normalize_text(h) for h in headers]
-    indexes = {}
+    for idx, header in enumerate(normalized):
+        if any(alias in header for alias in aliases):
+            return idx
+    return None
 
-    for target, words in aliases.items():
-        target_idx = None
-        for idx, header in enumerate(normalized):
-            if not header:
-                continue
-            if any(word in header for word in words):
-                target_idx = idx
+
+def _extract_entries_cn_real(headers, rows):
+    consultor_idx = _find_index_by_aliases(headers, ['CONSULTOR', 'CN', 'NOME'])
+    pdv_idx = _find_index_by_aliases(headers, ['PDV', 'LOJA', 'FILIAL'])
+    pilar_indexes = {}
+    normalized_headers = [_normalize_text(h) for h in headers]
+
+    for key, label in PILAR_COLUMNS:
+        idx = None
+        for header_idx, header in enumerate(normalized_headers):
+            if key in header:
+                idx = header_idx
                 break
-        indexes[target] = target_idx
+        pilar_indexes[label] = idx
 
-    return indexes
-
-
-def _extract_sheet_entries(worksheet, sheet_type):
-    rows = list(worksheet.iter_rows(values_only=True))
-    if not rows:
-        return []
-
-    headers = [str(cell).strip() if cell is not None else '' for cell in rows[0]]
-    indexes = _resolve_column_indexes(headers)
     entries = []
-
-    for row_number, row in enumerate(rows[1:], start=2):
+    for row_number, row in enumerate(rows, start=2):
         if all(cell in (None, '') for cell in row):
             continue
+
+        user_name = ''
+        store_name = ''
+        if consultor_idx is not None and consultor_idx < len(row):
+            user_name = '' if row[consultor_idx] is None else str(row[consultor_idx]).strip()
+        if pdv_idx is not None and pdv_idx < len(row):
+            store_name = '' if row[pdv_idx] is None else str(row[pdv_idx]).strip()
 
         row_data = {}
         for col_idx, header in enumerate(headers):
             if not header:
                 continue
-            value = row[col_idx] if col_idx < len(row) else None
-            row_data[header] = value
+            row_data[header] = row[col_idx] if col_idx < len(row) else None
 
-        def get_value(key):
-            idx = indexes.get(key)
+        for pilar_name, idx in pilar_indexes.items():
             if idx is None or idx >= len(row):
-                return ''
-            value = row[idx]
-            return '' if value is None else str(value).strip()
+                continue
+            goal_value = _parse_decimal(row[idx])
+            if goal_value is None:
+                continue
 
-        goal_value = None
-        value_idx = indexes.get('goal_value')
-        if value_idx is not None and value_idx < len(row):
-            goal_value = _parse_decimal(row[value_idx])
+            entries.append({
+                'sheet_type': GoalEntry.SHEET_CN_REAL,
+                'user_name': user_name,
+                'store_name': store_name,
+                'pilar': pilar_name,
+                'goal_value': goal_value,
+                'row_number': row_number,
+                'row_data': row_data,
+            })
 
-        if not row_data:
+    return entries
+
+
+def _extract_entries_pdv_real(headers, rows):
+    pdv_idx = _find_index_by_aliases(headers, ['PDV', 'LOJA', 'FILIAL'])
+    pilar_indexes = {}
+    normalized_headers = [_normalize_text(h) for h in headers]
+
+    for key, label in PILAR_COLUMNS:
+        idx = None
+        for header_idx, header in enumerate(normalized_headers):
+            if key in header:
+                idx = header_idx
+                break
+        pilar_indexes[label] = idx
+
+    entries = []
+    for row_number, row in enumerate(rows, start=2):
+        if all(cell in (None, '') for cell in row):
             continue
 
-        entries.append({
-            'sheet_type': sheet_type,
-            'user_name': get_value('user_name'),
-            'store_name': get_value('store_name'),
-            'pilar': get_value('pilar'),
-            'goal_value': goal_value,
-            'row_number': row_number,
-            'row_data': row_data,
-        })
+        store_name = ''
+        if pdv_idx is not None and pdv_idx < len(row):
+            store_name = '' if row[pdv_idx] is None else str(row[pdv_idx]).strip()
+
+        row_data = {}
+        for col_idx, header in enumerate(headers):
+            if not header:
+                continue
+            row_data[header] = row[col_idx] if col_idx < len(row) else None
+
+        for pilar_name, idx in pilar_indexes.items():
+            if idx is None or idx >= len(row):
+                continue
+            goal_value = _parse_decimal(row[idx])
+            if goal_value is None:
+                continue
+
+            entries.append({
+                'sheet_type': GoalEntry.SHEET_PDV_REAL,
+                'user_name': '',
+                'store_name': store_name,
+                'pilar': pilar_name,
+                'goal_value': goal_value,
+                'row_number': row_number,
+                'row_data': row_data,
+            })
 
     return entries
 
@@ -153,10 +198,18 @@ def _load_goal_entries_from_workbook(uploaded_file):
         raise ValueError('As sheets obrigatorias METAS  CN REAL e META PDV REAL nao foram encontradas.')
 
     all_entries = []
-    for normalized_sheet, sheet_type in required.items():
-        real_name = normalized_to_real[normalized_sheet]
-        worksheet = workbook[real_name]
-        all_entries.extend(_extract_sheet_entries(worksheet, sheet_type))
+
+    cn_sheet = workbook[normalized_to_real['METASCNREAL']]
+    cn_rows = list(cn_sheet.iter_rows(values_only=True))
+    if cn_rows:
+        cn_headers = [str(cell).strip() if cell is not None else '' for cell in cn_rows[0]]
+        all_entries.extend(_extract_entries_cn_real(cn_headers, cn_rows[1:]))
+
+    pdv_sheet = workbook[normalized_to_real['METAPDVREAL']]
+    pdv_rows = list(pdv_sheet.iter_rows(values_only=True))
+    if pdv_rows:
+        pdv_headers = [str(cell).strip() if cell is not None else '' for cell in pdv_rows[0]]
+        all_entries.extend(_extract_entries_pdv_real(pdv_headers, pdv_rows[1:]))
 
     return all_entries
 
@@ -317,6 +370,7 @@ def goals_list_view(request):
         entries = GoalEntry.objects.filter(upload=current_upload).order_by('sheet_type', 'store_name', 'pilar', 'user_name')
 
         if _is_standard_user(request.user):
+            entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
             user_tokens = {
                 _normalize_text(request.user.full_name),
                 _normalize_text(request.user.get_full_name()),
@@ -350,6 +404,9 @@ def goals_list_view(request):
                 ]
                 entries = entries.filter(id__in=entry_ids)
 
+    cn_entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
+    pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if not _is_standard_user(request.user) else GoalEntry.objects.none()
+
     all_stores = []
     all_pilares = []
     if current_upload and not _is_standard_user(request.user):
@@ -362,10 +419,49 @@ def goals_list_view(request):
         if item.goal_value is not None:
             total_value += item.goal_value
 
+    pilar_cn_map = defaultdict(lambda: Decimal('0.00'))
+    pilar_pdv_map = defaultdict(lambda: Decimal('0.00'))
+    for item in cn_entries:
+        if item.goal_value is not None:
+            pilar_cn_map[item.pilar or 'SEM PILAR'] += item.goal_value
+    for item in pdv_entries:
+        if item.goal_value is not None:
+            pilar_pdv_map[item.pilar or 'SEM PILAR'] += item.goal_value
+
+    all_dashboard_pilares = sorted(set(list(pilar_cn_map.keys()) + list(pilar_pdv_map.keys())))
+    pilar_rows = []
+    max_total = Decimal('0.00')
+    for pilar in all_dashboard_pilares:
+        total = pilar_cn_map[pilar] + pilar_pdv_map[pilar]
+        if total > max_total:
+            max_total = total
+        pilar_rows.append({
+            'pilar': pilar,
+            'cn': pilar_cn_map[pilar],
+            'pdv': pilar_pdv_map[pilar],
+            'total': total,
+        })
+
+    max_total = max_total if max_total > Decimal('0.00') else Decimal('1.00')
+    for row in pilar_rows:
+        row['bar_percent'] = float((row['total'] / max_total) * Decimal('100'))
+
+    store_totals = defaultdict(lambda: Decimal('0.00'))
+    if not _is_standard_user(request.user):
+        for item in pdv_entries:
+            if item.goal_value is None:
+                continue
+            store_key = item.store_name or 'SEM LOJA'
+            store_totals[store_key] += item.goal_value
+    top_stores = sorted(
+        [{'store': key, 'total': value} for key, value in store_totals.items()],
+        key=lambda x: x['total'],
+        reverse=True
+    )[:10]
+
     context = {
         'uploads': uploads[:24],
         'current_upload': current_upload,
-        'entries': entries,
         'selected_store': selected_store,
         'selected_pilar': selected_pilar,
         'all_stores': all_stores,
@@ -373,6 +469,12 @@ def goals_list_view(request):
         'is_standard_user': _is_standard_user(request.user),
         'total_value': total_value,
         'entries_count': entries.count() if hasattr(entries, 'count') else len(entries),
+        'cn_total': sum((item.goal_value or Decimal('0.00')) for item in cn_entries),
+        'pdv_total': sum((item.goal_value or Decimal('0.00')) for item in pdv_entries),
+        'cn_entries_count': cn_entries.count(),
+        'pdv_entries_count': pdv_entries.count() if not _is_standard_user(request.user) else 0,
+        'pilar_rows': pilar_rows,
+        'top_stores': top_stores,
         'now': timezone.now(),
     }
     return render(request, 'power_bi/goals_list.html', context)
