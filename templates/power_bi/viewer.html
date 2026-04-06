@@ -11,10 +11,12 @@
                 <p class="text-sm text-gray-600 mt-1">{{ report.description|default:'Dashboard corporativo Power BI' }}</p>
             </div>
             <div class="flex items-center gap-2">
+                {% if report.allow_open_in_new_tab %}
                 <a href="{{ report.embed_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
                     <i class="fas fa-external-link-alt mr-2"></i>
                     Abrir em nova guia
                 </a>
+                {% endif %}
                 <a href="{% url 'power_bi:list' %}" class="inline-flex items-center bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
                     <i class="fas fa-arrow-left mr-2"></i>
                     Voltar
@@ -29,7 +31,11 @@
                 <i class="fas fa-spinner"></i>
             </div>
             <p class="text-sm text-gray-700 font-medium">Verificando acesso ao Power BI...</p>
+            {% if report.allow_open_in_new_tab %}
             <p class="text-xs text-gray-500 mt-1">Se o embed estiver bloqueado, vamos abrir em nova guia e voltar para a lista.</p>
+            {% else %}
+            <p class="text-xs text-gray-500 mt-1">Se o embed estiver bloqueado, exiba o relatorio direto no Power BI liberando a opcao de nova guia no cadastro.</p>
+            {% endif %}
         </div>
 
         <iframe
@@ -43,6 +49,7 @@
 
         <div id="bi-fallback" class="hidden p-6 border-t border-gray-200 bg-amber-50">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                {% if report.allow_open_in_new_tab %}
                 <p class="text-sm text-amber-900">
                     Nao foi possivel carregar o BI incorporado. Abrindo em nova guia e retornando para a lista de Power BI.
                 </p>
@@ -50,6 +57,15 @@
                     <i class="fas fa-external-link-alt mr-2"></i>
                     Abrir em nova guia
                 </a>
+                {% else %}
+                <p class="text-sm text-amber-900">
+                    Nao foi possivel carregar o BI incorporado. Solicite ao SUPERADMIN habilitar a opcao de nova guia para este relatorio.
+                </p>
+                <a href="{% url 'power_bi:list' %}" class="inline-flex items-center bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Voltar para lista
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -63,12 +79,13 @@
         const precheck = document.getElementById('bi-precheck');
         const fallback = document.getElementById('bi-fallback');
         const fallbackLink = document.getElementById('bi-fallback-link');
-        if (!frame || !precheck || !fallback || !fallbackLink) return;
+        if (!frame || !precheck || !fallback) return;
 
         let loaded = false;
         let fallbackTriggered = false;
         let monitorIntervalId = null;
         const listUrl = "{% url 'power_bi:list' %}";
+        const canOpenInNewTab = {{ report.allow_open_in_new_tab|yesno:'true,false' }};
         const INITIAL_TIMEOUT_MS = 7000;
         const MONITOR_INTERVAL_MS = 1500;
 
@@ -126,9 +143,14 @@
 
             fallback.classList.remove('hidden');
 
-            // Fallback forte: sai do iframe e redireciona no mesmo tab para garantir login/acesso.
-            // Politicas de seguranca do navegador impedem forcar embed quando o provedor bloqueia.
-            window.location.replace(fallbackLink.href);
+            // Se permitido, tenta acesso direto no Power BI para contornar bloqueio de embed.
+            if (canOpenInNewTab && fallbackLink && fallbackLink.href) {
+                window.location.replace(fallbackLink.href);
+                return;
+            }
+
+            // Sem permissao para nova guia: exibe mensagem e retorna para lista apos curto intervalo.
+            setTimeout(redirectBackToList, 1800);
         }
 
         frame.addEventListener('load', function () {

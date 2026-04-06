@@ -237,9 +237,15 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Ordem</label>
                         {{ form.sort_order }}
                     </div>
-                    <div class="flex items-center gap-2 mt-7">
-                        {{ form.is_active }}
-                        <label class="text-sm text-gray-700">Ativo</label>
+                    <div class="space-y-3 mt-7">
+                        <div class="flex items-center gap-2">
+                            {{ form.is_active }}
+                            <label class="text-sm text-gray-700">Ativo</label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{ form.allow_open_in_new_tab }}
+                            <label class="text-sm text-gray-700">Nova guia permitida</label>
+                        </div>
                     </div>
                 </div>
 

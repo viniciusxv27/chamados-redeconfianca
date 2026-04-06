@@ -15,6 +15,7 @@ class PowerBIReport(models.Model):
         verbose_name='Icone (classe Font Awesome)'
     )
     embed_url = models.URLField(max_length=1000, verbose_name='Link do Power BI (embed)')
+    allow_open_in_new_tab = models.BooleanField(default=False, verbose_name='Nova guia permitida')
     allowed_groups = models.ManyToManyField(
         CommunicationGroup,
         blank=True,
