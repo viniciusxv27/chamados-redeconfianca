@@ -1,5 +1,33 @@
 {% extends 'base.html' %}
 
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+    .icon-preview {
+        width: 40px;
+        height: 40px;
+        border-radius: 0.5rem;
+        background: #f3f4f6;
+        color: #0f172a;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        border: 1px solid #e5e7eb;
+    }
+    .select2-container .select2-selection--multiple {
+        min-height: 44px;
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+    }
+    .select2-container--bootstrap-5 .select2-selection {
+        box-shadow: none;
+    }
+</style>
+{% endblock %}
+
 {% block title %}Gerenciar Power BI{% endblock %}
 
 {% block content %}
@@ -38,8 +66,15 @@
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Icone (Font Awesome)</label>
-                    {{ form.icon_class }}
-                    <p class="text-xs text-gray-500 mt-1">Exemplo: fas fa-chart-line</p>
+                    <div class="flex items-center gap-3">
+                        <div id="iconPreview" class="icon-preview">
+                            <i class="{{ form.icon_class.value|default:'fas fa-chart-line' }}"></i>
+                        </div>
+                        <div class="flex-1">
+                            {{ form.icon_class }}
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Selecione um icone para o card no menu/listagem.</p>
                 </div>
 
                 <div>
@@ -82,6 +117,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Usuarios especificos</label>
                     {{ form.allowed_users }}
+                    <p class="text-xs text-gray-500 mt-1">Pesquise por nome ou email e selecione varios usuarios.</p>
                 </div>
 
                 {% if form.errors %}
@@ -150,4 +186,36 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const iconSelect = document.getElementById('id_icon_class');
+        const iconPreview = document.getElementById('iconPreview');
+
+        function updateIconPreview() {
+            if (!iconSelect || !iconPreview) return;
+            const selected = iconSelect.value || 'fas fa-chart-line';
+            iconPreview.innerHTML = `<i class="${selected}"></i>`;
+        }
+
+        updateIconPreview();
+        if (iconSelect) {
+            iconSelect.addEventListener('change', updateIconPreview);
+        }
+
+        if (window.jQuery && jQuery.fn.select2) {
+            jQuery('#id_allowed_users').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: 'Digite para buscar usuarios...',
+                closeOnSelect: false,
+                allowClear: true,
+            });
+        }
+    });
+</script>
 {% endblock %}
