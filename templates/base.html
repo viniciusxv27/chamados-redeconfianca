@@ -1869,7 +1869,7 @@
                     
                     <div id="categoryDiv" class="hidden">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Assunto</label>
-                        <select id="supportChatCategory" required
+                        <select id="supportChatCategory" required onchange="window.handleSupportCategoryChange()"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Selecione o assunto</option>
                         </select>
@@ -1881,6 +1881,14 @@
                             <i class="fas fa-users mr-2"></i>
                             <span id="queueInfoText">Carregando fila...</span>
                         </div>
+                    </div>
+
+                    <div id="supportCpfDiv" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">CPF do Cliente</label>
+                        <input type="text" id="supportClientCpf" maxlength="14"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="000.000.000-00">
+                        <p class="text-xs text-gray-500 mt-1">Campo obrigatório para esta categoria</p>
                     </div>
 
                     <div>
@@ -2458,6 +2466,13 @@
                     // Clear form
                     formElement.reset();
                     document.getElementById('categoryDiv').classList.add('hidden');
+                    const cpfDiv = document.getElementById('supportCpfDiv');
+                    const cpfInput = document.getElementById('supportClientCpf');
+                    if (cpfDiv) cpfDiv.classList.add('hidden');
+                    if (cpfInput) {
+                        cpfInput.required = false;
+                        cpfInput.value = '';
+                    }
 
                     // Mostrar notificação de sucesso
                     const message = data.queue_position
@@ -2756,12 +2771,29 @@
                 const sectorSelect = document.getElementById('supportChatSector');
                 const categorySelect = document.getElementById('supportChatCategory');
                 const messageInput = document.getElementById('supportChatMessage');
+                const cpfInput = document.getElementById('supportClientCpf');
                 
                 console.log('Form values:', {
                     sector: sectorSelect.value,
                     category: categorySelect.value,
-                    message: messageInput.value
+                    message: messageInput.value,
+                    client_cpf: cpfInput ? cpfInput.value : ''
                 });
+
+                // Validar CPF no frontend quando a categoria exigir
+                const selectedCategory = categorySelect.options[categorySelect.selectedIndex];
+                const requiresCpf = selectedCategory && selectedCategory.dataset.requestCustomerCpf === 'true';
+                if (requiresCpf) {
+                    const cpfValue = (cpfInput?.value || '').replace(/\D/g, '');
+                    if (cpfValue.length !== 11) {
+                        if (typeof showToast === 'function') {
+                            showToast('Informe um CPF válido do cliente para esta categoria.', 'error');
+                        } else {
+                            alert('Informe um CPF válido do cliente para esta categoria.');
+                        }
+                        return;
+                    }
+                }
                 
                 // Create title based on sector and category
                 const sectorText = sectorSelect.options[sectorSelect.selectedIndex]?.text || '';
@@ -2773,6 +2805,7 @@
                 formData.append('sector_id', sectorSelect.value);
                 formData.append('category_id', categorySelect.value);
                 formData.append('message', messageInput.value);
+                formData.append('client_cpf', cpfInput ? cpfInput.value : '');
                 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
                 createSupportChatRequest(formData, this);
@@ -3087,6 +3120,8 @@
             console.log('loadSectorCategories() called with sectorId:', sectorId);
             const categoryDiv = document.getElementById('categoryDiv');
             const categorySelect = document.getElementById('supportChatCategory');
+            const cpfDiv = document.getElementById('supportCpfDiv');
+            const cpfInput = document.getElementById('supportClientCpf');
             const queueInfoDiv = document.getElementById('queueInfoDiv');
             const queueInfoText = document.getElementById('queueInfoText');
             
@@ -3098,6 +3133,11 @@
             if (!sectorId) {
                 categoryDiv.classList.add('hidden');
                 categorySelect.innerHTML = '<option value="">Selecione o assunto</option>';
+                if (cpfDiv) cpfDiv.classList.add('hidden');
+                if (cpfInput) {
+                    cpfInput.required = false;
+                    cpfInput.value = '';
+                }
                 if (queueInfoDiv) queueInfoDiv.classList.add('hidden');
                 return;
             }
@@ -3167,6 +3207,7 @@
                                 const option = document.createElement('option');
                                 option.value = category.id;
                                 option.textContent = category.name;
+                                option.dataset.requestCustomerCpf = category.request_customer_cpf ? 'true' : 'false';
                                 categorySelect.appendChild(option);
                             });
                             
@@ -3186,6 +3227,26 @@
                     console.error('Error loading categories:', error);
                     alert('Erro ao carregar categorias. Verifique sua conexão.');
                 });
+        };
+
+        // Alterna campo CPF conforme configuração da categoria
+        window.handleSupportCategoryChange = function() {
+            const categorySelect = document.getElementById('supportChatCategory');
+            const cpfDiv = document.getElementById('supportCpfDiv');
+            const cpfInput = document.getElementById('supportClientCpf');
+            if (!categorySelect || !cpfDiv || !cpfInput) return;
+
+            const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+            const requiresCpf = selectedOption && selectedOption.dataset.requestCustomerCpf === 'true';
+
+            if (requiresCpf) {
+                cpfDiv.classList.remove('hidden');
+                cpfInput.required = true;
+            } else {
+                cpfDiv.classList.add('hidden');
+                cpfInput.required = false;
+                cpfInput.value = '';
+            }
         };
         
         // Helper functions

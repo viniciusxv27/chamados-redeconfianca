@@ -257,6 +257,29 @@ def get_support_chat(request, chat_id):
 def create_support_chat(request):
     """Criar novo chat de suporte"""
     from datetime import datetime
+
+    def normalize_cpf(value):
+        return ''.join(ch for ch in (value or '') if ch.isdigit())
+
+    def is_valid_cpf(value):
+        cpf = normalize_cpf(value)
+        if len(cpf) != 11:
+            return False
+        if cpf == cpf[0] * 11:
+            return False
+
+        # 1o digito verificador
+        total = sum(int(cpf[i]) * (10 - i) for i in range(9))
+        check = (total * 10) % 11
+        check = 0 if check == 10 else check
+        if check != int(cpf[9]):
+            return False
+
+        # 2o digito verificador
+        total = sum(int(cpf[i]) * (11 - i) for i in range(10))
+        check = (total * 10) % 11
+        check = 0 if check == 10 else check
+        return check == int(cpf[10])
     
     # Verificar horário de atendimento
     now = datetime.now()
@@ -288,6 +311,7 @@ def create_support_chat(request):
     message = request.POST.get('message', '').strip()
     sector_id = request.POST.get('sector_id')
     category_id = request.POST.get('category_id')
+    client_cpf = request.POST.get('client_cpf', '').strip()
     
     if not title or not message:
         return JsonResponse({'success': False, 'error': 'Título e mensagem são obrigatórios'})
@@ -314,6 +338,14 @@ def create_support_chat(request):
         try:
             category = SupportCategory.objects.get(id=category_id)
             chat_data['category'] = category
+
+            if getattr(category, 'request_customer_cpf', False):
+                if not is_valid_cpf(client_cpf):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'CPF do cliente é obrigatório e deve ser válido para esta categoria.'
+                    })
+                chat_data['customer_cpf'] = normalize_cpf(client_cpf)
             
             # Se a categoria tem apenas UM agente padrão, atribuir automaticamente
             # Se tem múltiplos, deixar para os agentes assumirem
@@ -556,7 +588,15 @@ def get_sector_categories(request, sector_id):
         is_active=True
     ).order_by('name')
     
-    categories_data = [{'id': c.id, 'name': c.name, 'description': c.description} for c in categories]
+    categories_data = [
+        {
+            'id': c.id,
+            'name': c.name,
+            'description': c.description,
+            'request_customer_cpf': c.request_customer_cpf
+        }
+        for c in categories
+    ]
     
     return JsonResponse({'success': True, 'categories': categories_data})
 
@@ -1483,6 +1523,7 @@ def get_support_categories_api(request):
                     'id': cat.id,
                     'name': cat.name,
                     'description': cat.description,
+                    'request_customer_cpf': cat.request_customer_cpf,
                     'sector': {
                         'id': cat.sector.id,
                         'name': cat.sector.name
@@ -1536,6 +1577,7 @@ def get_support_categories_api(request):
                     name=data['name'],
                     sector=sector,
                     description=data.get('description', ''),
+                    request_customer_cpf=data.get('request_customer_cpf', False),
                     is_active=True
                 )
                 
@@ -1557,6 +1599,7 @@ def get_support_categories_api(request):
                         'id': category.id,
                         'name': category.name,
                         'description': category.description,
+                        'request_customer_cpf': category.request_customer_cpf,
                         'sector': {'id': sector.id, 'name': sector.name},
                         'default_agents': agents_list
                     }
@@ -1571,6 +1614,7 @@ def get_support_categories_api(request):
                 
                 category.name = data.get('name', category.name)
                 category.description = data.get('description', category.description)
+                category.request_customer_cpf = data.get('request_customer_cpf', category.request_customer_cpf)
                 category.is_active = data.get('is_active', category.is_active)
                 category.save()
                 

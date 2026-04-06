@@ -507,6 +507,14 @@
                         <textarea id="newCategoryDescription" rows="3"
                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></textarea>
                     </div>
+
+                    <div>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="newCategoryRequestCpf" class="rounded border-gray-300">
+                            <span class="text-sm text-gray-700 font-medium">Solicitar CPF</span>
+                        </label>
+                        <p class="text-xs text-gray-500 mt-1">Se marcado, o usuário deverá informar CPF do cliente antes de entrar na fila</p>
+                    </div>
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Agentes Padrão</label>
@@ -2450,12 +2458,13 @@ function loadCategories() {
                             <div class="font-medium text-gray-900">${category.name}</div>
                             <div class="text-sm text-gray-600">
                                 <span class="font-medium">Setor:</span> ${category.sector ? category.sector.name : 'N/A'}
+                                ${category.request_customer_cpf ? `<br><span class="text-xs text-indigo-600"><i class="fas fa-id-card mr-1"></i>Solicita CPF na abertura</span>` : ''}
                                 ${agentNames ? `<br><span class="text-xs text-green-600"><i class="fas fa-user-check mr-1"></i>Agentes padrão: ${agentNames}</span>` : ''}
                                 ${category.description ? `<br><span class="text-xs text-gray-500">${category.description}</span>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center space-x-2">
-                            <button onclick='editCategory(${category.id}, "${category.name.replace(/"/g, '\\"')}", "${(category.description || '').replace(/"/g, '\\"')}", ${category.sector ? category.sector.id : 'null'}, ${agentIds})' 
+                            <button onclick='editCategory(${category.id}, "${category.name.replace(/"/g, '\\"')}", "${(category.description || '').replace(/"/g, '\\"')}", ${category.sector ? category.sector.id : 'null'}, ${agentIds}, ${category.request_customer_cpf ? 'true' : 'false'})' 
                                     class="text-blue-600 hover:text-blue-800 px-2 py-1">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -2545,6 +2554,7 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
         sector_id: document.getElementById('newCategorySector').value,
         name: document.getElementById('newCategoryName').value,
         description: document.getElementById('newCategoryDescription').value,
+        request_customer_cpf: document.getElementById('newCategoryRequestCpf').checked,
         default_agent_ids: getSelectedAgentIds('newCategoryAgentsContainer')
     };
     
@@ -2573,7 +2583,7 @@ document.getElementById('newCategoryForm').addEventListener('submit', function(e
     });
 });
 
-function editCategory(id, name, description, sectorId, defaultAgentIds) {
+function editCategory(id, name, description, sectorId, defaultAgentIds, requestCustomerCpf = false) {
     // Garantir que defaultAgentIds seja um array
     if (!Array.isArray(defaultAgentIds)) {
         defaultAgentIds = [];
@@ -2592,6 +2602,13 @@ function editCategory(id, name, description, sectorId, defaultAgentIds) {
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                         <textarea id="editCategoryDescription" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">${description || ''}</textarea>
+                    </div>
+                    <div>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="editCategoryRequestCpf" class="rounded border-gray-300" ${requestCustomerCpf ? 'checked' : ''}>
+                            <span class="text-sm text-gray-700 font-medium">Solicitar CPF</span>
+                        </label>
+                        <p class="text-xs text-gray-500 mt-1">Exige CPF do cliente na abertura do ticket</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Agentes Padrão</label>
@@ -2621,6 +2638,7 @@ function closeEditCategoryModal() {
 function saveEditCategory(categoryId) {
     const name = document.getElementById('editCategoryName').value;
     const description = document.getElementById('editCategoryDescription').value;
+    const requestCustomerCpf = document.getElementById('editCategoryRequestCpf').checked;
     const defaultAgentIds = getSelectedAgentIds('editCategoryAgentsContainer');
     
     fetch('/projects/support/api/categories/', {
@@ -2634,6 +2652,7 @@ function saveEditCategory(categoryId) {
             category_id: categoryId,
             name: name,
             description: description,
+            request_customer_cpf: requestCustomerCpf,
             default_agent_ids: defaultAgentIds
         })
     })

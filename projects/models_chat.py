@@ -112,6 +112,12 @@ class SupportChat(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    customer_cpf = models.CharField(
+        max_length=11,
+        blank=True,
+        verbose_name="CPF do Cliente",
+        help_text="CPF informado na abertura do ticket quando a categoria exigir"
+    )
 
     class Meta:
         verbose_name = "Chat de Suporte"
@@ -220,6 +226,11 @@ class SupportCategory(models.Model):
         related_name='default_support_categories',
         verbose_name="Agentes Padrão",
         help_text="Agentes que serão notificados automaticamente sobre tickets desta categoria"
+    )
+    request_customer_cpf = models.BooleanField(
+        default=False,
+        verbose_name="Solicitar CPF",
+        help_text="Quando marcado, exige CPF do cliente na abertura do ticket"
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
