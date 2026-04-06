@@ -14,4 +14,5 @@ urlpatterns = [
     path('manage/<int:report_id>/delete/', views.delete_power_bi_view, name='delete'),
     path('manage/metas/', views.manage_goals_view, name='manage_goals'),
     path('manage/metas/upload/', views.upload_goals_view, name='upload_goals'),
+    path('manage/metas/<int:upload_id>/delete/', views.delete_goals_upload_view, name='delete_goals_upload'),
 ]

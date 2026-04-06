@@ -428,23 +428,39 @@ def goals_list_view(request):
         if item.goal_value is not None:
             pilar_pdv_map[item.pilar or 'SEM PILAR'] += item.goal_value
 
-    all_dashboard_pilares = sorted(set(list(pilar_cn_map.keys()) + list(pilar_pdv_map.keys())))
-    pilar_rows = []
-    max_total = Decimal('0.00')
-    for pilar in all_dashboard_pilares:
-        total = pilar_cn_map[pilar] + pilar_pdv_map[pilar]
-        if total > max_total:
-            max_total = total
-        pilar_rows.append({
+    cn_pilar_rows = []
+    cn_max_total = max(pilar_cn_map.values()) if pilar_cn_map else Decimal('0.00')
+    cn_max_total = cn_max_total if cn_max_total > Decimal('0.00') else Decimal('1.00')
+    for pilar in sorted(pilar_cn_map.keys()):
+        total = pilar_cn_map[pilar]
+        cn_pilar_rows.append({
             'pilar': pilar,
-            'cn': pilar_cn_map[pilar],
-            'pdv': pilar_pdv_map[pilar],
             'total': total,
+            'bar_percent': float((total / cn_max_total) * Decimal('100')),
         })
 
-    max_total = max_total if max_total > Decimal('0.00') else Decimal('1.00')
-    for row in pilar_rows:
-        row['bar_percent'] = float((row['total'] / max_total) * Decimal('100'))
+    pdv_pilar_rows = []
+    pdv_max_total = max(pilar_pdv_map.values()) if pilar_pdv_map else Decimal('0.00')
+    pdv_max_total = pdv_max_total if pdv_max_total > Decimal('0.00') else Decimal('1.00')
+    for pilar in sorted(pilar_pdv_map.keys()):
+        total = pilar_pdv_map[pilar]
+        pdv_pilar_rows.append({
+            'pilar': pilar,
+            'total': total,
+            'bar_percent': float((total / pdv_max_total) * Decimal('100')),
+        })
+
+    consultant_totals = defaultdict(lambda: Decimal('0.00'))
+    for item in cn_entries:
+        if item.goal_value is None:
+            continue
+        consultant_key = item.user_name or 'SEM CONSULTOR'
+        consultant_totals[consultant_key] += item.goal_value
+    top_consultants = sorted(
+        [{'name': key, 'total': value} for key, value in consultant_totals.items()],
+        key=lambda x: x['total'],
+        reverse=True
+    )[:10]
 
     store_totals = defaultdict(lambda: Decimal('0.00'))
     if not _is_standard_user(request.user):
@@ -473,7 +489,9 @@ def goals_list_view(request):
         'pdv_total': sum((item.goal_value or Decimal('0.00')) for item in pdv_entries),
         'cn_entries_count': cn_entries.count(),
         'pdv_entries_count': pdv_entries.count() if not _is_standard_user(request.user) else 0,
-        'pilar_rows': pilar_rows,
+        'cn_pilar_rows': cn_pilar_rows,
+        'pdv_pilar_rows': pdv_pilar_rows,
+        'top_consultants': top_consultants,
         'top_stores': top_stores,
         'now': timezone.now(),
     }
@@ -551,4 +569,20 @@ def upload_goals_view(request):
         ])
 
     messages.success(request, f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas).')
+    return redirect('power_bi:manage_goals')
+
+
+@login_required
+def delete_goals_upload_view(request, upload_id):
+    if not _is_superadmin(request.user):
+        messages.error(request, 'Apenas SUPERADMIN pode gerenciar metas.')
+        return redirect('dashboard')
+
+    if request.method != 'POST':
+        return redirect('power_bi:manage_goals')
+
+    upload = get_object_or_404(GoalUpload, id=upload_id)
+    period = f'{upload.month:02d}/{upload.year}'
+    upload.delete()
+    messages.success(request, f'Competencia {period} excluida com sucesso.')
     return redirect('power_bi:manage_goals')

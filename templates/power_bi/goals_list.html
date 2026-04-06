@@ -2,6 +2,16 @@
 
 {% block title %}Metas{% endblock %}
 
+{% block extra_css %}
+<style>
+    .goal-toggle-btn.active {
+        background: #f97316;
+        color: #fff;
+        border-color: #f97316;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-7xl mx-auto">
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -91,28 +101,35 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+        <div class="flex items-center gap-2">
+            <button type="button" id="toggle-cn" class="goal-toggle-btn active px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium">
+                Painel CN
+            </button>
+            {% if not is_standard_user %}
+            <button type="button" id="toggle-pdv" class="goal-toggle-btn px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium">
+                Painel PDV
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="panel-cn" class="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Dashboard por pilar</h3>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Painel CN por pilar</h3>
             <div class="space-y-4">
-                {% for row in pilar_rows %}
+                {% for row in cn_pilar_rows %}
                 <div>
                     <div class="flex items-center justify-between text-sm mb-1">
                         <span class="font-medium text-gray-700">{{ row.pilar }}</span>
                         <span class="text-gray-600">R$ {{ row.total|floatformat:2 }}</span>
                     </div>
                     <div class="w-full bg-gray-100 rounded-full h-2.5 mb-1 overflow-hidden">
-                        <div class="bg-orange-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
-                    </div>
-                    <div class="flex items-center gap-4 text-xs text-gray-500">
-                        <span>CN: R$ {{ row.cn|floatformat:2 }}</span>
-                        {% if not is_standard_user %}
-                        <span>PDV: R$ {{ row.pdv|floatformat:2 }}</span>
-                        {% endif %}
+                        <div class="bg-blue-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
                     </div>
                 </div>
                 {% empty %}
-                <p class="text-sm text-gray-500">Sem dados para o periodo selecionado.</p>
+                <p class="text-sm text-gray-500">Sem metas CN para o periodo selecionado.</p>
                 {% endfor %}
             </div>
         </div>
@@ -120,13 +137,47 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">
                 {% if is_standard_user %}
-                Minha performance em metas
+                Meu resumo CN
                 {% else %}
-                Top lojas (meta PDV)
+                Top consultores (CN)
                 {% endif %}
             </h3>
+            <div class="space-y-3">
+                {% for item in top_consultants %}
+                <div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2">
+                    <span class="text-gray-700">{{ item.name }}</span>
+                    <span class="font-semibold text-blue-700">R$ {{ item.total|floatformat:2 }}</span>
+                </div>
+                {% empty %}
+                <p class="text-sm text-gray-500">Sem metas CN para exibir.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
 
-            {% if not is_standard_user %}
+    {% if not is_standard_user %}
+    <div id="panel-pdv" class="grid grid-cols-1 xl:grid-cols-3 gap-6 hidden">
+        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Painel PDV por pilar</h3>
+            <div class="space-y-4">
+                {% for row in pdv_pilar_rows %}
+                <div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="font-medium text-gray-700">{{ row.pilar }}</span>
+                        <span class="text-gray-600">R$ {{ row.total|floatformat:2 }}</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-2.5 mb-1 overflow-hidden">
+                        <div class="bg-emerald-500 h-2.5 rounded-full" style="width: {{ row.bar_percent|floatformat:0 }}%"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-sm text-gray-500">Sem metas PDV para o periodo selecionado.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Top lojas (PDV)</h3>
             <div class="space-y-3">
                 {% for item in top_stores %}
                 <div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2">
@@ -137,13 +188,9 @@
                 <p class="text-sm text-gray-500">Sem metas PDV para exibir.</p>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="rounded-lg bg-blue-50 border border-blue-100 p-4 text-sm text-blue-900">
-                Este dashboard mostra somente suas metas de CN, vinculadas ao seu nome na sheet METAS CN REAL.
-            </div>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
     {% else %}
     <div class="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
         <div class="text-4xl text-gray-300 mb-3"><i class="fas fa-bullseye"></i></div>
@@ -152,4 +199,34 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const btnCn = document.getElementById('toggle-cn');
+        const btnPdv = document.getElementById('toggle-pdv');
+        const panelCn = document.getElementById('panel-cn');
+        const panelPdv = document.getElementById('panel-pdv');
+
+        function showCn() {
+            if (!panelCn) return;
+            panelCn.classList.remove('hidden');
+            if (panelPdv) panelPdv.classList.add('hidden');
+            if (btnCn) btnCn.classList.add('active');
+            if (btnPdv) btnPdv.classList.remove('active');
+        }
+
+        function showPdv() {
+            if (!panelPdv) return;
+            panelPdv.classList.remove('hidden');
+            if (panelCn) panelCn.classList.add('hidden');
+            if (btnPdv) btnPdv.classList.add('active');
+            if (btnCn) btnCn.classList.remove('active');
+        }
+
+        if (btnCn) btnCn.addEventListener('click', showCn);
+        if (btnPdv) btnPdv.addEventListener('click', showPdv);
+    });
+</script>
 {% endblock %}
