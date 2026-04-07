@@ -59,6 +59,18 @@ class SystemConfig(models.Model):
         verbose_name='Gestores Globais de Contestação',
         help_text='Usuários liberados para gerenciar tudo em /contestacao'
     )
+    display_reference_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Mês de Exibição do Comissionamento",
+        help_text="Mês de referência padrão exibido no /users/commission/ quando não houver seleção manual"
+    )
+    display_reference_year = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Ano de Exibição do Comissionamento",
+        help_text="Ano de referência padrão exibido no /users/commission/ quando não houver seleção manual"
+    )
     
     # Metadados
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
@@ -88,6 +100,16 @@ class SystemConfig(models.Model):
         """Retorna a instância de configuração (cria se não existir)"""
         config, created = cls.objects.get_or_create(pk=1)
         return config
+
+    def get_display_reference_month_year(self, base_date=None):
+        """Retorna o mês/ano padrão de exibição configurado; fallback para regra de referência."""
+        month = self.display_reference_month
+        year = self.display_reference_year
+
+        if month and year and 1 <= month <= 12:
+            return year, month
+
+        return CommissionSpreadsheetVersion.get_reference_month_year(base_date=base_date)
 
 
 class CommissionSpreadsheetVersion(models.Model):
@@ -153,6 +175,60 @@ class CommissionSpreadsheetVersion(models.Model):
     def get_reference_version(cls, base_date=None):
         year, month = cls.get_reference_month_year(base_date=base_date)
         return cls.objects.filter(year=year, month=month).first()
+
+
+class CommissionUserReferenceHistory(models.Model):
+    """Snapshot dos dados de comissionamento por usuário e referência (mês/ano)."""
+
+    ROLE_CHOICES = [
+        ('cn', 'CN'),
+        ('gerente', 'Gerente'),
+        ('coordenador', 'Coordenador'),
+    ]
+
+    year = models.PositiveSmallIntegerField(verbose_name="Ano de Referência")
+    month = models.PositiveSmallIntegerField(verbose_name="Mês de Referência")
+    user_name = models.CharField(max_length=255, verbose_name="Nome do Usuário")
+    user = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='commission_reference_history',
+        verbose_name="Usuário Vinculado"
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, verbose_name="Papel")
+    sheet_name = models.CharField(max_length=120, verbose_name="Sheet de Origem")
+    source_version = models.ForeignKey(
+        CommissionSpreadsheetVersion,
+        on_delete=models.CASCADE,
+        related_name='user_history_entries',
+        verbose_name="Versão de Origem"
+    )
+    row_data = models.JSONField(default=dict, blank=True, verbose_name="Dados da Linha")
+    captured_at = models.DateTimeField(auto_now_add=True, verbose_name="Capturado em")
+    updated_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='commission_history_updates',
+        verbose_name="Atualizado por"
+    )
+
+    class Meta:
+        verbose_name = "Histórico de Comissionamento por Usuário"
+        verbose_name_plural = "Históricos de Comissionamento por Usuário"
+        ordering = ['-year', '-month', 'user_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['year', 'month', 'sheet_name', 'user_name'],
+                name='unique_commission_user_history_by_reference_and_sheet'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user_name} - {self.sheet_name} ({self.month:02d}/{self.year})"
 
 
 def get_media_storage():

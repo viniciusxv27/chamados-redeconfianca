@@ -44,7 +44,7 @@ def get_excel_urls():
     """
     try:
         config = SystemConfig.get_config()
-        ref_year, ref_month = CommissionSpreadsheetVersion.get_reference_month_year(base_date=timezone.now())
+        ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
         version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
 
         if version:
@@ -1237,22 +1237,22 @@ def get_month_names():
         9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
     }
     
-    hoje = datetime.now()
-    
-    # Mês de referência: 2 meses atrás
-    data_referencia = hoje - relativedelta(months=2)
+    config = SystemConfig.get_config()
+    ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
+    data_referencia = datetime(ref_year, ref_month, 1)
+
     mes_referencia = meses_pt[data_referencia.month]
     ano_referencia = data_referencia.year
     
     # Meses para os atingimentos (pct_1, pct_2, pct_3)
-    data_pct_1 = hoje - relativedelta(months=2)  # Último: 2 meses atrás
-    data_pct_2 = hoje - relativedelta(months=3)  # Penúltimo: 3 meses atrás
-    data_pct_3 = hoje - relativedelta(months=4)  # Antepenúltimo: 4 meses atrás
+    data_pct_1 = data_referencia  # Último: mês de referência
+    data_pct_2 = data_referencia - relativedelta(months=1)  # Penúltimo
+    data_pct_3 = data_referencia - relativedelta(months=2)  # Antepenúltimo
     
     # Meses antigos para gráficos (mantendo compatibilidade)
     def get_month_back(months_back):
-        m = hoje.month - months_back
-        y = hoje.year
+        m = data_referencia.month - months_back
+        y = data_referencia.year
         while m <= 0:
             m += 12
             y -= 1

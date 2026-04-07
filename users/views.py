@@ -1837,6 +1837,70 @@ def manage_webhooks_view(request):
     return render(request, 'admin/webhooks.html', context)
 
 
+def _normalize_commission_user_name(value):
+    import unicodedata
+
+    raw = str(value or '').strip().upper()
+    raw = unicodedata.normalize('NFD', raw)
+    without_accents = ''.join(ch for ch in raw if unicodedata.category(ch) != 'Mn')
+    return ' '.join(without_accents.split())
+
+
+def _snapshot_commission_users_for_reference(version_obj, updated_by):
+    """Salva snapshot completo dos usuários por referência (mês/ano)."""
+    from users.commission_views import fetch_all_users_from_sheet, SHEET_CN, SHEET_GERENTE, SHEET_COORDENADOR
+    from users.models import CommissionUserReferenceHistory
+
+    sheet_role_map = {
+        SHEET_CN: 'cn',
+        SHEET_GERENTE: 'gerente',
+        SHEET_COORDENADOR: 'coordenador',
+    }
+
+    active_users = User.objects.filter(is_active=True)
+    user_name_index = {}
+    for db_user in active_users:
+        normalized = _normalize_commission_user_name(db_user.get_full_name())
+        if normalized and normalized not in user_name_index:
+            user_name_index[normalized] = db_user.id
+
+    history_rows = []
+    for sheet_name, role in sheet_role_map.items():
+        sheet_result = fetch_all_users_from_sheet(sheet_name, excel_url=version_obj.excel_comissao_url)
+        if not sheet_result.get('success'):
+            error_message = sheet_result.get('error') or f'Falha ao ler a sheet {sheet_name}'
+            raise ValueError(error_message)
+
+        for entry in sheet_result.get('users', []):
+            user_name = str(entry.get('nome') or '').strip()
+            if not user_name:
+                continue
+            normalized_name = _normalize_commission_user_name(user_name)
+            history_rows.append(
+                CommissionUserReferenceHistory(
+                    year=version_obj.year,
+                    month=version_obj.month,
+                    user_name=user_name,
+                    user_id=user_name_index.get(normalized_name),
+                    role=role,
+                    sheet_name=sheet_name,
+                    source_version=version_obj,
+                    row_data=entry.get('data') or {},
+                    updated_by=updated_by,
+                )
+            )
+
+    CommissionUserReferenceHistory.objects.filter(
+        year=version_obj.year,
+        month=version_obj.month,
+    ).delete()
+
+    if history_rows:
+        CommissionUserReferenceHistory.objects.bulk_create(history_rows, batch_size=500)
+
+    return len(history_rows)
+
+
 @login_required
 def system_config_view(request):
     """Gerenciar configurações do sistema (links das planilhas Excel)"""
@@ -1848,14 +1912,25 @@ def system_config_view(request):
         return redirect('dashboard')
     
     config = SystemConfig.get_config()
-    ref_year, ref_month = CommissionSpreadsheetVersion.get_reference_month_year(base_date=timezone.now())
+    display_ref_year, display_ref_month = config.get_display_reference_month_year(base_date=timezone.now())
 
-    active_version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
-    commission_versions = CommissionSpreadsheetVersion.objects.select_related('updated_by').all()[:24]
+    active_version = CommissionSpreadsheetVersion.objects.filter(
+        year=display_ref_year,
+        month=display_ref_month,
+    ).first()
+    commission_versions = CommissionSpreadsheetVersion.objects.select_related('updated_by').all()
+
+    available_references = list(
+        CommissionSpreadsheetVersion.objects.values('year', 'month').order_by('-year', '-month')
+    )
+    available_year_choices = sorted({item['year'] for item in available_references}, reverse=True)
+    available_month_choices = sorted({item['month'] for item in available_references})
     
     if request.method == 'POST':
         selected_month = request.POST.get('version_month', '').strip()
         selected_year = request.POST.get('version_year', '').strip()
+        display_month = request.POST.get('display_reference_month', '').strip()
+        display_year = request.POST.get('display_reference_year', '').strip()
 
         try:
             selected_month_int = int(selected_month)
@@ -1866,6 +1941,36 @@ def system_config_view(request):
 
         if selected_month_int < 1 or selected_month_int > 12:
             messages.error(request, 'Mês inválido. Use um valor entre 1 e 12.')
+            return redirect('system_config')
+
+        if (display_month and not display_year) or (display_year and not display_month):
+            messages.error(request, 'Informe mês e ano de exibição juntos.')
+            return redirect('system_config')
+
+        if display_month and display_year:
+            try:
+                display_month_int = int(display_month)
+                display_year_int = int(display_year)
+            except (TypeError, ValueError):
+                messages.error(request, 'Mês e ano de exibição inválidos.')
+                return redirect('system_config')
+        else:
+            display_month_int = selected_month_int
+            display_year_int = selected_year_int
+
+        if display_month_int < 1 or display_month_int > 12:
+            messages.error(request, 'Mês de exibição inválido. Use um valor entre 1 e 12.')
+            return redirect('system_config')
+
+        display_matches_selected_version = (
+            display_year_int == selected_year_int and display_month_int == selected_month_int
+        )
+        display_version_exists = CommissionSpreadsheetVersion.objects.filter(
+            year=display_year_int,
+            month=display_month_int,
+        ).exists()
+        if not (display_matches_selected_version or display_version_exists):
+            messages.error(request, 'Selecione mês e ano de exibição já disponíveis no histórico de versões.')
             return redirect('system_config')
 
         commission_urls = {
@@ -1879,23 +1984,32 @@ def system_config_view(request):
             messages.error(request, 'Preencha todas as URLs de comissionamento para salvar a versão.')
             return redirect('system_config')
 
-        version_obj, created = CommissionSpreadsheetVersion.objects.update_or_create(
-            year=selected_year_int,
-            month=selected_month_int,
-            defaults={
-                **commission_urls,
-                'updated_by': request.user,
-            }
-        )
+        try:
+            with transaction.atomic():
+                version_obj, created = CommissionSpreadsheetVersion.objects.update_or_create(
+                    year=selected_year_int,
+                    month=selected_month_int,
+                    defaults={
+                        **commission_urls,
+                        'updated_by': request.user,
+                    }
+                )
 
-        # Mantém estes campos como fallback para instalações sem versão cadastrada.
-        config.excel_comissao_url = commission_urls['excel_comissao_url']
-        config.excel_vendas_url = commission_urls['excel_vendas_url']
-        config.excel_base_pagamento_url = commission_urls['excel_base_pagamento_url']
-        config.excel_base_exclusao_url = commission_urls['excel_base_exclusao_url']
-        config.excel_contestacao_base_exclusao_url = request.POST.get('excel_contestacao_base_exclusao_url', '').strip()
-        config.updated_by = request.user
-        config.save()
+                # Mantém estes campos como fallback para instalações sem versão cadastrada.
+                config.excel_comissao_url = commission_urls['excel_comissao_url']
+                config.excel_vendas_url = commission_urls['excel_vendas_url']
+                config.excel_base_pagamento_url = commission_urls['excel_base_pagamento_url']
+                config.excel_base_exclusao_url = commission_urls['excel_base_exclusao_url']
+                config.excel_contestacao_base_exclusao_url = request.POST.get('excel_contestacao_base_exclusao_url', '').strip()
+                config.display_reference_month = display_month_int
+                config.display_reference_year = display_year_int
+                config.updated_by = request.user
+                config.save()
+
+                snapshot_count = _snapshot_commission_users_for_reference(version_obj, request.user)
+        except ValueError as exc:
+            messages.error(request, f'Erro ao salvar histórico completo dos usuários: {exc}')
+            return redirect('system_config')
         
         # Limpar cache das planilhas para forçar reload
         from django.core.cache import cache
@@ -1911,7 +2025,11 @@ def system_config_view(request):
         operation = 'atualizada' if not created else 'criada'
         messages.success(
             request,
-            f'Versão {selected_month_int:02d}/{selected_year_int} {operation} com sucesso. O cache foi limpo.'
+            (
+                f'Versão {selected_month_int:02d}/{selected_year_int} {operation} com sucesso. '
+                f'Padrão de exibição definido para {display_month_int:02d}/{display_year_int}. '
+                f'Histórico salvo para {snapshot_count} usuários. O cache foi limpo.'
+            )
         )
         return redirect('system_config')
 
@@ -1923,6 +2041,8 @@ def system_config_view(request):
             'excel_base_exclusao_url': active_version.excel_base_exclusao_url,
             'version_month': active_version.month,
             'version_year': active_version.year,
+            'display_reference_month': config.display_reference_month or active_version.month,
+            'display_reference_year': config.display_reference_year or active_version.year,
         }
     else:
         commission_form = {
@@ -1930,23 +2050,44 @@ def system_config_view(request):
             'excel_vendas_url': config.excel_vendas_url,
             'excel_base_pagamento_url': config.excel_base_pagamento_url,
             'excel_base_exclusao_url': config.excel_base_exclusao_url,
-            'version_month': ref_month,
-            'version_year': ref_year,
+            'version_month': display_ref_month,
+            'version_year': display_ref_year,
+            'display_reference_month': config.display_reference_month or display_ref_month,
+            'display_reference_year': config.display_reference_year or display_ref_year,
         }
+
+    meses_map = {
+        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro',
+    }
+
+    display_month_choices = [
+        (month_value, meses_map[month_value])
+        for month_value in available_month_choices
+        if month_value in meses_map
+    ]
+    if not display_month_choices:
+        display_month_choices = [(display_ref_month, meses_map.get(display_ref_month, str(display_ref_month)))]
+
+    if not available_year_choices:
+        available_year_choices = [display_ref_year]
     
     context = {
         'config': config,
         'commission_form': commission_form,
         'commission_versions': commission_versions,
         'active_version': active_version,
-        'reference_month': ref_month,
-        'reference_year': ref_year,
+        'reference_month': display_ref_month,
+        'reference_year': display_ref_year,
         'month_choices': [
             (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
             (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
             (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro'),
         ],
-        'year_choices': list(range(ref_year - 3, ref_year + 3)),
+        'year_choices': list(range(display_ref_year - 3, display_ref_year + 3)),
+        'display_month_choices': display_month_choices,
+        'display_year_choices': available_year_choices,
         'user': request.user,
     }
     return render(request, 'admin/system_config.html', context)
