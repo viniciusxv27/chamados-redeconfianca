@@ -7,7 +7,12 @@ from django.db.models.functions import TruncDate
 from django.db import transaction
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill
 from django.utils import timezone
 
 import openpyxl
@@ -501,6 +506,84 @@ def delete_power_bi_view(request, report_id):
     report.delete()
     messages.success(request, 'BI removido com sucesso.')
     return redirect('power_bi:manage')
+
+
+@login_required
+def export_power_bi_excel_view(request):
+    if not _is_superadmin(request.user):
+        messages.error(request, 'Apenas SUPERADMIN pode exportar os dados de Power BI.')
+        return redirect('dashboard')
+
+    reports = PowerBIReport.objects.all().prefetch_related('allowed_groups', 'allowed_sectors', 'allowed_users')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Power BI'
+
+    headers = [
+        'Nome',
+        'Descricao',
+        'Icone',
+        'Link Embed',
+        'Ativo',
+        'Ordem',
+        'Hierarquias',
+        'Grupos',
+        'Setores',
+        'Usuarios Especificos',
+        'Criado Em',
+        'Atualizado Em',
+    ]
+
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='1F2937', end_color='1F2937', fill_type='solid')
+
+    for col_index, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_index, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row_index, report in enumerate(reports, 2):
+        groups = ', '.join(report.allowed_groups.values_list('name', flat=True))
+        sectors = ', '.join(report.allowed_sectors.values_list('name', flat=True))
+        users = ', '.join(
+            [
+                user.full_name if user.full_name else user.email
+                for user in report.allowed_users.all()
+            ]
+        )
+        hierarchies = ', '.join(report.allowed_hierarchies or [])
+
+        ws.cell(row=row_index, column=1, value=report.name)
+        ws.cell(row=row_index, column=2, value=report.description)
+        ws.cell(row=row_index, column=3, value=report.icon_class)
+        ws.cell(row=row_index, column=4, value=report.embed_url)
+        ws.cell(row=row_index, column=5, value='Sim' if report.is_active else 'Nao')
+        ws.cell(row=row_index, column=6, value=report.sort_order)
+        ws.cell(row=row_index, column=7, value=hierarchies)
+        ws.cell(row=row_index, column=8, value=groups)
+        ws.cell(row=row_index, column=9, value=sectors)
+        ws.cell(row=row_index, column=10, value=users)
+        ws.cell(row=row_index, column=11, value=report.created_at.strftime('%d/%m/%Y %H:%M') if report.created_at else '')
+        ws.cell(row=row_index, column=12, value=report.updated_at.strftime('%d/%m/%Y %H:%M') if report.updated_at else '')
+
+    for column_cells in ws.columns:
+        max_length = 0
+        column = column_cells[0].column_letter
+        for cell in column_cells:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+        ws.column_dimensions[column].width = min(max_length + 2, 60)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="power_bi_dashboard_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    )
+
+    wb.save(response)
+    return response
 
 
 @login_required

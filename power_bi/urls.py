@@ -9,6 +9,7 @@ urlpatterns = [
     path('<int:report_id>/', views.power_bi_viewer, name='viewer'),
     path('metas/', views.goals_list_view, name='goals_list'),
     path('manage/', views.manage_power_bi_view, name='manage'),
+    path('manage/export-excel/', views.export_power_bi_excel_view, name='export_excel'),
     path('manage/create/', views.create_power_bi_view, name='create'),
     path('manage/<int:report_id>/edit/', views.edit_power_bi_view, name='edit'),
     path('manage/<int:report_id>/delete/', views.delete_power_bi_view, name='delete'),
