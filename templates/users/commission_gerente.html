@@ -1198,6 +1198,44 @@ document.addEventListener('DOMContentLoaded', function() {
             renderTabelaVendas(window.vendasExclusaoGlobal);
         }
     }
+
+    function normalizeColumnKey(key) {
+        return String(key || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .toUpperCase();
+    }
+
+    function getColumnValue(row, aliases, fallback) {
+        if (fallback === undefined) fallback = '-';
+        if (!row || typeof row !== 'object') {
+            return fallback;
+        }
+
+        for (var i = 0; i < aliases.length; i++) {
+            var alias = aliases[i];
+            var directValue = row[alias];
+            if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+                return directValue;
+            }
+        }
+
+        var normalizedRow = {};
+        Object.keys(row).forEach(function(key) {
+            normalizedRow[normalizeColumnKey(key)] = row[key];
+        });
+
+        for (var j = 0; j < aliases.length; j++) {
+            var normalizedAlias = normalizeColumnKey(aliases[j]);
+            var normalizedValue = normalizedRow[normalizedAlias];
+            if (normalizedValue !== undefined && normalizedValue !== null && String(normalizedValue).trim() !== '') {
+                return normalizedValue;
+            }
+        }
+
+        return fallback;
+    }
     
     window.renderTabelaVendas = function(vendas) {
         var conteudo = document.getElementById('conteudoVendas');
@@ -1218,7 +1256,11 @@ document.addEventListener('DOMContentLoaded', function() {
         html += '<th class="px-4 py-3 text-left">Plano/Produto</th>';
         html += '<th class="px-4 py-3 text-left">Nº Acesso</th>';
         html += '<th class="px-4 py-3 text-right">Receita</th>';
+        if (!isExclusao) {
+            html += '<th class="px-4 py-3 text-left">PGT. Contestação</th>';
+        }
         if (isExclusao) {
+            html += '<th class="px-4 py-3 text-left">Contestada</th>';
             html += '<th class="px-4 py-3 text-left">Observação</th>';
         }
         html += '</tr></thead><tbody class="divide-y divide-gray-100">';
@@ -1244,6 +1286,8 @@ document.addEventListener('DOMContentLoaded', function() {
             var planoProduto = v['Plano/Produto'] || v['PLANO/PRODUTO'] || '-';
             var numeroAcesso = v['NUMERO ACESSO'] || v['Numero Acesso'] || '-';
             var receita = v['Receita'] || v.RECEITA || 0;
+            var pgtContestacao = getColumnValue(v, ['PGT. CONTESTACAO', 'PGT. CONTESTAÇÃO', 'PGT CONTESTACAO', 'PGT CONTESTAÇÃO']);
+            var contestada = getColumnValue(v, ['CONTESTADA']);
             var observacao = v['OBSERVAÇÃO'] || v['Observação'] || v['OBSERVACAO'] || v['observacao'] || '-';
             
             html += '<tr class="hover:bg-purple-50 transition-colors">';
@@ -1254,7 +1298,11 @@ document.addEventListener('DOMContentLoaded', function() {
             html += '<td class="px-4 py-3 text-gray-600">' + planoProduto + '</td>';
             html += '<td class="px-4 py-3 text-gray-600">' + numeroAcesso + '</td>';
             html += '<td class="px-4 py-3 text-right font-semibold ' + corReceita + '">R$ ' + Number(receita).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</td>';
+            if (!isExclusao) {
+                html += '<td class="px-4 py-3 text-gray-600">' + pgtContestacao + '</td>';
+            }
             if (isExclusao) {
+                html += '<td class="px-4 py-3 text-gray-600">' + contestada + '</td>';
                 html += '<td class="px-4 py-3 text-gray-600">' + observacao + '</td>';
             }
             html += '</tr>';

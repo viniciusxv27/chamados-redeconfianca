@@ -1213,6 +1213,42 @@ function trocarTab(tab) {
     }
 }
 
+function normalizeColumnKey(key) {
+    return String(key || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toUpperCase();
+}
+
+function getColumnValue(row, aliases, fallback = '-') {
+    if (!row || typeof row !== 'object') {
+        return fallback;
+    }
+
+    for (const alias of aliases) {
+        const directValue = row[alias];
+        if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+            return directValue;
+        }
+    }
+
+    const normalizedRow = {};
+    Object.keys(row).forEach((key) => {
+        normalizedRow[normalizeColumnKey(key)] = row[key];
+    });
+
+    for (const alias of aliases) {
+        const normalizedAlias = normalizeColumnKey(alias);
+        const normalizedValue = normalizedRow[normalizedAlias];
+        if (normalizedValue !== undefined && normalizedValue !== null && String(normalizedValue).trim() !== '') {
+            return normalizedValue;
+        }
+    }
+
+    return fallback;
+}
+
 function renderTabelaVendas(vendas) {
     const conteudo = document.getElementById('conteudoVendas');
     
@@ -1241,7 +1277,11 @@ function renderTabelaVendas(vendas) {
     html += '<th class="px-4 py-3 text-left">Plano/Produto</th>';
     html += '<th class="px-4 py-3 text-left">Nº Acesso</th>';
     html += '<th class="px-4 py-3 text-right">Receita</th>';
+    if (!isExclusao) {
+        html += '<th class="px-4 py-3 text-left">PGT. Contestação</th>';
+    }
     if (isExclusao) {
+        html += '<th class="px-4 py-3 text-left">Contestada</th>';
         html += '<th class="px-4 py-3 text-left">Observação</th>';
     }
     html += '</tr></thead><tbody class="divide-y divide-gray-100">';
@@ -1269,6 +1309,8 @@ function renderTabelaVendas(vendas) {
         const planoProduto = v['Plano/Produto'] || v['PLANO/PRODUTO'] || '-';
         const numeroAcesso = v['NUMERO ACESSO'] || v['Numero Acesso'] || '-';
         const receita = v['Receita'] || v.RECEITA || 0;
+        const pgtContestacao = getColumnValue(v, ['PGT. CONTESTACAO', 'PGT. CONTESTAÇÃO', 'PGT CONTESTACAO', 'PGT CONTESTAÇÃO']);
+        const contestada = getColumnValue(v, ['CONTESTADA']);
         const observacao = v['OBSERVAÇÃO'] || v['Observação'] || v['OBSERVACAO'] || v['observacao'] || '-';
         
         somaTotal += Number(receita);
@@ -1281,7 +1323,11 @@ function renderTabelaVendas(vendas) {
         html += `<td class="px-4 py-3 text-gray-600">${planoProduto}</td>`;
         html += `<td class="px-4 py-3 text-gray-600">${numeroAcesso}</td>`;
         html += `<td class="px-4 py-3 text-right font-semibold ${corReceita}">R$ ${Number(receita).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+        if (!isExclusao) {
+            html += `<td class="px-4 py-3 text-gray-600">${pgtContestacao}</td>`;
+        }
         if (isExclusao) {
+            html += `<td class="px-4 py-3 text-gray-600">${contestada}</td>`;
             html += `<td class="px-4 py-3 text-gray-600">${observacao}</td>`;
         }
         html += '</tr>';
