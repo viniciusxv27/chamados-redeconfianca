@@ -28,6 +28,27 @@ def has_checklist_admin_permission(user):
     return False
 
 
+def is_admin_plus(user):
+    """Retorna True para hierarquia ADMIN+ (ADMIN/SUPERADMIN) ou superuser."""
+    return user.is_superuser or getattr(user, 'hierarchy', None) in ['ADMIN', 'SUPERADMIN']
+
+
+def get_user_visible_sector_ids(user, include_adm_for_admin_plus=False):
+    """Setores visíveis para o usuário, com opção de incluir setores ADM para ADMIN+."""
+    sector_ids = set(user.sectors.values_list('id', flat=True))
+
+    if getattr(user, 'sector_id', None):
+        sector_ids.add(user.sector_id)
+
+    if include_adm_for_admin_plus and is_admin_plus(user):
+        adm_sector_ids = Sector.objects.filter(
+            Q(name__icontains='adm') | Q(name__icontains='administra')
+        ).values_list('id', flat=True)
+        sector_ids.update(adm_sector_ids)
+
+    return list(sector_ids)
+
+
 @login_required
 def checklist_dashboard(request):
     """Dashboard principal dos checklists"""
@@ -55,13 +76,11 @@ def checklist_dashboard(request):
         ).select_related('template', 'assigned_to', 'assigned_by')
     elif is_supervisor:
         # SUPERVISOR vê checklists cujo TEMPLATE é do seu setor
-        user_sectors = list(user.sectors.all())
-        if user.sector:
-            user_sectors.append(user.sector)
+        user_sector_ids = get_user_visible_sector_ids(user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
+        if user_sector_ids:
             sector_assignments = ChecklistAssignment.objects.filter(
-                template__sector__in=user_sectors,
+                template__sector_id__in=user_sector_ids,
                 is_active=True
             ).exclude(
                 assigned_to=user  # Não duplicar
@@ -87,13 +106,11 @@ def checklist_dashboard(request):
         from itertools import chain
         today_executions = list(chain(today_executions, supervisor_executions))
     elif is_supervisor:
-        user_sectors = list(user.sectors.all())
-        if user.sector:
-            user_sectors.append(user.sector)
+        user_sector_ids = get_user_visible_sector_ids(user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
+        if user_sector_ids:
             supervisor_executions = ChecklistExecution.objects.filter(
-                assignment__template__sector__in=user_sectors,
+                assignment__template__sector_id__in=user_sector_ids,
                 execution_date=today
             ).exclude(
                 assignment__assigned_to=user  # Não duplicar
@@ -137,9 +154,10 @@ def checklist_dashboard(request):
     
     # Templates disponíveis para criação (usuário do mesmo setor)
     available_templates = []
-    if user.sector:
+    user_sector_ids = get_user_visible_sector_ids(user, include_adm_for_admin_plus=True)
+    if user_sector_ids:
         available_templates = ChecklistTemplate.objects.filter(
-            sector=user.sector,
+            sector_id__in=user_sector_ids,
             is_active=True
         ).prefetch_related('tasks')
     
@@ -172,13 +190,11 @@ def checklist_dashboard(request):
         calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
         calendar_executions.sort(key=lambda x: x.execution_date)
     elif is_supervisor:
-        user_sectors = list(user.sectors.all())
-        if user.sector:
-            user_sectors.append(user.sector)
+        user_sector_ids = get_user_visible_sector_ids(user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
+        if user_sector_ids:
             supervisor_calendar_executions = ChecklistExecution.objects.filter(
-                assignment__template__sector__in=user_sectors,
+                assignment__template__sector_id__in=user_sector_ids,
                 execution_date__gte=calendar_start,
                 execution_date__lte=calendar_end
             ).exclude(
@@ -279,12 +295,10 @@ def create_assignment(request):
                 return redirect('checklists:create_assignment')
             
             # Verificar permissão para todos os templates
-            user_sectors = list(request.user.sectors.all())
-            if request.user.sector:
-                user_sectors.append(request.user.sector)
+            user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
             
             for template in templates:
-                if template.sector not in user_sectors:
+                if template.sector_id not in user_sector_ids:
                     if not has_checklist_admin_permission(request.user):
                         messages.error(request, f'Você não tem permissão para atribuir o checklist "{template.name}".')
                         return redirect('checklists:dashboard')
@@ -381,20 +395,15 @@ def create_assignment(request):
     
     # GET - mostrar formulário
     # Obter todos os setores do usuário (principal + secundários)
-    user_sectors = list(request.user.sectors.all())
-    if request.user.sector:
-        user_sectors.append(request.user.sector)
+    user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
     
-    # Remover duplicatas
-    user_sectors = list(set(user_sectors))
-    
-    if not user_sectors:
+    if not user_sector_ids:
         messages.error(request, 'Você precisa estar em um setor para criar checklists.')
         return redirect('checklists:dashboard')
     
     # Templates de TODOS os setores do usuário
     templates = ChecklistTemplate.objects.filter(
-        sector__in=user_sectors,
+        sector_id__in=user_sector_ids,
         is_active=True
     ).prefetch_related('tasks').order_by('sector__name', 'name')
     
@@ -1033,7 +1042,8 @@ def api_get_template_details(request, template_id):
         template = get_object_or_404(ChecklistTemplate, id=template_id)
         
         # Verificar permissão
-        if request.user.sector != template.sector:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if template.sector_id not in user_sector_ids:
             return JsonResponse({'error': 'Sem permissão'}, status=403)
         
         tasks = [
@@ -1149,13 +1159,11 @@ def api_get_day_checklists(request):
         ).order_by('period', 'assignment__template__name')
     else:
         # SUPERVISOR vê execuções dos checklists cujo TEMPLATE é do seu setor + suas próprias
-        user_sectors = list(user.sectors.all())
-        if user.sector:
-            user_sectors.append(user.sector)
+        user_sector_ids = get_user_visible_sector_ids(user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
+        if user_sector_ids:
             executions = ChecklistExecution.objects.filter(
-                Q(assignment__assigned_to=user) | Q(assignment__template__sector__in=user_sectors),
+                Q(assignment__assigned_to=user) | Q(assignment__template__sector_id__in=user_sector_ids),
                 execution_date=target_date
             ).select_related(
                 'assignment__template',
@@ -1549,12 +1557,10 @@ def admin_approvals(request):
     
     # Filtrar por setores do usuário (exceto superuser que vê tudo)
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             # Se usuário não tem setores, não pode aprovar nada
             executions = executions.none()
@@ -1579,11 +1585,9 @@ def admin_approvals(request):
     # Estatísticas (também filtradas por setor)
     stats_filter = {}
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        if user_sectors:
-            stats_filter['assignment__template__sector__in'] = user_sectors
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            stats_filter['assignment__template__sector_id__in'] = user_sector_ids
     
     stats = {
         'awaiting_approval': ChecklistExecution.objects.filter(status='awaiting_approval', **stats_filter).count(),
@@ -1599,20 +1603,16 @@ def admin_approvals(request):
     if request.user.is_superuser:
         sectors = Sector.objects.all().order_by('name')
     else:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        sectors = Sector.objects.filter(id__in=user_sector_ids).order_by('name')
     
     # Templates/Categorias para filtro (baseado no setor selecionado ou todos os setores do usuário)
     if sector_filter:
         categories = ChecklistTemplate.objects.filter(sector_id=sector_filter, is_active=True).order_by('name')
     elif not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        if user_sectors:
-            categories = ChecklistTemplate.objects.filter(sector__in=user_sectors, is_active=True).order_by('name')
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            categories = ChecklistTemplate.objects.filter(sector_id__in=user_sector_ids, is_active=True).order_by('name')
         else:
             categories = ChecklistTemplate.objects.none()
     else:
@@ -1651,11 +1651,8 @@ def approve_checklist(request, execution_id):
     
     # Verificar se o checklist é de um setor do usuário (exceto quem atribuiu)
     if not request.user.is_superuser and request.user != execution.assignment.assigned_by:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        
-        if execution.assignment.template.sector not in user_sectors:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if execution.assignment.template.sector_id not in user_sector_ids:
             messages.error(request, 'Você só pode aprovar checklists dos seus setores.')
             return redirect('checklists:admin_approvals')
     
@@ -1688,11 +1685,8 @@ def reject_checklist(request, execution_id):
     
     # Verificar se o checklist é de um setor do usuário (exceto quem atribuiu)
     if not request.user.is_superuser and request.user != execution.assignment.assigned_by:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        
-        if execution.assignment.template.sector not in user_sectors:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if execution.assignment.template.sector_id not in user_sector_ids:
             messages.error(request, 'Você só pode rejeitar checklists dos seus setores.')
             return redirect('checklists:admin_approvals')
     
@@ -1744,12 +1738,10 @@ def approve_all_checklists(request):
     
     # Filtrar por setores do usuário (exceto superuser)
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             messages.error(request, 'Você não tem setores atribuídos.')
             return redirect('checklists:admin_approvals')
@@ -1787,12 +1779,10 @@ def reject_all_checklists(request):
     
     # Filtrar por setores do usuário (exceto superuser)
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
         
-        if user_sectors:
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             messages.error(request, 'Você não tem setores atribuídos.')
             return redirect('checklists:admin_approvals')
@@ -1841,11 +1831,8 @@ def approve_task(request, task_exec_id):
     
     # Verificar setor (exceto quem atribuiu)
     if not request.user.is_superuser and request.user != task_exec.execution.assignment.assigned_by:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        
-        if task_exec.execution.assignment.template.sector not in user_sectors:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if task_exec.execution.assignment.template.sector_id not in user_sector_ids:
             messages.error(request, 'Você só pode aprovar tarefas dos seus setores.')
             return redirect('checklists:admin_approvals')
     
@@ -1885,11 +1872,8 @@ def reject_task(request, task_exec_id):
     
     # Verificar setor (exceto quem atribuiu)
     if not request.user.is_superuser and request.user != task_exec.execution.assignment.assigned_by:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        
-        if task_exec.execution.assignment.template.sector not in user_sectors:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if task_exec.execution.assignment.template.sector_id not in user_sector_ids:
             messages.error(request, 'Você só pode reprovar tarefas dos seus setores.')
             return redirect('checklists:admin_approvals')
     
@@ -1934,11 +1918,8 @@ def unapprove_task(request, task_exec_id):
     
     # Verificar setor (exceto quem atribuiu)
     if not request.user.is_superuser and request.user != task_exec.execution.assignment.assigned_by:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        
-        if task_exec.execution.assignment.template.sector not in user_sectors:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if task_exec.execution.assignment.template.sector_id not in user_sector_ids:
             messages.error(request, 'Você só pode modificar tarefas dos seus setores.')
             return redirect('checklists:admin_approvals')
     
@@ -2005,11 +1986,9 @@ def checklist_reports(request):
     
     # Filtrar por setores do usuário (exceto superuser)
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        if user_sectors:
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             executions = executions.none()
     
@@ -2085,11 +2064,9 @@ def checklist_reports(request):
         templates = ChecklistTemplate.objects.filter(is_active=True).order_by('name')
         sectors = Sector.objects.all().order_by('name')
     else:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        templates = ChecklistTemplate.objects.filter(sector__in=user_sectors, is_active=True).order_by('name')
-        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        templates = ChecklistTemplate.objects.filter(sector_id__in=user_sector_ids, is_active=True).order_by('name')
+        sectors = Sector.objects.filter(id__in=user_sector_ids).order_by('name')
     
     context = {
         'users_report': users_list,
@@ -2159,11 +2136,9 @@ def export_checklists(request):
     
     # Filtrar por setores do usuário (exceto superuser)
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        if user_sectors:
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             executions = executions.none()
     
@@ -2444,11 +2419,9 @@ def admin_executions(request):
     
     # Filtrar por setores do usuário (exceto superuser)
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        if user_sectors:
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             executions = executions.none()
     
@@ -2498,12 +2471,10 @@ def admin_executions(request):
         sectors = Sector.objects.all().order_by('name')
         users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
     else:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        templates = ChecklistTemplate.objects.filter(is_active=True, sector__in=user_sectors).order_by('name')
-        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
-        users = User.objects.filter(is_active=True, sector__in=user_sectors).order_by('first_name', 'last_name')
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        templates = ChecklistTemplate.objects.filter(is_active=True, sector_id__in=user_sector_ids).order_by('name')
+        sectors = Sector.objects.filter(id__in=user_sector_ids).order_by('name')
+        users = User.objects.filter(is_active=True, sector_id__in=user_sector_ids).order_by('first_name', 'last_name')
     
     context = {
         'executions': executions_page,
@@ -2566,10 +2537,8 @@ def admin_executions_macro(request):
     if request.user.is_superuser:
         sectors = Sector.objects.all().order_by('name')
     else:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        sectors = Sector.objects.filter(id__in=[s.id for s in user_sectors]).order_by('name')
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        sectors = Sector.objects.filter(id__in=user_sector_ids).order_by('name')
     
     # Base queryset de execuções
     executions_qs = ChecklistExecution.objects.select_related(
@@ -2580,11 +2549,9 @@ def admin_executions_macro(request):
     
     # Filtrar por setores do usuário
     if not request.user.is_superuser:
-        user_sectors = list(request.user.sectors.all())
-        if request.user.sector:
-            user_sectors.append(request.user.sector)
-        if user_sectors:
-            executions_qs = executions_qs.filter(assignment__template__sector__in=user_sectors)
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            executions_qs = executions_qs.filter(assignment__template__sector_id__in=user_sector_ids)
         else:
             executions_qs = executions_qs.none()
     
@@ -2605,7 +2572,7 @@ def admin_executions_macro(request):
         users_with_assignments = User.objects.filter(
             is_active=True,
             checklist_assignments__isnull=False,
-            checklist_assignments__template__sector__in=user_sectors
+            checklist_assignments__template__sector_id__in=user_sector_ids
         ).distinct()
     
     if sector_filter:
@@ -2989,10 +2956,8 @@ def api_delete_executions(request):
         
         # Verificar permissão por setor (exceto superuser)
         if not request.user.is_superuser:
-            user_sectors = list(request.user.sectors.all())
-            if request.user.sector:
-                user_sectors.append(request.user.sector)
-            executions = executions.filter(assignment__template__sector__in=user_sectors)
+            user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
         
         count = executions.count()
         
