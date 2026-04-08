@@ -77,9 +77,20 @@
             display: none;
         }
         
-        /* Prevent flex items from overflowing in collapsed state */
-        .sidebar-collapsed .flex.items-center {
-            justify-content: center;
+        /* Keep nav icons locked in place when collapsed */
+        .sidebar-collapsed nav .flex.items-center {
+            justify-content: flex-start;
+        }
+
+        .sidebar-collapsed nav a.flex.items-center,
+        .sidebar-collapsed nav div.flex.items-center {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        .sidebar-collapsed nav .flex.items-center i {
+            width: 1.5rem;
+            text-align: center;
         }
         
         .sidebar-collapsed .space-x-2 > * + * {
@@ -213,8 +224,9 @@
                             <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
                                  onclick="toggleSubmenu('dashboard-menu')" title="Dashboard">
                                 <i class="fas fa-chart-line text-primary flex-shrink-0 w-6 text-center"></i>
-                                <span class="text-sm flex-1">Dashboard</span>
+                                <span class="text-sm flex-1 sidebar-text">Dashboard</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="dashboard-menu-icon"></i>
+                                <div class="tooltip-collapsed">Dashboard</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -231,7 +243,7 @@
                                 </li>
                                 <li>
                                     <a href="{% url 'power_bi:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Trilhas de Conhecimento">
-                                        <i class="fas fa-signal-cap text-cyan-400 flex-shrink-0"></i>
+                                        <i class="fas fa-chart-bar text-cyan-400 flex-shrink-0"></i>
                                         <span>Power BI</span>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
@@ -375,8 +387,9 @@
                         {% endif %}-->
                         <li>
                             <a href="{% url 'marketplace' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Marketplace C$">
-                                <i class="fas fa-store text-primary flex-shrink-0"></i>
-                                <span class="text-sm">Mercadinho</span>
+                                <i class="fas fa-store text-primary flex-shrink-0 w-6 text-center"></i>
+                                <span class="text-sm sidebar-text">Mercadinho</span>
+                                <div class="tooltip-collapsed">Mercadinho</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
@@ -384,8 +397,9 @@
                             <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
                                  onclick="toggleSubmenu('trainings-menu')" title="Treinamentos">
                                 <i class="fas fa-play-circle text-primary flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Treinamentos</span>
+                                <span class="text-sm flex-1 sidebar-text">Treinamentos</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="trainings-menu-icon"></i>
+                                <div class="tooltip-collapsed">Treinamentos</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -429,7 +443,7 @@
                         <!-- Menu Clube de Benefícios -->
                         <li>
                             <a href="{% url 'benefits:list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Clube de Benefícios">
-                                <i class="fas fa-gift text-primary flex-shrink-0"></i>
+                                <i class="fas fa-gift text-primary flex-shrink-0 w-6 text-center"></i>
                                 <span class="text-sm sidebar-text">Clube de Benefícios</span>
                                 <div class="tooltip-collapsed">Clube de Benefícios</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
@@ -441,8 +455,9 @@
                             <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
                                  onclick="toggleSubmenu('tickets-menu')" title="Chamados">
                                 <i class="fas fa-ticket-alt text-primary flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Chamados</span>
+                                <span class="text-sm flex-1 sidebar-text">Chamados</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="tickets-menu-icon"></i>
+                                <div class="tooltip-collapsed">Chamados</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -474,8 +489,9 @@
                             <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
                                  onclick="toggleSubmenu('projects-menu')" title="Projetos">
                                 <i class="fas fa-project-diagram text-primary flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Projetos</span>
+                                <span class="text-sm flex-1 sidebar-text">Projetos</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="projects-menu-icon"></i>
+                                <div class="tooltip-collapsed">Projetos</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -515,8 +531,9 @@
                             <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
                                  onclick="toggleSubmenu('financeiro-menu')" title="Financeiro">
                                 <i class="fas fa-wallet text-green-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Financeiro</span>
+                                <span class="text-sm flex-1 sidebar-text">Financeiro</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="financeiro-menu-icon"></i>
+                                <div class="tooltip-collapsed">Financeiro</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -559,7 +576,8 @@
                         <li>
                             <a href="{% url 'experiencia:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Experiência Vivo">
                                 <i class="fas fa-star text-purple-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Experiência Vivo</span>
+                                <span class="text-sm flex-1 sidebar-text">Experiência Vivo</span>
+                                <div class="tooltip-collapsed">Experiência Vivo</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
@@ -570,7 +588,7 @@
                             <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer" 
                                  onclick="toggleSubmenu('management-menu')">
                                 <i class="fas fa-cogs text-gray-400 flex-shrink-0"></i>
-                                <span class="text-xs text-gray-400 font-medium flex-1">ADMINISTRATIVO</span>
+                                <span class="text-xs text-gray-400 font-medium flex-1 sidebar-text">ADMINISTRATIVO</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="management-menu-icon"></i>
                             </div>
                         </li>
@@ -705,22 +723,24 @@
                         <!-- Menu Ajuda e Configurações -->
                         <li class="border-t border-gray-800 pt-2 mt-2">
                             <div class="px-2 py-1">
-                                <span class="text-xs text-gray-400 font-medium">CONFIGURAÇÕES</span>
+                                <span class="text-xs text-gray-400 font-medium sidebar-text">CONFIGURAÇÕES</span>
                             </div>
                         </li>
                         <li>
                             <ul class="space-y-1">
                                 <li>
                                     <a href="{% url 'help_tutorials' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Ajuda">
-                                        <i class="fas fa-question-circle text-cyan-400 flex-shrink-0"></i>
-                                        <span>Ajuda</span>
+                                        <i class="fas fa-question-circle text-cyan-400 flex-shrink-0 w-6 text-center"></i>
+                                        <span class="sidebar-text">Ajuda</span>
+                                        <div class="tooltip-collapsed">Ajuda</div>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
                                 <li>
                                     <a href="{% url 'core:anonymous_report' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Fazer Denúncia Anônima">
-                                        <i class="fas fa-shield-alt text-red-400 flex-shrink-0"></i>
-                                        <span>Denuncia</span>
+                                        <i class="fas fa-shield-alt text-red-400 flex-shrink-0 w-6 text-center"></i>
+                                        <span class="sidebar-text">Denuncia</span>
+                                        <div class="tooltip-collapsed">Denuncia</div>
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
