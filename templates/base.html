@@ -130,6 +130,11 @@
         /* Prevent horizontal overflow in sidebar */
         #sidebar {
             min-width: 0;
+            top: 0;
+            bottom: 0;
+            height: auto;
+            max-height: none;
+            padding-bottom: calc(6rem + env(safe-area-inset-bottom));
         }
         
         #sidebar * {
@@ -163,8 +168,7 @@
 
         <!-- Sidebar Navigation -->
         <div class="flex">
-            <aside id="sidebar" class="w-64 bg-black text-white h-screen fixed left-0 top-0 z-40 overflow-y-auto overflow-x-hidden pb-20 transform -translate-x-full lg:translate-x-0 transition-all duration-300 ease-in-out"
-                   style="height: 100vh; padding-bottom: 4rem;">
+                <aside id="sidebar" class="w-64 bg-black text-white fixed left-0 top-0 bottom-0 z-40 overflow-y-auto overflow-x-hidden transform -translate-x-full lg:translate-x-0 transition-all duration-300 ease-in-out">
                 <!-- Logo -->
                 <div class="p-3 sm:p-4 border-b border-gray-800 sidebar-logo">
                     <div class="flex items-center justify-center">
@@ -234,6 +238,114 @@
                                 </li>
                             </ul>
                         </li>
+
+                        <!-- Menu Gestão -->
+                        <li>
+                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
+                                 onclick="toggleSubmenu('gestao-menu')" title="Gestão">
+                                <i class="fas fa-layer-group text-orange-400 flex-shrink-0 w-6 text-center"></i>
+                                <span class="text-sm flex-1 sidebar-text">Gestão</span>
+                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="gestao-menu-icon"></i>
+                                <div class="tooltip-collapsed">Gestão</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </div>
+                        </li>
+                        <li class="ml-4 submenu-content hidden" id="gestao-menu">
+                            <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'agenda:calendar' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Agenda">
+                                        <i class="fas fa-calendar-alt text-indigo-400 flex-shrink-0"></i>
+                                        <span>Agenda</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
+                                        <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
+                                        <span>Checklists ADM</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Checklists">
+                                        <i class="fas fa-list-check text-blue-400 flex-shrink-0"></i>
+                                        <span>Meus Checklists</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user.hierarchy != 'PADRAO' %}
+                                    <li>
+                                        <a href="{% url 'manage_checklists' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Checklists">
+                                            <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
+                                            <span>Gerenciar Checklists</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="{% url 'create_daily_checklist' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Criar Checklist">
+                                            <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
+                                            <span>Criar Checklist</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="{% url 'checklists:admin_executions' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Controle de Execuções">
+                                            <i class="fas fa-chart-bar text-purple-400 flex-shrink-0"></i>
+                                            <span>Controle Checklists</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li>
+                                    <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
+                                        <i class="fas fa-tasks text-blue-400 flex-shrink-0"></i>
+                                        <span>Minhas Tarefas</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if user.hierarchy in 'SUPERVISOR,ADMINISTRATIVO,ADMIN,SUPERADMIN' %}
+                                    <li>
+                                        <a href="{% url 'manage_tasks' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Tarefas">
+                                            <i class="fas fa-tools text-yellow-400 flex-shrink-0"></i>
+                                            <span>Gerenciar Tarefas</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a href="{% url 'create_task' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Nova Tarefa">
+                                            <i class="fas fa-plus-circle text-green-400 flex-shrink-0"></i>
+                                            <span>Nova Tarefa</span>
+                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li>
+                                    <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
+                                        <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
+                                        <span>Almoxarifado</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'assets:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Inventário">
+                                        <i class="fas fa-clipboard-list text-teal-400 flex-shrink-0"></i>
+                                        <span>Inventário</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
+                                        <i class="fas fa-folder text-primary flex-shrink-0"></i>
+                                        <span>Arquivos</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
                         <li>
                             <a href="{% url 'communications:communications_list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Comunicados">
                                 <i class="fas fa-bullhorn text-primary flex-shrink-0 w-6 text-center"></i>
@@ -324,99 +436,6 @@
                             </a>
                         </li>
 
-                        <!-- Menu Checklists -->
-                        <li>
-                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
-                                 onclick="toggleSubmenu('checklists-menu')" title="Checklists">
-                                <i class="fas fa-clipboard-check text-primary flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Checklists</span>
-                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="checklists-menu-icon"></i>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </div>
-                        </li>
-                        
-                        <!-- Sub Menu Checklists -->
-                        <li class="ml-4 submenu-content hidden" id="checklists-menu">
-                            <ul class="space-y-1">
-                                <li>
-                                    <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
-                                        <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
-                                        <span>Checklists ADM</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Checklists">
-                                        <i class="fas fa-list-check text-blue-400 flex-shrink-0"></i>
-                                        <span>Meus Checklists</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                {% if user.hierarchy != 'PADRAO' %}
-                                    <li>
-                                        <a href="{% url 'manage_checklists' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Checklists">
-                                            <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
-                                            <span>Gerenciar</span>
-                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a href="{% url 'create_daily_checklist' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Criar Checklist">
-                                            <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
-                                            <span>Criar</span>
-                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a href="{% url 'checklists:admin_executions' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Controle de Execuções">
-                                            <i class="fas fa-chart-bar text-purple-400 flex-shrink-0"></i>
-                                            <span>Controle</span>
-                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                        </a>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </li>
-
-                        <!-- Menu Tarefas -->
-                        <li>
-                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
-                                 onclick="toggleSubmenu('tasks-menu')" title="Tarefas">
-                                <i class="fas fa-tasks text-primary flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Tarefas</span>
-                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="tasks-menu-icon"></i>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </div>
-                        </li>
-                        
-                        <!-- Sub Menu Tarefas -->
-                        <li class="ml-4 submenu-content hidden" id="tasks-menu">
-                            <ul class="space-y-1">
-                                <li>
-                                    <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
-                                        <i class="fas fa-user-check text-blue-400 flex-shrink-0"></i>
-                                        <span>Minhas Tarefas</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                {% if user.hierarchy in 'SUPERVISOR,ADMINISTRATIVO,ADMIN,SUPERADMIN' %}
-                                    <li>
-                                        <a href="{% url 'manage_tasks' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Tarefas">
-                                            <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
-                                            <span>Gerenciar</span>
-                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a href="{% url 'create_task' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Nova Tarefa">
-                                            <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
-                                            <span>Nova</span>
-                                            <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                        </a>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </li>
 
                         <li>
                             <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
@@ -536,51 +555,6 @@
                             </ul>
                         </li>
 
-                        <!-- Menu Gestão -->
-                        <li>
-                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
-                                 onclick="toggleSubmenu('gestao-menu')" title="Gestão">
-                                <i class="fas fa-boxes text-orange-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Gestão</span>
-                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="gestao-menu-icon"></i>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </div>
-                        </li>
-                        <li class="ml-4 submenu-content hidden" id="gestao-menu">
-                            <ul class="space-y-1">
-                                <li>
-                                    <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
-                                        <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
-                                        <span>Almoxarifado</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="{% url 'assets:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Inventário">
-                                        <i class="fas fa-clipboard-list text-teal-400 flex-shrink-0"></i>
-                                        <span>Inventário</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
-                                        <i class="fas fa-folder text-primary flex-shrink-0"></i>
-                                        <span>Arquivos</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                        
-                        <!-- Menu Agenda - Liberado para todos -->
-                        <li>
-                            <a href="{% url 'agenda:calendar' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Agenda">
-                                <i class="fas fa-calendar-alt text-indigo-400 flex-shrink-0"></i>
-                                <span class="text-sm flex-1">Agenda</span>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-
                         <!-- Menu Experiência Vivo -->
                         <li>
                             <a href="{% url 'experiencia:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Experiência Vivo">
@@ -590,18 +564,18 @@
                             </a>
                         </li>
 
-                        <!-- Menu GESTÃO - Para usuários autorizados -->
+                        <!-- Menu Administrativo - Para usuários autorizados -->
                         {% if user.can_manage_users or user.groups.all %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
                             <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer" 
                                  onclick="toggleSubmenu('management-menu')">
                                 <i class="fas fa-cogs text-gray-400 flex-shrink-0"></i>
-                                <span class="text-xs text-gray-400 font-medium flex-1">GESTÃO</span>
+                                <span class="text-xs text-gray-400 font-medium flex-1">ADMINISTRATIVO</span>
                                 <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="management-menu-icon"></i>
                             </div>
                         </li>
                         
-                        <!-- Sub Menu Gestão -->
+                        <!-- Sub Menu Administrativo -->
                         <li class="submenu-content hidden" id="management-menu">
                             <ul class="space-y-1 ml-4">
 
@@ -629,9 +603,9 @@
                                     
                                     {% if group.name == "Gestores de Projetos" %}
                                     <li>
-                                        <a href="{% url 'projects:project_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Projetos - Gestão">
+                                        <a href="{% url 'projects:project_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Projetos - Gerenciar">
                                             <i class="fas fa-project-diagram text-purple-400 flex-shrink-0"></i>
-                                            <span>Projetos - Gestão</span>
+                                            <span>Projetos - Gerenciar</span>
                                             <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                         </a>
                                     </li>
@@ -1383,34 +1357,51 @@
     
     <!-- Submenu Toggle Script -->
     <script>
+        function openSubmenu(menu, icon, menuId) {
+            menu.classList.remove('hidden');
+            menu.style.overflow = 'hidden';
+            menu.style.transition = 'max-height 0.28s ease, opacity 0.2s ease';
+            menu.style.opacity = '1';
+            menu.style.maxHeight = menu.scrollHeight + 'px';
+            if (icon) icon.style.transform = 'rotate(180deg)';
+            localStorage.setItem('submenu_' + menuId, 'open');
+        }
+
+        function closeSubmenu(menu, icon, menuId) {
+            menu.style.overflow = 'hidden';
+            menu.style.transition = 'max-height 0.28s ease, opacity 0.2s ease';
+            menu.style.maxHeight = '0px';
+            menu.style.opacity = '0';
+            if (icon) icon.style.transform = 'rotate(0deg)';
+            setTimeout(() => {
+                menu.classList.add('hidden');
+            }, 280);
+            localStorage.setItem('submenu_' + menuId, 'closed');
+        }
+
         function toggleSubmenu(menuId) {
             const menu = document.getElementById(menuId);
             const icon = document.getElementById(menuId + '-icon');
+            if (!menu) return;
             
             if (menu.classList.contains('hidden')) {
-                // Abrir menu
-                menu.classList.remove('hidden');
-                menu.style.maxHeight = menu.scrollHeight + 'px';
-                icon.style.transform = 'rotate(180deg)';
-                
-                // Salvar estado no localStorage
-                localStorage.setItem('submenu_' + menuId, 'open');
+                openSubmenu(menu, icon, menuId);
             } else {
-                // Fechar menu
-                menu.style.maxHeight = '0px';
-                icon.style.transform = 'rotate(0deg)';
-                setTimeout(() => {
-                    menu.classList.add('hidden');
-                }, 300);
-                
-                // Salvar estado no localStorage
-                localStorage.setItem('submenu_' + menuId, 'closed');
+                closeSubmenu(menu, icon, menuId);
             }
         }
         
         // Restaurar estado dos menus ao carregar a página
         document.addEventListener('DOMContentLoaded', function() {
-            const menus = ['trainings-menu', 'checklists-menu', 'tasks-menu', 'tickets-menu', 'projects-menu', 'management-menu'];
+            const menus = [
+                'dashboard-menu',
+                'gestao-menu',
+                'trainings-menu',
+                'tickets-menu',
+                'projects-menu',
+                'financeiro-menu',
+                'management-menu'
+            ];
             
             menus.forEach(menuId => {
                 const menu = document.getElementById(menuId);
@@ -1418,13 +1409,17 @@
                 const state = localStorage.getItem('submenu_' + menuId);
                 
                 if (menu && icon) {
+                    menu.style.overflow = 'hidden';
+                    menu.style.transition = 'max-height 0.28s ease, opacity 0.2s ease';
                     if (state === 'open') {
                         menu.classList.remove('hidden');
+                        menu.style.opacity = '1';
                         menu.style.maxHeight = menu.scrollHeight + 'px';
                         icon.style.transform = 'rotate(180deg)';
                     } else {
                         menu.classList.add('hidden');
                         menu.style.maxHeight = '0px';
+                        menu.style.opacity = '0';
                         icon.style.transform = 'rotate(0deg)';
                     }
                 }
