@@ -19,16 +19,16 @@
                         <div class="relative p-6 h-full flex flex-col">
                             <div class="flex items-start justify-between">
                                 <div class="flex items-center gap-3 min-w-0">
-                                    <div class="w-12 h-12 rounded-lg bg-white/20 text-white flex items-center justify-center backdrop-blur-sm border border-orange-300/70 shadow-[0_0_14px_rgba(251,146,60,0.9)]">
+                                    <div class="w-12 h-12 rounded-lg bg-white/20 text-orange-400 flex items-center justify-center backdrop-blur-sm border border-orange-300/70 shadow-[0_0_14px_rgba(251,146,60,0.9)]">
                                         <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
                                     </div>
                                     <h2 class="text-lg font-semibold text-white truncate">{{ report.name }}</h2>
                                 </div>
                                 <span class="text-xs bg-white/20 text-white px-2 py-1 rounded-full backdrop-blur-sm">BI</span>
                             </div>
-                            <p class="text-sm text-white/90 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                            <div class="mt-4">
-                                <span class="inline-flex items-center bg-orange-500 text-white text-sm font-semibold px-3 py-1.5 rounded-lg shadow-sm group-hover:bg-orange-600 transition-colors">
+                            <p class="text-base text-white/90 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
+                            <div class="mt-auto pt-4">
+                                <span class="inline-flex items-center text-orange-300 text-sm font-semibold group-hover:text-orange-200 transition-colors">
                                     Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
                                 </span>
                             </div>
@@ -43,9 +43,9 @@
                             </div>
                             <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
                         </div>
-                        <p class="text-sm text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                        <div class="mt-4">
-                            <span class="inline-flex items-center bg-orange-500 text-white text-sm font-semibold px-3 py-1.5 rounded-lg shadow-sm group-hover:bg-orange-600 transition-colors">
+                        <p class="text-base text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
+                        <div class="mt-auto pt-4">
+                            <span class="inline-flex items-center text-orange-500 text-sm font-semibold group-hover:text-orange-600 transition-colors">
                                 Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
                             </span>
                         </div>
