@@ -20,6 +20,7 @@ from django.utils import timezone
 import json
 import pandas as pd
 from io import BytesIO
+import unicodedata
 from users.models import User, Sector, SystemConfig, CommissionSpreadsheetVersion
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -97,6 +98,21 @@ SHEET_VENDAS = "VENDAS"
 # Grupos que identificam cada tipo de usuário
 GERENTE_GROUP_NAME = "GERENTES (CHECKLIST)"
 COORDENADOR_GROUP_NAME = "COORDENADORES"
+
+
+def normalize_person_name(name):
+    """Normaliza nome de pessoa para comparacao estrita."""
+    if name is None:
+        return ""
+    text = str(name).strip().upper()
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return ' '.join(text.split())
+
+
+def person_name_matches_exact(source_name, target_name):
+    """Retorna True somente quando os nomes completos normalizados sao iguais."""
+    return normalize_person_name(source_name) == normalize_person_name(target_name)
 
 
 # ============================================================================
@@ -629,10 +645,8 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                 # Comparação EXATA - normalizar ambos para comparar
                 match = (row_filial == user_sector_normalized)
             elif not is_gerente and vendedor_col:
-                row_vendedor = normalize_text(row.get(vendedor_col, ''))
-                match = (row_vendedor == user_name_normalized or 
-                        user_name_normalized in row_vendedor or 
-                        row_vendedor in user_name_normalized)
+                row_vendedor = row.get(vendedor_col, '')
+                match = person_name_matches_exact(row_vendedor, user_name)
             
             if match:
                 # Identificar o pilar desta linha
@@ -706,11 +720,10 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                     print(f"[DEBUG EXCLUSÃO GERENTE] Filtrando por Filial='{user_sector_normalized}': {len(df_exc_filtrado)} linhas")
                 else:
                     if vendedor_col_exc:
-                        # Para CN, criar uma lista de possíveis matches do nome
                         df_exc_filtrado = df_exclusao[
-                            df_exclusao[vendedor_col_exc].astype(str).str.strip().str.upper().str.contains(user_name_normalized.replace(' ', ''), na=False, case=False)
+                            df_exclusao[vendedor_col_exc].apply(lambda v: person_name_matches_exact(v, user_name))
                         ]
-                        print(f"[DEBUG EXCLUSÃO CN] Filtrando por Vendedor contendo '{user_name_normalized}': {len(df_exc_filtrado)} linhas")
+                        print(f"[DEBUG EXCLUSÃO CN] Filtrando por Vendedor EXATO '{normalize_person_name(user_name)}': {len(df_exc_filtrado)} linhas")
                     else:
                         print(f"[DEBUG EXCLUSÃO CN] ERRO: Coluna 'Vendedor' não encontrada!")
                         df_exc_filtrado = pd.DataFrame()
@@ -734,12 +747,8 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
                         # Comparação EXATA
                         match = (row_filial == user_sector_normalized)
                     elif not is_gerente and vendedor_col_exc:
-                        # Para CN, buscar pelo nome do vendedor
-                        row_vendedor = str(row.get(vendedor_col_exc, '')).strip().upper()
-                        row_vendedor_normalized = row_vendedor.replace(' ', '')
-                        # Match se o nome do usuário está contido no vendedor ou vice-versa
-                        match = (user_name_normalized.replace(' ', '') in row_vendedor_normalized or 
-                                row_vendedor_normalized in user_name_normalized.replace(' ', ''))
+                        row_vendedor = row.get(vendedor_col_exc, '')
+                        match = person_name_matches_exact(row_vendedor, user_name)
                     
                     if match:
                         pilar_val = normalize_text(row.get(pilar_col_exc, ''))
@@ -1048,18 +1057,13 @@ def fetch_vendas_data(user_name):
         if nome_col is None:
             nome_col = df.columns[0]
         
-        def normalize_name(name):
-            if pd.isna(name):
-                return ""
-            return str(name).strip().upper()
-        
-        user_name_normalized = normalize_name(user_name)
+        user_name_normalized = normalize_person_name(user_name)
         
         # Buscar todas as linhas do usuário (pode ter múltiplas vendas)
         user_rows = []
         for idx, row in df.iterrows():
-            row_name = normalize_name(row.get(nome_col, ''))
-            if row_name == user_name_normalized or user_name_normalized in row_name or row_name in user_name_normalized:
+            row_name = row.get(nome_col, '')
+            if person_name_matches_exact(row_name, user_name_normalized):
                 row_data = {}
                 for col in df.columns:
                     value = row.get(col)
@@ -3242,7 +3246,7 @@ def api_vendas_por_pilar(request):
                 return True
         return False
     
-    user_name_normalized = normalize_text(user_full_name)
+    user_name_normalized = normalize_person_name(user_full_name)
     
     vendas_pago = []
     vendas_exclusao = []
@@ -3251,28 +3255,7 @@ def api_vendas_por_pilar(request):
     # Função auxiliar para verificar match de nome (CN - coluna VENDEDOR)
     def nome_match(row_vendedor):
         """Verifica se o vendedor da linha corresponde ao usuário CN"""
-        if not row_vendedor:
-            return False
-        vendedor_upper = normalize_text(row_vendedor)
-        
-        # Match exato
-        if vendedor_upper == user_name_normalized:
-            return True
-        
-        # Nome completo contém ou está contido
-        if user_name_normalized in vendedor_upper or vendedor_upper in user_name_normalized:
-            return True
-        
-        # Primeiro nome
-        if user_first_name and user_first_name in vendedor_upper:
-            return True
-        
-        # Primeiro + último nome
-        if user_first_name and user_last_name:
-            if user_first_name in vendedor_upper and user_last_name in vendedor_upper:
-                return True
-        
-        return False
+        return person_name_matches_exact(row_vendedor, user_name_normalized)
     
     # Função auxiliar para verificar match de coordenador (coluna COORDENACAO)
     def coordenador_match(row_coordenacao):
