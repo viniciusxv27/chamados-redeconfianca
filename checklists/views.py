@@ -28,22 +28,22 @@ def has_checklist_admin_permission(user):
     return False
 
 
-def is_admin_plus(user):
-    """Retorna True para hierarquia ADMIN+ (ADMIN/SUPERADMIN) ou superuser."""
-    return user.is_superuser or getattr(user, 'hierarchy', None) in ['ADMIN', 'SUPERADMIN']
+def is_above_default_user(user):
+    """Retorna True para hierarquias acima de PADRAO."""
+    return user.is_superuser or getattr(user, 'hierarchy', None) in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
 
 
 def get_user_visible_sector_ids(user, include_adm_for_admin_plus=False):
     """Setores visíveis para o usuário.
 
-    Quando include_adm_for_admin_plus=True e o usuário é ADMIN+, retorna todos os setores.
+    Quando include_adm_for_admin_plus=True e o usuário está acima de PADRAO, retorna todos os setores.
     """
     sector_ids = set(user.sectors.values_list('id', flat=True))
 
     if getattr(user, 'sector_id', None):
         sector_ids.add(user.sector_id)
 
-    if include_adm_for_admin_plus and is_admin_plus(user):
+    if include_adm_for_admin_plus and is_above_default_user(user):
         return list(Sector.objects.values_list('id', flat=True))
 
     return list(sector_ids)
