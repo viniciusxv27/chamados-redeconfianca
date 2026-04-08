@@ -15,28 +15,40 @@
                 <a href="{% url 'power_bi:viewer' report.id %}" class="group relative rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-primary/40 transition-all {% if report.card_background_image %}min-h-[220px]{% else %}bg-white p-6{% endif %}">
                     {% if report.card_background_image %}
                         <img src="{{ report.card_background_image.url }}" alt="{{ report.name }}" class="absolute inset-0 h-full w-full object-cover">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/35 to-black/20"></div>
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/55 to-black/45"></div>
                         <div class="relative p-6 h-full flex flex-col">
                             <div class="flex items-start justify-between">
-                                <div class="w-12 h-12 rounded-lg bg-white/20 text-white flex items-center justify-center backdrop-blur-sm">
-                                    <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-12 h-12 rounded-lg bg-white/20 text-white flex items-center justify-center backdrop-blur-sm border border-orange-300/70 shadow-[0_0_14px_rgba(251,146,60,0.9)]">
+                                        <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                                    </div>
+                                    <h2 class="text-lg font-semibold text-white truncate">{{ report.name }}</h2>
                                 </div>
                                 <span class="text-xs bg-white/20 text-white px-2 py-1 rounded-full backdrop-blur-sm">BI</span>
                             </div>
-                            <h2 class="text-lg font-semibold text-white mt-4">{{ report.name }}</h2>
                             <p class="text-sm text-white/90 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                            <div class="mt-4 text-white text-sm font-medium">Abrir dashboard <i class="fas fa-arrow-right ml-1"></i></div>
+                            <div class="mt-4">
+                                <span class="inline-flex items-center bg-orange-500 text-white text-sm font-semibold px-3 py-1.5 rounded-lg shadow-sm group-hover:bg-orange-600 transition-colors">
+                                    Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
+                                </span>
+                            </div>
                         </div>
                     {% else %}
                         <div class="flex items-start justify-between">
-                            <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                                <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-12 h-12 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center border border-orange-200 shadow-[0_0_14px_rgba(251,146,60,0.55)]">
+                                    <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                                </div>
+                                <h2 class="text-lg font-semibold text-gray-900 truncate group-hover:text-primary transition-colors">{{ report.name }}</h2>
                             </div>
                             <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
                         </div>
-                        <h2 class="text-lg font-semibold text-gray-900 mt-4 group-hover:text-primary transition-colors">{{ report.name }}</h2>
                         <p class="text-sm text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                        <div class="mt-4 text-primary text-sm font-medium">Abrir dashboard <i class="fas fa-arrow-right ml-1"></i></div>
+                        <div class="mt-4">
+                            <span class="inline-flex items-center bg-orange-500 text-white text-sm font-semibold px-3 py-1.5 rounded-lg shadow-sm group-hover:bg-orange-600 transition-colors">
+                                Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
+                            </span>
+                        </div>
                     {% endif %}
                 </a>
             {% endfor %}
