@@ -662,7 +662,23 @@ def goals_list_view(request):
     fixa_as_percentage = bool(getattr(current_upload, 'fixa_as_percentage', False)) if current_upload else False
 
     cn_entries = entries.filter(sheet_type=GoalEntry.SHEET_CN_REAL)
-    pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL) if (is_gerente_user or not is_standard_user) else GoalEntry.objects.none()
+
+    if is_cn_user and current_upload:
+        pdv_store_entries = GoalEntry.objects.filter(
+            upload=current_upload,
+            sheet_type=GoalEntry.SHEET_PDV_REAL,
+        )
+        user_store = _get_user_primary_store(request.user)
+        pdv_store_ids = []
+        for entry in pdv_store_entries:
+            entry_store = _normalize_text(entry.store_name)
+            if user_store and _stores_match(entry_store, user_store):
+                pdv_store_ids.append(entry.id)
+        pdv_entries = pdv_store_entries.filter(id__in=pdv_store_ids)
+    elif is_gerente_user or not is_standard_user:
+        pdv_entries = entries.filter(sheet_type=GoalEntry.SHEET_PDV_REAL)
+    else:
+        pdv_entries = GoalEntry.objects.none()
 
     available_cns = []
     available_sellers = sorted({entry.user_name for entry in cn_entries if entry.user_name})
@@ -828,7 +844,7 @@ def goals_list_view(request):
         'cn_total': cn_total_value,
         'pdv_total': pdv_total_value,
         'cn_entries_count': cn_entries.count(),
-        'pdv_entries_count': pdv_entries.count() if (is_gerente_user or not is_standard_user) else 0,
+        'pdv_entries_count': pdv_entries.count(),
         'cn_pilar_rows': cn_pilar_rows,
         'pdv_pilar_rows': pdv_pilar_rows,
         'top_consultants': top_consultants,
