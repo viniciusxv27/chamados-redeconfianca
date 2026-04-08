@@ -1,4 +1,5 @@
 from django.db import models
+from users.models import get_media_storage
 
 from communications.models import CommunicationGroup
 from users.models import Sector, User
@@ -15,6 +16,13 @@ class PowerBIReport(models.Model):
         verbose_name='Icone (classe Font Awesome)'
     )
     embed_url = models.URLField(max_length=1000, verbose_name='Link do Power BI (embed)')
+    card_background_image = models.ImageField(
+        upload_to='power_bi/backgrounds/',
+        storage=get_media_storage(),
+        null=True,
+        blank=True,
+        verbose_name='Imagem de fundo do card'
+    )
     allow_open_in_new_tab = models.BooleanField(default=False, verbose_name='Nova guia permitida')
     allowed_groups = models.ManyToManyField(
         CommunicationGroup,

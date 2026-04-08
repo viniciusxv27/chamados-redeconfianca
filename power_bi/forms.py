@@ -55,6 +55,7 @@ class PowerBIReportForm(forms.ModelForm):
             'description',
             'icon_class',
             'embed_url',
+            'card_background_image',
             'allow_open_in_new_tab',
             'sort_order',
             'is_active',
@@ -74,6 +75,12 @@ class PowerBIReportForm(forms.ModelForm):
                 choices=ICON_CHOICES,
             ),
             'embed_url': forms.URLInput(attrs={'class': 'w-full border border-gray-300 rounded-lg p-2'}),
+            'card_background_image': forms.ClearableFileInput(
+                attrs={
+                    'class': 'w-full border border-gray-300 rounded-lg p-2',
+                    'accept': 'image/*',
+                }
+            ),
             'allow_open_in_new_tab': forms.CheckboxInput(attrs={'class': 'h-4 w-4 text-primary'}),
             'sort_order': forms.NumberInput(attrs={'class': 'w-full border border-gray-300 rounded-lg p-2', 'min': 0}),
             'is_active': forms.CheckboxInput(attrs={'class': 'h-4 w-4 text-primary'}),

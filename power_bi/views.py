@@ -440,7 +440,7 @@ def create_power_bi_view(request):
     if request.method != 'POST':
         return redirect('power_bi:manage')
 
-    form = PowerBIReportForm(request.POST)
+    form = PowerBIReportForm(request.POST, request.FILES)
     if form.is_valid():
         form.save()
         messages.success(request, 'BI criado com sucesso.')
@@ -470,7 +470,7 @@ def edit_power_bi_view(request, report_id):
     report = get_object_or_404(PowerBIReport, id=report_id)
 
     if request.method == 'POST':
-        form = PowerBIReportForm(request.POST, instance=report)
+        form = PowerBIReportForm(request.POST, request.FILES, instance=report)
         if form.is_valid():
             form.save()
             messages.success(request, 'BI atualizado com sucesso.')

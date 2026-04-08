@@ -207,7 +207,7 @@
                 {% if editing_report %}Editar BI{% else %}Novo BI{% endif %}
             </h2>
 
-            <form method="post" action="{% if editing_report %}{% url 'power_bi:edit' editing_report.id %}{% else %}{% url 'power_bi:create' %}{% endif %}" class="space-y-4">
+            <form method="post" enctype="multipart/form-data" action="{% if editing_report %}{% url 'power_bi:edit' editing_report.id %}{% else %}{% url 'power_bi:create' %}{% endif %}" class="space-y-4">
                 {% csrf_token %}
 
                 <div>
@@ -236,6 +236,15 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Link embed do BI</label>
                     {{ form.embed_url }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Fundo do card (imagem)</label>
+                    {{ form.card_background_image }}
+                    <p class="text-xs text-gray-500 mt-1">Imagem usada no card em /power-bi/. Recomendado: 1200x600.</p>
+                    {% if editing_report and editing_report.card_background_image %}
+                        <img src="{{ editing_report.card_background_image.url }}" alt="Preview do fundo" class="mt-2 h-24 w-full object-cover rounded-lg border border-gray-200">
+                    {% endif %}
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">

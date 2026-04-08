@@ -12,16 +12,32 @@
     {% if reports %}
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {% for report in reports %}
-                <a href="{% url 'power_bi:viewer' report.id %}" class="group bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md hover:border-primary/40 transition-all">
-                    <div class="flex items-start justify-between">
-                        <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                            <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                <a href="{% url 'power_bi:viewer' report.id %}" class="group relative rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-primary/40 transition-all {% if report.card_background_image %}min-h-[220px]{% else %}bg-white p-6{% endif %}">
+                    {% if report.card_background_image %}
+                        <img src="{{ report.card_background_image.url }}" alt="{{ report.name }}" class="absolute inset-0 h-full w-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/35 to-black/20"></div>
+                        <div class="relative p-6 h-full flex flex-col">
+                            <div class="flex items-start justify-between">
+                                <div class="w-12 h-12 rounded-lg bg-white/20 text-white flex items-center justify-center backdrop-blur-sm">
+                                    <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                                </div>
+                                <span class="text-xs bg-white/20 text-white px-2 py-1 rounded-full backdrop-blur-sm">BI</span>
+                            </div>
+                            <h2 class="text-lg font-semibold text-white mt-4">{{ report.name }}</h2>
+                            <p class="text-sm text-white/90 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
+                            <div class="mt-4 text-white text-sm font-medium">Abrir dashboard <i class="fas fa-arrow-right ml-1"></i></div>
                         </div>
-                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
-                    </div>
-                    <h2 class="text-lg font-semibold text-gray-900 mt-4 group-hover:text-primary transition-colors">{{ report.name }}</h2>
-                    <p class="text-sm text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                    <div class="mt-4 text-primary text-sm font-medium">Abrir dashboard <i class="fas fa-arrow-right ml-1"></i></div>
+                    {% else %}
+                        <div class="flex items-start justify-between">
+                            <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                                <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                            </div>
+                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900 mt-4 group-hover:text-primary transition-colors">{{ report.name }}</h2>
+                        <p class="text-sm text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
+                        <div class="mt-4 text-primary text-sm font-medium">Abrir dashboard <i class="fas fa-arrow-right ml-1"></i></div>
+                    {% endif %}
                 </a>
             {% endfor %}
         </div>
