@@ -239,6 +239,7 @@ def get_support_chat(request, chat_id):
                 'id': chat.category.id,
                 'name': chat.category.name
             } if chat.category else None,
+            'customer_cpf': chat.customer_cpf,
             'assigned_to': {
                 'id': chat.assigned_to.id,
                 'get_full_name': chat.assigned_to.get_full_name()
@@ -333,32 +334,46 @@ def create_support_chat(request):
         except Sector.DoesNotExist:
             pass
     
-    category = None
-    if category_id:
-        try:
-            category = SupportCategory.objects.get(id=category_id)
-            chat_data['category'] = category
+    if not category_id:
+        return JsonResponse({
+            'success': False,
+            'error': 'Selecione um assunto para abrir o ticket.'
+        })
 
-            if getattr(category, 'request_customer_cpf', False):
-                if not is_valid_cpf(client_cpf):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'CPF do cliente é obrigatório e deve ser válido para esta categoria.'
-                    })
-                chat_data['customer_cpf'] = normalize_cpf(client_cpf)
-            
-            # Se a categoria tem apenas UM agente padrão, atribuir automaticamente
-            # Se tem múltiplos, deixar para os agentes assumirem
-            try:
-                default_agents = category.default_agents.all()
-                if default_agents.count() == 1:
-                    # Apenas 1 agente - atribuir automaticamente
-                    chat_data['assigned_to'] = default_agents.first()
-                # Se tem múltiplos ou nenhum, não atribui - mantém status AGUARDANDO
-            except Exception:
-                pass  # Campo pode não existir ainda
-        except SupportCategory.DoesNotExist:
-            pass
+    try:
+        category = SupportCategory.objects.get(id=category_id, is_active=True)
+    except SupportCategory.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Categoria inválida ou inativa.'
+        })
+
+    if sector_id and str(category.sector_id) != str(sector_id):
+        return JsonResponse({
+            'success': False,
+            'error': 'A categoria selecionada não pertence ao setor informado.'
+        })
+
+    chat_data['category'] = category
+
+    if getattr(category, 'request_customer_cpf', False):
+        if not is_valid_cpf(client_cpf):
+            return JsonResponse({
+                'success': False,
+                'error': 'CPF do cliente é obrigatório e deve ser válido para esta categoria.'
+            })
+        chat_data['customer_cpf'] = normalize_cpf(client_cpf)
+
+    # Se a categoria tem apenas UM agente padrão, atribuir automaticamente
+    # Se tem múltiplos, deixar para os agentes assumirem
+    try:
+        default_agents = category.default_agents.all()
+        if default_agents.count() == 1:
+            # Apenas 1 agente - atribuir automaticamente
+            chat_data['assigned_to'] = default_agents.first()
+        # Se tem múltiplos ou nenhum, não atribui - mantém status AGUARDANDO
+    except Exception:
+        pass  # Campo pode não existir ainda
     
     chat = SupportChat.objects.create(**chat_data)
     
@@ -824,6 +839,7 @@ def support_admin_dashboard(request):
                 'id': chat.category.id,
                 'name': chat.category.name
             } if chat.category else None,
+            'customer_cpf': chat.customer_cpf,
             'assigned_to': {
                 'id': chat.assigned_to.id,
                 'get_full_name': chat.assigned_to.get_full_name()

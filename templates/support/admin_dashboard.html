@@ -1764,6 +1764,10 @@ function renderTicketDetails(data, forceScroll = false) {
                                 <label class="block text-xs font-medium text-gray-700">PDV</label>
                                 <p class="text-sm text-gray-900">${data.chat.user.pdv || '-'}</p>
                             </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">CPF do Cliente</label>
+                                <p class="text-sm text-gray-900 font-mono">${data.chat.customer_cpf || '-'}</p>
+                            </div>
                         </div>
                     </div>
 

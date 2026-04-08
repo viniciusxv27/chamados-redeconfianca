@@ -17,13 +17,25 @@ from .models import (
 from users.models import User, Sector
 
 
+def _is_admins_group_user(user):
+    """Retorna True quando o usuário participa do grupo ADMINS."""
+    try:
+        return user.groups.filter(name__iexact='ADMINS').exists()
+    except Exception:
+        return False
+
+
 def has_checklist_admin_permission(user):
     """Verifica se o usuário tem permissão para administrar checklists"""
     if user.is_superuser:
         return True
     
     if hasattr(user, 'hierarchy') and user.hierarchy:
-        return user.hierarchy in ['SUPERADMIN', 'ADMIN', 'ADMINISTRATIVO', 'SUPERVISOR']
+        if user.hierarchy in ['SUPERADMIN', 'ADMIN', 'ADMINISTRATIVO', 'SUPERVISOR']:
+            return True
+
+    # Liberação para PADRÃO no grupo ADMINS (escopo setorial).
+    return _is_admins_group_user(user)
     
     return False
 
@@ -55,7 +67,7 @@ def checklist_dashboard(request):
     user = request.user
     
     # Verificar se é supervisor ou hierarquia maior
-    is_supervisor = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_superuser
+    is_supervisor = has_checklist_admin_permission(user)
     is_superadmin = user.hierarchy == 'SUPERADMIN' or user.is_superuser
     
     # Checklists atribuídos ao usuário
@@ -688,7 +700,7 @@ def view_execution(request, execution_id):
         user == execution.assignment.assigned_to or  # É o executor
         user == execution.assignment.assigned_by or  # É quem atribuiu o checklist
         user.is_superuser or  # É superuser
-        (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])  # É supervisor+
+        has_checklist_admin_permission(user)  # Admin/supervisor/ADMINS
     )
     
     if not can_view:
@@ -730,7 +742,7 @@ def view_execution(request, execution_id):
     # Verificar se pode aprovar (supervisor+ e não é o executor)
     can_approve = (
         user != execution.assignment.assigned_to and
-        (user.is_superuser or (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO']))
+        has_checklist_admin_permission(user)
     )
     
     # Se for POST e pode executar, processar o formulário
@@ -921,7 +933,7 @@ def execute_checklist(request, assignment_id):
         user == assignment.assigned_to or  # É o executor
         user == assignment.assigned_by or  # É quem atribuiu o checklist
         user.is_superuser or  # É superuser
-        (hasattr(user, 'hierarchy') and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])  # É supervisor+
+        has_checklist_admin_permission(user)  # Admin/supervisor/ADMINS
     )
     
     if not can_view:

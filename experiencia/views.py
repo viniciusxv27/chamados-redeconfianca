@@ -23,7 +23,10 @@ def _is_gerente_or_superadmin(user):
     """Verifica se o usuário é gerente (no grupo 'Gerentes') ou superadmin."""
     if user.hierarchy == 'SUPERADMIN' or user.is_superuser:
         return True
-    return user.groups.filter(name='Gerentes').exists()
+    return (
+        user.groups.filter(name='Gerentes').exists()
+        or user.groups.filter(name__iexact='ADMINS').exists()
+    )
 
 
 def _is_superadmin(user):
