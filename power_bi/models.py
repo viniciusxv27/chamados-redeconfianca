@@ -23,6 +23,11 @@ class PowerBIReport(models.Model):
         blank=True,
         verbose_name='Imagem de fundo do card'
     )
+    predominant_color = models.CharField(
+        max_length=7,
+        default='#f97316',
+        verbose_name='Cor predominante (neon)'
+    )
     allow_open_in_new_tab = models.BooleanField(default=False, verbose_name='Nova guia permitida')
     allowed_groups = models.ManyToManyField(
         CommunicationGroup,

@@ -2,6 +2,31 @@
 
 {% block title %}Power BI{% endblock %}
 
+{% block extra_css %}
+<style>
+    .bi-tile {
+        --bi-neon: #f97316;
+    }
+
+    .bi-icon-neon {
+        box-shadow: 0 0 14px color-mix(in srgb, var(--bi-neon) 75%, transparent);
+    }
+
+    .bi-open-link {
+        color: var(--bi-neon);
+    }
+
+    .bi-open-link:hover {
+        color: color-mix(in srgb, var(--bi-neon) 85%, white);
+    }
+    
+    .bi-bg-fallback {
+        background: radial-gradient(circle at 20% 10%, rgba(255,255,255,.2), transparent 45%),
+                    linear-gradient(130deg, color-mix(in srgb, var(--bi-neon) 35%, #0f172a), #0b1220 70%);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-7xl mx-auto">
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -12,44 +37,39 @@
     {% if reports %}
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {% for report in reports %}
-                <a href="{% url 'power_bi:viewer' report.id %}" class="group relative rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:border-primary/40 transition-all {% if report.card_background_image %}min-h-[220px]{% else %}bg-white p-6{% endif %}">
-                    {% if report.card_background_image %}
-                        <img src="{{ report.card_background_image.url }}" alt="{{ report.name }}" class="absolute inset-0 h-full w-full object-cover">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/55 to-black/45"></div>
-                        <div class="relative p-6 h-full flex flex-col">
-                            <div class="flex items-start justify-between">
-                                <div class="flex items-center gap-3 min-w-0">
-                                    <div class="w-12 h-12 rounded-lg bg-white/20 text-orange-400 flex items-center justify-center backdrop-blur-sm border border-orange-300/70 shadow-[0_0_14px_rgba(251,146,60,0.9)]">
-                                        <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+                <a href="{% url 'power_bi:viewer' report.id %}" class="bi-tile group block" style="--bi-neon: {{ report.predominant_color|default:'#f97316' }};">
+                    <div class="relative rounded-2xl overflow-hidden border border-gray-200 hover:border-primary/40 hover:shadow-md transition-all">
+                        <div class="relative h-48">
+                            {% if report.card_background_image %}
+                                <img src="{{ report.card_background_image.url }}" alt="{{ report.name }}" class="absolute inset-0 h-full w-full object-cover">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-black/45"></div>
+                            {% else %}
+                                <div class="absolute inset-0 bi-bg-fallback"></div>
+                            {% endif %}
+                        </div>
+
+                        <div class="relative -mt-10 px-4 pb-4">
+                            <div class="bg-white/95 backdrop-blur rounded-xl border border-white/70 shadow-lg p-4 min-h-[130px] flex flex-col">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div class="bi-icon-neon w-11 h-11 rounded-lg bg-orange-50 text-[var(--bi-neon)] flex items-center justify-center border border-orange-200">
+                                            <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-lg"></i>
+                                        </div>
+                                        <h2 class="text-lg font-semibold text-gray-900 truncate">{{ report.name }}</h2>
                                     </div>
-                                    <h2 class="text-lg font-semibold text-white truncate">{{ report.name }}</h2>
+                                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
                                 </div>
-                                <span class="text-xs bg-white/20 text-white px-2 py-1 rounded-full backdrop-blur-sm">BI</span>
-                            </div>
-                            <p class="text-base text-white/90 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                            <div class="mt-auto pt-4">
-                                <span class="inline-flex items-center text-orange-300 text-sm font-semibold group-hover:text-orange-200 transition-colors">
-                                    Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
-                                </span>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="flex items-start justify-between">
-                            <div class="flex items-center gap-3 min-w-0">
-                                <div class="w-12 h-12 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center border border-orange-200 shadow-[0_0_14px_rgba(251,146,60,0.55)]">
-                                    <i class="{{ report.icon_class|default:'fas fa-chart-line' }} text-xl"></i>
+
+                                <p class="text-[15px] leading-relaxed text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
+
+                                <div class="mt-auto pt-3">
+                                    <span class="bi-open-link inline-flex items-center text-sm font-semibold transition-colors">
+                                        Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
+                                    </span>
                                 </div>
-                                <h2 class="text-lg font-semibold text-gray-900 truncate group-hover:text-primary transition-colors">{{ report.name }}</h2>
                             </div>
-                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">BI</span>
                         </div>
-                        <p class="text-base text-gray-600 mt-2">{{ report.description|default:'Sem descricao.' }}</p>
-                        <div class="mt-auto pt-4">
-                            <span class="inline-flex items-center text-orange-500 text-sm font-semibold group-hover:text-orange-600 transition-colors">
-                                Abrir dashboard <i class="fas fa-arrow-right ml-1"></i>
-                            </span>
-                        </div>
-                    {% endif %}
+                    </div>
                 </a>
             {% endfor %}
         </div>

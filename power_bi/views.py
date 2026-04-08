@@ -524,6 +524,7 @@ def export_power_bi_excel_view(request):
         'Nome',
         'Descricao',
         'Icone',
+        'Cor Predominante',
         'Link Embed',
         'Ativo',
         'Ordem',
@@ -557,15 +558,16 @@ def export_power_bi_excel_view(request):
         ws.cell(row=row_index, column=1, value=report.name)
         ws.cell(row=row_index, column=2, value=report.description)
         ws.cell(row=row_index, column=3, value=report.icon_class)
-        ws.cell(row=row_index, column=4, value=report.embed_url)
-        ws.cell(row=row_index, column=5, value='Sim' if report.is_active else 'Nao')
-        ws.cell(row=row_index, column=6, value=report.sort_order)
-        ws.cell(row=row_index, column=7, value=hierarchies)
-        ws.cell(row=row_index, column=8, value=groups)
-        ws.cell(row=row_index, column=9, value=sectors)
-        ws.cell(row=row_index, column=10, value=users)
-        ws.cell(row=row_index, column=11, value=report.created_at.strftime('%d/%m/%Y %H:%M') if report.created_at else '')
-        ws.cell(row=row_index, column=12, value=report.updated_at.strftime('%d/%m/%Y %H:%M') if report.updated_at else '')
+        ws.cell(row=row_index, column=4, value=report.predominant_color)
+        ws.cell(row=row_index, column=5, value=report.embed_url)
+        ws.cell(row=row_index, column=6, value='Sim' if report.is_active else 'Nao')
+        ws.cell(row=row_index, column=7, value=report.sort_order)
+        ws.cell(row=row_index, column=8, value=hierarchies)
+        ws.cell(row=row_index, column=9, value=groups)
+        ws.cell(row=row_index, column=10, value=sectors)
+        ws.cell(row=row_index, column=11, value=users)
+        ws.cell(row=row_index, column=12, value=report.created_at.strftime('%d/%m/%Y %H:%M') if report.created_at else '')
+        ws.cell(row=row_index, column=13, value=report.updated_at.strftime('%d/%m/%Y %H:%M') if report.updated_at else '')
 
     for column_cells in ws.columns:
         max_length = 0

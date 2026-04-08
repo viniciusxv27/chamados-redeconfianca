@@ -54,6 +54,7 @@ class PowerBIReportForm(forms.ModelForm):
             'name',
             'description',
             'icon_class',
+            'predominant_color',
             'embed_url',
             'card_background_image',
             'allow_open_in_new_tab',
@@ -73,6 +74,13 @@ class PowerBIReportForm(forms.ModelForm):
                     'id': 'id_icon_class',
                 },
                 choices=ICON_CHOICES,
+            ),
+            'predominant_color': forms.TextInput(
+                attrs={
+                    'type': 'color',
+                    'class': 'w-full h-11 border border-gray-300 rounded-lg p-1',
+                    'id': 'id_predominant_color',
+                }
             ),
             'embed_url': forms.URLInput(attrs={'class': 'w-full border border-gray-300 rounded-lg p-2'}),
             'card_background_image': forms.ClearableFileInput(
