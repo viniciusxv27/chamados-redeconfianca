@@ -34,17 +34,17 @@ def is_admin_plus(user):
 
 
 def get_user_visible_sector_ids(user, include_adm_for_admin_plus=False):
-    """Setores visíveis para o usuário, com opção de incluir setores ADM para ADMIN+."""
+    """Setores visíveis para o usuário.
+
+    Quando include_adm_for_admin_plus=True e o usuário é ADMIN+, retorna todos os setores.
+    """
     sector_ids = set(user.sectors.values_list('id', flat=True))
 
     if getattr(user, 'sector_id', None):
         sector_ids.add(user.sector_id)
 
     if include_adm_for_admin_plus and is_admin_plus(user):
-        adm_sector_ids = Sector.objects.filter(
-            Q(name__icontains='adm') | Q(name__icontains='administra')
-        ).values_list('id', flat=True)
-        sector_ids.update(adm_sector_ids)
+        return list(Sector.objects.values_list('id', flat=True))
 
     return list(sector_ids)
 
