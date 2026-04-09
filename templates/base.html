@@ -274,6 +274,11 @@
                                     </a>
                                 </li>
 
+                                <li class="pt-2">
+                                    <div class="px-2 py-1">
+                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold">Checklists</span>
+                                    </div>
+                                </li>
                                 <li>
                                     <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
                                         <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
@@ -312,6 +317,11 @@
                                     </li>
                                 {% endif %}
 
+                                <li class="pt-2">
+                                    <div class="px-2 py-1">
+                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold">Tarefas</span>
+                                    </div>
+                                </li>
                                 <li>
                                     <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
                                         <i class="fas fa-tasks text-blue-400 flex-shrink-0"></i>
@@ -336,6 +346,11 @@
                                     </li>
                                 {% endif %}
 
+                                <li class="pt-2">
+                                    <div class="px-2 py-1">
+                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold">Suprimentos</span>
+                                    </div>
+                                </li>
                                 <li>
                                     <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
                                         <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
