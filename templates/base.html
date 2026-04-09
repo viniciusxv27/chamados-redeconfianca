@@ -54,7 +54,9 @@
     <style>
         /* Sidebar collapsed state */
         .sidebar-collapsed {
-            width: 4rem; /* 64px - w-16 */
+            width: 4.5rem !important; /* 72px */
+            min-width: 4.5rem !important;
+            max-width: 4.5rem !important;
             overflow-x: hidden !important;
         }
         
@@ -105,7 +107,7 @@
         
         @media (min-width: 1024px) {
             .main-content-collapsed {
-                margin-left: 4rem; /* w-16 */
+                margin-left: 4.5rem; /* sidebar collapsed width */
             }
         }
         
@@ -191,9 +193,9 @@
                 <div class="p-2 sm:p-3" id="userInfo">
                     <div class="flex flex-col items-center">
                         {% if user.profile_picture %}
-                            <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 rounded-full object-cover mb-2">
+                            <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-full object-cover mb-2">
                         {% else %}
-                            <div class="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 bg-primary rounded-full flex items-center justify-center mb-2">
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 bg-primary rounded-full flex items-center justify-center mb-2">
                                 <span class="text-white font-bold text-xs sm:text-sm lg:text-lg">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
                             </div>
                         {% endif %}
