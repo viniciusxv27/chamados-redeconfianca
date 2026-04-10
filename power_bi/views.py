@@ -515,6 +515,12 @@ def export_power_bi_excel_view(request):
         return redirect('dashboard')
 
     reports = PowerBIReport.objects.all().prefetch_related('allowed_groups', 'allowed_sectors', 'allowed_users')
+    access_logs = (
+        PowerBIAccessLog.objects
+        .select_related('report', 'user', 'user__sector')
+        .prefetch_related('user__sectors')
+        .order_by('-accessed_at')
+    )
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -576,6 +582,46 @@ def export_power_bi_excel_view(request):
             if cell.value:
                 max_length = max(max_length, len(str(cell.value)))
         ws.column_dimensions[column].width = min(max_length + 2, 60)
+
+    ws_access = wb.create_sheet(title='acessos')
+    access_headers = [
+        'Usuario',
+        'Setor do Usuario',
+        'Em qual BI entrou',
+        'Horario',
+        'Dia',
+    ]
+
+    for col_index, header in enumerate(access_headers, 1):
+        cell = ws_access.cell(row=1, column=col_index, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row_index, log in enumerate(access_logs, 2):
+        full_name = log.user.get_full_name().strip()
+        user_name = full_name if full_name else (log.user.full_name or log.user.username)
+
+        user_sector = ''
+        if getattr(log.user, 'sector', None) and getattr(log.user.sector, 'name', None):
+            user_sector = log.user.sector.name
+        elif log.user.sectors.exists():
+            user_sector = ', '.join(log.user.sectors.values_list('name', flat=True))
+
+        local_accessed_at = timezone.localtime(log.accessed_at)
+
+        ws_access.cell(row=row_index, column=1, value=user_name)
+        ws_access.cell(row=row_index, column=2, value=user_sector)
+        ws_access.cell(row=row_index, column=3, value=log.report.name if log.report else '')
+        ws_access.cell(row=row_index, column=4, value=local_accessed_at.strftime('%H:%M'))
+        ws_access.cell(row=row_index, column=5, value=local_accessed_at.strftime('%d/%m/%Y'))
+
+    for column_cells in ws_access.columns:
+        max_length = 0
+        column = column_cells[0].column_letter
+        for cell in column_cells:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+        ws_access.column_dimensions[column].width = min(max_length + 2, 60)
 
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
