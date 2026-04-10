@@ -875,6 +875,7 @@ def edit_user_view(request, user_id):
         return redirect('dashboard')
     
     user_to_edit = get_object_or_404(User.objects.prefetch_related('sectors'), id=user_id)
+    hierarchy_levels = {key: index for index, (key, _) in enumerate(User.HIERARCHY_CHOICES)}
     
     if request.method == 'POST':
         email = request.POST.get('email')
@@ -911,6 +912,19 @@ def edit_user_view(request, user_id):
             if User.objects.filter(email=email).exclude(id=user_id).exists():
                 messages.error(request, 'Email já existe.')
             else:
+                # Ao editar outro usuário, não permitir atribuir hierarquia superior à do usuário logado.
+                if user_to_edit.id != request.user.id:
+                    current_user_level = hierarchy_levels.get(request.user.hierarchy, -1)
+                    selected_level = hierarchy_levels.get(hierarchy, -1)
+
+                    if selected_level == -1:
+                        messages.error(request, 'Hierarquia selecionada é inválida.')
+                        return redirect('edit_user', user_id=user_to_edit.id)
+
+                    if selected_level > current_user_level:
+                        messages.error(request, 'Você não pode definir uma hierarquia maior que a sua para outro usuário.')
+                        return redirect('edit_user', user_id=user_to_edit.id)
+
                 sector = get_object_or_404(Sector, id=sector_id) if sector_id else None
                 
                 user_to_edit.email = email
