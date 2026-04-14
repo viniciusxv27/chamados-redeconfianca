@@ -1340,8 +1340,14 @@ def export_metrics_report(request):
     # ========== ABA 4: Todos os Chats ==========
     ws_chats = wb.create_sheet('Todos os Chats')
     
+    def format_cpf(cpf_value):
+        cpf_digits = ''.join(filter(str.isdigit, str(cpf_value or '')))
+        if len(cpf_digits) == 11:
+            return f'{cpf_digits[:3]}.{cpf_digits[3:6]}.{cpf_digits[6:9]}-{cpf_digits[9:]}'
+        return cpf_value or ''
+
     # Headers
-    headers_chats = ['ID', 'Protocolo', 'Título', 'Cliente', 'Setor', 'Categoria', 'Status', 'Agente', 'Criado em', 'Fechado em']
+    headers_chats = ['ID', 'Protocolo', 'Título', 'Cliente', 'CPF Cliente', 'Setor', 'Categoria', 'Status', 'Agente', 'Criado em', 'Fechado em']
     for col, header in enumerate(headers_chats, start=1):
         cell = ws_chats.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -1358,15 +1364,19 @@ def export_metrics_report(request):
         ws_chats.cell(row=row, column=2, value=getattr(chat, 'protocol', '') or '').border = border
         ws_chats.cell(row=row, column=3, value=chat.title).border = border
         ws_chats.cell(row=row, column=4, value=chat.user.get_full_name()).border = border
-        ws_chats.cell(row=row, column=5, value=chat.sector.name if chat.sector else 'N/A').border = border
-        ws_chats.cell(row=row, column=6, value=chat.category.name if chat.category else 'N/A').border = border
-        ws_chats.cell(row=row, column=7, value=chat.get_status_display()).border = border
-        ws_chats.cell(row=row, column=8, value=chat.assigned_to.get_full_name() if chat.assigned_to else 'Não atribuído').border = border
-        ws_chats.cell(row=row, column=9, value=timezone.localtime(chat.created_at).strftime('%d/%m/%Y %H:%M')).border = border
-        ws_chats.cell(row=row, column=10, value=timezone.localtime(chat.closed_at).strftime('%d/%m/%Y %H:%M') if chat.closed_at else '').border = border
+        should_export_cpf = bool(chat.category and getattr(chat.category, 'request_customer_cpf', False))
+        cpf_value = format_cpf(chat.customer_cpf) if should_export_cpf else ''
+
+        ws_chats.cell(row=row, column=5, value=cpf_value).border = border
+        ws_chats.cell(row=row, column=6, value=chat.sector.name if chat.sector else 'N/A').border = border
+        ws_chats.cell(row=row, column=7, value=chat.category.name if chat.category else 'N/A').border = border
+        ws_chats.cell(row=row, column=8, value=chat.get_status_display()).border = border
+        ws_chats.cell(row=row, column=9, value=chat.assigned_to.get_full_name() if chat.assigned_to else 'Não atribuído').border = border
+        ws_chats.cell(row=row, column=10, value=timezone.localtime(chat.created_at).strftime('%d/%m/%Y %H:%M')).border = border
+        ws_chats.cell(row=row, column=11, value=timezone.localtime(chat.closed_at).strftime('%d/%m/%Y %H:%M') if chat.closed_at else '').border = border
     
     # Ajustar larguras
-    widths = [8, 18, 40, 25, 20, 25, 15, 25, 18, 18]
+    widths = [8, 18, 40, 25, 18, 20, 25, 15, 25, 18, 18]
     for col, width in enumerate(widths, start=1):
         ws_chats.column_dimensions[get_column_letter(col)].width = width
     
