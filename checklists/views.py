@@ -18,9 +18,12 @@ from users.models import User, Sector
 
 
 def _is_admins_group_user(user):
-    """Retorna True quando o usuário participa do grupo ADMINS."""
+    """Verifica se o usuário pertence ao grupo ADMINS."""
     try:
-        return user.groups.filter(name__iexact='ADMINS').exists()
+        admins_group = Group.objects.filter(name__iexact='ADMINS').first()
+        if admins_group:
+            return admins_group.members.filter(id=user.id).exists()
+        return False
     except Exception:
         return False
 
@@ -2946,6 +2949,7 @@ def api_delete_executions(request):
     """API para excluir múltiplas execuções de checklist"""
     from django.http import JsonResponse
     import json
+from users.models import Group
     
     # Verificar permissão
     is_authorized = (
