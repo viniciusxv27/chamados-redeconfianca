@@ -247,15 +247,16 @@ def manage_users_view(request):
         return redirect('dashboard')
     
     users = User.objects.all().select_related('sector')
-    
-    # Contar administradores corretamente
-    admin_count = users.filter(hierarchy__in=['SUPERADMIN', 'ADMINISTRATIVO']).count()
+
+    active_users_count = User.objects.filter(is_active=True).count()
+    superadmin_count = User.objects.filter(hierarchy='SUPERADMIN').count()
     
     context = {
         'users': users,
         'sectors': Sector.objects.all(),
         'user': request.user,
-        'admin_count': admin_count,
+        'active_users_count': active_users_count,
+        'admin_count': superadmin_count,
     }
     return render(request, 'admin/users.html', context)
 
