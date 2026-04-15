@@ -246,10 +246,10 @@ def manage_users_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('dashboard')
     
-    users = User.objects.all().select_related('sector')
+    users = list(User.objects.all().select_related('sector'))
 
-    active_users_count = User.objects.filter(is_active=True).count()
-    superadmin_count = User.objects.filter(hierarchy='SUPERADMIN').count()
+    active_users_count = sum(1 for user_item in users if user_item.is_active)
+    superadmin_count = sum(1 for user_item in users if user_item.hierarchy == 'SUPERADMIN')
     
     context = {
         'users': users,
