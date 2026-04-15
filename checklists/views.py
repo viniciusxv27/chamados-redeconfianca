@@ -2949,7 +2949,6 @@ def api_delete_executions(request):
     """API para excluir múltiplas execuções de checklist"""
     from django.http import JsonResponse
     import json
-from users.models import Group
     
     # Verificar permissão
     is_authorized = (
