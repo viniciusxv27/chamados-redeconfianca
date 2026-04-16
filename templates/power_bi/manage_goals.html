@@ -89,7 +89,7 @@
                                 <form method="post" action="{% url 'power_bi:sync_goals_upload_mysql' upload.id %}" onsubmit="return confirm('Sincronizar as metas de {{ upload.month|stringformat:'02d' }}/{{ upload.year }} com o banco MySQL?');">
                                     {% csrf_token %}
                                     <button type="submit" class="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-200 transition-colors text-sm">
-                                        <i class="fas fa-database mr-1"></i>Sincronizar Metas com Banco
+                                        <i class="fas fa-database mr-1"></i>Sincronizar com Banco
                                     </button>
                                 </form>
                                 <form method="post" action="{% url 'power_bi:delete_goals_upload' upload.id %}" onsubmit="return confirm('Deseja excluir a competencia {{ upload.month|stringformat:'02d' }}/{{ upload.year }}?');">

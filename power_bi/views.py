@@ -1030,23 +1030,46 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
         return redirect('power_bi:manage_goals')
 
     upload = get_object_or_404(GoalUpload, id=upload_id)
-    entries = GoalEntry.objects.filter(upload=upload).order_by('id')
+    entries = GoalEntry.objects.filter(
+        upload=upload,
+        sheet_type=GoalEntry.SHEET_PDV_REAL,
+    ).order_by('id')
 
     if not entries.exists():
         messages.warning(request, 'Nao ha metas para sincronizar nesta competencia.')
         return redirect('power_bi:manage_goals')
 
-    rows = []
+    grouped_rows = {}
     for entry in entries:
         if entry.goal_value is None:
             continue
-        rows.append((
-            entry.goal_value,
-            (entry.store_name or '').strip(),
+
+        pdv_raw = (entry.store_name or '').strip()
+        pilar = (entry.pilar or '').strip()
+        if not pdv_raw:
+            continue
+
+        unidade = 'Unidade' if (upload.fixa_as_percentage and _is_fixa_pilar(pilar)) else 'Valor'
+        key = (_normalize_text(pdv_raw), _normalize_text(pilar), unidade)
+
+        grouped_rows[key] = {
+            'valor': entry.goal_value,
+            'pdv': pdv_raw,
+            'pilar': pilar,
+            'unidade': unidade,
+        }
+
+    rows = [
+        (
+            row['valor'],
+            row['pdv'],
             upload.month,
             upload.year,
-            (entry.pilar or '').strip(),
-        ))
+            row['unidade'],
+            row['pilar'],
+        )
+        for row in grouped_rows.values()
+    ]
 
     if not rows:
         messages.warning(request, 'Nenhum item valido encontrado para sincronizar.')
@@ -1068,7 +1091,7 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
                     (upload.month, upload.year),
                 )
                 cursor.executemany(
-                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade) VALUES (%s, %s, %s, %s, %s)',
+                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade, pilar) VALUES (%s, %s, %s, %s, %s, %s)',
                     rows,
                 )
             connection.commit()
