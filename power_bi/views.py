@@ -1039,6 +1039,19 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
         messages.warning(request, 'Nao ha metas para sincronizar nesta competencia.')
         return redirect('power_bi:manage_goals')
 
+    cn_entries = GoalEntry.objects.filter(
+        upload=upload,
+        sheet_type=GoalEntry.SHEET_CN_REAL,
+    ).only('store_name', 'user_name')
+
+    hc_by_store = defaultdict(set)
+    for cn_entry in cn_entries:
+        store_normalized = _normalize_text(cn_entry.store_name)
+        seller_normalized = _normalize_text(cn_entry.user_name)
+        if not store_normalized or not seller_normalized:
+            continue
+        hc_by_store[store_normalized].add(seller_normalized)
+
     grouped_rows = {}
     for entry in entries:
         if entry.goal_value is None:
@@ -1057,6 +1070,7 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
             'pdv': pdv_raw,
             'pilar': pilar,
             'unidade': unidade,
+            'hc': len(hc_by_store.get(_normalize_text(pdv_raw), set())),
         }
 
     rows = [
@@ -1067,6 +1081,7 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
             upload.year,
             row['unidade'],
             row['pilar'],
+            row['hc'],
         )
         for row in grouped_rows.values()
     ]
@@ -1091,7 +1106,7 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
                     (upload.month, upload.year),
                 )
                 cursor.executemany(
-                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade, pilar) VALUES (%s, %s, %s, %s, %s, %s)',
+                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade, pilar, hc) VALUES (%s, %s, %s, %s, %s, %s, %s)',
                     rows,
                 )
             connection.commit()
