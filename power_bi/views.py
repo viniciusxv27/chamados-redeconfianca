@@ -1,6 +1,8 @@
 from decimal import Decimal, InvalidOperation
+import os
 import unicodedata
 from collections import defaultdict
+from urllib.parse import unquote, urlparse
 
 from django.db.models import Count
 from django.db.models.functions import TruncDate
@@ -19,6 +21,9 @@ import openpyxl
 
 from .forms import GoalUploadForm, PowerBIReportForm
 from .models import GoalEntry, GoalUpload, PowerBIAccessLog, PowerBIReport
+
+
+DEFAULT_MYSQL_URI = 'mysql://redeconfiancaadm:redeconfianca2025@painel.dev.redeconfianca.com.br:3306/rede_confianca_data'
 
 
 def _is_superadmin(user):
@@ -131,6 +136,26 @@ def _normalize_sheet_name(value):
 
 def _is_fixa_pilar(pilar):
     return _normalize_text(pilar) == 'FIXA'
+
+
+def _get_goals_mysql_config():
+    mysql_uri = os.getenv('MYSQL_URI', DEFAULT_MYSQL_URI)
+    parsed = urlparse(mysql_uri)
+
+    if parsed.scheme.lower() != 'mysql':
+        raise ValueError('MYSQL_URI invalida: o schema deve ser mysql://')
+
+    if not parsed.hostname or not parsed.path or parsed.path == '/':
+        raise ValueError('MYSQL_URI invalida: host e database sao obrigatorios.')
+
+    return {
+        'host': parsed.hostname,
+        'port': parsed.port or 3306,
+        'user': unquote(parsed.username or ''),
+        'password': unquote(parsed.password or ''),
+        'database': parsed.path.lstrip('/'),
+        'charset': 'utf8mb4',
+    }
 
 
 def _parse_decimal(value):
@@ -992,4 +1017,69 @@ def delete_goals_upload_view(request, upload_id):
     period = f'{upload.month:02d}/{upload.year}'
     upload.delete()
     messages.success(request, f'Competencia {period} excluida com sucesso.')
+    return redirect('power_bi:manage_goals')
+
+
+@login_required
+def sync_goals_upload_to_mysql_view(request, upload_id):
+    if not _is_superadmin(request.user):
+        messages.error(request, 'Apenas SUPERADMIN pode sincronizar metas.')
+        return redirect('dashboard')
+
+    if request.method != 'POST':
+        return redirect('power_bi:manage_goals')
+
+    upload = get_object_or_404(GoalUpload, id=upload_id)
+    entries = GoalEntry.objects.filter(upload=upload).order_by('id')
+
+    if not entries.exists():
+        messages.warning(request, 'Nao ha metas para sincronizar nesta competencia.')
+        return redirect('power_bi:manage_goals')
+
+    rows = []
+    for entry in entries:
+        if entry.goal_value is None:
+            continue
+        rows.append((
+            entry.goal_value,
+            (entry.store_name or '').strip(),
+            upload.month,
+            upload.year,
+            (entry.pilar or '').strip(),
+        ))
+
+    if not rows:
+        messages.warning(request, 'Nenhum item valido encontrado para sincronizar.')
+        return redirect('power_bi:manage_goals')
+
+    try:
+        import pymysql
+    except Exception:
+        messages.error(request, 'Dependencia PyMySQL nao encontrada no ambiente para sincronizacao.')
+        return redirect('power_bi:manage_goals')
+
+    try:
+        mysql_config = _get_goals_mysql_config()
+        connection = pymysql.connect(**mysql_config)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'DELETE FROM metas WHERE mes_ref = %s AND ano_ref = %s',
+                    (upload.month, upload.year),
+                )
+                cursor.executemany(
+                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade) VALUES (%s, %s, %s, %s, %s)',
+                    rows,
+                )
+            connection.commit()
+        finally:
+            connection.close()
+    except Exception as exc:
+        messages.error(request, f'Erro ao sincronizar metas no MySQL: {exc}')
+        return redirect('power_bi:manage_goals')
+
+    messages.success(
+        request,
+        f'Metas de {upload.month:02d}/{upload.year} sincronizadas com sucesso no banco MySQL ({len(rows)} linhas).',
+    )
     return redirect('power_bi:manage_goals')

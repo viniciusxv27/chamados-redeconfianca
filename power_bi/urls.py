@@ -16,4 +16,5 @@ urlpatterns = [
     path('manage/metas/', views.manage_goals_view, name='manage_goals'),
     path('manage/metas/upload/', views.upload_goals_view, name='upload_goals'),
     path('manage/metas/<int:upload_id>/delete/', views.delete_goals_upload_view, name='delete_goals_upload'),
+    path('manage/metas/<int:upload_id>/sync-mysql/', views.sync_goals_upload_to_mysql_view, name='sync_goals_upload_mysql'),
 ]
