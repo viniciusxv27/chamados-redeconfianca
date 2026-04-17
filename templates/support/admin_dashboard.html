@@ -348,9 +348,20 @@
                 <i class="fas fa-list mr-2"></i>Lista
             </button>
         </div>
-        <div class="text-sm text-gray-600">
-            <i class="fas fa-clock mr-1"></i>
-            Atualizado: <span id="lastUpdate">--</span>
+        <div class="flex items-center gap-3">
+            <div id="kanban-sector-filter-wrapper" class="flex items-center gap-2">
+                <label for="kanbanSectorFilter" class="text-sm font-medium text-gray-700">Setor:</label>
+                <select id="kanbanSectorFilter" onchange="applyKanbanFilter()" class="min-w-[220px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Todos os setores</option>
+                    {% for sector in user_sectors %}
+                    <option value="{{ sector.id }}">{{ sector.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="text-sm text-gray-600">
+                <i class="fas fa-clock mr-1"></i>
+                Atualizado: <span id="lastUpdate">--</span>
+            </div>
         </div>
     </div>
 
@@ -1171,6 +1182,7 @@ function loadSupportTickets() {
             if (data.stats) {
                 console.log('[LoadTickets] Atualizando contadores com stats do backend:', data.stats);
                 updateStatCounters(data.stats);
+                applyKanbanFilter();
             }
         })
         .catch(error => {
@@ -1181,6 +1193,8 @@ function loadSupportTickets() {
 
 function renderTickets(tickets) {
     console.log('renderTickets chamado com', tickets.length, 'tickets');
+    allTicketsData = tickets;
+    const kanbanTickets = getKanbanFilteredTickets(tickets);
     
     const containers = {
         'AGUARDANDO': document.getElementById('open-tickets'),
@@ -1197,7 +1211,7 @@ function renderTickets(tickets) {
         if (container) container.innerHTML = '';
     });
     
-    tickets.forEach(ticket => {
+    kanbanTickets.forEach(ticket => {
         console.log('Processando ticket:', ticket.id, 'Status:', ticket.status);
         const container = containers[ticket.status];
         if (container) {
@@ -1210,7 +1224,7 @@ function renderTickets(tickets) {
     });
     
     // Atualizar contadores
-    updateTicketCounts(tickets);
+    updateTicketCounts(kanbanTickets);
     
     // Renderizar lista também
     renderListView(tickets);
@@ -1360,10 +1374,12 @@ function toggleView(view) {
     const listView = document.getElementById('list-view');
     const btnKanban = document.getElementById('btn-kanban');
     const btnList = document.getElementById('btn-list');
+    const kanbanSectorFilterWrapper = document.getElementById('kanban-sector-filter-wrapper');
     
     if (view === 'kanban') {
         kanbanView.classList.remove('hidden');
         listView.classList.add('hidden');
+        if (kanbanSectorFilterWrapper) kanbanSectorFilterWrapper.classList.remove('hidden');
         btnKanban.classList.remove('bg-gray-200', 'text-gray-700');
         btnKanban.classList.add('bg-blue-500', 'text-white');
         btnList.classList.remove('bg-blue-500', 'text-white');
@@ -1371,6 +1387,7 @@ function toggleView(view) {
     } else {
         kanbanView.classList.add('hidden');
         listView.classList.remove('hidden');
+        if (kanbanSectorFilterWrapper) kanbanSectorFilterWrapper.classList.add('hidden');
         btnList.classList.remove('bg-gray-200', 'text-gray-700');
         btnList.classList.add('bg-blue-500', 'text-white');
         btnKanban.classList.remove('bg-blue-500', 'text-white');
@@ -1380,6 +1397,24 @@ function toggleView(view) {
 
 // Armazenar tickets para filtro
 let allTicketsData = [];
+
+function getKanbanFilteredTickets(tickets) {
+    const selectedSector = getFilterValue('kanbanSectorFilter');
+
+    if (!selectedSector) {
+        return tickets;
+    }
+
+    return tickets.filter(ticket => ticket.sector && String(ticket.sector.id) === selectedSector);
+}
+
+function applyKanbanFilter() {
+    if (allTicketsData.length > 0) {
+        renderTickets(allTicketsData);
+    } else {
+        updateTicketCounts([]);
+    }
+}
 
 function getFilterValue(selectId) {
     const el = document.getElementById(selectId);
@@ -1578,13 +1613,25 @@ function escapeHtml(text) {
 }
 
 function updateTicketCounts(tickets) {
+    let openTotal = 0;
+    let progressTotal = 0;
     let closedTotal = 0;
     
     tickets.forEach(ticket => {
-        if (ticket.status === 'FECHADO') {
+        if (ticket.status === 'AGUARDANDO' || ticket.status === 'ABERTO') {
+            openTotal++;
+        } else if (ticket.status === 'EM_ANDAMENTO') {
+            progressTotal++;
+        } else if (ticket.status === 'FECHADO') {
             closedTotal++;
         }
     });
+
+    const openBadge = document.querySelector('#open-tickets')?.parentElement?.querySelector('.bg-red-200');
+    if (openBadge) openBadge.textContent = openTotal;
+
+    const progressBadge = document.querySelector('#progress-tickets')?.parentElement?.querySelector('.bg-yellow-200');
+    if (progressBadge) progressBadge.textContent = progressTotal;
     
     const closedCountEl = document.getElementById('closed-count');
     if (closedCountEl) closedCountEl.textContent = closedTotal;
