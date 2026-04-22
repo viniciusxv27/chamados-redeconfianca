@@ -60,6 +60,35 @@
     <div class="bg-white shadow rounded-lg p-4 mb-4">
         <h3 class="text-sm font-semibold text-gray-700 mb-3"><i class="fas fa-tools text-gray-400 mr-1"></i> Ações em Lote</h3>
         <div class="flex flex-wrap gap-4">
+            <!-- Reimportar PDF completo do mês -->
+            <form id="full-month-reimport-form" class="flex items-end gap-2" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Mês</label>
+                    <select name="month" id="full-month" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for m_val, m_name in month_choices %}
+                        <option value="{{ m_val }}">{{ m_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Ano</label>
+                    <select name="year" id="full-year" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for y in years %}
+                        <option value="{{ y }}">{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">PDF Completo</label>
+                    <input type="file" name="pdf_file" id="full-pdf-file" accept=".pdf" required
+                           class="border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white">
+                </div>
+                <button type="submit" class="px-3 py-1.5 bg-amber-600 text-white text-sm rounded-md hover:bg-amber-700">
+                    <i class="fas fa-cut mr-1"></i> Processar PDF Completo
+                </button>
+            </form>
+
             <!-- Excluir em lote -->
             <form id="bulk-delete-form" class="flex items-end gap-2">
                 {% csrf_token %}
@@ -107,6 +136,7 @@
                 </button>
             </form>
         </div>
+        <div id="full-month-reimport-result" class="hidden mt-3"></div>
         <div id="bulk-delete-result" class="hidden mt-3"></div>
     </div>
 
@@ -220,6 +250,72 @@ document.getElementById('bulk-delete-form').addEventListener('submit', async fun
         resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
         resultEl.innerHTML = '<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> Erro de conexão.</p>';
         resultEl.classList.remove('hidden');
+    }
+});
+
+document.getElementById('full-month-reimport-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const pdfInput = document.getElementById('full-pdf-file');
+    if (!pdfInput.files.length) {
+        alert('Selecione o PDF completo do mês.');
+        return;
+    }
+
+    const fileName = pdfInput.files[0].name || '';
+    if (!fileName.toLowerCase().endsWith('.pdf')) {
+        alert('Arquivo inválido. Envie um PDF (.pdf).');
+        return;
+    }
+
+    const monthName = document.getElementById('full-month').selectedOptions[0].text;
+    const year = document.getElementById('full-year').value;
+    if (!confirm(`Processar PDF completo de ${monthName}/${year}? O sistema vai recortar e salvar 1 PDF por funcionário.`)) {
+        return;
+    }
+
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const oldBtnHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Processando...';
+
+    const resultEl = document.getElementById('full-month-reimport-result');
+    const formData = new FormData(this);
+
+    try {
+        const resp = await fetch('{% url "contracheque:api_reimport_full_month_pdf" %}', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+
+        if (resp.ok) {
+            const details = (data.results || []).slice(0, 15).map((r) => {
+                const tone = r.status === 'error' ? 'text-red-700' : (r.status === 'skip' ? 'text-yellow-700' : 'text-emerald-700');
+                return `<p class="text-xs ${tone}">• ${r.message}</p>`;
+            }).join('');
+
+            resultEl.className = 'mt-3 bg-emerald-50 border border-emerald-200 rounded p-3';
+            resultEl.innerHTML = `
+                <p class="text-sm text-emerald-800"><i class="fas fa-check-circle mr-1"></i> ${data.message}</p>
+                <p class="text-xs text-emerald-700 mt-1">Sucesso: ${data.success_count} | Criados: ${data.created_count} | Atualizados: ${data.updated_count} | Não encontrados: ${(data.unmatched || []).length}</p>
+                ${details ? `<div class="mt-2 space-y-1">${details}</div>` : ''}
+            `;
+            resultEl.classList.remove('hidden');
+            pdfInput.value = '';
+            setTimeout(() => location.reload(), 1800);
+        } else {
+            resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
+            resultEl.innerHTML = `<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> ${data.error || 'Erro ao processar PDF completo.'}</p>`;
+            resultEl.classList.remove('hidden');
+        }
+    } catch (err) {
+        resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
+        resultEl.innerHTML = '<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> Erro de conexão.</p>';
+        resultEl.classList.remove('hidden');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = oldBtnHtml;
     }
 });
 

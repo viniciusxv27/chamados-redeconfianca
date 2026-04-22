@@ -29,6 +29,7 @@ urlpatterns = [
     # APIs
     path('api/importar/', views.api_import_payslip, name='api_import_payslip'),
     path('api/importar-lote/', views.api_bulk_import, name='api_bulk_import'),
+    path('api/reimportar-mes/', views.api_reimport_full_month_pdf, name='api_reimport_full_month_pdf'),
     path('api/excluir-lote/', views.api_bulk_delete, name='api_bulk_delete'),
     path('api/assinar/<int:pk>/', views.api_sign_payslip, name='api_sign_payslip'),
     path('api/informes/importar-lote/', views.api_bulk_import_income, name='api_bulk_import_income'),

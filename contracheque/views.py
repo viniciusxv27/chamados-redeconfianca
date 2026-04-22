@@ -457,6 +457,151 @@ def api_bulk_import(request):
 
 
 @login_required
+def api_reimport_full_month_pdf(request):
+    """Importa um PDF completo do mês, recorta por funcionário e cria/atualiza registros."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    month = request.POST.get('month')
+    year = request.POST.get('year')
+    pdf_file = request.FILES.get('pdf_file')
+
+    if not month or not year or not pdf_file:
+        return JsonResponse({'error': 'Informe mês, ano e o PDF completo.'}, status=400)
+
+    try:
+        month = int(month)
+        year = int(year)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Mês/ano inválidos.'}, status=400)
+
+    file_name = (pdf_file.name or '').lower()
+    if not file_name.endswith('.pdf'):
+        return JsonResponse({'error': 'Arquivo inválido. Envie um PDF (.pdf).'}, status=400)
+
+    pdf_bytes = pdf_file.read()
+    all_payslips = extract_all_payslips(BytesIO(pdf_bytes))
+
+    if len(all_payslips) == 1 and 'error' in all_payslips[0] and not all_payslips[0].get('employee_name'):
+        return JsonResponse({'error': all_payslips[0]['error']}, status=400)
+
+    if not all_payslips:
+        return JsonResponse({'error': 'Nenhum contracheque encontrado no PDF enviado.'}, status=400)
+
+    users_cache = list(User.objects.filter(is_active=True))
+    results = []
+    unmatched_names = []
+    created_count = 0
+    updated_count = 0
+
+    for pdf_data in all_payslips:
+        employee_name = pdf_data.get('employee_name', '')
+        cpf = pdf_data.get('cpf', '')
+        page_num = pdf_data.get('_page_number', None)
+
+        target_user = None
+
+        if cpf:
+            cpf_clean = cpf.replace('.', '').replace('-', '').replace('/', '').replace(' ', '')
+            if cpf_clean:
+                target_user = User.objects.filter(cpf__icontains=cpf_clean).first()
+
+        if not target_user and employee_name:
+            target_user = _find_user_by_name(employee_name, users_cache)
+
+        if not target_user:
+            results.append({
+                'status': 'skip',
+                'message': f'Funcionário não encontrado: {employee_name or "Nome não identificado"}',
+            })
+            unmatched_names.append({'nome_pdf': employee_name or 'Nome não identificado', 'cpf': cpf})
+            continue
+
+        if page_num is None:
+            results.append({
+                'status': 'error',
+                'message': f'Página não identificada para {target_user.full_name}.',
+            })
+            continue
+
+        single_page_bytes = extract_single_page_pdf(pdf_bytes, page_num)
+        if not single_page_bytes:
+            results.append({
+                'status': 'error',
+                'message': f'Não foi possível recortar a página de {target_user.full_name}.',
+            })
+            continue
+
+        individual_pdf_name = f"contracheque_{target_user.pk}_{year}_{month:02d}.pdf"
+        pdf_content = ContentFile(single_page_bytes, name=individual_pdf_name)
+        pdf_data_clean = {
+            k: v for k, v in pdf_data.items()
+            if k not in ('error', '_page_number')
+        }
+
+        existing = Payslip.objects.filter(user=target_user, month=month, year=year).first()
+        if existing:
+            old_file_name = existing.pdf_file.name if existing.pdf_file else None
+
+            existing.pdf_file = pdf_content
+            existing.pdf_page_number = 0
+            existing.uploaded_by = request.user
+
+            for field, value in pdf_data_clean.items():
+                setattr(existing, field, value)
+
+            # O arquivo mudou, então a assinatura anterior não é mais válida.
+            existing.signed_at = None
+            existing.signature_image = ''
+            existing.signature_ip = None
+            existing.signature_user_agent = ''
+            existing.signature_hash = ''
+
+            existing.save()
+            updated_count += 1
+
+            if old_file_name and old_file_name != existing.pdf_file.name:
+                try:
+                    existing.pdf_file.storage.delete(old_file_name)
+                except Exception:
+                    pass
+
+            results.append({
+                'status': 'updated',
+                'message': f'Atualizado: {target_user.full_name}',
+            })
+        else:
+            Payslip.objects.create(
+                user=target_user,
+                month=month,
+                year=year,
+                pdf_file=pdf_content,
+                pdf_page_number=0,
+                uploaded_by=request.user,
+                **pdf_data_clean,
+            )
+            created_count += 1
+            results.append({
+                'status': 'created',
+                'message': f'Criado: {target_user.full_name}',
+            })
+
+    success_count = created_count + updated_count
+    return JsonResponse({
+        'results': results,
+        'total': len(results),
+        'success_count': success_count,
+        'created_count': created_count,
+        'updated_count': updated_count,
+        'unmatched': unmatched_names,
+        'message': f'Processamento concluído: {created_count} criado(s), {updated_count} atualizado(s).',
+    })
+
+
+@login_required
 def api_sign_payslip(request, pk):
     """API para assinar digitalmente um contracheque."""
     if request.method != 'POST':
