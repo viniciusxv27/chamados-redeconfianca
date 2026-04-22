@@ -149,13 +149,24 @@
                         <td class="px-4 py-3 text-sm text-right text-red-700">R$ {{ ps.total_deductions|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-sm text-right font-bold text-indigo-700">R$ {{ ps.net_pay|floatformat:2 }}</td>
                         <td class="px-4 py-3 text-center">
-                            <div class="flex justify-center gap-2">
+                            <div class="flex justify-center gap-2 items-center flex-wrap">
                                 <a href="{% url 'contracheque:payslip_detail' ps.pk %}" class="text-indigo-600 hover:text-indigo-800" title="Visualizar">
                                     <i class="fas fa-eye"></i>
                                 </a>
                                 <a href="{% url 'contracheque:payslip_pdf' ps.pk %}" target="_blank" class="text-green-600 hover:text-green-800" title="PDF">
                                     <i class="fas fa-file-pdf"></i>
                                 </a>
+                                <form method="post" action="{% url 'contracheque:admin_reupload_payslip_pdf' ps.pk %}" class="inline-flex items-center gap-1" enctype="multipart/form-data"
+                                      onsubmit="return confirmReupload(this, '{{ ps.user.full_name|escapejs }}', '{{ ps.period_display|escapejs }}')">
+                                    {% csrf_token %}
+                                    <label class="cursor-pointer text-blue-600 hover:text-blue-800" title="Selecionar novo PDF">
+                                        <i class="fas fa-cloud-upload-alt"></i>
+                                        <input type="file" name="pdf_file" accept=".pdf" class="hidden" required>
+                                    </label>
+                                    <button type="submit" class="text-blue-600 hover:text-blue-800" title="Reenviar PDF">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </form>
                                 <form method="post" action="{% url 'contracheque:admin_delete_payslip' ps.pk %}" class="inline"
                                       onsubmit="return confirm('Excluir contracheque de {{ ps.user.full_name }} – {{ ps.period_display }}?')">
                                     {% csrf_token %}
@@ -211,5 +222,21 @@ document.getElementById('bulk-delete-form').addEventListener('submit', async fun
         resultEl.classList.remove('hidden');
     }
 });
+
+function confirmReupload(formEl, employeeName, periodDisplay) {
+    const fileInput = formEl.querySelector('input[name="pdf_file"]');
+    if (!fileInput || !fileInput.files || !fileInput.files.length) {
+        alert('Selecione um arquivo PDF para reenviar.');
+        return false;
+    }
+
+    const fileName = fileInput.files[0].name || '';
+    if (!fileName.toLowerCase().endsWith('.pdf')) {
+        alert('Arquivo inválido. Envie um PDF (.pdf).');
+        return false;
+    }
+
+    return confirm(`Reenviar PDF de ${employeeName} (${periodDisplay})?`);
+}
 </script>
 {% endblock %}

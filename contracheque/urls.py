@@ -18,6 +18,7 @@ urlpatterns = [
     path('admin/', views.admin_payslips, name='admin_payslips'),
     path('admin/importar/', views.admin_import, name='admin_import'),
     path('admin/excluir/<int:pk>/', views.admin_delete_payslip, name='admin_delete_payslip'),
+    path('admin/reenviar-pdf/<int:pk>/', views.admin_reupload_payslip_pdf, name='admin_reupload_payslip_pdf'),
     path('admin/relatorio-assinaturas/', views.export_signature_report, name='export_signature_report'),
 
     # Área administrativa – Informes de Rendimentos

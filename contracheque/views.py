@@ -538,6 +538,58 @@ def admin_delete_payslip(request, pk):
     return redirect('contracheque:admin_payslips')
 
 
+@login_required
+def admin_reupload_payslip_pdf(request, pk):
+    """Reenviar PDF de um contracheque específico (SUPERADMIN)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+
+    if not is_superadmin(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    payslip = get_object_or_404(Payslip, pk=pk)
+    new_pdf = request.FILES.get('pdf_file')
+
+    if not new_pdf:
+        messages.error(request, 'Selecione um arquivo PDF para reenviar.')
+        return redirect('contracheque:admin_payslips')
+
+    filename = (new_pdf.name or '').lower()
+    if not filename.endswith('.pdf'):
+        messages.error(request, 'Arquivo inválido. Envie um PDF (.pdf).')
+        return redirect('contracheque:admin_payslips')
+
+    # Mantém padrão de um PDF individual por usuário/período.
+    new_pdf_bytes = new_pdf.read()
+    safe_name = f"contracheque_{payslip.user_id}_{payslip.year}_{payslip.month:02d}.pdf"
+    new_content = ContentFile(new_pdf_bytes, name=safe_name)
+
+    old_file_name = payslip.pdf_file.name if payslip.pdf_file else None
+
+    # Substitui arquivo e invalida assinatura anterior porque o documento mudou.
+    payslip.pdf_file = new_content
+    payslip.pdf_page_number = 0
+    payslip.uploaded_by = request.user
+    payslip.signed_at = None
+    payslip.signature_image = ''
+    payslip.signature_ip = None
+    payslip.signature_user_agent = ''
+    payslip.signature_hash = ''
+    payslip.save()
+
+    if old_file_name and old_file_name != payslip.pdf_file.name:
+        try:
+            payslip.pdf_file.storage.delete(old_file_name)
+        except Exception:
+            pass
+
+    messages.success(
+        request,
+        f'PDF reenviado com sucesso para {payslip.user.full_name} ({payslip.period_display}).'
+    )
+    return redirect('contracheque:admin_payslips')
+
+
 # ─── Excluir em lote por mês ─────────────────────────────────────────────────
 
 @login_required
