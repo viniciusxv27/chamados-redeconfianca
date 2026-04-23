@@ -79,6 +79,17 @@ def get_excel_urls(selected_year=None, selected_month=None):
             'version_month': ref_month,
             'version_id': None,
         }
+    except Exception:
+        # Se der erro ao acessar banco, usar valores padrão
+        return {
+            'comissao': DEFAULT_EXCEL_COMISSAO_URL,
+            'vendas': DEFAULT_EXCEL_VENDAS_URL,
+            'base_pagamento': DEFAULT_EXCEL_BASE_PAGAMENTO_URL,
+            'base_exclusao': DEFAULT_EXCEL_BASE_EXCLUSAO_URL,
+            'version_year': None,
+            'version_month': None,
+            'version_id': None,
+        }
 
 
 def resolve_commission_reference_from_request(request):
@@ -157,17 +168,6 @@ def resolve_commission_reference_from_request(request):
         'cache_suffix': f"{selected_year}_{selected_month:02d}",
         'invalid_selection': invalid_selection,
     }
-    except Exception:
-        # Se der erro ao acessar banco, usar valores padrão
-        return {
-            'comissao': DEFAULT_EXCEL_COMISSAO_URL,
-            'vendas': DEFAULT_EXCEL_VENDAS_URL,
-            'base_pagamento': DEFAULT_EXCEL_BASE_PAGAMENTO_URL,
-            'base_exclusao': DEFAULT_EXCEL_BASE_EXCLUSAO_URL,
-            'version_year': None,
-            'version_month': None,
-            'version_id': None,
-        }
 
 
 # Manter variáveis globais para compatibilidade (serão substituídas gradualmente)
