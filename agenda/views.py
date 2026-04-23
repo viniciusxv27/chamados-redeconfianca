@@ -13,6 +13,11 @@ from users.models import User, Sector
 from .models import CalendarEvent, MeetingRequest, EventParticipant, MeetingTranscription
 
 try:
+    from core.models import NotificationMixin
+except ImportError:
+    NotificationMixin = None
+
+try:
     from notifications.push_utils import send_push_notification_to_user
 except ImportError:
     send_push_notification_to_user = None
@@ -29,6 +34,53 @@ HIERARCHY_RANK = {
     'ADMIN': 3,
     'SUPERADMIN': 4,
 }
+
+
+def _format_event_datetime(value):
+    """Formata data/hora para mensagens de notificação."""
+    if not value:
+        return ''
+    try:
+        if timezone.is_naive(value):
+            return value.strftime('%d/%m/%Y às %H:%M')
+        return timezone.localtime(value).strftime('%d/%m/%Y às %H:%M')
+    except Exception:
+        return str(value)
+
+
+def _notify_agenda_user(user, title, message, action_url='/agenda/'):
+    """Envia notificação interna e push, com fallback silencioso."""
+    if not user:
+        return
+
+    if NotificationMixin:
+        try:
+            NotificationMixin.create_notification(
+                user=user,
+                title=title,
+                message=message,
+                notification_type='SYSTEM',
+                related_url=action_url,
+            )
+        except Exception:
+            pass
+
+    if send_push_notification_to_user:
+        try:
+            send_push_notification_to_user(
+                user,
+                title,
+                message,
+                action_url=action_url,
+            )
+        except Exception:
+            pass
+
+
+def _notify_agenda_users(users, title, message, action_url='/agenda/'):
+    """Dispara notificação para uma lista de usuários."""
+    for user in users:
+        _notify_agenda_user(user, title, message, action_url=action_url)
 
 
 def _can_view_full_calendar(viewer, target):
@@ -480,6 +532,14 @@ def api_event_create(request):
         recurrence_until=_parse_recurrence_until(data.get('recurrence_until')),
     )
 
+    formatted_start = _format_event_datetime(event.start)
+    _notify_agenda_user(
+        request.user,
+        'Evento marcado na agenda',
+        f'Você marcou "{event.title}" para {formatted_start}.',
+        action_url='/agenda/',
+    )
+
     # Participantes - criar convites pendentes
     participant_ids = data.get('participants', [])
     invited_users = []
@@ -491,17 +551,12 @@ def api_event_create(request):
                 user=user,
                 status='pending',
             )
-            # Enviar notificação push
-            if send_push_notification_to_user:
-                try:
-                    send_push_notification_to_user(
-                        user,
-                        'Convite para evento',
-                        f'{request.user.full_name} convidou você para: {event.title}',
-                        action_url='/agenda/',
-                    )
-                except Exception:
-                    pass
+            _notify_agenda_user(
+                user,
+                'Convite para evento',
+                f'{request.user.full_name} marcou "{event.title}" com você para {formatted_start}.',
+                action_url='/agenda/',
+            )
 
     # Gerar ocorrências recorrentes (semanal)
     if event.recurrence_rule == 'weekly':
@@ -521,6 +576,8 @@ def api_event_create(request):
 def api_event_update(request, pk):
     """Atualizar evento (mover/redimensionar/editar)"""
     event = get_object_or_404(CalendarEvent, pk=pk, owner=request.user)
+    old_start = event.start
+    old_end = event.end
 
     try:
         data = json.loads(request.body)
@@ -572,17 +629,21 @@ def api_event_update(request, pk):
                 user=user,
                 status='pending',
             )
-            # Enviar notificação push
-            if send_push_notification_to_user:
-                try:
-                    send_push_notification_to_user(
-                        user,
-                        'Convite para evento',
-                        f'{request.user.full_name} convidou você para: {event.title}',
-                        action_url='/agenda/',
-                    )
-                except Exception:
-                    pass
+            _notify_agenda_user(
+                user,
+                'Convite para evento',
+                f'{request.user.full_name} convidou você para "{event.title}".',
+                action_url='/agenda/',
+            )
+
+    if event.start != old_start or event.end != old_end:
+        participants_to_notify = event.participants.exclude(pk=request.user.pk)
+        _notify_agenda_users(
+            participants_to_notify,
+            'Evento remarcado',
+            f'{request.user.full_name} remarcou "{event.title}" para {_format_event_datetime(event.start)}.',
+            action_url='/agenda/',
+        )
 
     return JsonResponse({'ok': True})
 
@@ -656,9 +717,23 @@ def api_event_invitation_respond(request, pk):
     
     if action == 'accept':
         invitation.accept(notes)
+        if invitation.event.owner_id != request.user.pk:
+            _notify_agenda_user(
+                invitation.event.owner,
+                'Convite aceito',
+                f'{request.user.full_name} aceitou o convite para "{invitation.event.title}".',
+                action_url='/agenda/',
+            )
         return JsonResponse({'ok': True, 'message': 'Convite aceito!'})
     elif action == 'reject':
         invitation.reject(notes)
+        if invitation.event.owner_id != request.user.pk:
+            _notify_agenda_user(
+                invitation.event.owner,
+                'Convite recusado',
+                f'{request.user.full_name} recusou o convite para "{invitation.event.title}".',
+                action_url='/agenda/',
+            )
         return JsonResponse({'ok': True, 'message': 'Convite recusado.'})
     else:
         return JsonResponse({'error': 'Ação inválida'}, status=400)
@@ -736,7 +811,7 @@ def request_meeting(request, user_id):
             for e in errors:
                 messages.error(request, e)
         else:
-            MeetingRequest.objects.create(
+            meeting_request = MeetingRequest.objects.create(
                 requester=request.user,
                 target=target,
                 title=title,
@@ -745,6 +820,12 @@ def request_meeting(request, user_id):
                 proposed_start=proposed_start,
                 proposed_end=proposed_end,
                 location=location,
+            )
+            _notify_agenda_user(
+                target,
+                'Nova solicitação de reunião',
+                f'{request.user.full_name} solicitou "{meeting_request.title}" para {_format_event_datetime(meeting_request.proposed_start)}.',
+                action_url='/agenda/solicitacoes/?tab=received',
             )
             messages.success(request, f'Solicitação enviada para {target.full_name}!')
             return redirect('agenda:meeting_requests')
@@ -790,6 +871,12 @@ def meeting_request_accept(request, pk):
     mr = get_object_or_404(MeetingRequest, pk=pk, target=request.user, status='pending')
     notes = request.POST.get('response_notes', '')
     mr.accept(notes)
+    _notify_agenda_user(
+        mr.requester,
+        'Solicitação aceita',
+        f'{request.user.full_name} aceitou "{mr.title}". Reunião marcada para {_format_event_datetime(mr.proposed_start)}.',
+        action_url='/agenda/solicitacoes/?tab=sent',
+    )
     messages.success(request, f'Reunião "{mr.title}" aceita! Evento adicionado à sua agenda.')
     return redirect('agenda:meeting_requests')
 
@@ -801,6 +888,12 @@ def meeting_request_reject(request, pk):
     mr = get_object_or_404(MeetingRequest, pk=pk, target=request.user, status='pending')
     notes = request.POST.get('response_notes', '')
     mr.reject(notes)
+    _notify_agenda_user(
+        mr.requester,
+        'Solicitação recusada',
+        f'{request.user.full_name} recusou "{mr.title}".',
+        action_url='/agenda/solicitacoes/?tab=sent',
+    )
     messages.success(request, f'Solicitação de reunião "{mr.title}" recusada.')
     return redirect('agenda:meeting_requests')
 
@@ -811,6 +904,12 @@ def meeting_request_cancel(request, pk):
     """Cancelar solicitação enviada"""
     mr = get_object_or_404(MeetingRequest, pk=pk, requester=request.user, status='pending')
     mr.cancel()
+    _notify_agenda_user(
+        mr.target,
+        'Solicitação cancelada',
+        f'{request.user.full_name} cancelou a solicitação "{mr.title}".',
+        action_url='/agenda/solicitacoes/?tab=received',
+    )
     messages.success(request, 'Solicitação cancelada.')
     return redirect('agenda:meeting_requests')
 
@@ -1227,6 +1326,13 @@ def api_transcription_schedule(request, pk):
         start=start,
         end=end,
         color='#16a34a',
+    )
+
+    _notify_agenda_user(
+        request.user,
+        'Evento marcado na agenda',
+        f'O evento "{event.title}" foi marcado a partir da transcrição "{transcription.title}".',
+        action_url='/agenda/',
     )
 
     return JsonResponse({

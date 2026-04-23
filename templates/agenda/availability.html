@@ -8,12 +8,12 @@
     <div class="mb-6">
         <nav class="flex mb-2">
             <ol class="inline-flex items-center space-x-1 md:space-x-3">
-                <li><a href="{% url 'agenda:calendar' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-calendar-alt mr-1"></i> Agenda</a></li>
+                <li><a href="{% url 'agenda:calendar' %}" class="text-sm text-gray-500 hover:text-primary"><i class="fas fa-calendar-alt mr-1"></i> Agenda</a></li>
                 <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">Disponibilidade</span></div></li>
             </ol>
         </nav>
         <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold">
+            <div class="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-bold">
                 {{ target_user.first_name|first }}{{ target_user.last_name|first }}
             </div>
             <div>
@@ -27,18 +27,18 @@
     <div class="bg-white shadow rounded-lg mb-6 p-4">
         <div class="flex items-center justify-between mb-3">
             <a href="?date={{ selected_date|date:'Y-m-d' }}&offset=-7"
-               class="text-sm text-indigo-600 hover:text-indigo-800"><i class="fas fa-chevron-left mr-1"></i> Semana anterior</a>
+               class="text-sm text-primary hover:text-orange-600"><i class="fas fa-chevron-left mr-1"></i> Semana anterior</a>
             <h3 class="text-sm font-semibold text-gray-700">
                 {{ selected_date|date:"d/m/Y" }} — {{ selected_date|date:"l" }}
             </h3>
             <a href="?date={{ selected_date|date:'Y-m-d' }}&offset=7"
-               class="text-sm text-indigo-600 hover:text-indigo-800">Próxima semana <i class="fas fa-chevron-right ml-1"></i></a>
+               class="text-sm text-primary hover:text-orange-600">Próxima semana <i class="fas fa-chevron-right ml-1"></i></a>
         </div>
         <div class="grid grid-cols-7 gap-1 sm:gap-2">
             {% for d in week_dates %}
             <a href="?date={{ d|date:'Y-m-d' }}"
-               class="text-center p-2 rounded-lg text-sm transition-colors {% if d == selected_date %}bg-indigo-600 text-white{% elif d == today %}bg-indigo-50 text-indigo-700 border border-indigo-200{% else %}hover:bg-gray-100 text-gray-700{% endif %}">
-                <div class="text-xs font-medium {% if d == selected_date %}text-indigo-100{% else %}text-gray-400{% endif %}">{{ d|date:"D" }}</div>
+               class="text-center p-2 rounded-lg text-sm transition-colors {% if d == selected_date %}bg-primary text-white{% elif d == today %}bg-orange-50 text-orange-700 border border-orange-200{% else %}hover:bg-gray-100 text-gray-700{% endif %}">
+                <div class="text-xs font-medium {% if d == selected_date %}text-orange-100{% else %}text-gray-400{% endif %}">{{ d|date:"D" }}</div>
                 <div class="font-bold">{{ d|date:"d" }}</div>
             </a>
             {% endfor %}
@@ -78,7 +78,7 @@
     {% if can_view_full %}
     <div class="mt-4 text-center">
         <a href="{% url 'agenda:view_user_calendar' target_user.pk %}"
-           class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+           class="inline-flex items-center text-sm text-primary hover:text-orange-600 font-medium">
             <i class="fas fa-eye mr-1"></i> Ver agenda completa de {{ target_user.first_name }}
         </a>
     </div>

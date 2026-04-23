@@ -6,10 +6,10 @@
 <div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
     <div class="flex items-center justify-between mb-5">
         <div>
-            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-handshake mr-2 text-indigo-600"></i> Solicitações de Reunião</h1>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-handshake mr-2 text-primary"></i> Solicitações de Reunião</h1>
             <p class="text-sm text-gray-500 mt-1">Gerencie suas solicitações recebidas e enviadas</p>
         </div>
-        <a href="{% url 'agenda:calendar' %}" class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800">
+        <a href="{% url 'agenda:calendar' %}" class="inline-flex items-center text-sm text-primary hover:text-orange-600">
             <i class="fas fa-calendar-alt mr-1"></i> Agenda
         </a>
     </div>
@@ -18,10 +18,10 @@
     <div class="border-b border-gray-200 mb-4">
         <nav class="flex -mb-px space-x-4">
             <button type="button" onclick="switchTab('received')" id="tab-received"
-                    class="tab-btn py-2 px-3 border-b-2 border-indigo-500 text-sm font-medium text-indigo-600 cursor-pointer">
+                    class="tab-btn py-2 px-3 border-b-2 border-orange-500 text-sm font-medium text-primary cursor-pointer">
                 Recebidas
                 {% if received_requests.count > 0 %}
-                <span class="ml-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs">{{ received_requests.count }}</span>
+                <span class="ml-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs">{{ received_requests.count }}</span>
                 {% endif %}
             </button>
             <button type="button" onclick="switchTab('sent')" id="tab-sent"
@@ -71,7 +71,7 @@
                         <p class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">{{ req.description }}</p>
                         {% endif %}
                         {% if req.response_notes %}
-                        <p class="text-sm text-indigo-700 mt-1 italic"><i class="fas fa-reply mr-1"></i> {{ req.response_notes }}</p>
+                        <p class="text-sm text-orange-700 mt-1 italic"><i class="fas fa-reply mr-1"></i> {{ req.response_notes }}</p>
                         {% endif %}
                     </div>
                 </div>
@@ -140,7 +140,7 @@
                         <p class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">{{ req.description }}</p>
                         {% endif %}
                         {% if req.response_notes %}
-                        <p class="text-sm text-indigo-700 mt-1 italic"><i class="fas fa-reply mr-1"></i> {{ req.response_notes }}</p>
+                        <p class="text-sm text-orange-700 mt-1 italic"><i class="fas fa-reply mr-1"></i> {{ req.response_notes }}</p>
                         {% endif %}
                     </div>
                 </div>
@@ -170,11 +170,11 @@
 <script>
 function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => {
-        b.classList.remove('border-indigo-500', 'text-indigo-600');
+        b.classList.remove('border-orange-500', 'text-primary');
         b.classList.add('border-transparent', 'text-gray-500');
     });
     document.getElementById('tab-' + tab).classList.remove('border-transparent', 'text-gray-500');
-    document.getElementById('tab-' + tab).classList.add('border-indigo-500', 'text-indigo-600');
+    document.getElementById('tab-' + tab).classList.add('border-orange-500', 'text-primary');
     document.getElementById('panel-received').classList.toggle('hidden', tab !== 'received');
     document.getElementById('panel-sent').classList.toggle('hidden', tab !== 'sent');
     
