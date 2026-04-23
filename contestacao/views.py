@@ -95,8 +95,11 @@ def _can_sync_exclusions(user):
     return _can_access_contestation_module(user)
 
 
-def _open_contestation_filter():
-    return Q(status__in=['pending', 'accepted']) | Q(status='confirmed', payment_status='pending_payment')
+def _open_contestation_filter(since=None):
+    base_filter = Q(status__in=['pending', 'accepted']) | Q(status='confirmed', payment_status='pending_payment')
+    if since:
+        return base_filter & Q(created_at__gte=since)
+    return base_filter
 
 
 def _normalize_sector_name(sector_name):
@@ -612,25 +615,21 @@ def exclusion_list(request):
     pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
     filiais = qs.values_list('filial', flat=True).distinct().order_by('filial')
 
-    # IDs que já têm contestação ativa com seus status (rejeitadas ficam livres para novo envio)
+    sync_state = _get_sync_window_state()
+
+    # IDs que já têm contestação ativa no ciclo atual (após última sincronização).
     contestations_map = {}
-    for c in Contestation.objects.filter(
-        _open_contestation_filter()
-    ).values('exclusion_id', 'status', 'pk'):
+    current_cycle_filter = _open_contestation_filter(sync_state['last_sync_at']) if sync_state['has_sync'] else Q(pk__in=[])
+    for c in Contestation.objects.filter(current_cycle_filter).values('exclusion_id', 'status', 'pk'):
         contestations_map[c['exclusion_id']] = {'status': c['status'], 'pk': c['pk']}
 
-    locked_sectors = set(
-        Contestation.objects.filter(_open_contestation_filter())
-        .values_list('exclusion__filial', flat=True)
-    )
-    locked_sectors = {str(sector).strip().upper() for sector in locked_sectors if sector}
+    locked_sectors = set()
     
     # Keep backwards compatibility
     contested_ids = set(contestations_map.keys())
 
     total_records = qs.count()
     total_receita = qs.aggregate(total=Sum('receita'))['total'] or 0
-    sync_state = _get_sync_window_state()
 
     paginator = Paginator(qs, 50)
     page_number = request.GET.get('page')
@@ -946,14 +945,12 @@ def create_contestation(request, exclusion_id):
 
     exclusion = get_object_or_404(ExclusionRecord, pk=exclusion_id)
 
-    # Verificar se já existe contestação em andamento
-    existing = Contestation.objects.filter(exclusion=exclusion).filter(_open_contestation_filter()).first()
+    # Verificar se já existe contestação em andamento no ciclo atual (última sincronização).
+    existing = Contestation.objects.filter(exclusion=exclusion).filter(
+        _open_contestation_filter(sync_state['last_sync_at'])
+    ).first()
     if existing:
         messages.warning(request, 'Já existe uma contestação em andamento para este registro.')
-        return redirect('contestacao:exclusion_list')
-
-    if _has_open_contestation_for_sector(exclusion.filial):
-        messages.warning(request, f'Já existe uma contestação em andamento para o setor {exclusion.filial}.')
         return redirect('contestacao:exclusion_list')
 
     if request.method == 'POST':
@@ -1041,18 +1038,12 @@ def bulk_create_contestation(request):
         d.exclusion_id: d for d in ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=exclusion_ids)
     }
 
-    # Filter out already contested
+    # Filter out already contested in current cycle only
     already_contested = set(
         Contestation.objects.filter(exclusion_id__in=exclusion_ids)
-        .filter(_open_contestation_filter())
+        .filter(_open_contestation_filter(sync_state['last_sync_at']))
         .values_list('exclusion_id', flat=True)
     )
-
-    open_sectors = set(
-        Contestation.objects.filter(_open_contestation_filter())
-        .values_list('exclusion__filial', flat=True)
-    )
-    open_sectors = {str(sector).strip().upper() for sector in open_sectors if sector}
 
     created_count = 0
     created_ids = []
@@ -1069,8 +1060,6 @@ def bulk_create_contestation(request):
         if not attachment:
             continue
         exclusion = exclusions_by_id[eid]
-        if str(exclusion.filial).strip().upper() in open_sectors:
-            continue
         c = Contestation.objects.create(
             exclusion=exclusion,
             requester=request.user,
@@ -1087,8 +1076,6 @@ def bulk_create_contestation(request):
         created_count += 1
         created_ids.append(eid)
         already_contested.add(eid)
-        if exclusion.filial:
-            open_sectors.add(str(exclusion.filial).strip().upper())
 
     if created_count == 0:
         return JsonResponse({'success': False, 'error': 'Nenhuma contestacao pode ser criada. Verifique se os itens possuem motivo e evidencia salvos.'})

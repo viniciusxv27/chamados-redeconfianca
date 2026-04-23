@@ -304,10 +304,6 @@
                             <span class="text-xs font-medium text-red-600" title="Sincronize novamente a planilha para liberar novas contestações.">
                                 <i class="fas fa-lock mr-1"></i>Contestação bloqueada
                             </span>
-                            {% elif r.filial|upper in locked_sectors %}
-                            <span class="text-xs font-medium text-red-600" title="Já existe contestação em andamento neste setor.">
-                                <i class="fas fa-lock mr-1"></i>Setor bloqueado
-                            </span>
                             {% else %}
                             <div class="inline-flex items-center gap-1.5 flex-wrap justify-center">
                                 <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35 !important; color: white !important; padding: 0.35rem 0.6rem !important; border-radius: 0.45rem !important; border: none !important; font-size: 0.68rem !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; white-space: nowrap !important;" id="btn-{{ r.pk }}">
@@ -323,7 +319,7 @@
                         </td>
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
-                    {% if not info and r.filial|upper not in locked_sectors and not contestation_blocked %}
+                    {% if not info and not contestation_blocked %}
                     <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
                         <td colspan="12" class="px-4 py-4">
                             <div class="reason-content bg-white rounded-lg p-5 shadow-sm" style="background-color: #ffffff !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
@@ -418,8 +414,6 @@
             {% else %}
                 {% if contestation_blocked %}
                 <span class="text-xs font-medium text-red-600"><i class="fas fa-lock mr-1"></i>Contestação bloqueada</span>
-                {% elif r.filial|upper in locked_sectors %}
-                <span class="text-xs font-medium text-red-600"><i class="fas fa-lock mr-1"></i>Setor bloqueado</span>
                 {% else %}
                 <div class="grid grid-cols-2 gap-2 mt-3">
                 <button type="button" onclick="openReason({{ r.pk }})" style="background-color: #FF6B35 !important; color: white !important; padding: 0.75rem 0.5rem !important; border-radius: 0.5rem !important; border: none !important; font-size: 0.75rem !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 100% !important;" id="btn-mobile-{{ r.pk }}">
