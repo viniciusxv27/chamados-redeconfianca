@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
-from django.db.models import Q, Count, Sum, Case, When, IntegerField, F
+from django.db.models import Q, Count, Sum, Case, When, IntegerField, F, Max
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from datetime import datetime, timedelta, date
@@ -2988,3 +2988,105 @@ def api_delete_executions(request):
         return JsonResponse({'error': 'Dados inválidos.'}, status=400)
     except Exception as e:
         return JsonResponse({'error': f'Erro ao excluir: {str(e)}'}, status=500)
+
+
+@login_required
+@require_POST
+def api_delete_duplicate_executions(request):
+    """API para remover execuções duplicadas com base nos filtros da tela administrativa"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+
+    if not is_authorized:
+        return JsonResponse({'error': 'Você não tem permissão para remover duplicados.'}, status=403)
+
+    # Usar os mesmos filtros da tela de controle de execuções
+    template_filter = request.GET.get('template', '')
+    sector_filter = request.GET.get('sector', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    status_filter = request.GET.get('status', '')
+    period_filter = request.GET.get('period', '')
+
+    # Data padrão: últimos 30 dias
+    if not date_from:
+        date_from = (timezone.now().date() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if not date_to:
+        date_to = timezone.now().date().strftime('%Y-%m-%d')
+
+    try:
+        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Datas inválidas para deduplicação.'}, status=400)
+
+    executions = ChecklistExecution.objects.filter(
+        execution_date__gte=date_from_obj,
+        execution_date__lte=date_to_obj
+    )
+
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
+        else:
+            executions = executions.none()
+
+    if template_filter:
+        executions = executions.filter(assignment__template_id=template_filter)
+
+    if sector_filter:
+        executions = executions.filter(assignment__template__sector_id=sector_filter)
+
+    if user_filter:
+        executions = executions.filter(assignment__assigned_to_id=user_filter)
+
+    if status_filter:
+        executions = executions.filter(status=status_filter)
+
+    if period_filter:
+        executions = executions.filter(period=period_filter)
+
+    duplicate_groups = executions.values(
+        'assignment__template_id',
+        'assignment__assigned_to_id',
+        'execution_date',
+        'period',
+    ).annotate(
+        group_count=Count('id'),
+        keep_id=Max('id'),
+    ).filter(group_count__gt=1)
+
+    ids_to_delete = []
+    for group in duplicate_groups:
+        group_ids = list(
+            executions.filter(
+                assignment__template_id=group['assignment__template_id'],
+                assignment__assigned_to_id=group['assignment__assigned_to_id'],
+                execution_date=group['execution_date'],
+                period=group['period'],
+            ).exclude(id=group['keep_id']).values_list('id', flat=True)
+        )
+        ids_to_delete.extend(group_ids)
+
+    deleted_count = len(ids_to_delete)
+
+    if deleted_count == 0:
+        return JsonResponse({
+            'success': True,
+            'message': 'Nenhuma execução duplicada encontrada com os filtros selecionados.',
+            'deleted_count': 0,
+        })
+
+    ChecklistExecution.objects.filter(id__in=ids_to_delete).delete()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{deleted_count} execução(ões) duplicada(s) removida(s) com sucesso!',
+        'deleted_count': deleted_count,
+    })

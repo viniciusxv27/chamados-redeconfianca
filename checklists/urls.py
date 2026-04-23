@@ -46,6 +46,7 @@ urlpatterns = [
     path('admin/executions/', views.admin_executions, name='admin_executions'),
     path('admin/executions/macro/', views.admin_executions_macro, name='admin_executions_macro'),
     path('api/delete-executions/', views.api_delete_executions, name='api_delete_executions'),
+    path('api/delete-duplicate-executions/', views.api_delete_duplicate_executions, name='api_delete_duplicate_executions'),
     
     # Admin - Configurações de Aprovação de Atribuições
     path('admin/settings/approvers/', views.admin_assignment_approvers, name='admin_assignment_approvers'),
