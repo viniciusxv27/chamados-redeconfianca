@@ -91,8 +91,15 @@ def _can_access_contestation_module(user):
 
 
 def _can_sync_exclusions(user):
-    """Permite sincronização para usuários com acesso ao módulo de contestação."""
-    return _can_access_contestation_module(user)
+    """Permite sincronização apenas para perfis administrativos (não-gerente padrão)."""
+    if not _can_access_contestation_module(user):
+        return False
+
+    rank = HIERARCHY_RANK.get(user.hierarchy, 0)
+    if rank <= HIERARCHY_RANK['PADRAO'] and not _has_global_contestation_access(user):
+        return False
+
+    return True
 
 
 def _open_contestation_filter(since=None):
@@ -237,28 +244,26 @@ def _apply_exclusion_scope_for_user(exclusion_qs, user):
     if can_view_all_scope:
         return exclusion_qs
 
-    if user.hierarchy == 'PADRAO':
-        user_name_candidates = _build_user_name_candidates(user)
-        if not user_name_candidates:
-            return exclusion_qs.none()
-
-        matching_ids = []
-        for record in exclusion_qs:
-            gerente_name = _normalize_person_name(record.gerente)
-            if gerente_name and gerente_name in user_name_candidates:
-                matching_ids.append(record.id)
-        return exclusion_qs.filter(id__in=matching_ids) if matching_ids else exclusion_qs.none()
-
     user_sectors = list(user.sectors.values_list('name', flat=True))
     if user.sector:
         user_sectors.append(user.sector.name)
 
-    if not user_sectors:
+    if user_sectors:
+        matching_ids = []
+        for record in exclusion_qs:
+            if _match_sector_to_filial(user_sectors, record.filial):
+                matching_ids.append(record.id)
+        return exclusion_qs.filter(id__in=matching_ids) if matching_ids else exclusion_qs.none()
+
+    # Fallback para usuários sem setor vinculado: mantém compatibilidade por gerente da planilha.
+    user_name_candidates = _build_user_name_candidates(user)
+    if not user_name_candidates:
         return exclusion_qs.none()
 
     matching_ids = []
     for record in exclusion_qs:
-        if _match_sector_to_filial(user_sectors, record.filial):
+        gerente_name = _normalize_person_name(record.gerente)
+        if gerente_name and gerente_name in user_name_candidates:
             matching_ids.append(record.id)
     return exclusion_qs.filter(id__in=matching_ids) if matching_ids else exclusion_qs.none()
 
