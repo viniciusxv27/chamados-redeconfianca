@@ -18,6 +18,7 @@ from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 import json
+import hashlib
 import pandas as pd
 from io import BytesIO
 import unicodedata
@@ -37,15 +38,25 @@ DEFAULT_EXCEL_VENDAS_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQAVeQ-dgEiBTYG
 DEFAULT_EXCEL_BASE_PAGAMENTO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBHZkNccF89Tb0x1dXfoLhiAT8Q5C_fzHlIyUnc2L2FJVs?e=vAO4OX"
 DEFAULT_EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
 
+MONTH_NAMES_PT = {
+    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+}
 
-def get_excel_urls():
+
+def get_excel_urls(selected_year=None, selected_month=None):
     """
     Obtém as URLs das planilhas Excel do banco de dados.
     Retorna valores padrão se não houver configuração.
     """
     try:
         config = SystemConfig.get_config()
-        ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
+        if selected_year is not None and selected_month is not None:
+            ref_year, ref_month = int(selected_year), int(selected_month)
+        else:
+            ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
+
         version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
 
         if version:
@@ -68,6 +79,84 @@ def get_excel_urls():
             'version_month': ref_month,
             'version_id': None,
         }
+
+
+def resolve_commission_reference_from_request(request):
+    """Resolve mês/ano de referência com base no histórico disponível e GET."""
+    config = SystemConfig.get_config()
+    default_year, default_month = config.get_display_reference_month_year(base_date=timezone.now())
+
+    version_refs = list(
+        CommissionSpreadsheetVersion.objects.values('year', 'month').order_by('-year', '-month')
+    )
+
+    by_year = {}
+    for item in version_refs:
+        by_year.setdefault(item['year'], set()).add(item['month'])
+
+    year_options = sorted(by_year.keys(), reverse=True)
+    selected_year_raw = request.GET.get('year')
+    selected_month_raw = request.GET.get('month')
+
+    invalid_selection = False
+    selected_year = None
+    selected_month = None
+
+    try:
+        if selected_year_raw:
+            selected_year = int(selected_year_raw)
+        if selected_month_raw:
+            selected_month = int(selected_month_raw)
+    except (TypeError, ValueError):
+        invalid_selection = True
+        selected_year = None
+        selected_month = None
+
+    if selected_year is None:
+        if default_year in by_year:
+            selected_year = default_year
+        elif year_options:
+            selected_year = year_options[0]
+        else:
+            selected_year = default_year
+
+    months_for_year = sorted(by_year.get(selected_year, set()), reverse=True)
+
+    if selected_month is None:
+        if selected_year == default_year and default_month in months_for_year:
+            selected_month = default_month
+        elif months_for_year:
+            selected_month = months_for_year[0]
+        else:
+            selected_month = default_month
+    elif selected_month not in months_for_year:
+        invalid_selection = True
+        if selected_year == default_year and default_month in months_for_year:
+            selected_month = default_month
+        elif months_for_year:
+            selected_month = months_for_year[0]
+        else:
+            selected_month = default_month
+
+    month_options = [
+        {'value': month, 'label': MONTH_NAMES_PT.get(month, str(month))}
+        for month in months_for_year
+    ]
+
+    # Sem versões cadastradas: mantém fallback visual coerente.
+    if not month_options:
+        month_options = [{'value': selected_month, 'label': MONTH_NAMES_PT.get(selected_month, str(selected_month))}]
+    if not year_options:
+        year_options = [selected_year]
+
+    return {
+        'year': selected_year,
+        'month': selected_month,
+        'year_options': year_options,
+        'month_options': month_options,
+        'cache_suffix': f"{selected_year}_{selected_month:02d}",
+        'invalid_selection': invalid_selection,
+    }
     except Exception:
         # Se der erro ao acessar banco, usar valores padrão
         return {
@@ -275,7 +364,8 @@ def download_excel_file(excel_url, cache_key_prefix="excel"):
     """
     Baixa arquivo Excel do OneDrive e retorna como BytesIO
     """
-    cache_key = f"{cache_key_prefix}_file_content"
+    url_hash = hashlib.md5(excel_url.encode('utf-8')).hexdigest()[:10]
+    cache_key = f"{cache_key_prefix}_{url_hash}_file_content"
     cached_content = cache.get(cache_key)
     
     if cached_content:
@@ -329,7 +419,7 @@ def download_excel_file(excel_url, cache_key_prefix="excel"):
     return BytesIO(response.content), None
 
 
-def fetch_excel_data(sheet_name, user_name, excel_url=None):
+def fetch_excel_data(sheet_name, user_name, excel_url=None, cache_suffix=None):
     """
     Busca dados da planilha Excel do OneDrive
     Retorna os dados do usuário específico
@@ -338,7 +428,7 @@ def fetch_excel_data(sheet_name, user_name, excel_url=None):
         urls = get_excel_urls()
         excel_url = urls['comissao']
         
-    cache_key = f"commission_data_{sheet_name}_{user_name.replace(' ', '_')}"
+    cache_key = f"commission_data_{sheet_name}_{user_name.replace(' ', '_')}_{cache_suffix or 'default'}"
     cached_data = cache.get(cache_key)
     
     if cached_data:
@@ -409,7 +499,7 @@ def fetch_excel_data(sheet_name, user_name, excel_url=None):
         return {'error': f'Erro ao processar dados: {str(e)}'}
 
 
-def fetch_all_users_from_sheet(sheet_name, excel_url=None):
+def fetch_all_users_from_sheet(sheet_name, excel_url=None, cache_suffix=None):
     """
     Busca todos os usuários de uma sheet da planilha
     Retorna lista com dados de todos os usuários
@@ -418,7 +508,7 @@ def fetch_all_users_from_sheet(sheet_name, excel_url=None):
         urls = get_excel_urls()
         excel_url = urls['comissao']
         
-    cache_key = f"commission_all_users_{sheet_name}"
+    cache_key = f"commission_all_users_{sheet_name}_{cache_suffix or 'default'}"
     cached_data = cache.get(cache_key)
     
     if cached_data:
@@ -478,7 +568,7 @@ def fetch_all_users_from_sheet(sheet_name, excel_url=None):
         return {'error': f'Erro ao processar dados: {str(e)}'}
 
 
-def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
+def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=None, cache_suffix=None):
     """
     Busca Pago e Exclusão por pilar da planilha BASE_PAGAMENTO.
     
@@ -491,13 +581,14 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     Agrupa por PILAR e soma Receita
     """
     # Cache key diferente para gerente vs CN
-    cache_suffix = f"gerente_{user_sector}" if is_gerente else f"cn_{user_name}"
-    cache_key = f"metas_pilar_v2_{cache_suffix.replace(' ', '_')}"
+    scope_suffix = f"gerente_{user_sector}" if is_gerente else f"cn_{user_name}"
+    reference_suffix = cache_suffix or 'default'
+    cache_key = f"metas_pilar_v2_{scope_suffix.replace(' ', '_')}_{reference_suffix}"
     
     # Verificar cache
     cached_data = cache.get(cache_key)
     if cached_data:
-        print(f"[fetch_metas_por_pilar] Usando cache para {cache_suffix}")
+        print(f"[fetch_metas_por_pilar] Usando cache para {scope_suffix} ({reference_suffix})")
         return cached_data
     
     # Inicializar metas
@@ -574,7 +665,8 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
     print(f"[fetch_metas_por_pilar] user_sector_normalized={user_sector_normalized}")
     
     # Obter URLs dinâmicas
-    urls = get_excel_urls()
+    if urls is None:
+        urls = get_excel_urls()
     
     try:
         # Baixar planilha BASE_PAGAMENTO (apenas para dados de pagamento)
@@ -800,14 +892,14 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None):
         return metas
 
 
-def fetch_metas_por_pilar_coordenador(coordenador_nome):
+def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=None):
     """
     Busca Pago e Exclusão por pilar da planilha BASE_PAGAMENTO para um coordenador.
     Filtra pela coluna COORDENACAO usando o primeiro nome do coordenador.
     
     Agrupa por PILAR e soma Receita de todas as lojas do coordenador.
     """
-    cache_key = f"metas_pilar_coord_{coordenador_nome.replace(' ', '_')}"
+    cache_key = f"metas_pilar_coord_{coordenador_nome.replace(' ', '_')}_{cache_suffix or 'default'}"
     
     # Verificar cache
     cached_data = cache.get(cache_key)
@@ -862,7 +954,8 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome):
     print(f"[fetch_metas_por_pilar_coordenador] Buscando dados para coordenador: {coordenador_nome} (primeiro nome: {coord_first_name})")
     
     # Obter URLs dinâmicas
-    urls = get_excel_urls()
+    if urls is None:
+        urls = get_excel_urls()
     
     try:
         # Baixar planilha BASE_PAGAMENTO
@@ -1021,18 +1114,22 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome):
         return metas
 
 
-def fetch_vendas_data(user_name):
+def fetch_vendas_data(user_name, excel_url=None, cache_suffix=None, urls=None):
     """
     Busca dados de vendas do usuário da planilha de vendas e metas
     """
-    cache_key = f"vendas_data_{user_name.replace(' ', '_')}"
+    cache_key = f"vendas_data_{user_name.replace(' ', '_')}_{cache_suffix or 'default'}"
     cached_data = cache.get(cache_key)
     
     if cached_data:
         return cached_data
     
     try:
-        excel_file, error = download_excel_file(EXCEL_VENDAS_URL, "vendas")
+        if urls is None:
+            urls = get_excel_urls()
+        if excel_url is None:
+            excel_url = urls['vendas']
+        excel_file, error = download_excel_file(excel_url, "vendas")
         if error:
             return {'error': error, 'vendas': [], 'metas_pilar': {}}
         
@@ -1076,7 +1173,11 @@ def fetch_vendas_data(user_name):
                 user_rows.append(row_data)
         
         # Buscar metas por pilar das sheets específicas (Total, Pago, Exclusão)
-        metas_pilar = fetch_metas_por_pilar(user_name)
+        metas_pilar = fetch_metas_por_pilar(
+            user_name,
+            urls=urls,
+            cache_suffix=cache_suffix,
+        )
         
         result = {
             'success': True,
@@ -1223,7 +1324,7 @@ def convert_percentage(value):
     return value
 
 
-def get_month_names():
+def get_month_names(reference_year=None, reference_month=None):
     """
     Retorna os nomes dos meses M1, M2, M3 baseado no mês atual.
     Também retorna o mês de referência (2 meses atrás).
@@ -1235,14 +1336,13 @@ def get_month_names():
     from datetime import datetime
     from dateutil.relativedelta import relativedelta
     
-    meses_pt = {
-        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
-        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
-        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
-    }
-    
-    config = SystemConfig.get_config()
-    ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
+    meses_pt = MONTH_NAMES_PT
+
+    if reference_year is not None and reference_month is not None:
+        ref_year, ref_month = int(reference_year), int(reference_month)
+    else:
+        config = SystemConfig.get_config()
+        ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
     data_referencia = datetime(ref_year, ref_month, 1)
 
     mes_referencia = meses_pt[data_referencia.month]
@@ -1275,7 +1375,7 @@ def get_month_names():
     }
 
 
-def fetch_iq_data(user_name):
+def fetch_iq_data(user_name, excel_url=None, cache_suffix=None):
     """
     Busca dados de IQ MÓVEL e IQ FIXA da planilha ÍNDICE DE QUALIDADE.
     Sheet: ÍNDICE DE QUALIDADE
@@ -1283,7 +1383,7 @@ def fetch_iq_data(user_name):
     Coluna de busca: COLABORADOR
     Retorna: {'iq_movel': float, 'iq_fixa': float} em percentual (ex: 0.05 = 5%)
     """
-    cache_key = f"iq_data_{user_name.replace(' ', '_')}"
+    cache_key = f"iq_data_{user_name.replace(' ', '_')}_{cache_suffix or 'default'}"
     cached_data = cache.get(cache_key)
     
     if cached_data:
@@ -1298,12 +1398,12 @@ def fetch_iq_data(user_name):
     
     user_name_normalized = normalize_text(user_name)
     
-    # Obter URLs dinâmicas
-    urls = get_excel_urls()
+    if excel_url is None:
+        excel_url = get_excel_urls()['comissao']
     
     try:
         # Baixar planilha de comissão
-        excel_file, error = download_excel_file(urls['comissao'], "comissao_iq")
+        excel_file, error = download_excel_file(excel_url, "comissao_iq")
         if error:
             print(f"[fetch_iq_data] Erro ao baixar planilha: {error}")
             return iq_result
@@ -1389,7 +1489,7 @@ def fetch_iq_data(user_name):
         return iq_result
 
 
-def fetch_vendedores_por_filial(user_sector):
+def fetch_vendedores_por_filial(user_sector, urls=None):
     """
     Busca todos os vendedores e suas comissões por pilar da BASE_PAGAMENTO para uma filial.
     Busca também os percentuais de atingimento da planilha REMUNERAÇÃO CN.
@@ -1435,7 +1535,8 @@ def fetch_vendedores_por_filial(user_sector):
     }
     
     # Obter URLs dinâmicas
-    urls = get_excel_urls()
+    if urls is None:
+        urls = get_excel_urls()
     
     try:
         # 1. Buscar dados da planilha REMUNERAÇÃO CN (percentuais de atingimento)
@@ -2563,23 +2664,23 @@ def process_coordenador_commission_data(data, metas_pilar=None):
     return processed
 
 
-def fetch_lojas_por_coordenador(coordenador_nome):
+def fetch_lojas_por_coordenador(coordenador_nome, excel_url=None, cache_suffix=None):
     """
     Busca as lojas (PDVs) que pertencem a um coordenador específico.
     Lê a sheet REMUNERAÇÃO GERENTE e filtra pela coluna COORDENADOR (A).
     Compara pelo primeiro nome do coordenador.
     """
-    cache_key = f"lojas_coordenador_{coordenador_nome.replace(' ', '_')}"
+    cache_key = f"lojas_coordenador_{coordenador_nome.replace(' ', '_')}_{cache_suffix or 'default'}"
     cached_data = cache.get(cache_key)
     
     if cached_data:
         return cached_data
     
-    # Obter URLs dinâmicas
-    urls = get_excel_urls()
+    if excel_url is None:
+        excel_url = get_excel_urls()['comissao']
     
     try:
-        excel_file, error = download_excel_file(urls['comissao'], "lojas_coord")
+        excel_file, error = download_excel_file(excel_url, "lojas_coord")
         if error:
             return []
         
@@ -2681,6 +2782,11 @@ def commission_cn_view(request):
     - Lista de vendas
     """
     user = request.user
+    reference = resolve_commission_reference_from_request(request)
+    urls = get_excel_urls(reference['year'], reference['month'])
+
+    if reference['invalid_selection']:
+        messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
     
     # Determina qual sheet usar
     is_gerente = is_user_gerente(user)
@@ -2693,13 +2799,23 @@ def commission_cn_view(request):
     user_sector = user.sector.name if hasattr(user, 'sector') and user.sector else None
     
     # Buscar dados de comissionamento
-    result = fetch_excel_data(sheet_name, user_full_name)
+    result = fetch_excel_data(
+        sheet_name,
+        user_full_name,
+        excel_url=urls['comissao'],
+        cache_suffix=reference['cache_suffix'],
+    )
     
     # Buscar dados de vendas
-    vendas_result = fetch_vendas_data(user_full_name)
+    vendas_result = fetch_vendas_data(
+        user_full_name,
+        excel_url=urls['vendas'],
+        cache_suffix=reference['cache_suffix'],
+        urls=urls,
+    )
     
     # Obter nomes dos meses
-    meses = get_month_names()
+    meses = get_month_names(reference['year'], reference['month'])
     
     context = {
         'user': user,
@@ -2712,13 +2828,27 @@ def commission_cn_view(request):
         'meses': meses,
         'vendas': vendas_result.get('vendas', []) if vendas_result.get('success') else [],
         'role': 'cn',
+        'reference_year_options': reference['year_options'],
+        'reference_month_options': reference['month_options'],
+        'selected_reference_year': reference['year'],
+        'selected_reference_month': reference['month'],
     }
     
     if result.get('success'):
         # Obter metas por pilar - CN busca por nome, Gerente busca por filial
-        metas_pilar = fetch_metas_por_pilar(user_full_name, is_gerente, user_sector)
+        metas_pilar = fetch_metas_por_pilar(
+            user_full_name,
+            is_gerente,
+            user_sector,
+            urls=urls,
+            cache_suffix=reference['cache_suffix'],
+        )
         # Buscar dados de IQ
-        iq_data = fetch_iq_data(user_full_name)
+        iq_data = fetch_iq_data(
+            user_full_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
         print(f"[commission_dashboard] IQ Data: {iq_data}")
         print(f"[commission_dashboard] Metas Pilar: {metas_pilar}")
         processed = process_commission_data(result['data'], is_gerente, metas_pilar, iq_data)
@@ -2739,6 +2869,11 @@ def commission_gerente_view(request):
     - Atingimentos por pilar
     """
     user = request.user
+    reference = resolve_commission_reference_from_request(request)
+    urls = get_excel_urls(reference['year'], reference['month'])
+
+    if reference['invalid_selection']:
+        messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
     
     # Verificar se está visualizando um CN específico
     viewing_user_id = request.GET.get('user')
@@ -2770,13 +2905,18 @@ def commission_gerente_view(request):
     user_full_name = target_user.get_full_name() or target_user.first_name
     
     # Buscar dados de comissionamento
-    result = fetch_excel_data(sheet_name, user_full_name)
+    result = fetch_excel_data(
+        sheet_name,
+        user_full_name,
+        excel_url=urls['comissao'],
+        cache_suffix=reference['cache_suffix'],
+    )
     
     # Buscar resumo de todos os vendedores da loja diretamente da BASE_PAGAMENTO
     target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
-    cns_resumo = fetch_vendedores_por_filial(target_sector)
+    cns_resumo = fetch_vendedores_por_filial(target_sector, urls=urls)
     
-    meses = get_month_names()
+    meses = get_month_names(reference['year'], reference['month'])
     
     context = {
         'user': user,
@@ -2789,6 +2929,10 @@ def commission_gerente_view(request):
         'result': result,
         'meses': meses,
         'role': 'gerente',
+        'reference_year_options': reference['year_options'],
+        'reference_month_options': reference['month_options'],
+        'selected_reference_year': reference['year'],
+        'selected_reference_month': reference['month'],
     }
     
     if result.get('success'):
@@ -2796,10 +2940,20 @@ def commission_gerente_view(request):
         target_name = target_user.get_full_name() or target_user.first_name
         target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
         print(f"[commission_gerente_view] target_name={target_name}, target_is_gerente={target_is_gerente}, target_sector={target_sector}")
-        metas_pilar = fetch_metas_por_pilar(target_name, target_is_gerente, target_sector)
+        metas_pilar = fetch_metas_por_pilar(
+            target_name,
+            target_is_gerente,
+            target_sector,
+            urls=urls,
+            cache_suffix=reference['cache_suffix'],
+        )
         print(f"[commission_gerente_view] metas_pilar retornado: {metas_pilar}")
         # Buscar dados de IQ
-        iq_data = fetch_iq_data(target_name)
+        iq_data = fetch_iq_data(
+            target_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
         processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
@@ -2815,6 +2969,11 @@ def commission_coordenador_view(request):
     - Consegue ver atingimento das lojas
     """
     user = request.user
+    reference = resolve_commission_reference_from_request(request)
+    urls = get_excel_urls(reference['year'], reference['month'])
+
+    if reference['invalid_selection']:
+        messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
     
     # Verificar se está visualizando um usuário específico
     viewing_user_id = request.GET.get('user')
@@ -2831,12 +2990,20 @@ def commission_coordenador_view(request):
     user_first_name = user.first_name.strip().upper() if user.first_name else ''
     
     # Buscar lojas deste coordenador específico da planilha
-    lojas_coordenador = fetch_lojas_por_coordenador(user_first_name)
+    lojas_coordenador = fetch_lojas_por_coordenador(
+        user_first_name,
+        excel_url=urls['comissao'],
+        cache_suffix=reference['cache_suffix'],
+    )
     pdvs_coordenador = [l['pdv'].upper() for l in lojas_coordenador]
     
     # Buscar dados de todos os gerentes e filtrar pelos que pertencem a este coordenador
     gerentes_data = []
-    all_gerentes_result = fetch_all_users_from_sheet(SHEET_GERENTE)
+    all_gerentes_result = fetch_all_users_from_sheet(
+        SHEET_GERENTE,
+        excel_url=urls['comissao'],
+        cache_suffix=reference['cache_suffix'],
+    )
     
     def get_first_name(name):
         """Extrai o primeiro nome de uma string"""
@@ -2905,14 +3072,24 @@ def commission_coordenador_view(request):
         target_is_gerente = is_user_gerente(viewing_user)
         sheet_name = SHEET_GERENTE if target_is_gerente else SHEET_CN
         user_full_name = viewing_user.get_full_name() or viewing_user.first_name
-        result = fetch_excel_data(sheet_name, user_full_name)
+        result = fetch_excel_data(
+            sheet_name,
+            user_full_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
     else:
         # Coordenador visualizando seus próprios dados
         # Na planilha de coordenador, busca pelo PRIMEIRO NOME apenas
         sheet_name = SHEET_COORDENADOR
-        result = fetch_excel_data(sheet_name, user_first_name)
+        result = fetch_excel_data(
+            sheet_name,
+            user_first_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
     
-    meses = get_month_names()
+    meses = get_month_names(reference['year'], reference['month'])
     
     # Calcular resumo de comissões por loja para o gráfico de representatividade
     lojas_resumo = []
@@ -2945,6 +3122,10 @@ def commission_coordenador_view(request):
         'result': result,
         'meses': meses,
         'role': 'coordenador',
+        'reference_year_options': reference['year_options'],
+        'reference_month_options': reference['month_options'],
+        'selected_reference_year': reference['year'],
+        'selected_reference_month': reference['month'],
     }
     
     if viewing_user and result.get('success'):
@@ -2952,9 +3133,19 @@ def commission_coordenador_view(request):
         # Buscar metas por pilar - Gerente busca por filial, CN busca por nome
         target_name = viewing_user.get_full_name() or viewing_user.first_name
         target_sector = viewing_user.sector.name if hasattr(viewing_user, 'sector') and viewing_user.sector else None
-        metas_pilar = fetch_metas_por_pilar(target_name, target_is_gerente, target_sector)
+        metas_pilar = fetch_metas_por_pilar(
+            target_name,
+            target_is_gerente,
+            target_sector,
+            urls=urls,
+            cache_suffix=reference['cache_suffix'],
+        )
         # Buscar dados de IQ
-        iq_data = fetch_iq_data(target_name)
+        iq_data = fetch_iq_data(
+            target_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
         processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
@@ -2963,7 +3154,11 @@ def commission_coordenador_view(request):
         # Coordenador visualizando seus próprios dados - usar função específica
         # Buscar metas por pilar para o coordenador (filtra por COORDENACAO)
         coord_name = user.get_full_name() or user.first_name
-        metas_pilar = fetch_metas_por_pilar_coordenador(coord_name)
+        metas_pilar = fetch_metas_por_pilar_coordenador(
+            coord_name,
+            urls=urls,
+            cache_suffix=reference['cache_suffix'],
+        )
         processed = process_coordenador_commission_data(result['data'], metas_pilar)
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])

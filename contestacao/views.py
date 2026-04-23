@@ -90,6 +90,11 @@ def _can_access_contestation_module(user):
     return user.sectors.filter(pk=QUALITY_ISLAND_SECTOR_ID).exists()
 
 
+def _can_sync_exclusions(user):
+    """Permite sincronização para usuários com acesso ao módulo de contestação."""
+    return _can_access_contestation_module(user)
+
+
 def _open_contestation_filter():
     return Q(status__in=['pending', 'accepted']) | Q(status='confirmed', payment_status='pending_payment')
 
@@ -503,8 +508,7 @@ def _find_column(df, name):
 @login_required
 def sync_exclusions(request):
     """Sincroniza registros da planilha BASE_EXCLUSAO para o banco de dados."""
-    # Apenas ADMIN+ podem sincronizar
-    if not _can_manage_contestations(request.user):
+    if not _can_sync_exclusions(request.user):
         messages.error(request, 'Sem permissão para sincronizar.')
         return redirect('contestacao:exclusion_list')
 
@@ -646,7 +650,7 @@ def exclusion_list(request):
         'contestations_map': contestations_map,
         'locked_sectors': locked_sectors,
         'can_manage': _can_manage_contestations(request.user),
-        'can_sync': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem sincronizar
+        'can_sync': _can_sync_exclusions(request.user),
         'can_dashboard': _can_manage_contestations(request.user),  # Apenas ADMIN+ podem acessar dashboard
         'is_superadmin': can_view_all_scope,
         'contestation_blocked': sync_state['is_blocked'],
