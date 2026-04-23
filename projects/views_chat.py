@@ -2512,6 +2512,17 @@ def poll_dashboard_updates(request):
                     } if chat.assigned_to else None,
                     'created_at': timezone.localtime(chat.created_at).isoformat()
                 })
+
+        # Detectar alterações em tickets existentes (status, agente, categoria, etc)
+        changed_chats_count = SupportChat.objects.filter(
+            base_filter,
+            updated_at__gt=last_check_time,
+            created_at__lte=last_check_time
+        ).count()
+
+        if changed_chats_count > 0:
+            has_updates = True
+            logger.info(f'[Polling] Found {changed_chats_count} changed chats since {last_check_time}')
         
         # Verificar novas mensagens nos tickets atribuídos ao agente atual
         assigned_chats = SupportChat.objects.filter(

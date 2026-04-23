@@ -925,6 +925,8 @@ let lastCheckTimestamp = new Date().toISOString(); // Variável global para poll
 let activeModalChatId = null;
 let activeModalLastMessageId = 0;
 let activeModalPollInterval = null;
+let dashboardPollInterval = null;
+let isPollingRequestInFlight = false;
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== Dashboard de Suporte Carregado ===');
@@ -939,16 +941,40 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Polling em tempo real para atualizações (a cada 3 segundos)
     console.log('[Dashboard] Iniciando polling em tempo real');
-    // Primeira chamada imediata
-    pollForUpdates();
-    // Depois repetir a cada 3 segundos
-    setInterval(pollForUpdates, 3000);
+    startDashboardPolling();
     
     // Parar piscada do título quando a página receber foco
-    window.addEventListener('focus', stopTitleBlink);
+    window.addEventListener('focus', () => {
+        stopTitleBlink();
+        pollForUpdates();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            stopTitleBlink();
+            pollForUpdates();
+        }
+    });
 });
 
+function startDashboardPolling() {
+    if (dashboardPollInterval) {
+        clearInterval(dashboardPollInterval);
+    }
+
+    // Primeira chamada imediata
+    pollForUpdates();
+    // Depois repetir continuamente
+    dashboardPollInterval = setInterval(pollForUpdates, 3000);
+}
+
 function pollForUpdates() {
+    if (isPollingRequestInFlight) {
+        return;
+    }
+
+    isPollingRequestInFlight = true;
+
     fetch(`/projects/support/api/poll-updates/?last_check=${encodeURIComponent(lastCheckTimestamp)}`)
         .then(response => {
             if (!response.ok) {
@@ -1066,6 +1092,9 @@ function pollForUpdates() {
             console.error('[Polling] Erro (continuando polling):', error);
             // NÃO parar o polling, apenas log do erro
             // O setInterval continuará automaticamente
+        })
+        .finally(() => {
+            isPollingRequestInFlight = false;
         });
 }
 
