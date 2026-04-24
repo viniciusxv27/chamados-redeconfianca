@@ -3,23 +3,38 @@
 
 {% block title %}{{ transcription.title }}{% endblock %}
 
+{% block extra_css %}
+<style>
+    .trans-detail-shell {
+        border: 1px solid #ffd9c9;
+        background: linear-gradient(165deg, #fff8f2 0%, #fffdfb 48%, #f8fafc 100%);
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.07);
+    }
+
+    .trans-panel {
+        border: 1px solid #f5ddd0;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+<div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-0 trans-detail-shell rounded-2xl p-4 sm:p-6">
     <!-- Breadcrumb -->
     <nav class="flex mb-4">
         <ol class="inline-flex items-center space-x-1 md:space-x-3">
-            <li><a href="{% url 'agenda:transcription_list' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-microphone-alt mr-1"></i> Transcrições</a></li>
+            <li><a href="{% url 'agenda:transcription_list' %}" class="text-sm text-gray-500 hover:text-primary"><i class="fas fa-microphone-alt mr-1"></i> Transcrições</a></li>
             <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700 truncate max-w-[200px]">{{ transcription.title }}</span></div></li>
         </ol>
     </nav>
 
     <!-- Header Card -->
-    <div class="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg rounded-xl overflow-hidden mb-6">
+    <div class="bg-gradient-to-r from-orange-500 to-orange-700 shadow-lg rounded-xl overflow-hidden mb-6">
         <div class="px-6 py-5">
             <div class="flex justify-between items-start flex-wrap gap-3">
                 <div class="text-white">
                     <h1 class="text-xl sm:text-2xl font-bold">{{ transcription.title }}</h1>
-                    <div class="flex flex-wrap gap-4 mt-2 text-sm text-indigo-100">
+                    <div class="flex flex-wrap gap-4 mt-2 text-sm text-orange-100">
                         <span><i class="fas fa-calendar-alt mr-1"></i> {{ transcription.created_at|date:"d/m/Y H:i" }}</span>
                         {% if transcription.duration_seconds %}
                         <span><i class="fas fa-clock mr-1"></i> {{ transcription.duration_seconds|floatformat:0 }}s</span>
@@ -40,7 +55,7 @@
                             {% if transcription.sentiment == 'positive' %}bg-green-400/30 text-green-100
                             {% elif transcription.sentiment == 'negative' %}bg-red-400/30 text-red-100
                             {% elif transcription.sentiment == 'mixed' %}bg-yellow-400/30 text-yellow-100
-                            {% else %}bg-white/15 text-indigo-100{% endif %}">
+                            {% else %}bg-white/15 text-orange-100{% endif %}">
                             {% if transcription.sentiment == 'positive' %}<i class="fas fa-smile mr-1"></i>
                             {% elif transcription.sentiment == 'negative' %}<i class="fas fa-frown mr-1"></i>
                             {% elif transcription.sentiment == 'mixed' %}<i class="fas fa-meh mr-1"></i>
@@ -49,7 +64,7 @@
                         </span>
                         {% endif %}
                         {% for tag in transcription.tags %}
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-white/10 text-indigo-100">#{{ tag }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-white/10 text-orange-100">#{{ tag }}</span>
                         {% endfor %}
                     </div>
                 </div>
@@ -74,20 +89,30 @@
                         class="inline-flex items-center px-4 py-2 bg-white/10 text-white text-sm font-medium rounded-lg hover:bg-white/20 transition border border-white/20 ml-2 mt-2 sm:mt-0">
                     <i class="fas fa-file-alt mr-2"></i> Retranscrever com Texto Bruto
                 </button>
-                <p class="text-xs text-indigo-100 mt-2">Prioriza a transcrição Bruta/Completa salva; se não existir, tenta o áudio.</p>
+                <p class="text-xs text-orange-100 mt-2">Prioriza a transcrição bruta/completa salva; se não existir, tenta o áudio.</p>
             </div>
 
             {% if transcription.participants_identified %}
-            <div class="mt-3 flex items-center gap-2 text-sm text-indigo-100">
+            <div class="mt-3 flex items-center gap-2 text-sm text-orange-100">
                 <i class="fas fa-users"></i>
                 <span>Participantes: {{ transcription.participants_identified|join:", " }}</span>
+            </div>
+            {% endif %}
+
+            {% if transcription.participant_roles %}
+            <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                {% for role in transcription.participant_roles %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-white/20 border border-white/25 text-white">
+                    <i class="fas {{ role.icon|default:'fa-user' }} mr-1"></i>{{ role.name }} - {{ role.role }}
+                </span>
+                {% endfor %}
             </div>
             {% endif %}
         </div>
 
         <!-- Stats bar -->
         {% if transcription.status == 'completed' %}
-        <div class="bg-black/10 px-6 py-3 flex flex-wrap gap-6 text-sm text-indigo-100">
+        <div class="bg-black/10 px-6 py-3 flex flex-wrap gap-6 text-sm text-orange-100">
             <div><span class="font-bold text-white">{{ transcription.sections|length }}</span> seções</div>
             <div><span class="font-bold text-white">{{ transcription.key_decisions|length }}</span> decisões</div>
             <div><span class="font-bold text-white">{{ transcription.action_items|length }}</span> ações</div>
@@ -116,12 +141,12 @@
 
     <!-- Resumo Executivo -->
     {% if transcription.summary %}
-    <div class="bg-white shadow-md rounded-xl overflow-hidden mb-6 border border-indigo-100">
-        <div class="px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50 flex items-center gap-2">
-            <div class="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-lightbulb text-indigo-600"></i>
+    <div class="bg-white trans-panel rounded-xl overflow-hidden mb-6 border border-orange-100">
+        <div class="px-6 py-4 border-b bg-gradient-to-r from-orange-50 to-amber-50 flex items-center gap-2">
+            <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-lightbulb text-orange-600"></i>
             </div>
-            <h3 class="font-bold text-indigo-900">Resumo Executivo</h3>
+            <h3 class="font-bold text-orange-900">Resumo Executivo</h3>
         </div>
         <div class="px-6 py-5 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ transcription.summary }}</div>
     </div>
@@ -131,19 +156,19 @@
     {% if transcription.sections %}
     <div class="mb-6">
         <h2 class="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-            <i class="fas fa-stream text-indigo-600"></i> Seções da Reunião
+            <i class="fas fa-stream text-primary"></i> Seções da Reunião
         </h2>
         <div class="space-y-3" id="sections-container">
             {% for section in transcription.sections %}
-            <div class="bg-white shadow-sm rounded-xl border border-gray-100 overflow-hidden section-card transition-all hover:shadow-md">
+            <div class="bg-white trans-panel rounded-xl border border-gray-100 overflow-hidden section-card transition-all hover:shadow-md">
                 <button onclick="toggleSection({{ forloop.counter0 }})" class="w-full px-5 py-4 flex items-center gap-3 text-left hover:bg-gray-50 transition">
-                    <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                        <i class="fas {{ section.icon|default:'fa-comments' }} text-indigo-600"></i>
+                    <div class="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+                        <i class="fas {{ section.icon|default:'fa-comments' }} text-primary"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between">
                             <h4 class="font-semibold text-gray-900 truncate">
-                                <span class="text-indigo-400 font-mono text-xs mr-2">{{ forloop.counter }}.</span>
+                                <span class="text-orange-400 font-mono text-xs mr-2">{{ forloop.counter }}.</span>
                                 {{ section.title }}
                             </h4>
                             <div class="flex items-center gap-2 flex-shrink-0 ml-2">
@@ -160,9 +185,9 @@
                         <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ section.content }}</div>
                         {% if section.highlights %}
                         <div class="mt-4 space-y-2">
-                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider"><i class="fas fa-quote-left mr-1 text-indigo-400"></i> Destaques</p>
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider"><i class="fas fa-quote-left mr-1 text-orange-400"></i> Destaques</p>
                             {% for highlight in section.highlights %}
-                            <div class="pl-3 border-l-2 border-indigo-200 text-sm text-gray-600 italic">{{ highlight }}</div>
+                            <div class="pl-3 border-l-2 border-orange-200 text-sm text-gray-600 italic">{{ highlight }}</div>
                             {% endfor %}
                         </div>
                         {% endif %}
@@ -172,7 +197,7 @@
             {% endfor %}
         </div>
         <div class="mt-3 text-center">
-            <button onclick="expandAllSections()" id="btn-expand-all" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+            <button onclick="expandAllSections()" id="btn-expand-all" class="text-xs text-primary hover:text-orange-700 font-medium">
                 <i class="fas fa-expand-alt mr-1"></i> Expandir todas as seções
             </button>
         </div>
@@ -184,7 +209,7 @@
         <div class="lg:col-span-2 space-y-5">
             <!-- Decisões-Chave -->
             {% if transcription.key_decisions %}
-            <div class="bg-white shadow-sm rounded-xl border border-amber-100 overflow-hidden">
+            <div class="bg-white trans-panel rounded-xl border border-amber-100 overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gradient-to-r from-amber-50 to-orange-50 flex items-center gap-2">
                     <div class="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center">
                         <i class="fas fa-gavel text-amber-600 text-sm"></i>
@@ -213,18 +238,18 @@
             {% endif %}
 
             <!-- Transcrição Formatada -->
-            <div class="bg-white shadow-sm rounded-xl border overflow-hidden">
+            <div class="bg-white trans-panel rounded-xl border overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gray-50 flex justify-between items-center">
                     <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
                         <i class="fas fa-file-alt text-gray-500"></i> Transcrição Completa
                     </h3>
-                    <button onclick="toggleRaw()" class="text-xs text-indigo-600 hover:underline font-medium" id="btn-toggle-raw">
+                    <button onclick="toggleRaw()" class="text-xs text-primary hover:underline font-medium" id="btn-toggle-raw">
                         <i class="fas fa-code mr-1"></i> Ver texto bruto
                     </button>
                 </div>
                 <div id="formatted-transcription" class="px-5 py-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[600px] overflow-y-auto">{{ transcription.formatted_transcription }}</div>
                 <div id="raw-transcription" class="hidden px-5 py-4 text-sm text-gray-500 leading-relaxed whitespace-pre-wrap font-mono text-xs max-h-[600px] overflow-y-auto">{{ transcription.raw_transcription }}</div>
-                <textarea id="raw-transcription-textarea" class="hidden w-full border-t border-gray-100 px-5 py-4 text-xs text-gray-600 font-mono focus:ring-indigo-500 focus:border-indigo-500" rows="14">{{ transcription.raw_transcription }}</textarea>
+                <textarea id="raw-transcription-textarea" class="hidden w-full border-t border-gray-100 px-5 py-4 text-xs text-gray-600 font-mono focus:ring-orange-500 focus:border-orange-500" rows="14">{{ transcription.raw_transcription }}</textarea>
             </div>
         </div>
 
@@ -232,7 +257,7 @@
         <div class="space-y-5">
             <!-- Tarefas Criadas (do plano de ação) -->
             {% if tasks %}
-            <div class="bg-white shadow-sm rounded-xl border border-emerald-100 overflow-hidden">
+            <div class="bg-white trans-panel rounded-xl border border-emerald-100 overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gradient-to-r from-emerald-50 to-green-50 flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <div class="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center">
@@ -299,7 +324,7 @@
 
             <!-- Itens de Ação (originais da IA) -->
             {% if transcription.action_items %}
-            <div class="bg-white shadow-sm rounded-xl border border-emerald-100 overflow-hidden">
+            <div class="bg-white trans-panel rounded-xl border border-emerald-100 overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gradient-to-r from-emerald-50 to-green-50 flex items-center gap-2">
                     <div class="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center">
                         <i class="fas fa-tasks text-emerald-600 text-sm"></i>
@@ -344,14 +369,14 @@
 
             <!-- Eventos Sugeridos -->
             {% if transcription.suggested_events %}
-            <div class="bg-white shadow-sm rounded-xl border border-blue-100 overflow-hidden">
-                <div class="px-5 py-3 border-b bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center gap-2">
-                    <div class="w-7 h-7 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <i class="fas fa-calendar-plus text-blue-600 text-sm"></i>
+            <div class="bg-white trans-panel rounded-xl border border-orange-100 overflow-hidden">
+                <div class="px-5 py-3 border-b bg-gradient-to-r from-orange-50 to-amber-50 flex items-center gap-2">
+                    <div class="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-calendar-plus text-orange-600 text-sm"></i>
                     </div>
-                    <h3 class="font-bold text-blue-900 text-sm">Agendar Eventos</h3>
+                    <h3 class="font-bold text-orange-900 text-sm">Agendar Eventos</h3>
                 </div>
-                <div class="divide-y divide-blue-50">
+                <div class="divide-y divide-orange-50">
                     {% for evt in transcription.suggested_events %}
                     <div class="px-5 py-3" id="suggested-event-{{ forloop.counter0 }}">
                         <p class="text-sm font-medium text-gray-800">{{ evt.title }}</p>
@@ -360,9 +385,9 @@
                         {% endif %}
                         <div class="mt-2 flex gap-2 flex-wrap">
                             <input type="datetime-local" id="evt-datetime-{{ forloop.counter0 }}"
-                                   class="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:ring-indigo-500 focus:border-indigo-500 flex-1 min-w-0">
+                                   class="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:ring-orange-500 focus:border-orange-500 flex-1 min-w-0">
                             <button onclick="scheduleEvent({{ transcription.pk }}, {{ forloop.counter0 }}, this)"
-                                    class="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex-shrink-0">
+                                    class="inline-flex items-center px-3 py-1.5 bg-orange-600 text-white text-xs font-medium rounded-lg hover:bg-orange-700 transition flex-shrink-0">
                                 <i class="fas fa-plus mr-1"></i> Agendar
                             </button>
                         </div>
@@ -375,7 +400,7 @@
 
             <!-- Áudio Original -->
             {% if transcription.audio_file %}
-            <div class="bg-white shadow-sm rounded-xl border overflow-hidden">
+            <div class="bg-white trans-panel rounded-xl border overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gray-50 flex items-center gap-2">
                     <div class="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center">
                         <i class="fas fa-headphones text-gray-600 text-sm"></i>
@@ -390,10 +415,10 @@
 
             <!-- Link para Agenda -->
             {% if transcription.calendar_event_created %}
-            <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-                <i class="fas fa-calendar-check text-purple-500 text-lg mb-1"></i>
-                <p class="text-sm text-purple-700 font-medium">Registrado na sua agenda</p>
-                <a href="{% url 'agenda:calendar' %}" class="text-xs text-purple-600 hover:underline mt-1 inline-block">
+            <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+                <i class="fas fa-calendar-check text-primary text-lg mb-1"></i>
+                <p class="text-sm text-orange-700 font-medium">Registrado na sua agenda</p>
+                <a href="{% url 'agenda:calendar' %}" class="text-xs text-orange-600 hover:underline mt-1 inline-block">
                     <i class="fas fa-external-link-alt mr-1"></i> Ver na agenda
                 </a>
             </div>
@@ -402,18 +427,18 @@
     </div>
 
     {% elif transcription.status == 'processing' %}
-    <div class="bg-white shadow-md rounded-xl p-10 text-center" id="processing-card">
-        <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4" id="processing-icon">
-            <i class="fas fa-spinner fa-spin text-2xl text-indigo-600"></i>
+    <div class="bg-white trans-panel rounded-xl p-10 text-center" id="processing-card">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-orange-100 rounded-full mb-4" id="processing-icon">
+            <i class="fas fa-spinner fa-spin text-2xl text-primary"></i>
         </div>
-        <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA...</p>
-        <p class="text-sm text-gray-400 mt-2">Transcrição de áudio + análise avançada com GPT-4o</p>
+        <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA em segundo plano...</p>
+        <p class="text-sm text-gray-500 mt-2">Você pode manter a aba aberta, navegar no portal ou voltar mais tarde.</p>
         <p class="text-xs text-gray-400 mt-1 mb-5">Criado em {{ transcription.created_at|date:"d/m/Y H:i" }}</p>
         <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-processing"
-                class="inline-flex items-center px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition shadow-sm">
+                class="inline-flex items-center px-5 py-2.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition shadow-sm">
             <i class="fas fa-redo mr-2"></i> Reiniciar Processamento
         </button>
-        <p class="text-xs text-gray-400 mt-3">Se está travado, clique para reiniciar a transcrição desde o início.</p>
+        <p class="text-xs text-gray-400 mt-3" id="processing-subtitle">A tela atualiza automaticamente quando a conclusão for detectada.</p>
     </div>
     {% endif %}
 </div>
@@ -423,6 +448,9 @@
 <script>
 // ---- Section toggle ----
 let allExpanded = false;
+const transcriptionId = {{ transcription.pk }};
+const initialStatus = '{{ transcription.status }}';
+let statusPollTimer = null;
 
 function toggleSection(index) {
     const body = document.getElementById(`section-body-${index}`);
@@ -457,6 +485,37 @@ function expandAllSections() {
         : '<i class="fas fa-expand-alt mr-1"></i> Expandir todas as seções';
 }
 
+async function pollProcessingStatus() {
+    try {
+        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/status/`);
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (data.status === 'completed' || data.status === 'error') {
+            if (statusPollTimer) {
+                clearInterval(statusPollTimer);
+                statusPollTimer = null;
+            }
+            window.location.reload();
+            return;
+        }
+
+        const subtitle = document.getElementById('processing-subtitle');
+        if (subtitle && data.updated_at) {
+            const updatedTime = new Date(data.updated_at).toLocaleTimeString('pt-BR');
+            subtitle.textContent = `Última atualização detectada: ${updatedTime}`;
+        }
+    } catch (err) {
+        // Falha silenciosa para não interromper a tela.
+    }
+}
+
+function startStatusPollingIfNeeded() {
+    if (initialStatus !== 'processing') return;
+    pollProcessingStatus();
+    statusPollTimer = setInterval(pollProcessingStatus, 7000);
+}
+
 // Auto-expand first section
 document.addEventListener('DOMContentLoaded', () => {
     const first = document.getElementById('section-body-0');
@@ -465,6 +524,8 @@ document.addEventListener('DOMContentLoaded', () => {
         first.classList.remove('hidden');
         if (firstArrow) firstArrow.style.transform = 'rotate(180deg)';
     }
+
+    startStatusPollingIfNeeded();
 });
 
 // ---- Raw/Formatted toggle ----

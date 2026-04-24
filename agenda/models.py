@@ -347,6 +347,12 @@ class MeetingTranscription(models.Model):
         blank=True, default=list, verbose_name='Participantes Identificados',
         help_text='Nomes de participantes detectados na conversa',
     )
+    participant_roles = models.JSONField(
+        blank=True,
+        default=list,
+        verbose_name='Papéis dos Participantes',
+        help_text='Papéis definidos manualmente para melhorar a identificação de falantes.',
+    )
     sentiment = models.CharField(
         max_length=20, choices=SENTIMENT_CHOICES, default='neutral',
         verbose_name='Sentimento Geral',

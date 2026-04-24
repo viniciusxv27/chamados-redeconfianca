@@ -1,9 +1,14 @@
 import json
+import os
 import re
+import subprocess
+import tempfile
+import threading
 from datetime import datetime, timedelta, time, date as date_type
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import close_old_connections
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -210,6 +215,77 @@ def _normalize_transcription_analysis(payload, source_text):
     }
 
 
+PARTICIPANT_ROLE_ICON_MAP = {
+    'Moderador': 'fa-chess-king',
+    'Tomador de decisão': 'fa-gavel',
+    'Responsável técnico': 'fa-cogs',
+    'Cliente': 'fa-user-tie',
+    'Observador': 'fa-eye',
+    'Participante': 'fa-user',
+}
+
+
+def _parse_participant_roles(raw_value):
+    """Normaliza papéis de participantes enviados pela UI."""
+    if not raw_value:
+        return []
+
+    data = raw_value
+    if isinstance(raw_value, str):
+        try:
+            data = json.loads(raw_value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+    if not isinstance(data, list):
+        return []
+
+    normalized = []
+    for item in data[:12]:
+        if not isinstance(item, dict):
+            continue
+
+        name = (item.get('name') or '').strip()
+        role = (item.get('role') or '').strip() or 'Participante'
+
+        if not name:
+            continue
+        if role not in PARTICIPANT_ROLE_ICON_MAP:
+            role = 'Participante'
+
+        normalized.append({
+            'name': name[:80],
+            'role': role,
+            'icon': PARTICIPANT_ROLE_ICON_MAP.get(role, 'fa-user'),
+        })
+
+    return normalized
+
+
+def _build_participant_roles_context(participant_roles):
+    """Monta contexto textual para orientar a IA sobre papéis dos participantes."""
+    if not participant_roles:
+        return ''
+
+    lines = []
+    for entry in participant_roles:
+        if not isinstance(entry, dict):
+            continue
+        name = (entry.get('name') or '').strip()
+        role = (entry.get('role') or '').strip()
+        if not name or not role:
+            continue
+        lines.append(f'- {name}: {role}')
+
+    if not lines:
+        return ''
+
+    return (
+        "Contexto adicional definido pelo usuário para identificação de falantes:\n"
+        + "\n".join(lines)
+    )
+
+
 def _build_transcription_system_prompt(today_str, compact=False):
     """Prompt de análise estruturada da transcrição."""
     formatted_instruction = (
@@ -252,11 +328,15 @@ def _build_transcription_system_prompt(today_str, compact=False):
     )
 
 
-def _generate_transcription_analysis(client, meeting_title, source_text):
+def _generate_transcription_analysis(client, meeting_title, source_text, analysis_context=''):
     """Executa análise de IA com retry quando a resposta vier truncada ou inválida."""
     clipped_text = (source_text or '').strip()
     if len(clipped_text) > 120000:
         clipped_text = clipped_text[:120000]
+
+    user_content = f"Transcrição da reunião '{meeting_title}':\n\n{clipped_text}"
+    if analysis_context:
+        user_content = f"{analysis_context}\n\n{user_content}"
 
     today_str = timezone.now().strftime('%Y-%m-%d')
     attempts = [
@@ -277,7 +357,7 @@ def _generate_transcription_analysis(client, meeting_title, source_text):
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": attempt['system_prompt']},
-                    {"role": "user", "content": f"Transcrição da reunião '{meeting_title}':\n\n{clipped_text}"},
+                    {"role": "user", "content": user_content},
                 ],
                 temperature=0.2,
                 max_tokens=attempt['max_tokens'],
@@ -971,17 +1051,18 @@ def transcription_new(request):
 @login_required
 @require_POST
 def api_transcription_upload(request):
-    """Recebe áudio e transcreve usando OpenAI Whisper + GPT-4o com análise avançada"""
-    import openai
-    import json as json_module
-    import tempfile
-    import os
+    """Recebe áudio, salva com segurança e agenda processamento assíncrono."""
     from django.conf import settings as django_settings
 
     audio_file = request.FILES.get('audio')
     title = request.POST.get('title', '').strip() or 'Reunião sem título'
     event_id = request.POST.get('event_id')
-    duration_seconds = int(request.POST.get('duration_seconds', 0) or 0)
+    participant_roles = _parse_participant_roles(request.POST.get('participant_roles'))
+
+    try:
+        duration_seconds = int(request.POST.get('duration_seconds', 0) or 0)
+    except (TypeError, ValueError):
+        duration_seconds = 0
 
     if not audio_file:
         return JsonResponse({'error': 'Nenhum arquivo de áudio enviado.'}, status=400)
@@ -993,243 +1074,423 @@ def api_transcription_upload(request):
     event = None
     if event_id:
         try:
-            event = CalendarEvent.objects.get(pk=event_id)
+            event = CalendarEvent.objects.get(pk=event_id, owner=request.user)
         except CalendarEvent.DoesNotExist:
             pass
 
-    # Criar registro de transcrição
+    # O arquivo é persistido no storage (S3 quando USE_S3=True) antes do processamento.
     transcription = MeetingTranscription.objects.create(
         owner=request.user,
         event=event,
         title=title,
         audio_file=audio_file,
         duration_seconds=duration_seconds,
+        participant_roles=participant_roles,
         status='processing',
     )
 
+    _start_transcription_background_job(
+        transcription_id=transcription.pk,
+        api_key=api_key,
+        mode='upload',
+        options={},
+    )
+
+    return JsonResponse({
+        'id': transcription.pk,
+        'status': 'processing',
+        'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        'message': 'Áudio salvo e processamento iniciado em segundo plano.',
+    }, status=202)
+
+
+def _copy_storage_file_to_temp(field_file):
+    """Copia um FieldFile para arquivo temporário local sem carregar tudo em memória."""
+    suffix = '.webm'
+    if getattr(field_file, 'name', None):
+        _, ext = os.path.splitext(field_file.name)
+        if ext:
+            suffix = ext
+
+    tmp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_path = tmp_file.name
     try:
-        client = openai.OpenAI(api_key=api_key)
+        field_file.open('rb')
+        while True:
+            chunk = field_file.read(1024 * 1024)
+            if not chunk:
+                break
+            tmp_file.write(chunk)
+    finally:
+        try:
+            field_file.close()
+        except Exception:
+            pass
+        tmp_file.close()
 
-        # 1. Transcrever áudio com Whisper (converte para mp3 via ffmpeg)
-        audio_file.seek(0)
-        audio_data = audio_file.read()
-        raw_text, duration = _transcribe_audio(client, audio_data, audio_file.name)
-        if duration:
-            transcription.duration_seconds = duration
-
-        transcription.raw_transcription = raw_text
-
-        # 2. Análise avançada com IA (com retry e normalização)
-        analysis = _generate_transcription_analysis(client, title, raw_text)
-
-        transcription.formatted_transcription = analysis['formatted_transcription']
-        transcription.summary = analysis['summary']
-        transcription.sections = analysis['sections']
-        transcription.key_decisions = analysis['key_decisions']
-        transcription.action_items = analysis['action_items']
-        transcription.participants_identified = analysis['participants_identified']
-        transcription.sentiment = analysis['sentiment']
-        transcription.meeting_type_detected = analysis['meeting_type_detected']
-        transcription.tags = analysis['tags']
-        transcription.suggested_events = analysis['suggested_events']
-        transcription.status = 'completed'
-        transcription.save()
-
-        # 3. Criar evento na agenda do usuário marcando que fez uma transcrição
-        now = timezone.now()
-        cal_event = CalendarEvent.objects.create(
-            owner=request.user,
-            title=f"📝 Transcrição: {title}",
-            description=(
-                f"Transcrição de reunião processada com IA.\n\n"
-                f"📋 Resumo: {transcription.summary[:200]}...\n"
-                f"✅ Itens de ação: {len(transcription.action_items)}\n"
-                f"🎯 Decisões: {len(transcription.key_decisions)}\n\n"
-                f"Ver transcrição completa: /agenda/transcricoes/{transcription.pk}/"
-            ),
-            event_type='task',
-            color='#9333ea',
-            start=now - timedelta(seconds=max(duration_seconds, 60)),
-            end=now,
-            all_day=False,
-        )
-        transcription.calendar_event_created = cal_event
-        transcription.save(update_fields=['calendar_event_created'])
-
-        # 4. Criar tarefas automaticamente a partir dos action_items
-        _create_tasks_from_transcription(transcription, request.user)
-
-        return JsonResponse({
-            'id': transcription.pk,
-            'status': 'completed',
-            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-        })
-
-    except json_module.JSONDecodeError:
-        transcription.formatted_transcription = transcription.raw_transcription
-        transcription.summary = 'Erro ao processar análise avançada. Transcrição bruta disponível.'
-        transcription.status = 'completed'
-        transcription.save()
-        return JsonResponse({
-            'id': transcription.pk,
-            'status': 'completed',
-            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-        })
-    except Exception as e:
-        transcription.status = 'error'
-        transcription.error_message = str(e)
-        transcription.save()
-        return JsonResponse({'error': f'Erro ao processar: {str(e)}'}, status=500)
+    return tmp_path
 
 
-def _convert_to_mp3(audio_data, original_filename):
-    """Converte áudio para mp3 usando ffmpeg. Retorna path do arquivo mp3 temporário."""
-    import subprocess
-    import tempfile
-    import os
-
-    ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else 'webm'
-    tmp_input = tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False)
-    tmp_input.write(audio_data)
-    tmp_input.close()
-
-    tmp_output = tmp_input.name.rsplit('.', 1)[0] + '.mp3'
+def _convert_to_mp3(input_path):
+    """Converte áudio para mp3 (mono/16kHz) usando ffmpeg e retorna o path gerado."""
+    base_name, _ = os.path.splitext(input_path)
+    output_path = f'{base_name}_normalized.mp3'
 
     try:
         subprocess.run(
-            ['ffmpeg', '-y', '-i', tmp_input.name, '-vn', '-acodec', 'libmp3lame',
-             '-ab', '64k', '-ar', '16000', '-ac', '1', tmp_output],
-            capture_output=True, timeout=300, check=True,
+            [
+                'ffmpeg', '-y', '-i', input_path, '-vn', '-acodec', 'libmp3lame',
+                '-ab', '64k', '-ar', '16000', '-ac', '1', output_path,
+            ],
+            capture_output=True,
+            timeout=900,
+            check=True,
         )
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        # Se ffmpeg falhar, tenta enviar o original (pode funcionar se já for formato válido)
-        os.unlink(tmp_input.name)
-        return None, audio_data, original_filename
+        return output_path
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        if os.path.exists(output_path):
+            os.unlink(output_path)
+        return None
+
+
+def _extract_whisper_text_and_duration(whisper_response):
+    """Extrai texto e duração de respostas do Whisper."""
+    duration = None
+    if hasattr(whisper_response, 'text'):
+        raw_text = whisper_response.text or ''
+        if hasattr(whisper_response, 'duration') and whisper_response.duration:
+            try:
+                duration = int(whisper_response.duration)
+            except (TypeError, ValueError):
+                duration = None
+    else:
+        raw_text = str(whisper_response)
+    return raw_text.strip(), duration
+
+
+def _transcribe_audio_from_storage(client, field_file):
+    """Transcreve um áudio armazenado no storage (S3/local) com uso seguro de memória."""
+    temp_source_path = _copy_storage_file_to_temp(field_file)
+    original_name = os.path.basename(getattr(field_file, 'name', '') or 'audio.webm')
+
+    try:
+        return _transcribe_audio_path(client, temp_source_path, original_name)
     finally:
-        if os.path.exists(tmp_input.name):
-            os.unlink(tmp_input.name)
-
-    return tmp_output, None, None
+        if os.path.exists(temp_source_path):
+            os.unlink(temp_source_path)
 
 
-def _transcribe_audio(client, audio_data, original_filename):
-    """Converte para mp3, divide se necessário, e transcreve com Whisper.
-    Retorna (raw_text, duration_seconds)."""
-    import os
-    import math
-    import subprocess
-    import tempfile
-
-    WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 24MB
-
-    # Converter para mp3 (mono 64kbps 16kHz — muito menor que o original)
-    mp3_path, fallback_data, fallback_name = _convert_to_mp3(audio_data, original_filename)
+def _transcribe_audio_path(client, source_path, original_filename):
+    """Converte para mp3 quando possível, divide em partes se necessário e transcreve."""
+    whisper_max_size = 24 * 1024 * 1024  # 24MB
+    mp3_path = _convert_to_mp3(source_path)
 
     if mp3_path:
-        mp3_size = os.path.getsize(mp3_path)
+        try:
+            mp3_size = os.path.getsize(mp3_path)
+            if mp3_size <= whisper_max_size:
+                with open(mp3_path, 'rb') as audio_stream:
+                    whisper_response = client.audio.transcriptions.create(
+                        model='whisper-1',
+                        file=audio_stream,
+                        language='pt',
+                        response_format='verbose_json',
+                        timestamp_granularities=['segment'],
+                    )
+                return _extract_whisper_text_and_duration(whisper_response)
 
-        if mp3_size <= WHISPER_MAX_SIZE:
-            # Arquivo cabe num único envio
-            with open(mp3_path, 'rb') as f:
-                mp3_data = f.read()
-            os.unlink(mp3_path)
-
-            whisper_response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=('audio.mp3', mp3_data, 'audio/mpeg'),
-                language="pt",
-                response_format="verbose_json",
-                timestamp_granularities=["segment"],
-            )
-            duration = None
-            if hasattr(whisper_response, 'text'):
-                raw_text = whisper_response.text
-                if hasattr(whisper_response, 'duration') and whisper_response.duration:
-                    duration = int(whisper_response.duration)
-            else:
-                raw_text = str(whisper_response)
-            return raw_text, duration
-        else:
-            # Ainda grande demais — dividir por tempo com ffmpeg
-            raw_text = _split_and_transcribe(client, mp3_path, mp3_size)
-            os.unlink(mp3_path)
+            raw_text = _split_and_transcribe(client, mp3_path)
             return raw_text, None
-    else:
-        # ffmpeg não disponível, enviar original
-        file_tuple = (fallback_name or 'audio.webm', fallback_data, 'audio/webm')
+        finally:
+            if os.path.exists(mp3_path):
+                os.unlink(mp3_path)
+
+    # fallback sem ffmpeg: tenta enviar o original direto para Whisper
+    with open(source_path, 'rb') as audio_stream:
         whisper_response = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=file_tuple,
-            language="pt",
-            response_format="verbose_json",
-            timestamp_granularities=["segment"],
+            model='whisper-1',
+            file=audio_stream,
+            language='pt',
+            response_format='verbose_json',
+            timestamp_granularities=['segment'],
         )
-        duration = None
-        if hasattr(whisper_response, 'text'):
-            raw_text = whisper_response.text
-            if hasattr(whisper_response, 'duration') and whisper_response.duration:
-                duration = int(whisper_response.duration)
-        else:
-            raw_text = str(whisper_response)
-        return raw_text, duration
+    return _extract_whisper_text_and_duration(whisper_response)
 
 
-def _split_and_transcribe(client, mp3_path, mp3_size):
-    """Divide mp3 grande em segmentos de ~10min e transcreve cada parte."""
-    import subprocess
-    import tempfile
-    import os
-    import glob
-
-    WHISPER_MAX_SIZE = 24 * 1024 * 1024
-    # Calcular duração do áudio
+def _split_and_transcribe(client, mp3_path):
+    """Divide mp3 grande em segmentos de ~10min e concatena as transcrições."""
     try:
-        result = subprocess.run(
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-             '-of', 'default=noprint_wrappers=1:nokey=1', mp3_path],
-            capture_output=True, text=True, timeout=30,
+        probe_result = subprocess.run(
+            [
+                'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1', mp3_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
-        total_duration = float(result.stdout.strip())
+        total_duration = float(probe_result.stdout.strip())
     except Exception:
-        total_duration = 3600  # fallback: assume 1 hora
+        total_duration = 3600
 
-    # Segmentos de 10 minutos
     segment_seconds = 600
-    num_segments = max(1, int(total_duration / segment_seconds) + 1)
+    max_segment_seconds = max(600, min(1800, int(total_duration / 12) if total_duration > 7200 else segment_seconds))
 
     tmp_dir = tempfile.mkdtemp()
     segment_pattern = os.path.join(tmp_dir, 'seg_%03d.mp3')
 
     try:
         subprocess.run(
-            ['ffmpeg', '-y', '-i', mp3_path, '-f', 'segment',
-             '-segment_time', str(segment_seconds), '-acodec', 'libmp3lame',
-             '-ab', '64k', '-ar', '16000', '-ac', '1', segment_pattern],
-            capture_output=True, timeout=300, check=True,
+            [
+                'ffmpeg', '-y', '-i', mp3_path, '-f', 'segment', '-segment_time', str(max_segment_seconds),
+                '-acodec', 'libmp3lame', '-ab', '64k', '-ar', '16000', '-ac', '1', segment_pattern,
+            ],
+            capture_output=True,
+            timeout=900,
+            check=True,
         )
 
-        segment_files = sorted(glob.glob(os.path.join(tmp_dir, 'seg_*.mp3')))
+        segment_files = sorted(
+            [
+                os.path.join(tmp_dir, name)
+                for name in os.listdir(tmp_dir)
+                if name.startswith('seg_') and name.endswith('.mp3')
+            ]
+        )
         all_text_parts = []
 
         for seg_file in segment_files:
-            with open(seg_file, 'rb') as f:
-                seg_data = f.read()
-
-            whisper_response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=('segment.mp3', seg_data, 'audio/mpeg'),
-                language="pt",
-                response_format="text",
-            )
+            with open(seg_file, 'rb') as seg_stream:
+                whisper_response = client.audio.transcriptions.create(
+                    model='whisper-1',
+                    file=seg_stream,
+                    language='pt',
+                    response_format='text',
+                )
             text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
-            all_text_parts.append(text.strip())
+            if text and text.strip():
+                all_text_parts.append(text.strip())
 
-        return ' '.join(all_text_parts)
+        return '\n\n'.join(all_text_parts).strip()
     finally:
-        # Limpar arquivos temporários
-        for f in glob.glob(os.path.join(tmp_dir, '*')):
-            os.unlink(f)
+        for name in os.listdir(tmp_dir):
+            file_path = os.path.join(tmp_dir, name)
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
         os.rmdir(tmp_dir)
+
+
+def _ensure_transcription_calendar_event(transcription, user):
+    """Cria evento de rastreabilidade da transcrição caso ainda não exista."""
+    if transcription.calendar_event_created_id:
+        return
+
+    now = timezone.now()
+    duration = max(transcription.duration_seconds or 60, 60)
+    summary_preview = (transcription.summary or '').strip()
+
+    cal_event = CalendarEvent.objects.create(
+        owner=user,
+        title=f'📝 Transcrição: {transcription.title}',
+        description=(
+            'Transcrição de reunião processada com IA.\n\n'
+            f'📋 Resumo: {summary_preview[:200]}...\n'
+            f'✅ Itens de ação: {len(transcription.action_items or [])}\n'
+            f'🎯 Decisões: {len(transcription.key_decisions or [])}\n\n'
+            f'Ver transcrição completa: /agenda/transcricoes/{transcription.pk}/'
+        ),
+        event_type='task',
+        color='#ea580c',
+        start=now - timedelta(seconds=duration),
+        end=now,
+        all_day=False,
+    )
+
+    transcription.calendar_event_created = cal_event
+    transcription.save(update_fields=['calendar_event_created'])
+
+
+def _process_transcription_upload_job(transcription_id, client):
+    """Pipeline principal de transcrição inicial."""
+    transcription = MeetingTranscription.objects.select_related('owner').get(pk=transcription_id)
+    if not transcription.audio_file:
+        raise ValueError('Arquivo de áudio não encontrado para processamento.')
+
+    raw_text, duration = _transcribe_audio_from_storage(client, transcription.audio_file)
+    if not raw_text:
+        raise ValueError('Falha ao transcrever áudio enviado.')
+
+    if duration:
+        transcription.duration_seconds = duration
+
+    transcription.raw_transcription = raw_text
+
+    analysis_context = _build_participant_roles_context(transcription.participant_roles)
+    analysis = _generate_transcription_analysis(
+        client,
+        transcription.title,
+        raw_text,
+        analysis_context=analysis_context,
+    )
+
+    transcription.formatted_transcription = analysis['formatted_transcription']
+    transcription.summary = analysis['summary']
+    transcription.sections = analysis['sections']
+    transcription.key_decisions = analysis['key_decisions']
+    transcription.action_items = analysis['action_items']
+    transcription.participants_identified = analysis['participants_identified']
+    transcription.sentiment = analysis['sentiment']
+    transcription.meeting_type_detected = analysis['meeting_type_detected']
+    transcription.tags = analysis['tags']
+    transcription.suggested_events = analysis['suggested_events']
+    transcription.status = 'completed'
+    transcription.error_message = ''
+    transcription.save()
+
+    _ensure_transcription_calendar_event(transcription, transcription.owner)
+    transcription.tasks_created.clear()
+    _create_tasks_from_transcription(transcription, transcription.owner)
+
+
+def _process_transcription_reprocess_job(transcription_id, client, options=None):
+    """Pipeline de reprocessamento, priorizando texto salvo e fallback para áudio."""
+    options = options or {}
+    transcription = MeetingTranscription.objects.select_related('owner').get(pk=transcription_id)
+
+    force_raw = bool(options.get('force_raw'))
+    provided_raw_text = (options.get('raw_text') or '').strip()
+
+    source_text = (transcription.raw_transcription or '').strip()
+    formatted_text = (transcription.formatted_transcription or '').strip()
+
+    if provided_raw_text:
+        source_text = provided_raw_text
+        transcription.raw_transcription = provided_raw_text
+        transcription.save(update_fields=['raw_transcription'])
+
+    if not source_text and formatted_text:
+        source_text = formatted_text
+        transcription.raw_transcription = formatted_text
+        transcription.save(update_fields=['raw_transcription'])
+
+    if force_raw and not source_text:
+        raise ValueError('Não há texto bruto para retranscrever.')
+
+    if not source_text and transcription.audio_file:
+        source_text, duration = _transcribe_audio_from_storage(client, transcription.audio_file)
+        if duration:
+            transcription.duration_seconds = duration
+        if source_text:
+            transcription.raw_transcription = source_text
+            transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
+
+    if not source_text:
+        raise ValueError('Sem transcrição bruta/completa ou áudio para processar.')
+
+    analysis_context = _build_participant_roles_context(transcription.participant_roles)
+    analysis = _generate_transcription_analysis(
+        client,
+        transcription.title,
+        source_text,
+        analysis_context=analysis_context,
+    )
+
+    transcription.formatted_transcription = analysis['formatted_transcription']
+    if not transcription.raw_transcription:
+        transcription.raw_transcription = source_text
+    transcription.summary = analysis['summary']
+    transcription.sections = analysis['sections']
+    transcription.key_decisions = analysis['key_decisions']
+    transcription.action_items = analysis['action_items']
+    transcription.participants_identified = analysis['participants_identified']
+    transcription.sentiment = analysis['sentiment']
+    transcription.meeting_type_detected = analysis['meeting_type_detected']
+    transcription.tags = analysis['tags']
+    transcription.suggested_events = analysis['suggested_events']
+    transcription.status = 'completed'
+    transcription.error_message = ''
+    transcription.save()
+
+    _ensure_transcription_calendar_event(transcription, transcription.owner)
+    transcription.tasks_created.clear()
+    _create_tasks_from_transcription(transcription, transcription.owner)
+
+
+def _run_transcription_background_job(transcription_id, api_key, mode, options=None):
+    """Worker thread para processar transcrição sem depender da conexão HTTP."""
+    import openai
+
+    close_old_connections()
+    options = options or {}
+    source_text = ''
+
+    try:
+        transcription = MeetingTranscription.objects.get(pk=transcription_id)
+    except MeetingTranscription.DoesNotExist:
+        close_old_connections()
+        return
+
+    try:
+        if mode == 'upload' and not api_key:
+            raise ValueError('OPENAI_API_KEY não configurada para transcrição.')
+
+        if mode == 'reprocess' and not api_key:
+            source_text = (transcription.raw_transcription or '').strip() or (transcription.formatted_transcription or '').strip()
+            if not source_text:
+                raise ValueError('Chave da API OpenAI não configurada.')
+
+            transcription.formatted_transcription = transcription.formatted_transcription or source_text
+            transcription.summary = (
+                transcription.summary
+                or 'Reprocessado usando a transcrição já salva. Configure OPENAI_API_KEY para análise avançada.'
+            )
+            transcription.status = 'completed'
+            transcription.error_message = ''
+            transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
+            return
+
+        client = openai.OpenAI(api_key=api_key)
+
+        if mode == 'upload':
+            _process_transcription_upload_job(transcription_id, client)
+        else:
+            _process_transcription_reprocess_job(transcription_id, client, options=options)
+
+    except Exception as err:
+        transcription = MeetingTranscription.objects.filter(pk=transcription_id).first()
+        if transcription:
+            source_text = (transcription.raw_transcription or '').strip() or (transcription.formatted_transcription or '').strip()
+            if source_text:
+                transcription.formatted_transcription = transcription.formatted_transcription or source_text
+                transcription.summary = (
+                    transcription.summary
+                    or 'Processamento parcial concluído usando a transcrição já salva.'
+                )
+                transcription.status = 'completed'
+                transcription.error_message = ''
+                transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
+            else:
+                transcription.status = 'error'
+                transcription.error_message = str(err)
+                transcription.save(update_fields=['status', 'error_message'])
+    finally:
+        close_old_connections()
+
+
+def _start_transcription_background_job(transcription_id, api_key, mode='upload', options=None):
+    """Dispara uma thread para processamento de transcrição em segundo plano."""
+    worker = threading.Thread(
+        target=_run_transcription_background_job,
+        kwargs={
+            'transcription_id': transcription_id,
+            'api_key': api_key,
+            'mode': mode,
+            'options': options or {},
+        },
+        daemon=True,
+        name=f'transcription-{mode}-{transcription_id}',
+    )
+    worker.start()
 
 
 def _create_tasks_from_transcription(transcription, user):
@@ -1287,6 +1548,19 @@ def transcription_detail(request, pk):
         'users': users,
     }
     return render(request, 'agenda/transcription_detail.html', context)
+
+
+@login_required
+def api_transcription_status(request, pk):
+    """Retorna status resumido da transcrição para polling da interface."""
+    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    return JsonResponse({
+        'id': transcription.pk,
+        'status': transcription.status,
+        'error_message': transcription.error_message,
+        'updated_at': transcription.updated_at.isoformat(),
+        'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+    })
 
 
 @login_required
@@ -1379,13 +1653,7 @@ def api_transcription_assign_task(request, pk, task_id):
 @login_required
 @require_POST
 def api_transcription_reprocess(request, pk):
-    """Reiniciar o processamento de uma transcrição (processing travada ou com erro).
-    
-    Prioriza reprocessar a partir da transcrição já salva (bruta/completa).
-    Se não houver texto, tenta reconstruir a transcrição a partir do áudio salvo.
-    """
-    import openai
-    import json as json_module
+    """Reinicia processamento da transcrição em segundo plano."""
     from django.conf import settings as django_settings
 
     transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
@@ -1395,160 +1663,29 @@ def api_transcription_reprocess(request, pk):
     except (json.JSONDecodeError, UnicodeDecodeError):
         payload = {}
 
-    force_raw = bool(payload.get('force_raw'))
     provided_raw_text = (payload.get('raw_text') or '').strip()
-
-    if transcription.status == 'completed':
-        # Permitir reprocessar mesmo completas (o usuário quer "priorizar" = refazer)
-        pass
 
     transcription.status = 'processing'
     transcription.error_message = ''
-    transcription.save(update_fields=['status', 'error_message'])
-
-    source_text = (transcription.raw_transcription or '').strip()
-    formatted_text = (transcription.formatted_transcription or '').strip()
+    update_fields = ['status', 'error_message']
 
     if provided_raw_text:
-        source_text = provided_raw_text
         transcription.raw_transcription = provided_raw_text
-        transcription.save(update_fields=['raw_transcription'])
+        update_fields.append('raw_transcription')
 
-    # 1) Priorizar texto já salvo (Bruta/Completa) para evitar depender do áudio.
-    if not source_text and formatted_text:
-        source_text = formatted_text
-        transcription.raw_transcription = formatted_text
-        transcription.save(update_fields=['raw_transcription'])
-
-    if force_raw and not source_text:
-        transcription.status = 'error'
-        transcription.error_message = 'Não há texto bruto para retranscrever.'
-        transcription.save(update_fields=['status', 'error_message'])
-        return JsonResponse({'error': 'Não há texto bruto para retranscrever.'}, status=400)
+    transcription.save(update_fields=update_fields)
 
     api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
-    if not api_key and source_text:
-        transcription.formatted_transcription = formatted_text or source_text
-        transcription.summary = (
-            transcription.summary
-            or 'Reprocessado usando a transcrição já salva. Configure OPENAI_API_KEY para análise avançada.'
-        )
-        transcription.status = 'completed'
-        transcription.error_message = ''
-        transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
-        return JsonResponse({
-            'ok': True,
-            'status': 'completed',
-            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-        })
-    if not api_key:
-        return JsonResponse({'error': 'Chave da API OpenAI não configurada.'}, status=500)
+    _start_transcription_background_job(
+        transcription_id=transcription.pk,
+        api_key=api_key,
+        mode='reprocess',
+        options=payload,
+    )
 
-    try:
-        client = openai.OpenAI(api_key=api_key)
-
-        # 2) Se não houver texto e não for modo forçado por texto bruto, tentar áudio salvo no storage.
-        if not source_text and not force_raw and transcription.audio_file:
-            try:
-                transcription.audio_file.open('rb')
-                audio_data = transcription.audio_file.read()
-                transcription.audio_file.close()
-
-                fname = transcription.audio_file.name or 'audio.webm'
-                source_text, duration = _transcribe_audio(client, audio_data, fname)
-                if duration:
-                    transcription.duration_seconds = duration
-
-                transcription.raw_transcription = source_text
-                transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
-            except Exception:
-                source_text = (transcription.raw_transcription or '').strip() or formatted_text
-
-        if not source_text:
-            transcription.status = 'error'
-            transcription.error_message = 'Sem transcrição bruta/completa ou áudio para processar.'
-            transcription.save(update_fields=['status', 'error_message'])
-            return JsonResponse({'error': 'Sem transcrição bruta/completa ou áudio para processar.'}, status=400)
-
-        analysis = _generate_transcription_analysis(client, transcription.title, source_text)
-
-        transcription.formatted_transcription = analysis['formatted_transcription']
-        if not transcription.raw_transcription:
-            transcription.raw_transcription = source_text
-        transcription.summary = analysis['summary']
-        transcription.sections = analysis['sections']
-        transcription.key_decisions = analysis['key_decisions']
-        transcription.action_items = analysis['action_items']
-        transcription.participants_identified = analysis['participants_identified']
-        transcription.sentiment = analysis['sentiment']
-        transcription.meeting_type_detected = analysis['meeting_type_detected']
-        transcription.tags = analysis['tags']
-        transcription.suggested_events = analysis['suggested_events']
-        transcription.status = 'completed'
-        transcription.save()
-
-        # Criar evento na agenda se ainda não existe
-        if not transcription.calendar_event_created:
-            now = timezone.now()
-            cal_event = CalendarEvent.objects.create(
-                owner=request.user,
-                title=f"📝 Transcrição: {transcription.title}",
-                description=(
-                    f"Transcrição de reunião processada com IA.\n\n"
-                    f"📋 Resumo: {transcription.summary[:200]}...\n"
-                    f"✅ Itens de ação: {len(transcription.action_items)}\n"
-                    f"🎯 Decisões: {len(transcription.key_decisions)}\n\n"
-                    f"Ver transcrição completa: /agenda/transcricoes/{transcription.pk}/"
-                ),
-                event_type='task',
-                color='#9333ea',
-                start=now - timedelta(seconds=max(transcription.duration_seconds or 60, 60)),
-                end=now,
-                all_day=False,
-            )
-            transcription.calendar_event_created = cal_event
-            transcription.save(update_fields=['calendar_event_created'])
-
-        # Recriar plano de ação para manter consistência com a transcrição normal.
-        # Mantém tarefas antigas no banco, mas remove o vínculo desta transcrição
-        # e cria novamente a partir dos action_items atuais.
-        transcription.tasks_created.clear()
-        _create_tasks_from_transcription(transcription, request.user)
-
-        return JsonResponse({
-            'ok': True,
-            'status': 'completed',
-            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-        })
-
-    except json_module.JSONDecodeError:
-        transcription.formatted_transcription = transcription.formatted_transcription or transcription.raw_transcription or source_text
-        transcription.summary = 'Erro ao processar análise avançada. Transcrição bruta disponível.'
-        transcription.status = 'completed'
-        transcription.save()
-        return JsonResponse({
-            'ok': True,
-            'status': 'completed',
-            'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-        })
-    except Exception as e:
-        # Fallback seguro: se já temos texto salvo, mantemos a transcrição como concluída.
-        if source_text:
-            transcription.formatted_transcription = transcription.formatted_transcription or source_text
-            transcription.summary = (
-                transcription.summary
-                or 'Reprocessamento parcial concluído usando a transcrição já salva.'
-            )
-            transcription.status = 'completed'
-            transcription.error_message = ''
-            transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
-            return JsonResponse({
-                'ok': True,
-                'status': 'completed',
-                'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-            })
-
-        transcription.status = 'error'
-        transcription.error_message = str(e)
-        transcription.save(update_fields=['status', 'error_message'])
-        return JsonResponse({'error': f'Erro ao reprocessar: {str(e)}'}, status=500)
+    return JsonResponse({
+        'ok': True,
+        'status': 'processing',
+        'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        'message': 'Reprocessamento iniciado em segundo plano.',
+    }, status=202)

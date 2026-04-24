@@ -38,6 +38,7 @@ urlpatterns = [
     path('transcricoes/nova/', views.transcription_new, name='transcription_new'),
     path('transcricoes/<int:pk>/', views.transcription_detail, name='transcription_detail'),
     path('api/transcricoes/upload/', views.api_transcription_upload, name='api_transcription_upload'),
+    path('api/transcricoes/<int:pk>/status/', views.api_transcription_status, name='api_transcription_status'),
     path('api/transcricoes/<int:pk>/agendar/', views.api_transcription_schedule, name='api_transcription_schedule'),
     path('api/transcricoes/<int:pk>/tasks/<int:task_id>/assign/', views.api_transcription_assign_task, name='api_transcription_assign_task'),
     path('api/transcricoes/<int:pk>/reprocess/', views.api_transcription_reprocess, name='api_transcription_reprocess'),

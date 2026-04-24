@@ -2,114 +2,237 @@
 
 {% block title %}Nova Transcrição{% endblock %}
 
+{% block extra_css %}
+<style>
+    :root {
+        --trans-brand: #ff6b35;
+        --trans-brand-soft: #fff2ea;
+        --trans-brand-dark: #e85d2d;
+    }
+
+    .trans-shell {
+        background: linear-gradient(165deg, #fff6f0 0%, #fffdfb 48%, #f8fafc 100%);
+        border: 1px solid #ffdcca;
+        box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
+    }
+
+    .trans-card {
+        border: 1px solid #fde1d3;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .mode-card-active {
+        border-color: #ffb08e;
+        background: linear-gradient(180deg, #fff3ec 0%, #fff7f3 100%);
+        box-shadow: 0 6px 14px rgba(255, 107, 53, 0.2);
+    }
+
+    .role-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 9999px;
+        padding: 0.3rem 0.65rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: 1px solid #fecfb4;
+        background: #fff5ef;
+        color: #b9481b;
+    }
+
+    .pulse-ring {
+        animation: pulseRing 1.6s infinite;
+    }
+
+    @keyframes pulseRing {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+        70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    @keyframes fadeSlide {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-slide {
+        animation: fadeSlide 0.24s ease;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+<div class="max-w-5xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
     <nav class="flex mb-4">
         <ol class="inline-flex items-center space-x-1 md:space-x-3">
-            <li><a href="{% url 'agenda:transcription_list' %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-microphone-alt mr-1"></i> Transcrições</a></li>
+            <li><a href="{% url 'agenda:transcription_list' %}" class="text-sm text-gray-500 hover:text-primary"><i class="fas fa-microphone-alt mr-1"></i> Transcrições</a></li>
             <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">Nova Transcrição</span></div></li>
         </ol>
     </nav>
 
-    <div class="bg-white shadow rounded-lg overflow-hidden">
-        <div class="px-5 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
-            <h2 class="text-lg font-bold text-gray-900"><i class="fas fa-microphone-alt text-indigo-600 mr-2"></i> Transcrever Reunião</h2>
-            <p class="text-sm text-gray-500 mt-1">Grave áudio ou faça upload de um arquivo para transcrever com IA avançada (GPT-4o)</p>
+    <div class="rounded-2xl overflow-hidden trans-shell">
+        <div class="px-5 py-5 sm:px-7 border-b border-orange-100 bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div>
+                    <h2 class="text-xl sm:text-2xl font-bold"><i class="fas fa-wave-square mr-2"></i> Central de Transcrição</h2>
+                    <p class="text-sm text-orange-100 mt-1">Grave ou envie áudios longos com processamento robusto, mantendo o padrão visual da plataforma.</p>
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs">
+                    <span class="px-2.5 py-1 rounded-full bg-white/20 border border-white/30"><i class="fas fa-cloud-upload-alt mr-1"></i> Salvamento seguro</span>
+                    <span class="px-2.5 py-1 rounded-full bg-white/20 border border-white/30"><i class="fas fa-clock mr-1"></i> Sem limite de tempo no gravador</span>
+                    <span class="px-2.5 py-1 rounded-full bg-white/20 border border-white/30"><i class="fas fa-window-minimize mr-1"></i> Continua com aba minimizada</span>
+                </div>
+            </div>
         </div>
 
         {% if event %}
-        <div class="px-5 py-3 bg-gray-50 border-b">
-            <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-1 text-indigo-500"></i> Evento: <strong>{{ event.title }}</strong> – {{ event.start|date:"d/m/Y H:i" }}</p>
+        <div class="px-5 sm:px-7 py-3 bg-orange-50 border-b border-orange-100">
+            <p class="text-sm text-orange-900"><i class="fas fa-calendar-day mr-1 text-primary"></i> Evento vinculado: <strong>{{ event.title }}</strong> - {{ event.start|date:"d/m/Y H:i" }}</p>
         </div>
         {% endif %}
 
-        <div class="p-5 space-y-5">
-            <!-- Título -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Título da Reunião *</label>
-                <input type="text" id="transcription-title" value="{% if event %}{{ event.title }}{% endif %}"
-                       placeholder="Ex: Reunião de alinhamento semanal"
-                       class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        <div class="p-5 sm:p-7 space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div class="lg:col-span-2 trans-card bg-white rounded-xl p-4 sm:p-5">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Título da Reunião *</label>
+                    <input
+                        type="text"
+                        id="transcription-title"
+                        value="{% if event %}{{ event.title }}{% endif %}"
+                        placeholder="Ex: Reunião estratégica da operação"
+                        class="w-full border border-orange-200 rounded-lg px-3 py-2.5 text-sm focus:ring-orange-500 focus:border-orange-500"
+                    >
+                    <p class="text-xs text-gray-500 mt-2">Use um título claro para facilitar busca futura e rastreabilidade de decisões.</p>
+                </div>
+
+                <div class="trans-card bg-white rounded-xl p-4 sm:p-5">
+                    <p class="text-sm font-semibold text-gray-700 mb-2">Confiabilidade</p>
+                    <ul class="text-xs text-gray-600 space-y-1.5">
+                        <li><i class="fas fa-check-circle text-green-500 mr-1"></i> Áudio salvo no storage antes da transcrição.</li>
+                        <li><i class="fas fa-cogs text-primary mr-1"></i> Processamento em segundo plano.</li>
+                        <li><i class="fas fa-shield-alt text-blue-500 mr-1"></i> Fallback para preservar texto salvo.</li>
+                    </ul>
+                </div>
             </div>
 
-            <!-- Modo de entrada -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Método de Entrada</label>
-                <div class="flex gap-3">
-                    <button onclick="showRecorder()" id="btn-record" class="flex-1 px-4 py-3 border-2 border-indigo-500 bg-indigo-50 rounded-lg text-center cursor-pointer hover:bg-indigo-100 transition">
-                        <i class="fas fa-microphone text-2xl text-indigo-600 mb-1"></i>
-                        <p class="text-sm font-medium text-indigo-700">Gravar Áudio</p>
+            <div class="trans-card bg-white rounded-xl p-4 sm:p-5">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Método de Entrada</label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button type="button" onclick="showRecorder()" id="btn-record" class="mode-card-active border rounded-xl px-4 py-4 text-left transition">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-orange-100 text-primary flex items-center justify-center"><i class="fas fa-microphone-alt"></i></div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-800">Gravar agora</p>
+                                <p class="text-xs text-gray-500">Ideal para reuniões em andamento</p>
+                            </div>
+                        </div>
                     </button>
-                    <button onclick="showUpload()" id="btn-upload" class="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg text-center cursor-pointer hover:bg-gray-50 transition">
-                        <i class="fas fa-upload text-2xl text-gray-500 mb-1"></i>
-                        <p class="text-sm font-medium text-gray-600">Upload de Arquivo</p>
+                    <button type="button" onclick="showUpload()" id="btn-upload" class="border border-gray-200 rounded-xl px-4 py-4 text-left hover:border-orange-200 transition">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center"><i class="fas fa-file-audio"></i></div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-800">Enviar arquivo</p>
+                                <p class="text-xs text-gray-500">Para áudios gravados externamente</p>
+                            </div>
+                        </div>
                     </button>
                 </div>
             </div>
 
-            <!-- Gravador -->
-            <div id="recorder-section">
-                <div class="bg-gray-50 border rounded-lg p-6 text-center">
-                    <div id="recording-indicator" class="hidden mb-4">
-                        <div class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 rounded-full">
-                            <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
-                            <span class="text-sm font-medium text-red-700">Gravando...</span>
-                            <span id="recording-time" class="text-sm font-mono text-red-600">00:00</span>
+            <div id="recorder-section" class="trans-card bg-white rounded-xl p-5">
+                <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-800"><i class="fas fa-podcast text-primary mr-1"></i> Gravação contínua</p>
+                        <p class="text-xs text-gray-500 mt-1">A gravação segue ativa mesmo com a aba minimizada. Não há limite de tempo no front-end.</p>
+                    </div>
+                    <div id="background-recording-note" class="hidden text-xs px-3 py-1.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                        <i class="fas fa-window-minimize mr-1"></i> Gravando em segundo plano
+                    </div>
+                </div>
+
+                <div class="bg-orange-50 border border-orange-100 rounded-xl p-5 text-center">
+                    <div id="recording-indicator" class="hidden mb-4 fade-slide">
+                        <div class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 border border-red-200 rounded-full pulse-ring">
+                            <span class="w-3 h-3 bg-red-500 rounded-full"></span>
+                            <span class="text-sm font-semibold text-red-700">Gravando</span>
+                            <span id="recording-time" class="text-sm font-mono text-red-700">00:00</span>
                         </div>
                     </div>
+
                     <div id="not-recording" class="mb-4">
-                        <i class="fas fa-microphone text-4xl text-gray-300 mb-2"></i>
-                        <p class="text-sm text-gray-500">Clique para iniciar a gravação</p>
+                        <i class="fas fa-microphone text-4xl text-orange-300 mb-2"></i>
+                        <p class="text-sm text-gray-600">Inicie quando a reunião começar</p>
                     </div>
-                    <div class="flex gap-3 justify-center">
-                        <button onclick="startRecording()" id="btn-start-rec"
-                                class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">
-                            <i class="fas fa-circle mr-2"></i> Iniciar Gravação
+
+                    <div class="flex flex-wrap gap-3 justify-center">
+                        <button type="button" onclick="startRecording()" id="btn-start-rec" class="inline-flex items-center px-4 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">
+                            <i class="fas fa-circle mr-2"></i> Iniciar gravação
                         </button>
-                        <button onclick="stopRecording()" id="btn-stop-rec" class="hidden inline-flex items-center px-4 py-2 bg-gray-700 text-white text-sm font-medium rounded-md hover:bg-gray-800">
-                            <i class="fas fa-stop mr-2"></i> Parar
+                        <button type="button" onclick="stopRecording()" id="btn-stop-rec" class="hidden inline-flex items-center px-4 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-black">
+                            <i class="fas fa-stop mr-2"></i> Encerrar
                         </button>
                     </div>
-                    <div id="audio-preview" class="hidden mt-4">
+
+                    <div id="audio-preview" class="hidden mt-4 fade-slide">
+                        <p class="text-xs text-gray-500 mb-2">Prévia do áudio capturado</p>
                         <audio id="audio-player" controls class="w-full"></audio>
                     </div>
                 </div>
             </div>
 
-            <!-- Upload -->
-            <div id="upload-section" class="hidden">
-                <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <div id="upload-section" class="hidden trans-card bg-white rounded-xl p-5">
+                <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
                     <i class="fas fa-cloud-upload-alt text-4xl text-gray-300 mb-2"></i>
-                    <p class="text-sm text-gray-500 mb-3">Arraste um arquivo de áudio ou clique para selecionar</p>
-                    <input type="file" id="audio-file-input" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm"
-                           class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-                    <p class="text-xs text-gray-400 mt-2">Formatos aceitos: MP3, WAV, M4A, OGG, WebM (máx. 25MB)</p>
+                    <p class="text-sm text-gray-600 mb-2">Selecione um arquivo de áudio para transcrição</p>
+                    <input type="file" id="audio-file-input" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.mp4"
+                           class="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-100 file:text-orange-700 hover:file:bg-orange-200">
+                    <p class="text-xs text-gray-400 mt-2">Formatos comuns são aceitos. Áudios grandes são segmentados automaticamente no processamento.</p>
                 </div>
             </div>
 
-            <!-- Botão de envio -->
-            <div class="flex gap-3 pt-2">
-                <a href="{% url 'agenda:transcription_list' %}"
-                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</a>
-                <button onclick="submitTranscription()" id="btn-submit"
-                        class="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                    <i class="fas fa-magic mr-2"></i> Transcrever com IA
+            <div class="trans-card bg-white rounded-xl p-4 sm:p-5">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-800"><i class="fas fa-user-tag text-primary mr-1"></i> Definir papéis da transcrição</p>
+                        <p class="text-xs text-gray-500 mt-1">Ajuda a IA a identificar quem decide, quem facilita e quem executa.</p>
+                    </div>
+                    <button type="button" onclick="addRoleRow()" class="inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200">
+                        <i class="fas fa-plus mr-1"></i> Adicionar papel
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    <span class="role-pill"><i class="fas fa-chess-king"></i> Moderador</span>
+                    <span class="role-pill"><i class="fas fa-gavel"></i> Tomador de decisão</span>
+                    <span class="role-pill"><i class="fas fa-cogs"></i> Responsável técnico</span>
+                    <span class="role-pill"><i class="fas fa-user-tie"></i> Cliente</span>
+                    <span class="role-pill"><i class="fas fa-eye"></i> Observador</span>
+                </div>
+
+                <div id="roles-container" class="space-y-2"></div>
+                <input type="hidden" id="participant-roles-json" value="[]">
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 pt-1">
+                <a href="{% url 'agenda:transcription_list' %}" class="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 text-center">Cancelar</a>
+                <button type="button" onclick="submitTranscription()" id="btn-submit"
+                        class="flex-1 px-4 py-2.5 border border-transparent rounded-lg text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <i class="fas fa-magic mr-2"></i> Processar Transcrição
                 </button>
             </div>
 
-            <!-- Status de processamento -->
             <div id="processing-status" class="hidden">
-                <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-5 text-center">
-                    <i class="fas fa-spinner fa-spin text-3xl text-indigo-600 mb-3"></i>
-                    <p class="text-sm font-bold text-indigo-700">Processando com IA avançada...</p>
-                    <div class="mt-3 space-y-1.5 text-xs text-indigo-500">
+                <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-5 text-center">
+                    <i class="fas fa-spinner fa-spin text-3xl text-primary mb-3"></i>
+                    <p class="text-sm font-bold text-orange-800">Processamento iniciado em segundo plano</p>
+                    <div class="mt-3 space-y-1.5 text-xs text-orange-700">
                         <p id="step-transcribe"><i class="fas fa-circle-notch fa-spin mr-1"></i> Transcrevendo áudio com Whisper...</p>
-                        <p id="step-analyze" class="opacity-40"><i class="fas fa-circle mr-1"></i> Análise avançada com GPT-4o</p>
-                        <p id="step-sections" class="opacity-40"><i class="fas fa-circle mr-1"></i> Dividindo em seções e tópicos</p>
-                        <p id="step-actions" class="opacity-40"><i class="fas fa-circle mr-1"></i> Identificando decisões e ações</p>
-                        <p id="step-calendar" class="opacity-40"><i class="fas fa-circle mr-1"></i> Registrando na sua agenda</p>
+                        <p id="step-analyze" class="opacity-40"><i class="fas fa-circle mr-1"></i> Estruturando tópicos, decisões e ações</p>
+                        <p id="step-sections" class="opacity-40"><i class="fas fa-circle mr-1"></i> Organizando seções e participantes</p>
+                        <p id="step-actions" class="opacity-40"><i class="fas fa-circle mr-1"></i> Gerando plano de ação</p>
+                        <p id="step-calendar" class="opacity-40"><i class="fas fa-circle mr-1"></i> Gravando na agenda e salvando vínculos</p>
                     </div>
-                    <p class="text-xs text-gray-400 mt-3">Isso pode levar 1-3 minutos dependendo da duração do áudio</p>
+                    <p class="text-xs text-gray-500 mt-3">Você pode minimizar a aba; a transcrição continuará sendo processada.</p>
                 </div>
             </div>
         </div>
@@ -120,54 +243,139 @@
 {% block extra_js %}
 <script>
 let mediaRecorder = null;
+let recordingStream = null;
 let audioChunks = [];
 let recordedBlob = null;
 let recordingTimer = null;
 let recordingSeconds = 0;
+let wakeLock = null;
+let stepInterval = null;
+
+const ROLE_OPTIONS = [
+    { value: 'Moderador', icon: 'fa-chess-king' },
+    { value: 'Tomador de decisão', icon: 'fa-gavel' },
+    { value: 'Responsável técnico', icon: 'fa-cogs' },
+    { value: 'Cliente', icon: 'fa-user-tie' },
+    { value: 'Observador', icon: 'fa-eye' },
+    { value: 'Participante', icon: 'fa-user' },
+];
+
+function isRecording() {
+    return mediaRecorder && mediaRecorder.state === 'recording';
+}
 
 function showRecorder() {
     document.getElementById('recorder-section').classList.remove('hidden');
     document.getElementById('upload-section').classList.add('hidden');
-    document.getElementById('btn-record').classList.add('border-indigo-500', 'bg-indigo-50');
-    document.getElementById('btn-record').classList.remove('border-gray-300');
-    document.getElementById('btn-upload').classList.remove('border-indigo-500', 'bg-indigo-50');
-    document.getElementById('btn-upload').classList.add('border-gray-300');
+    document.getElementById('btn-record').classList.add('mode-card-active');
+    document.getElementById('btn-upload').classList.remove('mode-card-active');
+    updateSubmitState();
 }
 
 function showUpload() {
     document.getElementById('recorder-section').classList.add('hidden');
     document.getElementById('upload-section').classList.remove('hidden');
-    document.getElementById('btn-upload').classList.add('border-indigo-500', 'bg-indigo-50');
-    document.getElementById('btn-upload').classList.remove('border-gray-300');
-    document.getElementById('btn-record').classList.remove('border-indigo-500', 'bg-indigo-50');
-    document.getElementById('btn-record').classList.add('border-gray-300');
+    document.getElementById('btn-upload').classList.add('mode-card-active');
+    document.getElementById('btn-record').classList.remove('mode-card-active');
+    updateSubmitState();
+}
+
+async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+        // Falha silenciosa: alguns browsers/dispositivos não suportam.
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+    }
+}
+
+function updateSubmitState() {
+    const hasRecorded = !!recordedBlob;
+    const hasUpload = document.getElementById('audio-file-input').files.length > 0;
+    document.getElementById('btn-submit').disabled = !(hasRecorded || hasUpload);
+}
+
+function showBackgroundRecordingNote(show) {
+    const el = document.getElementById('background-recording-note');
+    if (!el) return;
+    if (show) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+}
+
+async function notifyBackgroundRecording() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        try {
+            await Notification.requestPermission();
+        } catch (err) {
+            return;
+        }
+    }
+    if (Notification.permission === 'granted') {
+        new Notification('Transcrição em andamento', {
+            body: 'A gravação continua ativa mesmo com a aba minimizada.',
+            icon: '/static/images/logo3.png',
+        });
+    }
 }
 
 async function startRecording() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Seu navegador não suporta captura de áudio.');
+            return;
+        }
+
+        recordingStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            }
+        });
+
+        let recorderOptions = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            recorderOptions = { mimeType: 'audio/webm;codecs=opus' };
+        }
+
+        mediaRecorder = new MediaRecorder(recordingStream, recorderOptions);
         audioChunks = [];
+        recordedBlob = null;
 
         mediaRecorder.ondataavailable = (e) => {
             if (e.data.size > 0) audioChunks.push(e.data);
         };
 
         mediaRecorder.onstop = () => {
-            recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const mimeType = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm';
+            recordedBlob = new Blob(audioChunks, { type: mimeType });
             const url = URL.createObjectURL(recordedBlob);
             document.getElementById('audio-player').src = url;
             document.getElementById('audio-preview').classList.remove('hidden');
-            document.getElementById('btn-submit').disabled = false;
-            stream.getTracks().forEach(t => t.stop());
+            if (recordingStream) {
+                recordingStream.getTracks().forEach(t => t.stop());
+            }
+            recordingStream = null;
+            updateSubmitState();
         };
 
-        mediaRecorder.start(1000);
+        mediaRecorder.start(3000);
         recordingSeconds = 0;
         document.getElementById('recording-indicator').classList.remove('hidden');
         document.getElementById('not-recording').classList.add('hidden');
         document.getElementById('btn-start-rec').classList.add('hidden');
         document.getElementById('btn-stop-rec').classList.remove('hidden');
+        document.getElementById('audio-preview').classList.add('hidden');
+        showBackgroundRecordingNote(false);
+        await requestWakeLock();
 
         recordingTimer = setInterval(() => {
             recordingSeconds++;
@@ -186,15 +394,100 @@ function stopRecording() {
         mediaRecorder.stop();
     }
     clearInterval(recordingTimer);
+    recordingTimer = null;
+    releaseWakeLock();
+    showBackgroundRecordingNote(false);
     document.getElementById('recording-indicator').classList.add('hidden');
     document.getElementById('not-recording').classList.remove('hidden');
     document.getElementById('btn-start-rec').classList.remove('hidden');
     document.getElementById('btn-stop-rec').classList.add('hidden');
 }
 
+function stopRecordingAndWait() {
+    return new Promise((resolve) => {
+        if (!isRecording()) {
+            resolve();
+            return;
+        }
+
+        const handler = () => resolve();
+        mediaRecorder.addEventListener('stop', handler, { once: true });
+        stopRecording();
+    });
+}
+
+function iconForRole(role) {
+    const found = ROLE_OPTIONS.find(o => o.value === role);
+    return found ? found.icon : 'fa-user';
+}
+
+function roleOptionsMarkup(selectedRole) {
+    return ROLE_OPTIONS.map(item => {
+        const selected = item.value === selectedRole ? 'selected' : '';
+        return `<option value="${item.value}" ${selected}>${item.value}</option>`;
+    }).join('');
+}
+
+function addRoleRow(name = '', role = 'Participante') {
+    const container = document.getElementById('roles-container');
+    const row = document.createElement('div');
+    row.className = 'grid grid-cols-1 md:grid-cols-12 gap-2 items-center fade-slide';
+    row.innerHTML = `
+        <div class="md:col-span-5">
+            <input type="text" placeholder="Nome do participante" value="${name}"
+                class="role-name w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
+        </div>
+        <div class="md:col-span-5">
+            <select class="role-type w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
+                ${roleOptionsMarkup(role)}
+            </select>
+        </div>
+        <div class="md:col-span-1 text-center text-gray-400" title="Ícone do papel">
+            <i class="role-icon fas ${iconForRole(role)}"></i>
+        </div>
+        <div class="md:col-span-1 text-right">
+            <button type="button" class="remove-role inline-flex items-center justify-center w-8 h-8 rounded-full text-red-500 hover:bg-red-50">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+
+    container.appendChild(row);
+
+    row.querySelector('.remove-role').addEventListener('click', () => {
+        row.remove();
+        serializeRoles();
+    });
+
+    row.querySelector('.role-name').addEventListener('input', serializeRoles);
+    row.querySelector('.role-type').addEventListener('change', (event) => {
+        const iconEl = row.querySelector('.role-icon');
+        iconEl.className = `role-icon fas ${iconForRole(event.target.value)}`;
+        serializeRoles();
+    });
+
+    serializeRoles();
+}
+
+function serializeRoles() {
+    const rows = Array.from(document.querySelectorAll('#roles-container > div'));
+    const payload = rows.map((row) => {
+        const name = row.querySelector('.role-name').value.trim();
+        const role = row.querySelector('.role-type').value;
+        if (!name) return null;
+        return { name, role, icon: iconForRole(role) };
+    }).filter(Boolean);
+
+    document.getElementById('participant-roles-json').value = JSON.stringify(payload);
+}
+
 // Enable submit when file is selected in upload mode
 document.getElementById('audio-file-input').addEventListener('change', function() {
-    document.getElementById('btn-submit').disabled = !this.files.length;
+    if (this.files.length) {
+        recordedBlob = null;
+        document.getElementById('audio-preview').classList.add('hidden');
+    }
+    updateSubmitState();
 });
 
 async function submitTranscription() {
@@ -204,9 +497,14 @@ async function submitTranscription() {
         return;
     }
 
+    if (isRecording()) {
+        await stopRecordingAndWait();
+    }
+
     const formData = new FormData();
     formData.append('title', title);
     formData.append('duration_seconds', recordingSeconds.toString());
+    formData.append('participant_roles', document.getElementById('participant-roles-json').value || '[]');
     {% if event %}
     formData.append('event_id', '{{ event.pk }}');
     {% endif %}
@@ -224,11 +522,13 @@ async function submitTranscription() {
 
     document.getElementById('btn-submit').disabled = true;
     document.getElementById('processing-status').classList.remove('hidden');
+    document.getElementById('btn-record').disabled = true;
+    document.getElementById('btn-upload').disabled = true;
 
     // Animate processing steps
     const steps = ['step-transcribe', 'step-analyze', 'step-sections', 'step-actions', 'step-calendar'];
     let currentStep = 0;
-    const stepInterval = setInterval(() => {
+    stepInterval = setInterval(() => {
         currentStep++;
         if (currentStep < steps.length) {
             // Mark previous as done
@@ -257,15 +557,14 @@ async function submitTranscription() {
 
         const contentType = resp.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
-            // Servidor retornou HTML (timeout, erro 500, etc.)
             if (resp.status === 413) {
                 alert('Arquivo de áudio muito grande. Tente um arquivo menor ou comprima o áudio.');
-            } else if (resp.status === 502 || resp.status === 504) {
-                alert('O processamento demorou demais e o servidor não respondeu a tempo. A transcrição pode ainda estar sendo processada. Verifique a lista de transcrições em alguns minutos.');
             } else {
-                alert('Erro no servidor (código ' + resp.status + '). A transcrição pode estar sendo processada em segundo plano. Verifique a lista de transcrições.');
+                alert('Erro no servidor (código ' + resp.status + '). Tente novamente em instantes.');
             }
             document.getElementById('btn-submit').disabled = false;
+            document.getElementById('btn-record').disabled = false;
+            document.getElementById('btn-upload').disabled = false;
             document.getElementById('processing-status').classList.add('hidden');
             return;
         }
@@ -276,14 +575,40 @@ async function submitTranscription() {
         } else {
             alert(data.error || 'Erro ao processar transcrição.');
             document.getElementById('btn-submit').disabled = false;
+            document.getElementById('btn-record').disabled = false;
+            document.getElementById('btn-upload').disabled = false;
             document.getElementById('processing-status').classList.add('hidden');
         }
     } catch (err) {
         clearInterval(stepInterval);
-        alert('Erro de conexão. O processamento pode estar acontecendo em segundo plano. Verifique a lista de transcrições em alguns minutos.');
+        alert('Erro de conexão. Verifique sua internet e tente novamente.');
         document.getElementById('btn-submit').disabled = false;
+        document.getElementById('btn-record').disabled = false;
+        document.getElementById('btn-upload').disabled = false;
         document.getElementById('processing-status').classList.add('hidden');
     }
 }
+
+document.addEventListener('visibilitychange', async () => {
+    if (document.hidden && isRecording()) {
+        showBackgroundRecordingNote(true);
+        await notifyBackgroundRecording();
+    } else if (!document.hidden && isRecording()) {
+        showBackgroundRecordingNote(false);
+        await requestWakeLock();
+    }
+});
+
+window.addEventListener('beforeunload', (event) => {
+    if (isRecording()) {
+        event.preventDefault();
+        event.returnValue = '';
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    addRoleRow();
+    updateSubmitState();
+});
 </script>
 {% endblock %}

@@ -2,89 +2,126 @@
 
 {% block title %}Transcrições de Reunião{% endblock %}
 
+{% block extra_css %}
+<style>
+    .trans-list-shell {
+        border: 1px solid #ffd9c9;
+        background: linear-gradient(165deg, #fff7f1 0%, #fffdfb 50%, #f8fafc 100%);
+        box-shadow: 0 16px 30px rgba(15, 23, 42, 0.07);
+    }
+
+    .trans-list-card {
+        border: 1px solid #f7ddd0;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    }
+
+    .status-pill {
+        border-radius: 9999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .status-completed { background: #dcfce7; color: #166534; }
+    .status-processing { background: #ffedd5; color: #9a3412; }
+    .status-recording { background: #fee2e2; color: #991b1b; }
+    .status-error { background: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-5xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div>
-            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-microphone-alt mr-2 text-indigo-600"></i> Transcrições de Reunião</h1>
-            <p class="text-sm text-gray-500 mt-1">Grave e transcreva suas reuniões com IA avançada (GPT-4o)</p>
+<div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="trans-list-shell rounded-2xl overflow-hidden p-4 sm:p-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-microphone-alt mr-2 text-primary"></i> Transcrições de Reunião</h1>
+                <p class="text-sm text-gray-600 mt-1">Histórico com rastreabilidade completa: áudio, resumo, decisões, ações e vínculos na agenda.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'agenda:calendar' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-orange-200 text-gray-700 rounded-lg hover:bg-orange-50">
+                    <i class="fas fa-calendar mr-2 text-primary"></i> Agenda
+                </a>
+                <a href="{% url 'agenda:transcription_new' %}" class="inline-flex items-center px-3 py-2 text-sm font-semibold bg-orange-600 text-white rounded-lg hover:bg-orange-700 shadow-sm">
+                    <i class="fas fa-plus mr-2"></i> Nova Transcrição
+                </a>
+            </div>
         </div>
-        <div class="flex gap-2">
-            <a href="{% url 'agenda:calendar' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
-                <i class="fas fa-calendar mr-2"></i> Agenda
+
+        {% if transcriptions %}
+        <div class="space-y-3">
+            {% for t in transcriptions %}
+            <a href="{% url 'agenda:transcription_detail' t.pk %}" class="trans-list-card block bg-white rounded-xl overflow-hidden group hover:-translate-y-0.5 transition-all">
+                <div class="p-4 sm:p-5">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center flex-wrap gap-2 mb-1">
+                                <span class="font-bold text-gray-900 group-hover:text-primary transition-colors">{{ t.title }}</span>
+
+                                {% if t.status == 'completed' %}
+                                <span class="status-pill status-completed"><i class="fas fa-check"></i> Concluída</span>
+                                {% elif t.status == 'processing' %}
+                                <span class="status-pill status-processing"><i class="fas fa-spinner fa-spin"></i> Processando</span>
+                                {% elif t.status == 'recording' %}
+                                <span class="status-pill status-recording"><i class="fas fa-circle"></i> Gravando</span>
+                                {% elif t.status == 'error' %}
+                                <span class="status-pill status-error"><i class="fas fa-exclamation-triangle"></i> Erro</span>
+                                {% endif %}
+
+                                {% if t.meeting_type_detected and t.meeting_type_detected != 'general' %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-100">
+                                    <i class="fas fa-tag mr-1"></i> {{ t.get_meeting_type_detected_display }}
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            {% if t.event %}
+                            <p class="text-xs text-gray-500"><i class="fas fa-calendar-alt mr-1"></i> {{ t.event.title }} - {{ t.event.start|date:"d/m/Y H:i" }}</p>
+                            {% endif %}
+
+                            {% if t.summary %}
+                            <p class="text-sm text-gray-600 mt-1.5 line-clamp-2">{{ t.summary|truncatewords:38 }}</p>
+                            {% endif %}
+
+                            <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
+                                {% if t.sections %}<span><i class="fas fa-stream mr-1 text-blue-500"></i> {{ t.sections|length }} seções</span>{% endif %}
+                                {% if t.action_items %}<span><i class="fas fa-tasks mr-1 text-emerald-500"></i> {{ t.action_items|length }} ações</span>{% endif %}
+                                {% if t.key_decisions %}<span><i class="fas fa-gavel mr-1 text-amber-500"></i> {{ t.key_decisions|length }} decisões</span>{% endif %}
+                                {% if t.participant_roles %}<span><i class="fas fa-user-tag mr-1 text-primary"></i> {{ t.participant_roles|length }} papéis</span>{% endif %}
+                            </div>
+
+                            {% if t.tags %}
+                            <div class="flex flex-wrap gap-1 mt-2">
+                                {% for tag in t.tags %}
+                                <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">#{{ tag }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="text-right flex-shrink-0">
+                            <span class="text-xs text-gray-400">{{ t.created_at|date:"d/m/Y H:i" }}</span>
+                            <div class="mt-2"><i class="fas fa-chevron-right text-gray-300 group-hover:text-primary transition-colors"></i></div>
+                        </div>
+                    </div>
+                </div>
             </a>
-            <a href="{% url 'agenda:transcription_new' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm">
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-16 text-gray-400 bg-white rounded-xl border border-orange-100">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-orange-50 rounded-full mb-4">
+                <i class="fas fa-microphone-alt text-4xl text-primary"></i>
+            </div>
+            <p class="text-lg mb-2 text-gray-700">Nenhuma transcrição ainda</p>
+            <p class="text-sm mb-4 text-gray-500">Registre reuniões com áudio contínuo e processamento automático em segundo plano.</p>
+            <a href="{% url 'agenda:transcription_new' %}" class="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-semibold shadow-sm">
                 <i class="fas fa-plus mr-2"></i> Nova Transcrição
             </a>
         </div>
+        {% endif %}
     </div>
-
-    {% if transcriptions %}
-    <div class="space-y-3">
-        {% for t in transcriptions %}
-        <a href="{% url 'agenda:transcription_detail' t.pk %}" class="block bg-white border rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden group">
-            <div class="p-4 sm:p-5">
-                <div class="flex items-start justify-between">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-1 flex-wrap">
-                            <span class="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{{ t.title }}</span>
-                            {% if t.status == 'completed' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i> Concluída</span>
-                            {% elif t.status == 'processing' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-spinner fa-spin mr-1"></i> Processando</span>
-                            {% elif t.status == 'recording' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-circle mr-1"></i> Gravando</span>
-                            {% elif t.status == 'error' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-exclamation-triangle mr-1"></i> Erro</span>
-                            {% endif %}
-                            {% if t.meeting_type_detected and t.meeting_type_detected != 'general' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700"><i class="fas fa-tag mr-1"></i> {{ t.get_meeting_type_detected_display }}</span>
-                            {% endif %}
-                        </div>
-                        {% if t.event %}<p class="text-xs text-gray-500"><i class="fas fa-calendar mr-1"></i> {{ t.event.title }} - {{ t.event.start|date:"d/m/Y H:i" }}</p>{% endif %}
-                        {% if t.summary %}<p class="text-sm text-gray-600 mt-1.5 line-clamp-2">{{ t.summary|truncatewords:40 }}</p>{% endif %}
-                        <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
-                            {% if t.sections %}<span><i class="fas fa-stream mr-1 text-indigo-400"></i> {{ t.sections|length }} seções</span>{% endif %}
-                            {% if t.action_items %}<span><i class="fas fa-tasks mr-1 text-emerald-400"></i> {{ t.action_items|length }} ações</span>{% endif %}
-                            {% if t.key_decisions %}<span><i class="fas fa-gavel mr-1 text-amber-400"></i> {{ t.key_decisions|length }} decisões</span>{% endif %}
-                            {% if t.sentiment %}
-                            <span>
-                                {% if t.sentiment == 'positive' %}<i class="fas fa-smile mr-1 text-green-400"></i>
-                                {% elif t.sentiment == 'negative' %}<i class="fas fa-frown mr-1 text-red-400"></i>
-                                {% elif t.sentiment == 'mixed' %}<i class="fas fa-meh mr-1 text-yellow-400"></i>
-                                {% else %}<i class="fas fa-minus-circle mr-1"></i>{% endif %}
-                                {{ t.get_sentiment_display }}
-                            </span>
-                            {% endif %}
-                        </div>
-                        {% if t.tags %}
-                        <div class="flex flex-wrap gap-1 mt-2">
-                            {% for tag in t.tags %}
-                            <span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">#{{ tag }}</span>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </div>
-                    <div class="flex flex-col items-end gap-1 flex-shrink-0 ml-3">
-                        <span class="text-xs text-gray-400">{{ t.created_at|date:"d/m/Y H:i" }}</span>
-                        <i class="fas fa-chevron-right text-gray-300 group-hover:text-indigo-400 transition-colors mt-2"></i>
-                    </div>
-                </div>
-            </div>
-        </a>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="text-center py-16 text-gray-400">
-        <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-50 rounded-full mb-4">
-            <i class="fas fa-microphone-alt text-4xl text-indigo-300"></i>
-        </div>
-        <p class="text-lg mb-2 text-gray-600">Nenhuma transcrição ainda</p>
-        <p class="text-sm mb-4 text-gray-400">Grave ou faça upload de áudio de reuniões para transcrever com IA avançada</p>
-        <a href="{% url 'agenda:transcription_new' %}" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium shadow-sm">
-            <i class="fas fa-plus mr-2"></i> Nova Transcrição
-        </a>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
