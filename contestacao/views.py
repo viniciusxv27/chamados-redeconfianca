@@ -192,6 +192,32 @@ def _format_sale_date_value(raw_value):
     return parsed_dt.strftime('%d/%m/%Y')
 
 
+def _parse_sale_date_value(raw_value):
+    """Converte a data da venda para date, quando possível."""
+    if raw_value is None:
+        return None
+
+    if isinstance(raw_value, float) and pd.isna(raw_value):
+        return None
+
+    if isinstance(raw_value, pd.Timestamp):
+        return raw_value.date()
+    if isinstance(raw_value, datetime.datetime):
+        return raw_value.date()
+    if isinstance(raw_value, datetime.date):
+        return raw_value
+
+    raw_str = str(raw_value).strip()
+    if not raw_str or raw_str.lower() == 'nan':
+        return None
+
+    parsed_series = pd.to_datetime([raw_str], errors='coerce', dayfirst=True)
+    parsed = parsed_series[0] if len(parsed_series) else pd.NaT
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
 def _has_open_contestation_for_sector(filial):
     if not filial:
         return False
@@ -600,6 +626,19 @@ def exclusion_list(request):
 
     qs = ExclusionRecord.objects.all()
 
+    # Mostra apenas os registros com data da venda no mês anterior.
+    now = timezone.localtime(timezone.now()).date()
+    current_month_start = now.replace(day=1)
+    previous_month_end = current_month_start
+    previous_month_start = (current_month_start - datetime.timedelta(days=1)).replace(day=1)
+
+    sale_date_ids = []
+    for record in qs:
+        sale_date = _parse_sale_date_value(record.data_venda)
+        if sale_date and previous_month_start <= sale_date < previous_month_end:
+            sale_date_ids.append(record.id)
+    qs = qs.filter(id__in=sale_date_ids)
+
     # Superadmin vê tudo; outros filtram por setor
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
     can_view_all_scope = _can_view_all_contestation_scope(request.user)
@@ -609,6 +648,7 @@ def exclusion_list(request):
     search = request.GET.get('q', '').strip()
     pilar = request.GET.get('pilar', '').strip()
     filial_filter = request.GET.get('filial', '').strip()
+    
     if search:
         qs = qs.filter(Q(vendedor__icontains=search) | Q(nome_cliente__icontains=search) | Q(cpf_cnpj__icontains=search))
     if pilar:
