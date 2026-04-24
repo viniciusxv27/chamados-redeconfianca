@@ -429,13 +429,13 @@ class User(AbstractUser):
         return self.hierarchy in ['SUPERADMIN']
 
     def can_create_contestations(self):
-        """Permite criação de contestações para SUPERVISOR+ ou PADRAO no grupo Gerentes."""
+        """Permite criação de contestações para SUPERVISOR+ ou PADRAO no grupo GERENTES."""
         if self.is_superuser:
             return True
         if self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
             return True
         if self.hierarchy == 'PADRAO':
-            return True
+            return self.communication_groups.filter(name__iexact='GERENTES').exists()
         return False
     
     def can_delete_users(self):

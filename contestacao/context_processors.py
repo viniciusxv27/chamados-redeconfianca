@@ -25,7 +25,9 @@ def contestacao_menu_context(request):
     user = request.user
     can_access = False
 
-    if user.can_create_contestations():
+    if user.hierarchy == 'PADRAO':
+        can_access = user.can_create_contestations()
+    elif user.can_create_contestations():
         can_access = True
     elif user.hierarchy in ['ADMINISTRATIVO', 'ADMIN', 'SUPERADMIN']:
         can_access = True

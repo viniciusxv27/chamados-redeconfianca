@@ -79,6 +79,8 @@ def _can_create_contestations(user):
 def _can_access_contestation_module(user):
     if not user or not user.is_authenticated:
         return False
+    if user.hierarchy == 'PADRAO':
+        return user.can_create_contestations()
     if _can_create_contestations(user):
         return True
     if user.hierarchy in ['ADMINISTRATIVO', 'ADMIN', 'SUPERADMIN']:
