@@ -1566,17 +1566,18 @@ def fetch_vendedores_por_filial(user_sector, urls=None):
                 # Encontrar coluna de remuneração final
                 rem_final_col = None
                 for col in df_rem.columns:
-                    col_upper = str(col).upper()
-                    if 'REMUNERAÇÃO' in col_upper or 'REMUNERACAO' in col_upper:
-                        if 'FINAL' in col_upper or 'TOTAL' in col_upper:
-                            rem_final_col = col
-                            break
-                if not rem_final_col:
-                    for col in df_rem.columns:
                         col_upper = str(col).upper()
                         if 'REMUNERAÇÃO_FINAL' in col_upper:
                             rem_final_col = col
                             break
+
+                if not rem_final_col:
+                    for col in df_rem.columns:
+                        col_upper = str(col).upper()
+                        if 'REMUNERAÇÃO' in col_upper or 'REMUNERACAO' in col_upper:
+                            if 'FINAL' in col_upper or 'TOTAL' in col_upper:
+                                rem_final_col = col
+                                break
                 if not rem_final_col:
                     for col in df_rem.columns:
                         col_upper = str(col).upper()
