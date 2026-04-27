@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, time, date as date_type
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.files import File
 from django.db import close_old_connections
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -1071,6 +1072,8 @@ def api_transcription_upload(request):
     if not api_key:
         return JsonResponse({'error': 'Chave da API OpenAI não configurada. Configure OPENAI_API_KEY no .env'}, status=500)
 
+    temp_audio_path = _save_uploaded_audio_to_temp(audio_file)
+
     event = None
     if event_id:
         try:
@@ -1083,7 +1086,6 @@ def api_transcription_upload(request):
         owner=request.user,
         event=event,
         title=title,
-        audio_file=audio_file,
         duration_seconds=duration_seconds,
         participant_roles=participant_roles,
         status='processing',
@@ -1093,15 +1095,36 @@ def api_transcription_upload(request):
         transcription_id=transcription.pk,
         api_key=api_key,
         mode='upload',
-        options={},
+        options={
+            'temp_audio_path': temp_audio_path,
+            'original_audio_name': getattr(audio_file, 'name', '') or 'audio.webm',
+        },
     )
 
     return JsonResponse({
         'id': transcription.pk,
         'status': 'processing',
         'redirect': f'/agenda/transcricoes/{transcription.pk}/',
-        'message': 'Áudio salvo e processamento iniciado em segundo plano.',
+        'message': 'Áudio recebido e processamento iniciado em segundo plano.',
     }, status=202)
+
+
+def _save_uploaded_audio_to_temp(uploaded_file):
+    """Copia um upload recebido na request para um arquivo temporário local."""
+    suffix = '.webm'
+    if getattr(uploaded_file, 'name', None):
+        _, ext = os.path.splitext(uploaded_file.name)
+        if ext:
+            suffix = ext
+
+    tmp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    try:
+        for chunk in uploaded_file.chunks():
+            tmp_file.write(chunk)
+    finally:
+        tmp_file.close()
+
+    return tmp_file.name
 
 
 def _copy_storage_file_to_temp(field_file):
@@ -1310,46 +1333,66 @@ def _ensure_transcription_calendar_event(transcription, user):
     transcription.save(update_fields=['calendar_event_created'])
 
 
-def _process_transcription_upload_job(transcription_id, client):
+def _process_transcription_upload_job(transcription_id, client, source_path=None, original_audio_name=None):
     """Pipeline principal de transcrição inicial."""
     transcription = MeetingTranscription.objects.select_related('owner').get(pk=transcription_id)
-    if not transcription.audio_file:
-        raise ValueError('Arquivo de áudio não encontrado para processamento.')
+    temp_path = source_path
 
-    raw_text, duration = _transcribe_audio_from_storage(client, transcription.audio_file)
-    if not raw_text:
-        raise ValueError('Falha ao transcrever áudio enviado.')
+    if temp_path:
+        original_name = original_audio_name or os.path.basename(temp_path) or 'audio.webm'
+        with open(temp_path, 'rb') as audio_stream:
+            transcription.audio_file.save(original_name, File(audio_stream), save=False)
+        transcription.save(update_fields=['audio_file'])
 
-    if duration:
-        transcription.duration_seconds = duration
+    try:
+        if temp_path:
+            raw_text, duration = _transcribe_audio_path(
+                client,
+                temp_path,
+                original_audio_name or os.path.basename(temp_path) or 'audio.webm',
+            )
+        else:
+            if not transcription.audio_file:
+                raise ValueError('Arquivo de áudio não encontrado para processamento.')
 
-    transcription.raw_transcription = raw_text
+            raw_text, duration = _transcribe_audio_from_storage(client, transcription.audio_file)
 
-    analysis_context = _build_participant_roles_context(transcription.participant_roles)
-    analysis = _generate_transcription_analysis(
-        client,
-        transcription.title,
-        raw_text,
-        analysis_context=analysis_context,
-    )
+        if not raw_text:
+            raise ValueError('Falha ao transcrever áudio enviado.')
 
-    transcription.formatted_transcription = analysis['formatted_transcription']
-    transcription.summary = analysis['summary']
-    transcription.sections = analysis['sections']
-    transcription.key_decisions = analysis['key_decisions']
-    transcription.action_items = analysis['action_items']
-    transcription.participants_identified = analysis['participants_identified']
-    transcription.sentiment = analysis['sentiment']
-    transcription.meeting_type_detected = analysis['meeting_type_detected']
-    transcription.tags = analysis['tags']
-    transcription.suggested_events = analysis['suggested_events']
-    transcription.status = 'completed'
-    transcription.error_message = ''
-    transcription.save()
+        if duration:
+            transcription.duration_seconds = duration
 
-    _ensure_transcription_calendar_event(transcription, transcription.owner)
-    transcription.tasks_created.clear()
-    _create_tasks_from_transcription(transcription, transcription.owner)
+        transcription.raw_transcription = raw_text
+
+        analysis_context = _build_participant_roles_context(transcription.participant_roles)
+        analysis = _generate_transcription_analysis(
+            client,
+            transcription.title,
+            raw_text,
+            analysis_context=analysis_context,
+        )
+
+        transcription.formatted_transcription = analysis['formatted_transcription']
+        transcription.summary = analysis['summary']
+        transcription.sections = analysis['sections']
+        transcription.key_decisions = analysis['key_decisions']
+        transcription.action_items = analysis['action_items']
+        transcription.participants_identified = analysis['participants_identified']
+        transcription.sentiment = analysis['sentiment']
+        transcription.meeting_type_detected = analysis['meeting_type_detected']
+        transcription.tags = analysis['tags']
+        transcription.suggested_events = analysis['suggested_events']
+        transcription.status = 'completed'
+        transcription.error_message = ''
+        transcription.save()
+
+        _ensure_transcription_calendar_event(transcription, transcription.owner)
+        transcription.tasks_created.clear()
+        _create_tasks_from_transcription(transcription, transcription.owner)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def _process_transcription_reprocess_job(transcription_id, client, options=None):
@@ -1452,7 +1495,12 @@ def _run_transcription_background_job(transcription_id, api_key, mode, options=N
         client = openai.OpenAI(api_key=api_key)
 
         if mode == 'upload':
-            _process_transcription_upload_job(transcription_id, client)
+            _process_transcription_upload_job(
+                transcription_id,
+                client,
+                source_path=options.get('temp_audio_path'),
+                original_audio_name=options.get('original_audio_name'),
+            )
         else:
             _process_transcription_reprocess_job(transcription_id, client, options=options)
 
