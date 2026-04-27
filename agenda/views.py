@@ -4,6 +4,7 @@ import re
 import subprocess
 import tempfile
 import threading
+from collections import Counter
 from datetime import datetime, timedelta, time, date as date_type
 
 from django.contrib import messages
@@ -329,7 +330,7 @@ def _build_transcription_system_prompt(today_str, compact=False):
     )
 
 
-def _generate_transcription_analysis(client, meeting_title, source_text, analysis_context=''):
+def _generate_transcription_analysis_single(client, meeting_title, source_text, analysis_context=''):
     """Executa análise de IA com retry quando a resposta vier truncada ou inválida."""
     clipped_text = (source_text or '').strip()
     if len(clipped_text) > 120000:
@@ -378,6 +379,159 @@ def _generate_transcription_analysis(client, meeting_title, source_text, analysi
             last_error = err
 
     raise last_error or ValueError('Falha ao analisar transcrição com IA.')
+
+
+def _split_text_for_analysis(source_text, max_chars=100000):
+    """Divide texto longo preservando blocos de parágrafos."""
+    text = (source_text or '').strip()
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    current = []
+    current_len = 0
+    for line in text.splitlines():
+        line_len = len(line) + 1
+        if current_len + line_len > max_chars and current:
+            chunks.append('\n'.join(current).strip())
+            current = []
+            current_len = 0
+        current.append(line)
+        current_len += line_len
+
+    if current:
+        chunks.append('\n'.join(current).strip())
+
+    return [c for c in chunks if c]
+
+
+def _dedupe_by_text(items, key):
+    seen = set()
+    deduped = []
+    for item in items:
+        if isinstance(item, dict):
+            text = (item.get(key) or '').strip()
+        else:
+            text = str(item or '').strip()
+        if not text:
+            continue
+        norm = re.sub(r'\s+', ' ', text.lower())
+        if norm in seen:
+            continue
+        seen.add(norm)
+        deduped.append(item)
+    return deduped
+
+
+def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
+    summaries = [a.get('summary', '').strip() for a in analyses if a.get('summary')]
+    formatted_parts = [a.get('formatted_transcription', '').strip() for a in analyses if a.get('formatted_transcription')]
+    sections = []
+    key_decisions = []
+    action_items = []
+    suggested_events = []
+    participants = set()
+    meeting_types = []
+    sentiments = []
+    tag_counter = Counter()
+
+    for analysis in analyses:
+        sections.extend(analysis.get('sections') or [])
+        key_decisions.extend(analysis.get('key_decisions') or [])
+        action_items.extend(analysis.get('action_items') or [])
+        suggested_events.extend(analysis.get('suggested_events') or [])
+        participants.update([p for p in (analysis.get('participants_identified') or []) if p])
+        meeting_types.append(analysis.get('meeting_type_detected') or 'general')
+        sentiments.append(analysis.get('sentiment') or 'neutral')
+        for tag in (analysis.get('tags') or []):
+            if isinstance(tag, str) and tag.strip():
+                tag_counter[tag.strip().lower()] += 1
+
+    formatted_transcription = '\n\n'.join([p for p in formatted_parts if p]).strip() or (source_text or '').strip()
+
+    summary = ''
+    if summaries:
+        joined = '\n'.join([f'- {text}' for text in summaries if text])
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Você consolida resumos de reuniões. Combine os pontos sem repetir, "
+                            "em 2-3 parágrafos objetivos."
+                        )
+                    },
+                    {"role": "user", "content": f"Resumos parciais da reunião '{meeting_title}':\n\n{joined}"},
+                ],
+                temperature=0.2,
+                max_tokens=800,
+            )
+            summary = (resp.choices[0].message.content or '').strip()
+        except Exception:
+            summary = summaries[0]
+
+    key_decisions = _dedupe_by_text(key_decisions, 'decision')[:60]
+    action_items = _dedupe_by_text(action_items, 'task')[:80]
+    suggested_events = _dedupe_by_text(suggested_events, 'title')[:40]
+
+    sections = sections[:60]
+    tags = [tag for tag, _ in tag_counter.most_common(8)]
+
+    if 'mixed' in sentiments or ('positive' in sentiments and 'negative' in sentiments):
+        sentiment = 'mixed'
+    elif sentiments:
+        sentiment = Counter(sentiments).most_common(1)[0][0]
+    else:
+        sentiment = 'neutral'
+
+    meeting_type = Counter(meeting_types).most_common(1)[0][0] if meeting_types else 'general'
+
+    return {
+        'formatted_transcription': formatted_transcription,
+        'summary': summary,
+        'sections': sections,
+        'key_decisions': key_decisions,
+        'action_items': action_items,
+        'participants_identified': sorted(participants),
+        'sentiment': sentiment,
+        'meeting_type_detected': meeting_type,
+        'tags': tags,
+        'suggested_events': suggested_events,
+    }
+
+
+def _generate_transcription_analysis(client, meeting_title, source_text, analysis_context=''):
+    """Analisa transcrições longas com chunking e consolidação."""
+    source_text = (source_text or '').strip()
+    if len(source_text) <= 120000:
+        return _generate_transcription_analysis_single(client, meeting_title, source_text, analysis_context=analysis_context)
+
+    chunks = _split_text_for_analysis(source_text, max_chars=100000)
+    analyses = []
+    for chunk in chunks:
+        try:
+            analyses.append(
+                _generate_transcription_analysis_single(client, meeting_title, chunk, analysis_context=analysis_context)
+            )
+        except Exception:
+            analyses.append(
+                {
+                    'formatted_transcription': chunk,
+                    'summary': '',
+                    'sections': [],
+                    'key_decisions': [],
+                    'action_items': [],
+                    'participants_identified': [],
+                    'sentiment': 'neutral',
+                    'meeting_type_detected': 'general',
+                    'tags': [],
+                    'suggested_events': [],
+                }
+            )
+
+    return _merge_transcription_analyses(client, meeting_title, analyses, source_text)
 
 
 # =========================================================================
@@ -1125,6 +1279,166 @@ def _save_uploaded_audio_to_temp(uploaded_file):
         tmp_file.close()
 
     return tmp_file.name
+
+
+def _get_transcription_upload_temp_base():
+    base_dir = os.path.join(tempfile.gettempdir(), 'agenda_transcription_uploads')
+    os.makedirs(base_dir, exist_ok=True)
+    return base_dir
+
+
+def _sanitize_upload_id(value):
+    upload_id = (value or '').strip()
+    if not upload_id or not re.match(r'^[a-zA-Z0-9_-]{8,}$', upload_id):
+        return ''
+    return upload_id
+
+
+def _get_upload_dir(upload_id):
+    return os.path.join(_get_transcription_upload_temp_base(), upload_id)
+
+
+@login_required
+@require_POST
+def api_transcription_upload_chunk(request):
+    """Recebe um chunk de áudio para uploads grandes."""
+    upload_id = _sanitize_upload_id(request.POST.get('upload_id'))
+    if not upload_id:
+        return JsonResponse({'error': 'upload_id inválido.'}, status=400)
+
+    try:
+        chunk_index = int(request.POST.get('chunk_index', -1))
+        total_chunks = int(request.POST.get('total_chunks', 0))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Índices de chunk inválidos.'}, status=400)
+
+    if chunk_index < 0 or total_chunks <= 0 or chunk_index >= total_chunks:
+        return JsonResponse({'error': 'Chunk fora do intervalo.'}, status=400)
+
+    audio_chunk = request.FILES.get('audio')
+    if not audio_chunk:
+        return JsonResponse({'error': 'Nenhum chunk enviado.'}, status=400)
+
+    upload_dir = _get_upload_dir(upload_id)
+    os.makedirs(upload_dir, exist_ok=True)
+    part_path = os.path.join(upload_dir, f'part_{chunk_index:06d}')
+
+    with open(part_path, 'wb') as target:
+        for data in audio_chunk.chunks():
+            target.write(data)
+
+    return JsonResponse({
+        'upload_id': upload_id,
+        'chunk_index': chunk_index,
+        'received': True,
+    })
+
+
+@login_required
+@require_POST
+def api_transcription_upload_finalize(request):
+    """Finaliza upload chunked, monta o arquivo e inicia transcrição."""
+    from django.conf import settings as django_settings
+
+    upload_id = _sanitize_upload_id(request.POST.get('upload_id'))
+    if not upload_id:
+        return JsonResponse({'error': 'upload_id inválido.'}, status=400)
+
+    try:
+        total_chunks = int(request.POST.get('total_chunks', 0))
+    except (TypeError, ValueError):
+        total_chunks = 0
+
+    if total_chunks <= 0:
+        return JsonResponse({'error': 'total_chunks inválido.'}, status=400)
+
+    title = request.POST.get('title', '').strip() or 'Reunião sem título'
+    event_id = request.POST.get('event_id')
+    participant_roles = _parse_participant_roles(request.POST.get('participant_roles'))
+
+    try:
+        duration_seconds = int(request.POST.get('duration_seconds', 0) or 0)
+    except (TypeError, ValueError):
+        duration_seconds = 0
+
+    api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        return JsonResponse({'error': 'Chave da API OpenAI não configurada. Configure OPENAI_API_KEY no .env'}, status=500)
+
+    upload_dir = _get_upload_dir(upload_id)
+    if not os.path.isdir(upload_dir):
+        return JsonResponse({'error': 'Upload não encontrado.'}, status=404)
+
+    parts = sorted(
+        [
+            name for name in os.listdir(upload_dir)
+            if name.startswith('part_')
+        ]
+    )
+
+    if len(parts) != total_chunks:
+        return JsonResponse({'error': 'Upload incompleto. Envie todos os chunks.'}, status=400)
+
+    original_audio_name = request.POST.get('original_audio_name', '') or 'audio.webm'
+    _, ext = os.path.splitext(original_audio_name)
+    suffix = ext or '.webm'
+
+    temp_output = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    temp_path = temp_output.name
+    try:
+        for part in parts:
+            part_path = os.path.join(upload_dir, part)
+            with open(part_path, 'rb') as source:
+                while True:
+                    chunk = source.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    temp_output.write(chunk)
+    finally:
+        temp_output.close()
+
+    for part in parts:
+        try:
+            os.unlink(os.path.join(upload_dir, part))
+        except OSError:
+            pass
+    try:
+        os.rmdir(upload_dir)
+    except OSError:
+        pass
+
+    event = None
+    if event_id:
+        try:
+            event = CalendarEvent.objects.get(pk=event_id, owner=request.user)
+        except CalendarEvent.DoesNotExist:
+            pass
+
+    transcription = MeetingTranscription.objects.create(
+        owner=request.user,
+        event=event,
+        title=title,
+        duration_seconds=duration_seconds,
+        participant_roles=participant_roles,
+        status='processing',
+    )
+
+    _start_transcription_background_job(
+        transcription_id=transcription.pk,
+        api_key=api_key,
+        mode='upload',
+        options={
+            'temp_audio_path': temp_path,
+            'original_audio_name': original_audio_name,
+        },
+    )
+
+    return JsonResponse({
+        'id': transcription.pk,
+        'status': 'processing',
+        'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        'message': 'Upload concluído e transcrição iniciada em segundo plano.',
+    }, status=202)
 
 
 def _copy_storage_file_to_temp(field_file):

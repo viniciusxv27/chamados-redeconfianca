@@ -250,6 +250,7 @@ let recordingTimer = null;
 let recordingSeconds = 0;
 let wakeLock = null;
 let stepInterval = null;
+const CHUNK_SIZE = 10 * 1024 * 1024;
 
 const ROLE_OPTIONS = [
     { value: 'Moderador', icon: 'fa-chess-king' },
@@ -481,6 +482,66 @@ function serializeRoles() {
     document.getElementById('participant-roles-json').value = JSON.stringify(payload);
 }
 
+function createUploadId() {
+    if (window.crypto && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    const rand = Math.random().toString(16).slice(2);
+    return `upload_${Date.now()}_${rand}`;
+}
+
+function updateStepText(stepId, text) {
+    const el = document.getElementById(stepId);
+    if (!el) return;
+    el.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1"></i> ' + text;
+    el.classList.remove('opacity-40');
+}
+
+async function uploadChunks(audioBlob, originalName) {
+    const uploadId = createUploadId();
+    const totalChunks = Math.ceil(audioBlob.size / CHUNK_SIZE);
+
+    for (let index = 0; index < totalChunks; index++) {
+        const start = index * CHUNK_SIZE;
+        const end = Math.min(audioBlob.size, start + CHUNK_SIZE);
+        const chunk = audioBlob.slice(start, end);
+
+        updateStepText('step-transcribe', `Enviando áudio (${index + 1}/${totalChunks})...`);
+
+        const form = new FormData();
+        form.append('upload_id', uploadId);
+        form.append('chunk_index', index.toString());
+        form.append('total_chunks', totalChunks.toString());
+        form.append('audio', chunk, originalName);
+
+        const resp = await fetch('{% url "agenda:api_transcription_upload_chunk" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            body: form,
+        });
+
+        if (!resp.ok) {
+            throw new Error('Falha ao enviar parte do áudio.');
+        }
+    }
+
+    return { uploadId, totalChunks };
+}
+
+async function finalizeChunkedUpload(payload) {
+    const form = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === '') return;
+        form.append(key, value);
+    });
+
+    return fetch('{% url "agenda:api_transcription_upload_finalize" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        body: form,
+    });
+}
+
 // Enable submit when file is selected in upload mode
 document.getElementById('audio-file-input').addEventListener('change', function() {
     if (this.files.length) {
@@ -511,6 +572,10 @@ async function submitTranscription() {
 
     // Get audio from recording or upload
     const uploadInput = document.getElementById('audio-file-input');
+    const audioBlob = recordedBlob || (uploadInput.files.length ? uploadInput.files[0] : null);
+    const originalName = recordedBlob
+        ? 'recording.webm'
+        : (uploadInput.files.length ? uploadInput.files[0].name : 'audio.webm');
     if (recordedBlob) {
         formData.append('audio', recordedBlob, 'recording.webm');
     } else if (uploadInput.files.length) {
@@ -547,11 +612,29 @@ async function submitTranscription() {
     }, 4000);
 
     try {
-        const resp = await fetch('{% url "agenda:api_transcription_upload" %}', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-            body: formData,
-        });
+        let resp = null;
+
+        if (audioBlob && audioBlob.size > CHUNK_SIZE) {
+            const chunkInfo = await uploadChunks(audioBlob, originalName);
+            const payload = {
+                upload_id: chunkInfo.uploadId,
+                total_chunks: chunkInfo.totalChunks.toString(),
+                original_audio_name: originalName,
+                title,
+                duration_seconds: recordingSeconds.toString(),
+                participant_roles: document.getElementById('participant-roles-json').value || '[]',
+                {% if event %}
+                event_id: '{{ event.pk }}',
+                {% endif %}
+            };
+            resp = await finalizeChunkedUpload(payload);
+        } else {
+            resp = await fetch('{% url "agenda:api_transcription_upload" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                body: formData,
+            });
+        }
 
         clearInterval(stepInterval);
 
