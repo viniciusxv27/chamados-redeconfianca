@@ -1166,11 +1166,11 @@ def _convert_to_mp3(input_path):
                 '-ab', '64k', '-ar', '16000', '-ac', '1', output_path,
             ],
             capture_output=True,
-            timeout=900,
+            timeout=1800,  # Aumentado para 30min (era 900)
             check=True,
         )
         return output_path
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         if os.path.exists(output_path):
             os.unlink(output_path)
         return None
@@ -1204,44 +1204,72 @@ def _transcribe_audio_from_storage(client, field_file):
 
 
 def _transcribe_audio_path(client, source_path, original_filename):
-    """Converte para mp3 quando possível, divide em partes se necessário e transcreve."""
+    """Converte para mp3 quando possível, divide em partes se necessário e transcreve com retry."""
     whisper_max_size = 24 * 1024 * 1024  # 24MB
+    
+    # Primeiro, tenta sem conversão se for pequeno o suficiente
+    try:
+        source_size = os.path.getsize(source_path)
+        if source_size <= whisper_max_size:
+            return _try_transcribe_file(client, source_path, is_converted=False, max_retries=2)
+    except Exception:
+        pass
+    
+    # Para arquivos grandes, tenta converter para MP3 (menor, mais robusto)
     mp3_path = _convert_to_mp3(source_path)
-
     if mp3_path:
         try:
             mp3_size = os.path.getsize(mp3_path)
             if mp3_size <= whisper_max_size:
-                with open(mp3_path, 'rb') as audio_stream:
-                    whisper_response = client.audio.transcriptions.create(
-                        model='whisper-1',
-                        file=audio_stream,
-                        language='pt',
-                        response_format='verbose_json',
-                        timestamp_granularities=['segment'],
-                    )
-                return _extract_whisper_text_and_duration(whisper_response)
-
+                # Tentativa com retry para upload único
+                return _try_transcribe_file(client, mp3_path, is_converted=True, max_retries=3)
+            
+            # Se ainda for grande, divide em segmentos
             raw_text = _split_and_transcribe(client, mp3_path)
             return raw_text, None
         finally:
             if os.path.exists(mp3_path):
                 os.unlink(mp3_path)
+    
+    # Fallback: divide o original se for muito grande
+    try:
+        if os.path.getsize(source_path) > whisper_max_size:
+            # Tenta dividir o arquivo original sem converter
+            raw_text = _split_and_transcribe_raw(client, source_path)
+            return raw_text, None
+    except Exception:
+        pass
+    
+    # Último recurso: tenta enviar o original direto com retry
+    return _try_transcribe_file(client, source_path, is_converted=False, max_retries=3)
 
-    # fallback sem ffmpeg: tenta enviar o original direto para Whisper
-    with open(source_path, 'rb') as audio_stream:
-        whisper_response = client.audio.transcriptions.create(
-            model='whisper-1',
-            file=audio_stream,
-            language='pt',
-            response_format='verbose_json',
-            timestamp_granularities=['segment'],
-        )
-    return _extract_whisper_text_and_duration(whisper_response)
+
+def _try_transcribe_file(client, file_path, is_converted=False, max_retries=2):
+    """Tenta transcrever um arquivo com retry automático em caso de erro."""
+    for attempt in range(max_retries):
+        try:
+            with open(file_path, 'rb') as audio_stream:
+                # Retries internos do Whisper com backoff
+                whisper_response = client.audio.transcriptions.create(
+                    model='whisper-1',
+                    file=audio_stream,
+                    language='pt',
+                    response_format='verbose_json',
+                    timestamp_granularities=['segment'],
+                )
+            return _extract_whisper_text_and_duration(whisper_response)
+        except Exception as e:
+            if attempt < max_retries - 1:
+                import time
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                time.sleep(wait_time)
+                continue
+            # Último attempt falhou, re-raise
+            raise
 
 
 def _split_and_transcribe(client, mp3_path):
-    """Divide mp3 grande em segmentos de ~10min e concatena as transcrições."""
+    """Divide mp3 grande em segmentos de ~10min e concatena as transcrições com retry."""
     try:
         probe_result = subprocess.run(
             [
@@ -1269,7 +1297,7 @@ def _split_and_transcribe(client, mp3_path):
                 '-acodec', 'libmp3lame', '-ab', '64k', '-ar', '16000', '-ac', '1', segment_pattern,
             ],
             capture_output=True,
-            timeout=900,
+            timeout=1800,  # Aumentado para 30min (era 900)
             check=True,
         )
 
@@ -1283,17 +1311,87 @@ def _split_and_transcribe(client, mp3_path):
         all_text_parts = []
 
         for seg_file in segment_files:
-            with open(seg_file, 'rb') as seg_stream:
-                whisper_response = client.audio.transcriptions.create(
-                    model='whisper-1',
-                    file=seg_stream,
-                    language='pt',
-                    response_format='text',
-                )
-            text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
-            if text and text.strip():
-                all_text_parts.append(text.strip())
+            # Retry para cada segmento
+            for attempt in range(3):
+                try:
+                    with open(seg_file, 'rb') as seg_stream:
+                        whisper_response = client.audio.transcriptions.create(
+                            model='whisper-1',
+                            file=seg_stream,
+                            language='pt',
+                            response_format='text',
+                        )
+                    text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
+                    if text and text.strip():
+                        all_text_parts.append(text.strip())
+                    break  # Success, move to next segment
+                except Exception as e:
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    # Falhou após retry, adiciona texto vazio
+                    all_text_parts.append(f'[Segmento não transcrito: {str(e)[:50]}]')
 
+        return '\n\n'.join(all_text_parts).strip()
+    finally:
+        for name in os.listdir(tmp_dir):
+            file_path = os.path.join(tmp_dir, name)
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+        os.rmdir(tmp_dir)
+
+
+def _split_and_transcribe_raw(client, source_path):
+    """Divide arquivo de áudio SEM converter para MP3, segmentando por tamanho (backup)."""
+    whisper_max_size = 24 * 1024 * 1024  # 24MB
+    file_size = os.path.getsize(source_path)
+    
+    # Calcula quantos chunks são necessários
+    num_chunks = (file_size // whisper_max_size) + 1
+    if num_chunks <= 1:
+        return _try_transcribe_file(client, source_path, is_converted=False, max_retries=2)[0]
+    
+    # Divide o arquivo em chunks
+    tmp_dir = tempfile.mkdtemp()
+    chunk_size = file_size // num_chunks + 1
+    all_text_parts = []
+    
+    try:
+        chunk_index = 0
+        with open(source_path, 'rb') as f:
+            while True:
+                chunk_data = f.read(chunk_size)
+                if not chunk_data:
+                    break
+                
+                chunk_path = os.path.join(tmp_dir, f'chunk_{chunk_index:03d}.webm')
+                with open(chunk_path, 'wb') as chunk_file:
+                    chunk_file.write(chunk_data)
+                
+                # Transcreve cada chunk
+                for attempt in range(2):
+                    try:
+                        with open(chunk_path, 'rb') as audio_stream:
+                            whisper_response = client.audio.transcriptions.create(
+                                model='whisper-1',
+                                file=audio_stream,
+                                language='pt',
+                                response_format='text',
+                            )
+                        text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
+                        if text and text.strip():
+                            all_text_parts.append(text.strip())
+                        break
+                    except Exception:
+                        if attempt < 1:
+                            import time
+                            time.sleep(2)
+                        else:
+                            all_text_parts.append(f'[Chunk {chunk_index} não processado]')
+                
+                chunk_index += 1
+        
         return '\n\n'.join(all_text_parts).strip()
     finally:
         for name in os.listdir(tmp_dir):
@@ -1508,21 +1606,7 @@ def _run_transcription_background_job(transcription_id, api_key, mode, options=N
         transcription = MeetingTranscription.objects.filter(pk=transcription_id).first()
         if transcription:
             source_text = (transcription.raw_transcription or '').strip() or (transcription.formatted_transcription or '').strip()
-            if source_text:
-                transcription.formatted_transcription = transcription.formatted_transcription or source_text
-                transcription.summary = (
-                    transcription.summary
-                    or 'Processamento parcial concluído usando a transcrição já salva.'
-                )
-                transcription.status = 'completed'
-                transcription.error_message = ''
-                transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
-            else:
-                transcription.status = 'error'
-                transcription.error_message = str(err)
-                transcription.save(update_fields=['status', 'error_message'])
-    finally:
-        close_old_connections()
+            error_msg = str(err)[:500]  # Limita a mensagem de erro\n            \n            # Se temos transcrição bruta, marca como sucesso parcial\n            if source_text:\n                transcription.formatted_transcription = transcription.formatted_transcription or source_text\n                transcription.summary = (\n                    transcription.summary\n                    or f'Transcrição bruta processada. (Análise de IA: {error_msg[:100]})'\n                )\n                # Atribui tipo genérico já que a análise completa falhou\n                if not transcription.meeting_type_detected:\n                    transcription.meeting_type_detected = 'general'\n                if not transcription.sentiment:\n                    transcription.sentiment = 'neutral'\n                \n                transcription.status = 'completed'\n                transcription.error_message = ''  # Considerado \"sucesso\"\n                transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message', 'meeting_type_detected', 'sentiment'])\n            else:\n                # Nenhuma transcrição, falha real\n                transcription.status = 'error'\n                transcription.error_message = error_msg\n                transcription.save(update_fields=['status', 'error_message'])\n    finally:\n        close_old_connections()
 
 
 def _start_transcription_background_job(transcription_id, api_key, mode='upload', options=None):
