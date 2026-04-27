@@ -1199,13 +1199,26 @@ def manage_contestations(request):
         else:
             base_qs = base_qs.none()
 
+    # Filtro de status
+    status_filter = request.GET.get('status', 'pending')
+
+    # Filtro por mês de abertura (aplicado apenas em "todas").
+    opened_month_filter = request.GET.get('opened_month', '').strip()
+    if status_filter == '' and opened_month_filter:
+        try:
+            opened_month_date = datetime.datetime.strptime(opened_month_filter, '%Y-%m').date()
+            base_qs = base_qs.filter(
+                created_at__year=opened_month_date.year,
+                created_at__month=opened_month_date.month,
+            )
+        except ValueError:
+            opened_month_filter = ''
+
     # Filtro de loja/filial
     filial_filter = request.GET.get('filial', '').strip()
     if filial_filter:
         base_qs = base_qs.filter(exclusion__filial__iexact=filial_filter)
 
-    # Filtro de status
-    status_filter = request.GET.get('status', 'pending')
     qs = base_qs
     if status_filter == 'awaiting_manager':
         qs = qs.filter(status='rejected', confirmed_by__isnull=True)
@@ -1326,6 +1339,7 @@ def manage_contestations(request):
     context = {
         'contestations': qs[:100],
         'status_filter': status_filter,
+        'opened_month_filter': opened_month_filter,
         'filial_filter': filial_filter,
         'filiais': filiais,
         'pending_count': pending_count,
