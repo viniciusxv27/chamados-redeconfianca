@@ -1312,7 +1312,10 @@ def api_transcription_upload_chunk(request):
     except (TypeError, ValueError):
         return JsonResponse({'error': 'Índices de chunk inválidos.'}, status=400)
 
-    if chunk_index < 0 or total_chunks <= 0 or chunk_index >= total_chunks:
+    if chunk_index < 0:
+        return JsonResponse({'error': 'Chunk fora do intervalo.'}, status=400)
+
+    if total_chunks > 0 and chunk_index >= total_chunks:
         return JsonResponse({'error': 'Chunk fora do intervalo.'}, status=400)
 
     audio_chunk = request.FILES.get('audio')

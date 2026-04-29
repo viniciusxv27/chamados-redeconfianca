@@ -251,6 +251,12 @@ let recordingSeconds = 0;
 let wakeLock = null;
 let stepInterval = null;
 const CHUNK_SIZE = 10 * 1024 * 1024;
+const LIVE_RECORD_CHUNK_MS = 10 * 60 * 1000;
+let uploadQueue = Promise.resolve();
+let recordedUploadId = '';
+let recordedChunksCount = 0;
+let liveUploadActive = false;
+let recordedOriginalName = 'recording.webm';
 
 const ROLE_OPTIONS = [
     { value: 'Moderador', icon: 'fa-chess-king' },
@@ -300,7 +306,8 @@ function releaseWakeLock() {
 function updateSubmitState() {
     const hasRecorded = !!recordedBlob;
     const hasUpload = document.getElementById('audio-file-input').files.length > 0;
-    document.getElementById('btn-submit').disabled = !(hasRecorded || hasUpload);
+    const hasLiveRecording = recordedUploadId && recordedChunksCount > 0;
+    document.getElementById('btn-submit').disabled = !(hasRecorded || hasUpload || hasLiveRecording);
 }
 
 function showBackgroundRecordingNote(show) {
@@ -350,17 +357,40 @@ async function startRecording() {
         mediaRecorder = new MediaRecorder(recordingStream, recorderOptions);
         audioChunks = [];
         recordedBlob = null;
+        recordedUploadId = createUploadId();
+        recordedChunksCount = 0;
+        liveUploadActive = true;
+        recordedOriginalName = 'recording.webm';
+        uploadQueue = Promise.resolve();
 
         mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunks.push(e.data);
+            if (!e.data || e.data.size === 0) return;
+            if (!liveUploadActive) {
+                audioChunks.push(e.data);
+                return;
+            }
+
+            const chunkIndex = recordedChunksCount;
+            recordedChunksCount += 1;
+
+            uploadQueue = uploadQueue.then(() => uploadRecordingChunk(e.data, chunkIndex));
+            uploadQueue.catch(() => {
+                alert('Erro ao enviar parte do áudio. Verifique sua conexão e tente novamente.');
+            });
+            updateSubmitState();
         };
 
         mediaRecorder.onstop = () => {
-            const mimeType = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm';
-            recordedBlob = new Blob(audioChunks, { type: mimeType });
-            const url = URL.createObjectURL(recordedBlob);
-            document.getElementById('audio-player').src = url;
-            document.getElementById('audio-preview').classList.remove('hidden');
+            if (liveUploadActive) {
+                recordedBlob = null;
+                document.getElementById('audio-preview').classList.add('hidden');
+            } else {
+                const mimeType = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'audio/webm';
+                recordedBlob = new Blob(audioChunks, { type: mimeType });
+                const url = URL.createObjectURL(recordedBlob);
+                document.getElementById('audio-player').src = url;
+                document.getElementById('audio-preview').classList.remove('hidden');
+            }
             if (recordingStream) {
                 recordingStream.getTracks().forEach(t => t.stop());
             }
@@ -368,7 +398,7 @@ async function startRecording() {
             updateSubmitState();
         };
 
-        mediaRecorder.start(3000);
+        mediaRecorder.start(LIVE_RECORD_CHUNK_MS);
         recordingSeconds = 0;
         document.getElementById('recording-indicator').classList.remove('hidden');
         document.getElementById('not-recording').classList.add('hidden');
@@ -497,6 +527,24 @@ function updateStepText(stepId, text) {
     el.classList.remove('opacity-40');
 }
 
+async function uploadRecordingChunk(chunk, chunkIndex) {
+    const form = new FormData();
+    form.append('upload_id', recordedUploadId);
+    form.append('chunk_index', chunkIndex.toString());
+    form.append('total_chunks', '0');
+    form.append('audio', chunk, recordedOriginalName);
+
+    const resp = await fetch('{% url "agenda:api_transcription_upload_chunk" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        body: form,
+    });
+
+    if (!resp.ok) {
+        throw new Error('Falha ao enviar chunk de gravação.');
+    }
+}
+
 async function uploadChunks(audioBlob, originalName) {
     const uploadId = createUploadId();
     const totalChunks = Math.ceil(audioBlob.size / CHUNK_SIZE);
@@ -546,6 +594,9 @@ async function finalizeChunkedUpload(payload) {
 document.getElementById('audio-file-input').addEventListener('change', function() {
     if (this.files.length) {
         recordedBlob = null;
+        recordedUploadId = '';
+        recordedChunksCount = 0;
+        liveUploadActive = false;
         document.getElementById('audio-preview').classList.add('hidden');
     }
     updateSubmitState();
@@ -573,14 +624,16 @@ async function submitTranscription() {
     // Get audio from recording or upload
     const uploadInput = document.getElementById('audio-file-input');
     const audioBlob = recordedBlob || (uploadInput.files.length ? uploadInput.files[0] : null);
-    const originalName = recordedBlob
-        ? 'recording.webm'
-        : (uploadInput.files.length ? uploadInput.files[0].name : 'audio.webm');
+    const originalName = recordedUploadId
+        ? recordedOriginalName
+        : (recordedBlob
+            ? 'recording.webm'
+            : (uploadInput.files.length ? uploadInput.files[0].name : 'audio.webm'));
     if (recordedBlob) {
         formData.append('audio', recordedBlob, 'recording.webm');
     } else if (uploadInput.files.length) {
         formData.append('audio', uploadInput.files[0]);
-    } else {
+    } else if (!recordedUploadId) {
         alert('Grave ou faça upload de um áudio primeiro.');
         return;
     }
@@ -614,7 +667,21 @@ async function submitTranscription() {
     try {
         let resp = null;
 
-        if (audioBlob && audioBlob.size > CHUNK_SIZE) {
+        if (recordedUploadId) {
+            await uploadQueue;
+            const payload = {
+                upload_id: recordedUploadId,
+                total_chunks: recordedChunksCount.toString(),
+                original_audio_name: originalName,
+                title,
+                duration_seconds: recordingSeconds.toString(),
+                participant_roles: document.getElementById('participant-roles-json').value || '[]',
+                {% if event %}
+                event_id: '{{ event.pk }}',
+                {% endif %}
+            };
+            resp = await finalizeChunkedUpload(payload);
+        } else if (audioBlob && audioBlob.size > CHUNK_SIZE) {
             const chunkInfo = await uploadChunks(audioBlob, originalName);
             const payload = {
                 upload_id: chunkInfo.uploadId,
