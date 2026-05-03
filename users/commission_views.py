@@ -7,6 +7,8 @@ Visões:
 - CN: Vê seu comissionamento, valores por pilar, lista de vendas
 - Gerente: Vê todos os CNs da loja, valores de cada CN, atingimentos por pilar
 - Coordenador: Vê todos os gerentes e CNs, atingimento das lojas
+- Recepcionista: Vê seu comissionamento (sheet específica)
+- Superadmin: Visão de todos os usuários com comissionamento
 """
 import requests
 from django.shortcuts import render, redirect, get_object_or_404
@@ -180,6 +182,7 @@ EXCEL_BASE_EXCLUSAO_URL = DEFAULT_EXCEL_BASE_EXCLUSAO_URL
 SHEET_GERENTE = "REMUNERAÇÃO GERENTE"
 SHEET_CN = "REMUNERAÇÃO CN"
 SHEET_COORDENADOR = "REMUNERAÇÃO COO e SNP"
+SHEET_RECEPCIONISTA = "REMUNERAÇÃO RECEPCIONISTA"
 
 # Nome da sheet na planilha de vendas (será detectado automaticamente)
 SHEET_VENDAS = "VENDAS"
@@ -187,6 +190,7 @@ SHEET_VENDAS = "VENDAS"
 # Grupos que identificam cada tipo de usuário
 GERENTE_GROUP_NAME = "GERENTES (CHECKLIST)"
 COORDENADOR_GROUP_NAME = "COORDENADORES"
+RECEPCIONISTA_GROUP_NAME = "RECEPCIONISTAS"
 
 
 def normalize_person_name(name):
@@ -233,19 +237,50 @@ def is_user_coordenador(user):
     return False
 
 
+def is_user_recepcionista(user):
+    """Verifica se o usuário está no grupo RECEPCIONISTAS"""
+    from communications.models import CommunicationGroup
+    try:
+        recep_group = CommunicationGroup.objects.filter(name__icontains="RECEPCIONISTAS").first()
+        if recep_group:
+            return user in recep_group.members.all()
+    except Exception:
+        pass
+    return False
+
+
+def is_user_superadmin(user):
+    """Verifica se o usuário é SUPERADMIN"""
+    return getattr(user, 'hierarchy', None) == 'SUPERADMIN'
+
+
 def get_user_role(user):
     """
     Retorna o papel do usuário no sistema de comissionamento:
     - 'coordenador': Pode ver todos os gerentes e CNs
     - 'gerente': Pode ver CNs da sua loja
+    - 'recepcionista': Vê apenas seu próprio comissionamento
     - 'cn': Vê apenas seu próprio comissionamento
     """
+    if is_user_superadmin(user):
+        return 'superadmin'
     if is_user_coordenador(user):
         return 'coordenador'
     elif is_user_gerente(user):
         return 'gerente'
+    elif is_user_recepcionista(user):
+        return 'recepcionista'
     else:
         return 'cn'
+
+
+def get_group_members_by_name(name_contains):
+    """Retorna membros ativos de um grupo de comunicação por nome parcial."""
+    from communications.models import CommunicationGroup
+    group = CommunicationGroup.objects.filter(name__icontains=name_contains).first()
+    if group:
+        return group.members.filter(is_active=True)
+    return User.objects.none()
 
 
 def get_sector_users(user, include_gerentes=False):
@@ -2768,6 +2803,10 @@ def commission_view(request):
     
     role = get_user_role(user)
     
+    # Superadmin vê todos
+    if role == 'superadmin':
+        return commission_superadmin_view(request)
+
     # Coordenador tem visão especial
     if role == 'coordenador':
         return commission_coordenador_view(request)
@@ -2775,9 +2814,217 @@ def commission_view(request):
     # Gerente pode ver equipe ou seu próprio
     if role == 'gerente':
         return commission_gerente_view(request)
+
+    # Recepcionista
+    if role == 'recepcionista':
+        return commission_recepcionista_view(request)
     
     # CN padrão
     return commission_cn_view(request)
+
+
+@login_required
+def commission_superadmin_view(request):
+    """
+    Visão do Superadmin:
+    - Lista todos os usuários com comissionamento
+    - Permite visualizar detalhes de qualquer usuário
+    """
+    user = request.user
+    if not is_user_superadmin(user):
+        return redirect('commission')
+
+    reference = resolve_commission_reference_from_request(request)
+    urls = get_excel_urls(reference['year'], reference['month'])
+
+    if reference['invalid_selection']:
+        messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
+
+    viewing_user_id = request.GET.get('user')
+    if viewing_user_id:
+        target_user = get_object_or_404(User, id=viewing_user_id, is_active=True)
+        target_is_gerente = is_user_gerente(target_user)
+        target_is_coordenador = is_user_coordenador(target_user)
+        target_is_recepcionista = is_user_recepcionista(target_user)
+
+        if target_is_gerente:
+            sheet_name = SHEET_GERENTE
+            lookup_name = target_user.get_full_name() or target_user.first_name
+        elif target_is_coordenador:
+            sheet_name = SHEET_COORDENADOR
+            lookup_name = target_user.first_name or target_user.get_full_name() or ''
+        elif target_is_recepcionista:
+            sheet_name = SHEET_RECEPCIONISTA
+            lookup_name = target_user.get_full_name() or target_user.first_name
+        else:
+            sheet_name = SHEET_CN
+            lookup_name = target_user.get_full_name() or target_user.first_name
+
+        result = fetch_excel_data(
+            sheet_name,
+            lookup_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
+
+        meses = get_month_names(reference['year'], reference['month'])
+        target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
+
+        vendas = []
+        if not target_is_gerente and not target_is_coordenador:
+            vendas_result = fetch_vendas_data(
+                lookup_name,
+                excel_url=urls['vendas'],
+                cache_suffix=reference['cache_suffix'],
+                urls=urls,
+            )
+            if vendas_result.get('success'):
+                vendas = vendas_result.get('vendas', [])
+
+        context = {
+            'user': user,
+            'target_user': target_user,
+            'viewing_other': True,
+            'is_gerente': target_is_gerente,
+            'target_is_gerente': target_is_gerente,
+            'sector_users': [],
+            'result': result,
+            'meses': meses,
+            'vendas': vendas,
+            'role': 'superadmin',
+            'reference_year_options': reference['year_options'],
+            'reference_month_options': reference['month_options'],
+            'selected_reference_year': reference['year'],
+            'selected_reference_month': reference['month'],
+        }
+
+        if result.get('success'):
+            if target_is_coordenador:
+                metas_pilar = fetch_metas_por_pilar_coordenador(
+                    lookup_name,
+                    urls=urls,
+                    cache_suffix=reference['cache_suffix'],
+                )
+                processed = process_coordenador_commission_data(result['data'], metas_pilar)
+            else:
+                metas_pilar = fetch_metas_por_pilar(
+                    lookup_name,
+                    target_is_gerente,
+                    target_sector,
+                    urls=urls,
+                    cache_suffix=reference['cache_suffix'],
+                )
+                iq_data = fetch_iq_data(
+                    lookup_name,
+                    excel_url=urls['comissao'],
+                    cache_suffix=reference['cache_suffix'],
+                )
+                processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
+
+            context['data'] = processed
+            context['charts_json'] = json.dumps(processed['charts'])
+
+        return render(request, 'users/commission.html', context)
+
+    gerentes = get_group_members_by_name('GERENTES')
+    coordenadores = get_group_members_by_name('COORDENADORES')
+    recepcionistas = get_group_members_by_name('RECEPCIONISTAS')
+
+    excluded_ids = set(gerentes.values_list('id', flat=True))
+    excluded_ids.update(coordenadores.values_list('id', flat=True))
+    excluded_ids.update(recepcionistas.values_list('id', flat=True))
+
+    cns = User.objects.filter(
+        hierarchy='PADRAO',
+        is_active=True,
+    ).exclude(id__in=excluded_ids).order_by('first_name', 'last_name')
+
+    context = {
+        'user': user,
+        'gerentes': gerentes,
+        'coordenadores': coordenadores,
+        'recepcionistas': recepcionistas,
+        'cns': cns,
+        'reference_year_options': reference['year_options'],
+        'reference_month_options': reference['month_options'],
+        'selected_reference_year': reference['year'],
+        'selected_reference_month': reference['month'],
+    }
+
+    return render(request, 'users/commission_superadmin.html', context)
+
+
+@login_required
+def commission_recepcionista_view(request):
+    """
+    Visão do Recepcionista:
+    - Vê seu comissionamento
+    - Valores por pilar
+    """
+    user = request.user
+    reference = resolve_commission_reference_from_request(request)
+    urls = get_excel_urls(reference['year'], reference['month'])
+
+    if reference['invalid_selection']:
+        messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
+
+    sheet_name = SHEET_RECEPCIONISTA
+    user_full_name = user.get_full_name() or user.first_name
+    user_sector = user.sector.name if hasattr(user, 'sector') and user.sector else None
+
+    result = fetch_excel_data(
+        sheet_name,
+        user_full_name,
+        excel_url=urls['comissao'],
+        cache_suffix=reference['cache_suffix'],
+    )
+
+    meses = get_month_names(reference['year'], reference['month'])
+
+    context = {
+        'user': user,
+        'target_user': user,
+        'viewing_other': False,
+        'is_gerente': False,
+        'target_is_gerente': False,
+        'sector_users': [],
+        'result': result,
+        'meses': meses,
+        'vendas': [],
+        'role': 'recepcionista',
+        'reference_year_options': reference['year_options'],
+        'reference_month_options': reference['month_options'],
+        'selected_reference_year': reference['year'],
+        'selected_reference_month': reference['month'],
+    }
+
+    if result.get('success'):
+        metas_pilar = fetch_metas_por_pilar(
+            user_full_name,
+            False,
+            user_sector,
+            urls=urls,
+            cache_suffix=reference['cache_suffix'],
+        )
+        iq_data = fetch_iq_data(
+            user_full_name,
+            excel_url=urls['comissao'],
+            cache_suffix=reference['cache_suffix'],
+        )
+        processed = process_commission_data(result['data'], False, metas_pilar, iq_data)
+        processed['info']['cargo'] = 'Recepcionista'
+        processed['info']['pdv'] = user_sector
+        processed['info']['coordenador'] = result['data'].get('GERENTE PDV')
+        processed['comissoes']['total'] = safe_float(
+            result['data'].get('COMISSÃO') or result['data'].get('COMISSAO')
+        )
+        processed['totais']['premiacao_cargo'] = safe_float(
+            result['data'].get('PREMIAÇÃO') or result['data'].get('PREMIACAO')
+        )
+        context['data'] = processed
+        context['charts_json'] = json.dumps(processed['charts'])
+
+    return render(request, 'users/commission.html', context)
 
 
 @login_required
@@ -3186,7 +3433,7 @@ def commission_api(request):
     
     # Verificar permissões
     if user_id:
-        if role == 'cn':
+        if role in ['cn', 'recepcionista']:
             return JsonResponse({'error': 'Não autorizado'}, status=403)
         
         try:
@@ -3202,18 +3449,34 @@ def commission_api(request):
         target_user = user
     
     target_is_gerente = is_user_gerente(target_user)
-    sheet_name = SHEET_GERENTE if target_is_gerente else SHEET_CN
-    user_full_name = target_user.get_full_name() or target_user.first_name
+    target_is_coordenador = is_user_coordenador(target_user)
+    target_is_recepcionista = is_user_recepcionista(target_user)
+    if target_is_gerente:
+        sheet_name = SHEET_GERENTE
+    elif target_is_coordenador:
+        sheet_name = SHEET_COORDENADOR
+    elif target_is_recepcionista:
+        sheet_name = SHEET_RECEPCIONISTA
+    else:
+        sheet_name = SHEET_CN
+    if target_is_coordenador:
+        user_full_name = target_user.first_name or target_user.get_full_name() or ''
+    else:
+        user_full_name = target_user.get_full_name() or target_user.first_name
     target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
     
     result = fetch_excel_data(sheet_name, user_full_name)
     
     if result.get('success'):
-        # Buscar metas por pilar - Gerente busca por filial, CN busca por nome
-        metas_pilar = fetch_metas_por_pilar(user_full_name, target_is_gerente, target_sector)
-        # Buscar dados de IQ
-        iq_data = fetch_iq_data(user_full_name)
-        processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
+        if target_is_coordenador:
+            metas_pilar = fetch_metas_por_pilar_coordenador(user_full_name)
+            processed = process_coordenador_commission_data(result['data'], metas_pilar)
+        else:
+            # Buscar metas por pilar - Gerente busca por filial, CN busca por nome
+            metas_pilar = fetch_metas_por_pilar(user_full_name, target_is_gerente, target_sector)
+            # Buscar dados de IQ
+            iq_data = fetch_iq_data(user_full_name)
+            processed = process_commission_data(result['data'], target_is_gerente, metas_pilar, iq_data)
         return JsonResponse({
             'success': True,
             'data': processed,
@@ -3236,7 +3499,7 @@ def commission_refresh(request):
     user = request.user
     user_full_name = (user.get_full_name() or user.first_name).replace(' ', '_')
     
-    for sheet in [SHEET_GERENTE, SHEET_CN]:
+    for sheet in [SHEET_GERENTE, SHEET_CN, SHEET_COORDENADOR, SHEET_RECEPCIONISTA]:
         cache.delete(f"commission_data_{sheet}_{user_full_name}")
         cache.delete(f"commission_all_users_{sheet}")
         cache.delete(f"comissao_{sheet}_file_content")
@@ -3283,7 +3546,51 @@ def export_commission_excel(request):
         bottom=Side(style='thin')
     )
     
-    if role == 'coordenador':
+    if role == 'superadmin':
+        headers = ['Nome', 'Perfil', 'PDV', 'Remuneração Final']
+        for col, header in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = border
+
+        row = 2
+
+        def append_row(nome, perfil, pdv, remuneracao_final):
+            nonlocal row
+            ws.cell(row=row, column=1, value=nome).border = border
+            ws.cell(row=row, column=2, value=perfil).border = border
+            ws.cell(row=row, column=3, value=pdv).border = border
+            ws.cell(row=row, column=4, value=f"R$ {remuneracao_final:.2f}").border = border
+            row += 1
+
+        all_gerentes_result = fetch_all_users_from_sheet(SHEET_GERENTE)
+        if all_gerentes_result.get('success'):
+            for user_data in all_gerentes_result['users']:
+                processed = process_simple_commission_data(user_data['data'], is_gerente=True)
+                append_row(processed.get('nome', ''), 'Gerente', processed.get('pdv', ''), processed.get('remuneracao_final', 0))
+
+        all_cn_result = fetch_all_users_from_sheet(SHEET_CN)
+        if all_cn_result.get('success'):
+            for user_data in all_cn_result['users']:
+                processed = process_simple_commission_data(user_data['data'])
+                append_row(processed.get('nome', ''), 'CN', processed.get('pdv', ''), processed.get('remuneracao_final', 0))
+
+        all_recep_result = fetch_all_users_from_sheet(SHEET_RECEPCIONISTA)
+        if all_recep_result.get('success'):
+            for user_data in all_recep_result['users']:
+                processed = process_simple_commission_data(user_data['data'])
+                append_row(processed.get('nome', ''), 'Recepcionista', processed.get('pdv', ''), processed.get('remuneracao_final', 0))
+
+        all_coord_result = fetch_all_users_from_sheet(SHEET_COORDENADOR)
+        if all_coord_result.get('success'):
+            for user_data in all_coord_result['users']:
+                processed = process_coordenador_commission_data(user_data['data'])
+                nome = processed.get('info', {}).get('nome', '')
+                remuneracao_final = processed.get('totais', {}).get('remuneracao_final', 0)
+                append_row(nome, 'Coordenador', '', remuneracao_final)
+
+    elif role == 'coordenador':
         # Exportar dados de todos os gerentes
         headers = ['Nome', 'PDV', 'Móvel %', 'Fixa %', 'Smart %', 'Eletro %', 'Essen %', 'Seguro %', 'SVA %', 'Remuneração Final']
         for col, header in enumerate(headers, start=1):
@@ -3329,6 +3636,32 @@ def export_commission_excel(request):
                         row += 1
                         break
     
+    elif role == 'recepcionista':
+        user_full_name = user.get_full_name() or user.first_name
+        user_sector = user.sector.name if hasattr(user, 'sector') and user.sector else None
+        result = fetch_excel_data(SHEET_RECEPCIONISTA, user_full_name)
+
+        if result.get('success'):
+            metas_pilar = fetch_metas_por_pilar(user_full_name, False, user_sector)
+            iq_data = fetch_iq_data(user_full_name)
+            processed = process_commission_data(result['data'], False, metas_pilar, iq_data)
+
+            ws['A1'] = 'Comissionamento - ' + user_full_name
+            ws['A1'].font = Font(bold=True, size=14)
+
+            ws['A3'] = 'Pilar'
+            ws['B3'] = 'Atingimento'
+            ws['C3'] = 'Comissão'
+            for col in ['A', 'B', 'C']:
+                ws[f'{col}3'].font = header_font
+                ws[f'{col}3'].fill = header_fill
+
+            row = 4
+            for pilar in processed['pilares']:
+                ws.cell(row=row, column=1, value=pilar['nome'])
+                ws.cell(row=row, column=2, value=f"{pilar['media']:.1f}%")
+                row += 1
+
     else:
         # CN - Exportar dados próprios
         user_full_name = user.get_full_name() or user.first_name
