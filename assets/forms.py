@@ -274,6 +274,11 @@ class StockEntryForm(forms.ModelForm):
 
 class StockExitForm(forms.ModelForm):
     """Formulário para saída de estoque"""
+    EXIT_STATUS_CHOICES = [
+        (value, label)
+        for value, label in InventoryItem.STATUS_CHOICES
+        if value != 'available'
+    ]
     EXIT_REASON_CHOICES = [
         ('assigned_to_user', 'Atribuído a Usuário'),
         ('assigned_to_sector', 'Atribuído a Setor'),
@@ -303,11 +308,17 @@ class StockExitForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': SELECT_CLASSES}),
         label='Para (Setor)'
     )
+
+    new_status = forms.ChoiceField(
+        choices=EXIT_STATUS_CHOICES,
+        widget=forms.Select(attrs={'class': SELECT_CLASSES}),
+        label='Status após Saída'
+    )
     
     class Meta:
         model = StockMovement
         fields = ['inventory_item', 'reason', 'to_user', 'to_sector', 
-                  'to_location', 'notes', 'document_reference']
+              'to_location', 'notes', 'document_reference']
         widgets = {
             'inventory_item': forms.Select(attrs={
                 'class': SELECT_CLASSES
@@ -356,6 +367,7 @@ class StockExitForm(forms.ModelForm):
             # Atualizar o status do item
             item = instance.inventory_item
             reason = self.cleaned_data.get('reason')
+            new_status = self.cleaned_data.get('new_status')
             
             if reason in ['assigned_to_user', 'assigned_to_sector']:
                 item.status = 'in_use'
@@ -363,6 +375,8 @@ class StockExitForm(forms.ModelForm):
                 item.assigned_sector = self.cleaned_data.get('to_sector')
                 from django.utils import timezone
                 item.assigned_date = timezone.now()
+            elif new_status:
+                item.status = new_status
             elif reason == 'maintenance':
                 item.status = 'maintenance'
             elif reason == 'disposed':
