@@ -34,6 +34,11 @@
                     <option value="{{ year_value }}" {% if selected_reference_year == year_value %}selected{% endif %}>{{ year_value }}</option>
                     {% endfor %}
                 </select>
+                <select name="phase" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                    {% for p in reference_phase_options %}
+                    <option value="{{ p.value }}" {% if selected_reference_phase == p.value %}selected{% endif %}>{{ p.label }}</option>
+                    {% endfor %}
+                </select>
                 <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors">
                     Aplicar
                 </button>
@@ -434,7 +439,7 @@
                 <div class="space-y-2">
                     <!-- Gerente da Loja -->
                     {% if loja.gerente %}
-                    <a href="?user={{ loja.gerente.id }}" class="flex items-center gap-2 p-2 bg-white rounded-lg hover:shadow-sm transition-all">
+                    <a href="?user={{ loja.gerente.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}" class="flex items-center gap-2 p-2 bg-white rounded-lg hover:shadow-sm transition-all">
                         <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-semibold text-xs">
                             {{ loja.gerente.first_name|slice:":1" }}
                         </div>
@@ -461,7 +466,7 @@
                     <!-- CNs da Loja -->
                     {% if loja.cns %}
                     {% for cn in loja.cns|slice:":3" %}
-                    <a href="?user={{ cn.id }}" class="flex items-center gap-2 p-2 bg-white rounded-lg hover:shadow-sm transition-all">
+                    <a href="?user={{ cn.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}" class="flex items-center gap-2 p-2 bg-white rounded-lg hover:shadow-sm transition-all">
                         <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-semibold text-xs">
                             {{ cn.first_name|slice:":1" }}
                         </div>

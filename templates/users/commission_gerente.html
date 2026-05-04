@@ -35,6 +35,11 @@
                     <option value="{{ year_value }}" {% if selected_reference_year == year_value %}selected{% endif %}>{{ year_value }}</option>
                     {% endfor %}
                 </select>
+                <select name="phase" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                    {% for p in reference_phase_options %}
+                    <option value="{{ p.value }}" {% if selected_reference_phase == p.value %}selected{% endif %}>{{ p.label }}</option>
+                    {% endfor %}
+                </select>
                 <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors">
                     Aplicar
                 </button>
@@ -704,7 +709,7 @@
                             R$ {{ cn.remuneracao_final|floatformat:2 }}
                         </td>
                         <td class="py-3 pl-4">
-                            <a href="?user={{ cn.user_id }}" class="text-primary hover:text-primary/80 text-sm font-medium">
+                            <a href="?user={{ cn.user_id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}" class="text-primary hover:text-primary/80 text-sm font-medium">
                                 Ver detalhes
                             </a>
                         </td>

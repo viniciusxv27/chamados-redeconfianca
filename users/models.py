@@ -138,6 +138,17 @@ class CommissionSpreadsheetVersion(models.Model):
         verbose_name="Planilha BASE_EXCLUSAO (Comissionamento)",
         help_text="URL de compartilhamento do OneDrive para base de exclusão do comissionamento",
     )
+    CONTESTACAO_PHASE_CHOICES = [
+        ('antes', 'Antes da Contestação'),
+        ('pos', 'Pós Contestação'),
+    ]
+    contestacao_phase = models.CharField(
+        max_length=10,
+        choices=CONTESTACAO_PHASE_CHOICES,
+        default='pos',
+        verbose_name='Fase de Contestação',
+        help_text='Indica se a versão é antes ou pós contestação',
+    )
 
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
     updated_by = models.ForeignKey(

@@ -20,6 +20,11 @@
                 <option value="{{ year_value }}" {% if selected_reference_year == year_value %}selected{% endif %}>{{ year_value }}</option>
                 {% endfor %}
             </select>
+            <select name="phase" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                {% for p in reference_phase_options %}
+                <option value="{{ p.value }}" {% if selected_reference_phase == p.value %}selected{% endif %}>{{ p.label }}</option>
+                {% endfor %}
+            </select>
             <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors">
                 Aplicar
             </button>
@@ -32,7 +37,7 @@
             {% if coordenadores %}
             <div class="space-y-2">
                 {% for user_item in coordenadores %}
-                <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}"
+                     <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}"
                    class="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                     <span class="text-sm font-medium text-gray-700">{{ user_item.get_full_name|default:user_item.email }}</span>
                     <span class="text-xs text-gray-400">Ver detalhes</span>
@@ -49,7 +54,7 @@
             {% if gerentes %}
             <div class="space-y-2">
                 {% for user_item in gerentes %}
-                <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}"
+                     <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}"
                    class="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                     <span class="text-sm font-medium text-gray-700">{{ user_item.get_full_name|default:user_item.email }}</span>
                     <span class="text-xs text-gray-400">Ver detalhes</span>
@@ -66,7 +71,7 @@
             {% if recepcionistas %}
             <div class="space-y-2">
                 {% for user_item in recepcionistas %}
-                <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}"
+                     <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}"
                    class="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                     <span class="text-sm font-medium text-gray-700">{{ user_item.get_full_name|default:user_item.email }}</span>
                     <span class="text-xs text-gray-400">Ver detalhes</span>
@@ -83,7 +88,7 @@
             {% if cns %}
             <div class="space-y-2">
                 {% for user_item in cns %}
-                <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}"
+                     <a href="{% url 'commission' %}?user={{ user_item.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}"
                    class="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                     <span class="text-sm font-medium text-gray-700">{{ user_item.get_full_name|default:user_item.email }}</span>
                     <span class="text-xs text-gray-400">Ver detalhes</span>

@@ -2003,9 +2003,15 @@ def system_config_view(request):
 
         try:
             with transaction.atomic():
+                # Contestation phase selection (antes/pos)
+                selected_phase = request.POST.get('contestacao_phase', 'pos').strip()
+                if selected_phase not in ('antes', 'pos'):
+                    selected_phase = 'pos'
+
                 version_obj, created = CommissionSpreadsheetVersion.objects.update_or_create(
                     year=selected_year_int,
                     month=selected_month_int,
+                    contestacao_phase=selected_phase,
                     defaults={
                         **commission_urls,
                         'updated_by': request.user,
@@ -2058,6 +2064,7 @@ def system_config_view(request):
             'excel_base_exclusao_url': active_version.excel_base_exclusao_url,
             'version_month': active_version.month,
             'version_year': active_version.year,
+            'version_phase': getattr(active_version, 'contestacao_phase', 'pos'),
             'display_reference_month': config.display_reference_month or active_version.month,
             'display_reference_year': config.display_reference_year or active_version.year,
         }
@@ -2069,6 +2076,7 @@ def system_config_view(request):
             'excel_base_exclusao_url': config.excel_base_exclusao_url,
             'version_month': display_ref_month,
             'version_year': display_ref_year,
+            'version_phase': 'pos',
             'display_reference_month': config.display_reference_month or display_ref_month,
             'display_reference_year': config.display_reference_year or display_ref_year,
         }

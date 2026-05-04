@@ -32,6 +32,11 @@
                     <option value="{{ year_value }}" {% if selected_reference_year == year_value %}selected{% endif %}>{{ year_value }}</option>
                     {% endfor %}
                 </select>
+                <select name="phase" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                    {% for p in reference_phase_options %}
+                    <option value="{{ p.value }}" {% if selected_reference_phase == p.value %}selected{% endif %}>{{ p.label }}</option>
+                    {% endfor %}
+                </select>
                 <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors">
                     Aplicar
                 </button>
@@ -41,6 +46,7 @@
             <form method="get" class="flex items-center gap-2">
                 <input type="hidden" name="month" value="{{ selected_reference_month }}">
                 <input type="hidden" name="year" value="{{ selected_reference_year }}">
+                <input type="hidden" name="phase" value="{{ selected_reference_phase }}">
                 <select name="user" onchange="this.form.submit()" 
                     class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
                     <option value="">Meus dados</option>

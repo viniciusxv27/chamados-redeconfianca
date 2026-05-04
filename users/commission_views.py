@@ -47,7 +47,7 @@ MONTH_NAMES_PT = {
 }
 
 
-def get_excel_urls(selected_year=None, selected_month=None):
+def get_excel_urls(selected_year=None, selected_month=None, selected_phase=None):
     """
     Obtém as URLs das planilhas Excel do banco de dados.
     Retorna valores padrão se não houver configuração.
@@ -61,6 +61,10 @@ def get_excel_urls(selected_year=None, selected_month=None):
 
         version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
 
+        # Prefer version matching the selected phase when provided
+        if selected_phase:
+            version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month, contestacao_phase=selected_phase).first() or version
+
         if version:
             return {
                 'comissao': version.excel_comissao_url,
@@ -70,6 +74,7 @@ def get_excel_urls(selected_year=None, selected_month=None):
                 'version_year': version.year,
                 'version_month': version.month,
                 'version_id': version.id,
+                'version_phase': getattr(version, 'contestacao_phase', 'pos'),
             }
 
         return {
@@ -110,6 +115,8 @@ def resolve_commission_reference_from_request(request):
     year_options = sorted(by_year.keys(), reverse=True)
     selected_year_raw = request.GET.get('year')
     selected_month_raw = request.GET.get('month')
+    # Contestação phase selection
+    selected_phase_raw = request.GET.get('phase')
 
     invalid_selection = False
     selected_year = None
@@ -132,7 +139,6 @@ def resolve_commission_reference_from_request(request):
             selected_year = year_options[0]
         else:
             selected_year = default_year
-
     months_for_year = sorted(by_year.get(selected_year, set()), reverse=True)
 
     if selected_month is None:
@@ -156,6 +162,18 @@ def resolve_commission_reference_from_request(request):
         for month in months_for_year
     ]
 
+    # Phase options (fixed)
+    phase_options = [
+        {'value': 'antes', 'label': 'Antes da Contestação'},
+        {'value': 'pos', 'label': 'Pós Contestação'},
+    ]
+
+    # Validate selected phase
+    if selected_phase_raw in ('antes', 'pos'):
+        selected_phase = selected_phase_raw
+    else:
+        selected_phase = 'pos'
+
     # Sem versões cadastradas: mantém fallback visual coerente.
     if not month_options:
         month_options = [{'value': selected_month, 'label': MONTH_NAMES_PT.get(selected_month, str(selected_month))}]
@@ -165,9 +183,11 @@ def resolve_commission_reference_from_request(request):
     return {
         'year': selected_year,
         'month': selected_month,
+        'phase': selected_phase,
+        'phase_options': phase_options,
         'year_options': year_options,
         'month_options': month_options,
-        'cache_suffix': f"{selected_year}_{selected_month:02d}",
+        'cache_suffix': f"{selected_year}_{selected_month:02d}_{selected_phase}",
         'invalid_selection': invalid_selection,
     }
 
@@ -2835,7 +2855,7 @@ def commission_superadmin_view(request):
         return redirect('commission')
 
     reference = resolve_commission_reference_from_request(request)
-    urls = get_excel_urls(reference['year'], reference['month'])
+    urls = get_excel_urls(reference['year'], reference['month'], reference.get('phase'))
 
     if reference['invalid_selection']:
         messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
@@ -2963,7 +2983,7 @@ def commission_recepcionista_view(request):
     """
     user = request.user
     reference = resolve_commission_reference_from_request(request)
-    urls = get_excel_urls(reference['year'], reference['month'])
+    urls = get_excel_urls(reference['year'], reference['month'], reference.get('phase'))
 
     if reference['invalid_selection']:
         messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
@@ -3037,7 +3057,7 @@ def commission_cn_view(request):
     """
     user = request.user
     reference = resolve_commission_reference_from_request(request)
-    urls = get_excel_urls(reference['year'], reference['month'])
+    urls = get_excel_urls(reference['year'], reference['month'], reference.get('phase'))
 
     if reference['invalid_selection']:
         messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
@@ -3124,7 +3144,7 @@ def commission_gerente_view(request):
     """
     user = request.user
     reference = resolve_commission_reference_from_request(request)
-    urls = get_excel_urls(reference['year'], reference['month'])
+    urls = get_excel_urls(reference['year'], reference['month'], reference.get('phase'))
 
     if reference['invalid_selection']:
         messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
@@ -3224,7 +3244,7 @@ def commission_coordenador_view(request):
     """
     user = request.user
     reference = resolve_commission_reference_from_request(request)
-    urls = get_excel_urls(reference['year'], reference['month'])
+    urls = get_excel_urls(reference['year'], reference['month'], reference.get('phase'))
 
     if reference['invalid_selection']:
         messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
