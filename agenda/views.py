@@ -1520,10 +1520,37 @@ def _transcribe_audio_from_storage(client, field_file):
             os.unlink(temp_source_path)
 
 
+def _probe_audio_duration_seconds(file_path):
+    """Obtém duração do áudio via ffprobe (em segundos)."""
+    try:
+        probe_result = subprocess.run(
+            [
+                'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1', file_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return float((probe_result.stdout or '').strip())
+    except Exception:
+        return None
+
+
 def _transcribe_audio_path(client, source_path, original_filename):
     """Converte para mp3 quando possível, divide em partes se necessário e transcreve com retry."""
     whisper_max_size = 24 * 1024 * 1024  # 24MB
-    
+    long_audio_seconds = 1500  # acima de ~25min, segmentar para mais robustez
+
+    duration_seconds = _probe_audio_duration_seconds(source_path)
+    if duration_seconds and duration_seconds >= long_audio_seconds:
+        try:
+            raw_text = _split_and_transcribe(client, source_path)
+            return raw_text, int(duration_seconds)
+        except Exception:
+            # Se falhar a segmentacao, tenta o fluxo tradicional
+            pass
+
     # Primeiro, tenta sem conversão se for pequeno o suficiente
     try:
         source_size = os.path.getsize(source_path)
@@ -1531,7 +1558,7 @@ def _transcribe_audio_path(client, source_path, original_filename):
             return _try_transcribe_file(client, source_path, is_converted=False, max_retries=2)
     except Exception:
         pass
-    
+
     # Para arquivos grandes, tenta converter para MP3 (menor, mais robusto)
     mp3_path = _convert_to_mp3(source_path)
     if mp3_path:
@@ -1540,40 +1567,43 @@ def _transcribe_audio_path(client, source_path, original_filename):
             if mp3_size <= whisper_max_size:
                 # Tentativa com retry para upload único
                 return _try_transcribe_file(client, mp3_path, is_converted=True, max_retries=3)
-            
+
             # Se ainda for grande, divide em segmentos
             raw_text = _split_and_transcribe(client, mp3_path)
-            return raw_text, None
+            return raw_text, duration_seconds
         finally:
             if os.path.exists(mp3_path):
                 os.unlink(mp3_path)
-    
+
     # Fallback: divide o original se for muito grande
     try:
         if os.path.getsize(source_path) > whisper_max_size:
             # Tenta dividir o arquivo original sem converter
             raw_text = _split_and_transcribe_raw(client, source_path)
-            return raw_text, None
+            return raw_text, duration_seconds
     except Exception:
         pass
-    
+
     # Último recurso: tenta enviar o original direto com retry
     return _try_transcribe_file(client, source_path, is_converted=False, max_retries=3)
 
 
-def _try_transcribe_file(client, file_path, is_converted=False, max_retries=2):
+def _try_transcribe_file(client, file_path, is_converted=False, max_retries=2, response_format='verbose_json'):
     """Tenta transcrever um arquivo com retry automático em caso de erro."""
     for attempt in range(max_retries):
         try:
             with open(file_path, 'rb') as audio_stream:
+                payload = {
+                    'model': 'whisper-1',
+                    'file': audio_stream,
+                    'language': 'pt',
+                    'response_format': response_format,
+                }
+                if response_format == 'verbose_json':
+                    payload['timestamp_granularities'] = ['segment']
+
                 # Retries internos do Whisper com backoff
-                whisper_response = client.audio.transcriptions.create(
-                    model='whisper-1',
-                    file=audio_stream,
-                    language='pt',
-                    response_format='verbose_json',
-                    timestamp_granularities=['segment'],
-                )
+                whisper_response = client.audio.transcriptions.create(**payload)
             return _extract_whisper_text_and_duration(whisper_response)
         except Exception as e:
             if attempt < max_retries - 1:
@@ -1586,71 +1616,55 @@ def _try_transcribe_file(client, file_path, is_converted=False, max_retries=2):
 
 
 def _split_and_transcribe(client, mp3_path):
-    """Divide mp3 grande em segmentos de ~10min e concatena as transcrições com retry."""
-    try:
-        probe_result = subprocess.run(
-            [
-                'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1', mp3_path,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        total_duration = float(probe_result.stdout.strip())
-    except Exception:
-        total_duration = 3600
+    """Divide áudio grande em segmentos de tempo e concatena as transcrições com retry."""
+    total_duration = _probe_audio_duration_seconds(mp3_path) or 3600
 
-    segment_seconds = 600
-    max_segment_seconds = max(600, min(1800, int(total_duration / 12) if total_duration > 7200 else segment_seconds))
+    if total_duration >= 6 * 3600:
+        segment_seconds = 900
+    else:
+        segment_seconds = 720
 
     tmp_dir = tempfile.mkdtemp()
-    segment_pattern = os.path.join(tmp_dir, 'seg_%03d.mp3')
+    all_text_parts = []
 
     try:
-        subprocess.run(
-            [
-                'ffmpeg', '-y', '-i', mp3_path, '-f', 'segment', '-segment_time', str(max_segment_seconds),
-                '-acodec', 'libmp3lame', '-ab', '64k', '-ar', '16000', '-ac', '1', segment_pattern,
-            ],
-            capture_output=True,
-            timeout=1800,  # Aumentado para 30min (era 900)
-            check=True,
-        )
+        start = 0.0
+        segment_index = 0
+        while start < total_duration:
+            seg_duration = min(segment_seconds, max(1, total_duration - start))
+            seg_path = os.path.join(tmp_dir, f'seg_{segment_index:04d}.mp3')
+            timeout = max(300, int(seg_duration * 3))
 
-        segment_files = sorted(
-            [
-                os.path.join(tmp_dir, name)
-                for name in os.listdir(tmp_dir)
-                if name.startswith('seg_') and name.endswith('.mp3')
-            ]
-        )
-        all_text_parts = []
+            try:
+                subprocess.run(
+                    [
+                        'ffmpeg', '-y', '-ss', str(start), '-t', str(seg_duration), '-i', mp3_path,
+                        '-vn', '-acodec', 'libmp3lame', '-ab', '64k', '-ar', '16000', '-ac', '1', seg_path,
+                    ],
+                    capture_output=True,
+                    timeout=timeout,
+                    check=True,
+                )
 
-        for seg_file in segment_files:
-            # Retry para cada segmento
-            for attempt in range(3):
-                try:
-                    with open(seg_file, 'rb') as seg_stream:
-                        whisper_response = client.audio.transcriptions.create(
-                            model='whisper-1',
-                            file=seg_stream,
-                            language='pt',
-                            response_format='text',
-                        )
-                    text = whisper_response if isinstance(whisper_response, str) else str(whisper_response)
-                    if text and text.strip():
-                        all_text_parts.append(text.strip())
-                    break  # Success, move to next segment
-                except Exception as e:
-                    if attempt < 2:
-                        import time
-                        time.sleep(2 ** attempt)  # Exponential backoff
-                        continue
-                    # Falhou após retry, adiciona texto vazio
-                    all_text_parts.append(f'[Segmento não transcrito: {str(e)[:50]}]')
+                text, _ = _try_transcribe_file(
+                    client,
+                    seg_path,
+                    is_converted=True,
+                    max_retries=3,
+                    response_format='text',
+                )
+                if text:
+                    all_text_parts.append(text.strip())
+            except Exception as err:
+                all_text_parts.append(f'[Segmento não transcrito: {str(err)[:80]}]')
+            finally:
+                if os.path.exists(seg_path):
+                    os.unlink(seg_path)
 
-        return '\n\n'.join(all_text_parts).strip()
+            start += seg_duration
+            segment_index += 1
+
+        return '\n\n'.join([p for p in all_text_parts if p]).strip()
     finally:
         for name in os.listdir(tmp_dir):
             file_path = os.path.join(tmp_dir, name)
