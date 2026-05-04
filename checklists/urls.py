@@ -47,6 +47,7 @@ urlpatterns = [
     path('admin/executions/macro/', views.admin_executions_macro, name='admin_executions_macro'),
     path('api/delete-executions/', views.api_delete_executions, name='api_delete_executions'),
     path('api/delete-duplicate-executions/', views.api_delete_duplicate_executions, name='api_delete_duplicate_executions'),
+    path('api/delete-filtered-executions/', views.api_delete_filtered_executions, name='api_delete_filtered_executions'),
     
     # Admin - Configurações de Aprovação de Atribuições
     path('admin/settings/approvers/', views.admin_assignment_approvers, name='admin_assignment_approvers'),
@@ -57,4 +58,6 @@ urlpatterns = [
     path('admin/pending-assignments/', views.admin_pending_assignments, name='admin_pending_assignments'),
     path('api/pending-assignment/<int:pending_id>/approve/', views.api_approve_pending_assignment, name='api_approve_pending_assignment'),
     path('api/pending-assignment/<int:pending_id>/reject/', views.api_reject_pending_assignment, name='api_reject_pending_assignment'),
+    path('api/pending-assignments/approve-all/', views.api_approve_all_pending_assignments, name='api_approve_all_pending_assignments'),
+    path('api/pending-assignments/reject-all/', views.api_reject_all_pending_assignments, name='api_reject_all_pending_assignments'),
 ]

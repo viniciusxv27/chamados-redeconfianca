@@ -70,9 +70,23 @@
         <!-- Pendentes -->
         <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
             <div class="p-4 border-b border-gray-200 bg-yellow-50">
-                <h2 class="text-lg font-semibold text-gray-800">
-                    <i class="fas fa-clock text-yellow-500 mr-2"></i>Aguardando Aprovação
-                </h2>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <h2 class="text-lg font-semibold text-gray-800">
+                        <i class="fas fa-clock text-yellow-500 mr-2"></i>Aguardando Aprovação
+                    </h2>
+                    {% if pending_assignments %}
+                    <div class="flex gap-2">
+                        <button onclick="approveAllAssignments()"
+                                class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors text-sm">
+                            <i class="fas fa-check-double mr-2"></i>Aprovar Todos
+                        </button>
+                        <button onclick="rejectAllAssignments()"
+                                class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors text-sm">
+                            <i class="fas fa-times-circle mr-2"></i>Recusar Todos
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
             
             <div class="divide-y divide-gray-200">
@@ -240,6 +254,75 @@
 </div>
 
 <script>
+async function approveAllAssignments() {
+    const confirmed = confirm('Tem certeza que deseja aprovar todas as atribuições pendentes visíveis?');
+    if (!confirmed) return;
+
+    document.getElementById('loadingModal').classList.remove('hidden');
+
+    try {
+        const response = await fetch('{% url "checklists:api_approve_all_pending_assignments" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+
+        const data = await response.json();
+        document.getElementById('loadingModal').classList.add('hidden');
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 900);
+        } else {
+            showToast(data.error || 'Erro ao aprovar em lote', 'error');
+        }
+    } catch (error) {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao processar a solicitação', 'error');
+        console.error('Erro:', error);
+    }
+}
+
+async function rejectAllAssignments() {
+    const confirmed = confirm('Tem certeza que deseja recusar todas as atribuições pendentes visíveis?');
+    if (!confirmed) return;
+
+    const reason = prompt('Informe um motivo para rejeição em lote (opcional):') || '';
+
+    document.getElementById('loadingModal').classList.remove('hidden');
+
+    try {
+        const response = await fetch('{% url "checklists:api_reject_all_pending_assignments" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ reason: reason })
+        });
+
+        const data = await response.json();
+        document.getElementById('loadingModal').classList.add('hidden');
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 900);
+        } else {
+            showToast(data.error || 'Erro ao rejeitar em lote', 'error');
+        }
+    } catch (error) {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao processar a solicitação', 'error');
+        console.error('Erro:', error);
+    }
+}
+
 async function approveAssignment(pendingId) {
     document.getElementById('loadingModal').classList.remove('hidden');
     

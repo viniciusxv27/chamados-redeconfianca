@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+from django.db import transaction
 from django.db.models import Q, Count, Sum, Case, When, IntegerField, F, Max
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
@@ -2945,6 +2946,132 @@ def api_reject_pending_assignment(request, pending_id):
 
 @login_required
 @require_POST
+def api_approve_all_pending_assignments(request):
+    """API para aprovar todas as atribuições pendentes visíveis ao aprovador"""
+    # Verificar permissão
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+
+    is_approver = ChecklistAssignmentApprover.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
+
+    if not (is_superadmin or is_approver):
+        return JsonResponse({'error': 'Você não tem permissão para aprovar atribuições.'}, status=403)
+
+    pending = ChecklistPendingAssignment.objects.filter(
+        status='pending'
+    ).select_related('template', 'assigned_to', 'assigned_by')
+
+    # Se não for superadmin, filtrar por setores permitidos
+    if not is_superadmin:
+        approver_sectors = list(ChecklistAssignmentApprover.objects.filter(
+            user=request.user,
+            is_active=True
+        ).values_list('sector_id', flat=True))
+
+        if None not in approver_sectors:
+            pending = pending.filter(template__sector_id__in=[s for s in approver_sectors if s])
+
+    pending_list = list(pending)
+    count = len(pending_list)
+
+    if count == 0:
+        return JsonResponse({
+            'success': True,
+            'message': 'Não há atribuições pendentes para aprovar.',
+            'processed_count': 0,
+        })
+
+    try:
+        with transaction.atomic():
+            now = timezone.now()
+            for item in pending_list:
+                assignment = ChecklistAssignment.objects.create(
+                    template=item.template,
+                    assigned_to=item.assigned_to,
+                    assigned_by=item.assigned_by,
+                    schedule_type=item.schedule_type,
+                    period=item.period,
+                    start_date=item.start_date,
+                    end_date=item.end_date,
+                    custom_dates=item.custom_dates
+                )
+
+                create_executions_for_assignment(assignment)
+
+                item.status = 'approved'
+                item.approved_by = request.user
+                item.approved_at = now
+                item.save(update_fields=['status', 'approved_by', 'approved_at'])
+
+        return JsonResponse({
+            'success': True,
+            'message': f'{count} atribuição(ões) aprovada(s) com sucesso!',
+            'processed_count': count,
+        })
+    except Exception as e:
+        return JsonResponse({'error': f'Erro ao aprovar em lote: {str(e)}'}, status=500)
+
+
+@login_required
+@require_POST
+def api_reject_all_pending_assignments(request):
+    """API para rejeitar todas as atribuições pendentes visíveis ao aprovador"""
+    # Verificar permissão
+    is_superadmin = request.user.is_superuser or (hasattr(request.user, 'hierarchy') and request.user.hierarchy == 'SUPERADMIN')
+
+    is_approver = ChecklistAssignmentApprover.objects.filter(
+        user=request.user,
+        is_active=True
+    ).exists()
+
+    if not (is_superadmin or is_approver):
+        return JsonResponse({'error': 'Você não tem permissão para rejeitar atribuições.'}, status=403)
+
+    try:
+        data = json.loads(request.body or '{}')
+        reason = data.get('reason', '')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Dados inválidos.'}, status=400)
+
+    pending = ChecklistPendingAssignment.objects.filter(status='pending')
+
+    # Se não for superadmin, filtrar por setores permitidos
+    if not is_superadmin:
+        approver_sectors = list(ChecklistAssignmentApprover.objects.filter(
+            user=request.user,
+            is_active=True
+        ).values_list('sector_id', flat=True))
+
+        if None not in approver_sectors:
+            pending = pending.filter(template__sector_id__in=[s for s in approver_sectors if s])
+
+    count = pending.count()
+
+    if count == 0:
+        return JsonResponse({
+            'success': True,
+            'message': 'Não há atribuições pendentes para rejeitar.',
+            'processed_count': 0,
+        })
+
+    pending.update(
+        status='rejected',
+        approved_by=request.user,
+        approved_at=timezone.now(),
+        rejection_reason=reason,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{count} atribuição(ões) rejeitada(s) com sucesso!',
+        'processed_count': count,
+    })
+
+
+@login_required
+@require_POST
 def api_delete_executions(request):
     """API para excluir múltiplas execuções de checklist"""
     from django.http import JsonResponse
@@ -3088,5 +3215,85 @@ def api_delete_duplicate_executions(request):
     return JsonResponse({
         'success': True,
         'message': f'{deleted_count} execução(ões) duplicada(s) removida(s) com sucesso!',
+        'deleted_count': deleted_count,
+    })
+
+
+@login_required
+@require_POST
+def api_delete_filtered_executions(request):
+    """API para excluir todas as execuções filtradas na tela administrativa"""
+    # Verificar permissão
+    is_authorized = (
+        request.user.is_superuser or
+        (hasattr(request.user, 'hierarchy') and request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'])
+    )
+
+    if not is_authorized:
+        return JsonResponse({'error': 'Você não tem permissão para excluir execuções filtradas.'}, status=403)
+
+    # Usar os mesmos filtros da tela de controle de execuções
+    template_filter = request.GET.get('template', '')
+    sector_filter = request.GET.get('sector', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    status_filter = request.GET.get('status', '')
+    period_filter = request.GET.get('period', '')
+
+    # Data padrão: últimos 30 dias
+    if not date_from:
+        date_from = (timezone.now().date() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if not date_to:
+        date_to = timezone.now().date().strftime('%Y-%m-%d')
+
+    try:
+        date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Datas inválidas para exclusão filtrada.'}, status=400)
+
+    executions = ChecklistExecution.objects.filter(
+        execution_date__gte=date_from_obj,
+        execution_date__lte=date_to_obj
+    )
+
+    # Filtrar por setores do usuário (exceto superuser)
+    if not request.user.is_superuser:
+        user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
+        if user_sector_ids:
+            executions = executions.filter(assignment__template__sector_id__in=user_sector_ids)
+        else:
+            executions = executions.none()
+
+    if template_filter:
+        executions = executions.filter(assignment__template_id=template_filter)
+
+    if sector_filter:
+        executions = executions.filter(assignment__template__sector_id=sector_filter)
+
+    if user_filter:
+        executions = executions.filter(assignment__assigned_to_id=user_filter)
+
+    if status_filter:
+        executions = executions.filter(status=status_filter)
+
+    if period_filter:
+        executions = executions.filter(period=period_filter)
+
+    deleted_count = executions.count()
+
+    if deleted_count == 0:
+        return JsonResponse({
+            'success': True,
+            'message': 'Nenhuma execução encontrada com os filtros selecionados.',
+            'deleted_count': 0,
+        })
+
+    executions.delete()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{deleted_count} execução(ões) filtrada(s) removida(s) com sucesso!',
         'deleted_count': deleted_count,
     })

@@ -143,6 +143,9 @@
                     
                     <!-- Botões -->
                     <div class="flex items-end gap-2">
+                        <button type="button" onclick="deleteFilteredExecutions()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium" title="Remove todas as execuções que atendem aos filtros atuais">
+                            <i class="fas fa-trash-alt mr-2"></i>Remover Filtrados
+                        </button>
                         <button type="button" onclick="removeDuplicatesByFilters()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-medium" title="Remove execuções duplicadas com os filtros atuais">
                             <i class="fas fa-broom mr-2"></i>Remover Duplicados
                         </button>
@@ -462,6 +465,50 @@ async function removeDuplicatesByFilters() {
         document.getElementById('loadingModal').classList.add('hidden');
         showToast('Erro ao processar a remoção de duplicados', 'error');
         console.error('Erro ao remover duplicados:', error);
+    }
+}
+
+async function deleteFilteredExecutions() {
+    const totalFiltered = parseInt('{{ stats.total }}', 10) || 0;
+
+    if (totalFiltered === 0) {
+        showToast('Não há execuções filtradas para remover.', 'error');
+        return;
+    }
+
+    const confirmed = confirm(`Tem certeza que deseja remover TODAS as ${totalFiltered} execução(ões) filtrada(s)? Esta ação não pode ser desfeita.`);
+    if (!confirmed) {
+        return;
+    }
+
+    document.getElementById('loadingModal').classList.remove('hidden');
+
+    try {
+        const queryParams = new URLSearchParams(window.location.search);
+        queryParams.delete('page');
+
+        const response = await fetch(`{% url "checklists:api_delete_filtered_executions" %}?${queryParams.toString()}`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+
+        const data = await response.json();
+        document.getElementById('loadingModal').classList.add('hidden');
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showToast(data.error || 'Erro ao remover filtrados', 'error');
+        }
+    } catch (error) {
+        document.getElementById('loadingModal').classList.add('hidden');
+        showToast('Erro ao processar a remoção dos filtrados', 'error');
+        console.error('Erro ao remover filtrados:', error);
     }
 }
 
