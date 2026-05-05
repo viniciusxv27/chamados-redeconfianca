@@ -1,11 +1,13 @@
+import os
+from io import BytesIO
+
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, FileResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Q
-
-from io import BytesIO
 from django.core.files.base import ContentFile
 
 from .models import Payslip, IncomeReport
@@ -23,6 +25,43 @@ HIERARCHY_RANK = {
 
 def is_superadmin(user):
     return HIERARCHY_RANK.get(user.hierarchy, 0) >= HIERARCHY_RANK['SUPERADMIN']
+
+
+def _read_pdf_bytes(field_file):
+    if not field_file or not field_file.name:
+        return None
+
+    try:
+        field_file.open('rb')
+        data = field_file.read()
+        field_file.close()
+        if data:
+            return data
+    except Exception:
+        pass
+
+    storage_location = getattr(field_file.storage, 'location', '')
+    if not getattr(settings, 'USE_S3', False) or storage_location != 'media':
+        return None
+    if field_file.name.startswith('media/'):
+        return None
+
+    try:
+        from storages.backends.s3boto3 import S3Boto3Storage
+        legacy_storage = S3Boto3Storage()
+        if legacy_storage.exists(field_file.name):
+            with legacy_storage.open(field_file.name, 'rb') as legacy_file:
+                data = legacy_file.read()
+            if data:
+                try:
+                    field_file.save(os.path.basename(field_file.name), ContentFile(data), save=True)
+                except Exception:
+                    pass
+                return data
+    except Exception:
+        pass
+
+    return None
 
 
 # ─── Área Pessoal ────────────────────────────────────────────────────────────
@@ -81,22 +120,7 @@ def payslip_pdf(request, pk):
         messages.error(request, 'PDF não disponível para este contracheque.')
         return redirect('contracheque:payslip_detail', pk=payslip.pk)
 
-    # Evita redirecionar para URL quebrada quando objeto não existe no storage.
-    try:
-        if not payslip.pdf_file.storage.exists(payslip.pdf_file.name):
-            messages.error(request, 'Arquivo PDF não encontrado no armazenamento. Reimporte o contracheque.')
-            return redirect('contracheque:payslip_detail', pk=payslip.pk)
-    except Exception:
-        pass
-
-    # Tentar ler o conteúdo do PDF (funciona tanto com S3 quanto filesystem local)
-    pdf_content = None
-    try:
-        payslip.pdf_file.open('rb')
-        pdf_content = payslip.pdf_file.read()
-        payslip.pdf_file.close()
-    except Exception:
-        pass
+    pdf_content = _read_pdf_bytes(payslip.pdf_file)
 
     # Se não conseguiu ler o conteúdo, tentar redirecionar para a URL do arquivo
     if not pdf_content:
@@ -917,13 +941,7 @@ def income_report_pdf(request, pk):
         messages.error(request, 'PDF não disponível para este informe.')
         return redirect('contracheque:income_report_detail', pk=report.pk)
 
-    pdf_content = None
-    try:
-        report.pdf_file.open('rb')
-        pdf_content = report.pdf_file.read()
-        report.pdf_file.close()
-    except Exception:
-        pass
+    pdf_content = _read_pdf_bytes(report.pdf_file)
 
     if not pdf_content:
         try:

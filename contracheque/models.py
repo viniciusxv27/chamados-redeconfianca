@@ -5,6 +5,14 @@ from django.conf import settings
 from django.utils import timezone
 
 
+def get_media_storage():
+    """Return media storage backend."""
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage
+    return None
+
+
 def upload_payslip_pdf(instance, filename):
     ext = filename.rsplit('.', 1)[-1].lower()
     unique_token = uuid.uuid4().hex[:10]
@@ -29,7 +37,11 @@ class Payslip(models.Model):
     )
     month = models.PositiveSmallIntegerField(choices=MONTH_CHOICES, verbose_name='Mês')
     year = models.PositiveIntegerField(verbose_name='Ano')
-    pdf_file = models.FileField(upload_to=upload_payslip_pdf, verbose_name='Arquivo PDF')
+    pdf_file = models.FileField(
+        upload_to=upload_payslip_pdf,
+        storage=get_media_storage(),
+        verbose_name='Arquivo PDF',
+    )
 
     # Dados extraídos do PDF
     employee_name = models.CharField(max_length=200, blank=True, verbose_name='Nome no Contracheque')
@@ -118,7 +130,11 @@ class IncomeReport(models.Model):
     )
     base_year = models.PositiveIntegerField(verbose_name='Ano-Calendário')
     exercise_year = models.PositiveIntegerField(verbose_name='Exercício')
-    pdf_file = models.FileField(upload_to=upload_income_report_pdf, verbose_name='Arquivo PDF')
+    pdf_file = models.FileField(
+        upload_to=upload_income_report_pdf,
+        storage=get_media_storage(),
+        verbose_name='Arquivo PDF',
+    )
 
     # Dados do beneficiário
     employee_name = models.CharField(max_length=200, blank=True, verbose_name='Nome no Informe')
