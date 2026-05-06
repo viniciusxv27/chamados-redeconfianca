@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Meu Extrato C${% endblock %}
+{% block title %}{% if is_admin_view %}Extrato C$ - {{ statement_user.full_name }}{% else %}Meu Extrato C${% endif %}{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50">
@@ -11,19 +11,36 @@
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900 flex items-center">
                         <i class="fas fa-coins text-primary mr-3"></i>
-                        Meu Extrato C$
+                        {% if is_admin_view %}
+                            Extrato C$ - {{ statement_user.full_name }}
+                        {% else %}
+                            Meu Extrato C$
+                        {% endif %}
                     </h1>
-                    <p class="text-gray-600 mt-1">Acompanhe suas transações de Confianças C$</p>
+                    <p class="text-gray-600 mt-1">
+                        {% if is_admin_view %}
+                            Acompanhe as transações de Confianças C$ de {{ statement_user.full_name }}
+                        {% else %}
+                            Acompanhe suas transações de Confianças C$
+                        {% endif %}
+                    </p>
                 </div>
                 <div class="flex items-center space-x-3">
-                    <a href="{% url 'marketplace' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
-                        <i class="fas fa-store mr-2"></i>
-                        Ir para Mercadinho
-                    </a>
-                    <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
-                        <i class="fas fa-arrow-left mr-2"></i>
-                        Voltar
-                    </a>
+                    {% if is_admin_view %}
+                        <a href="{% url 'manage_cs' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar para Gerenciar C$
+                        </a>
+                    {% else %}
+                        <a href="{% url 'marketplace' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                            <i class="fas fa-store mr-2"></i>
+                            Ir para Mercadinho
+                        </a>
+                        <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -107,7 +124,7 @@
                 <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors mr-2">
                     <i class="fas fa-search mr-2"></i>Filtrar
                 </button>
-                <a href="{% url 'my_cs_statement' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                <a href="{% if is_admin_view %}{% url 'user_cs_statement' statement_user.id %}{% else %}{% url 'my_cs_statement' %}{% endif %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors">
                     <i class="fas fa-times mr-2"></i>Limpar
                 </a>
             </div>
@@ -166,7 +183,7 @@
                         </td>
                         <td class="px-6 py-4">
                             <div class="text-sm text-gray-900">{{ transaction.description }}</div>
-                            {% if transaction.created_by and transaction.created_by != user %}
+                            {% if transaction.created_by and transaction.created_by != statement_user %}
                                 <div class="text-xs text-gray-500">Por: {{ transaction.created_by.full_name }}</div>
                             {% endif %}
                         </td>

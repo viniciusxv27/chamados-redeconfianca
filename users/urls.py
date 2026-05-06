@@ -39,6 +39,7 @@ urlpatterns = [
     path('manage/cs/', views.manage_cs_view, name='manage_cs'),
     path('manage/cs/<int:user_id>/add/', views.add_cs_view, name='add_cs'),
     path('manage/cs/<int:user_id>/remove/', views.remove_cs_view, name='remove_cs'),
+    path('manage/cs/<int:user_id>/statement/', views.user_cs_statement_view, name='user_cs_statement'),
     path('manage/cs/export-excel/', views.export_cs_excel, name='export_cs_excel'),
     path('manage/cs/import-excel/', views.import_cs_excel_view, name='import_cs_excel'),
     path('manage/sectors/', views.manage_sectors_view, name='manage_sectors'),
