@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+{% load simulator_tags %}
+
+{% block title %}Admin - Fatores do Simulador{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-2 sm:p-4 md:p-8">
+  <!-- Header -->
+  <div class="mb-4 sm:mb-6 md:mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+      <div>
+        <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 flex items-center gap-2 sm:gap-3">
+          <i class="fas fa-sliders-h text-warning"></i>
+          Gerenciamento de Fatores
+        </h1>
+        <p class="text-gray-600 mt-2">Edite os fatores de comissão e premiação para cada papel</p>
+      </div>
+      <a href="{% url 'simulator:dashboard' %}" class="px-3 sm:px-4 py-2 text-sm sm:text-base bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors duration-200 flex items-center gap-2">
+        <i class="fas fa-arrow-left"></i>
+        Voltar
+      </a>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% for role, factor_set in factor_sets.items %}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <!-- Card Header -->
+      <div class="bg-gradient-to-r {% if role == 'consultor' %}from-blue-500 to-blue-600{% elif role == 'gerente' %}from-purple-500 to-purple-600{% else %}from-green-500 to-green-600{% endif %} px-3 sm:px-6 py-3 sm:py-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h2 class="text-base sm:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+            <i class="fas fa-{% if role == 'consultor' %}user{% elif role == 'gerente' %}user-tie{% else %}crown{% endif %}"></i>
+            {{ role|title }}
+          </h2>
+          <div class="text-xs sm:text-sm text-white opacity-90">
+            <i class="fas fa-clock mr-1 sm:mr-2"></i>
+            <span class="hidden sm:inline">Atualizado {{ factor_set.updated_at|date:"d/m/Y H:i" }} por {{ factor_set.updated_by.get_full_name|default:"Sistema" }}</span>
+            <span class="sm:hidden">{{ factor_set.updated_at|date:"d/m" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Body -->
+      <div class="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+        <!-- Alert -->
+        <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 flex items-start gap-3">
+          <i class="fas fa-info-circle mt-1 flex-shrink-0"></i>
+          <div>
+            <strong>Edição de Fatores</strong>
+            <p class="mt-1 text-sm">Os fatores são armazenados em formato JSON. Edite os valores e clique em "Salvar" para aplicar as mudanças.</p>
+          </div>
+        </div>
+
+        <!-- JSON Textarea -->
+        <div>
+          <label for="factor_json__{{ role }}" class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-code text-primary mr-2"></i>
+            Dados JSON
+          </label>
+          <textarea 
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm bg-gray-50"
+            rows="20" 
+            name="factor_json__{{ role }}"
+            spellcheck="false"
+          >{{ factor_set.data }}</textarea>
+          <div class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-xs">
+            <strong>Dica:</strong> Use um validador JSON online se tiver dúvidas sobre a formatação.
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    <!-- Action Buttons -->
+    <div class="flex gap-4 sticky bottom-0 bg-white border-t border-gray-200 p-6 rounded-lg shadow-lg">
+      <button type="submit" class="px-6 py-3 bg-success hover:bg-green-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2 flex-1 md:flex-none justify-center">
+        <i class="fas fa-save"></i>
+        Salvar Fatores
+      </button>
+      <a href="{% url 'simulator:dashboard' %}" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2 flex-1 md:flex-none justify-center">
+        <i class="fas fa-times"></i>
+        Cancelar
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

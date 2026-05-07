@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'contracheque',  # Contracheques / Recibos de Pagamento
     'experiencia',  # Experiência Vivo
     'power_bi',  # Dashboards Power BI
+    'simulator',  # Simulador de comissionamento
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
