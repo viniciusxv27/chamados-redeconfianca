@@ -47,6 +47,30 @@ SIMULATOR_INPUT_PILLARS = [
     ('sva', 'SVA'),
 ]
 
+# Versão exibida na UI: Eletrônicos A/B e Essenciais A/B aparecem unificados.
+# As chaves continuam usando "_a" para que o backend trate o valor digitado
+# como o total do pilar (B fica zero).
+SIMULATOR_INPUT_PILLARS_DISPLAY = [
+    ('movel', 'Móvel'),
+    ('fixa', 'Fixa'),
+    ('smartphones', 'Smartphones'),
+    ('eletronicos_a', 'Eletrônicos'),
+    ('essenciais_a', 'Essenciais'),
+    ('seguros', 'Seguros'),
+    ('sva', 'SVA'),
+]
+
+# Pilares usados nos seletores de Hunter (também unificam A/B).
+HUNTER_PILLARS = [
+    ('movel', 'Móvel'),
+    ('fixa', 'Fixa'),
+    ('smartphones', 'Smartphones'),
+    ('eletronicos', 'Eletrônicos'),
+    ('essenciais', 'Essenciais'),
+    ('seguros', 'Seguros'),
+    ('sva', 'SVA'),
+]
+
 WORKBOOK_FILES = {
     ROLE_CONSULTOR: 'CONSULTOR.xlsx',
     ROLE_GERENTE: 'GERENTE.xlsx',
@@ -859,7 +883,7 @@ def compute_consultor_simulation(
         # Realizado individual: usa AT_* da planilha REALIZADO
         ind_values = {
             'movel': to_float(real_row.get('AT_MOVEL')),
-            'fixa': to_float(real_row.get('AT_FIXA')),
+            'fixa': to_float(real_row.get('F_M_FIXA')) if 'F_M_FIXA' in real_row.index else to_float(real_row.get('AT_FIXA')),
             'smartphones': to_float(real_row.get('AT_SMARTPHONE')),
             'eletronicos_a': to_float(real_row.get('AT_ACESSORIOS_A')),
             'eletronicos_b': to_float(real_row.get('AT_ACESSORIOS_B')),
@@ -868,14 +892,19 @@ def compute_consultor_simulation(
             'seguros': to_float(real_row.get('AT_SEGUROS')),
             'sva': to_float(real_row.get('AT_SVA')),
         }
+        fixa_quantity = to_float(real_row.get('AT_FIXA'))
+        fixa_revenue = ind_values['fixa']
     elif view_mode == VIEW_SIMULADOR:
-        # Simulador: usa valores informados pelo usuário
+        # Simulador: usa valores informados pelo usuário.
+        # Aceita chaves unificadas para Eletrônicos/Essenciais (campo "_a" recebe o total).
         ind_values = {p: _get_sim_input(simulator_inputs, p, 'real') for p, _ in SIMULATOR_INPUT_PILLARS}
         # Permite sobrescrever metas individuais
         for key in base_meta:
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
             if override is not None:
                 base_meta[key] = override
+        fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
+        fixa_revenue = ind_values.get('fixa', 0.0)
     else:  # VIEW_PROJECAO
         ind_values = {
             'movel': to_float(proj_row.get('PROJ_MOVEL')),
@@ -888,6 +917,8 @@ def compute_consultor_simulation(
             'seguros': to_float(proj_row.get('PROJ_SEGURO')),
             'sva': to_float(proj_row.get('PROJ_SVA')),
         }
+        fixa_quantity = to_float(proj_row.get('PROJ_BL'))
+        fixa_revenue = ind_values['fixa']
 
     meta_movel, proj_movel, att_movel = build_pillar_values(base_meta['movel'], ind_values['movel'])
     meta_fixa, proj_fixa, att_fixa = build_pillar_values(base_meta['fixa'], ind_values['fixa'])
@@ -1096,6 +1127,8 @@ def compute_consultor_simulation(
             'total_with_pdv': total_with_pdv,
             'hunter2_value': hunter2_value,
             'hunter3_value': hunter3_value,
+            'quantity': fixa_quantity if key == 'fixa' else None,
+            'revenue': fixa_revenue if key == 'fixa' else None,
         })
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
@@ -1129,16 +1162,20 @@ def compute_gerente_simulation(
     realized = load_dataframe(ROLE_GERENTE, 'REALIZADO')
     projection = load_dataframe(ROLE_GERENTE, 'PROJEÇÃO')
 
-    pdv = ''
-    if getattr(user, 'sector', None):
-        pdv = user.sector.name or ''
+    # Resolve PDV usando o nome de loja normalizado (ex.: "Loja Anchieta" → "ANCHIETA")
+    # para que bata com o valor das planilhas.
+    store_name = get_store_name_from_user(user)
+    pdv = store_name
+    if not pdv and getattr(user, 'sector', None):
+        pdv = (user.sector.name or '').strip()
     # Sem PDV vinculado: o gerente ainda pode usar o Simulador (valores
     # informados manualmente). As metas/projeções da planilha ficarão zeradas.
 
     coord_name = ''
     if pdv:
+        target_pdv = normalize_text(pdv)
         for _, row in realized.iterrows():
-            if normalize_text(row.get('PDV', '')) == normalize_text(pdv):
+            if normalize_text(row.get('PDV', '')) == target_pdv:
                 coord_name = str(row.get('COORDENAÇÃO') or '').strip()
                 break
 
@@ -1152,15 +1189,17 @@ def compute_gerente_simulation(
         'sva': sumifs(realized, 'META_SVA', 'PDV', pdv),
     }
     # Sobrescreve com metas oficiais (META_PDV_REAL)
-    store_for_pdv = get_store_name_from_user(user) or pdv
+    store_for_pdv = store_name or pdv
     if store_for_pdv:
         pdv_pb = get_metas_from_power_bi(store_name=store_for_pdv)
         for k, v in (pdv_pb or {}).items():
             if v:
                 meta_map[k] = v
+
+    if view_mode == VIEW_REALIZADO:
         proj_map = {
             'movel': sumifs(realized, 'AT_MOVEL', 'PDV', pdv),
-            'fixa': sumifs(realized, 'AT_FIXA', 'PDV', pdv),
+            'fixa': sumifs(realized, 'F_M_FIXA', 'PDV', pdv) if 'F_M_FIXA' in realized.columns else sumifs(realized, 'AT_FIXA', 'PDV', pdv),
             'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'PDV', pdv),
             'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv) + sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv),
             'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv) + sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv),
@@ -1171,23 +1210,30 @@ def compute_gerente_simulation(
         eletro_b_pdv = sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv)
         ess_a_pdv = sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv)
         ess_b_pdv = sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv)
+        fixa_quantity = sumifs(realized, 'AT_FIXA', 'PDV', pdv)
+        fixa_revenue = proj_map['fixa']
     elif view_mode == VIEW_SIMULADOR:
-        # Para Gerente em modo Simulador: usuário define real (PDV) por pilar
+        # Para Gerente em modo Simulador: usuário define real (PDV) por pilar.
+        # Aceita tanto a chave unificada ('eletronicos'/'essenciais') quanto _a/_b.
+        eletro_a_in = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
+        eletro_b_in = _get_sim_input(simulator_inputs, 'eletronicos_b', 'real')
+        ess_a_in = _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
+        ess_b_in = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
         proj_map = {
             'movel': _get_sim_input(simulator_inputs, 'movel', 'real'),
             'fixa': _get_sim_input(simulator_inputs, 'fixa', 'real'),
             'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'real'),
-            'eletronicos': _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
-                + _get_sim_input(simulator_inputs, 'eletronicos_b', 'real'),
-            'essenciais': _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
-                + _get_sim_input(simulator_inputs, 'essenciais_b', 'real'),
+            'eletronicos': eletro_a_in + eletro_b_in,
+            'essenciais': ess_a_in + ess_b_in,
             'seguros': _get_sim_input(simulator_inputs, 'seguros', 'real'),
             'sva': _get_sim_input(simulator_inputs, 'sva', 'real'),
         }
-        eletro_a_pdv = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
-        eletro_b_pdv = _get_sim_input(simulator_inputs, 'eletronicos_b', 'real')
-        ess_a_pdv = _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
-        ess_b_pdv = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
+        eletro_a_pdv = eletro_a_in
+        eletro_b_pdv = eletro_b_in
+        ess_a_pdv = ess_a_in
+        ess_b_pdv = ess_b_in
+        fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
+        fixa_revenue = proj_map['fixa']
         # Permite sobrescrever metas
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
@@ -1207,6 +1253,8 @@ def compute_gerente_simulation(
         eletro_b_pdv = sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv)
         ess_a_pdv = sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv)
         ess_b_pdv = sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv)
+        fixa_quantity = sumifs(projection, 'PROJ_BL', 'PDV', pdv) if 'PROJ_BL' in projection.columns else 0.0
+        fixa_revenue = proj_map['fixa']
 
     coord_meta = {
         'movel': sumifs(realized, 'META_MOVEL', 'COORDENAÇÃO', coord_name),
@@ -1372,6 +1420,8 @@ def compute_gerente_simulation(
             'total_with_pdv': total_with_pdv,
             'hunter2_value': hunter2_value,
             'hunter3_value': hunter3_value,
+            'quantity': fixa_quantity if key == 'fixa' else None,
+            'revenue': fixa_revenue if key == 'fixa' else None,
         })
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
@@ -1434,11 +1484,13 @@ def compute_coordenador_simulation(
     eletro_b = sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name)
     ess_a = sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name)
     ess_b = sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name)
+    fixa_quantity = sumifs(projection, 'PROJ_BL', 'COORDENAÇÃO', coord_name) if 'PROJ_BL' in projection.columns else 0.0
+    fixa_revenue = proj_map['fixa']
 
     if view_mode == VIEW_REALIZADO:
         proj_map = {
             'movel': sumifs(realized, 'AT_MOVEL', 'COORDENAÇÃO', coord_name),
-            'fixa': sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name),
+            'fixa': sumifs(realized, 'F_M_FIXA', 'COORDENAÇÃO', coord_name) if 'F_M_FIXA' in realized.columns else sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name),
             'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'COORDENAÇÃO', coord_name),
             'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name),
             'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name),
@@ -1449,22 +1501,28 @@ def compute_coordenador_simulation(
         eletro_b = sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name)
         ess_a = sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name)
         ess_b = sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name)
+        fixa_quantity = sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name)
+        fixa_revenue = proj_map['fixa']
     elif view_mode == VIEW_SIMULADOR:
+        eletro_a_in = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
+        eletro_b_in = _get_sim_input(simulator_inputs, 'eletronicos_b', 'real')
+        ess_a_in = _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
+        ess_b_in = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
         proj_map = {
             'movel': _get_sim_input(simulator_inputs, 'movel', 'real'),
             'fixa': _get_sim_input(simulator_inputs, 'fixa', 'real'),
             'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'real'),
-            'eletronicos': _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
-                + _get_sim_input(simulator_inputs, 'eletronicos_b', 'real'),
-            'essenciais': _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
-                + _get_sim_input(simulator_inputs, 'essenciais_b', 'real'),
+            'eletronicos': eletro_a_in + eletro_b_in,
+            'essenciais': ess_a_in + ess_b_in,
             'seguros': _get_sim_input(simulator_inputs, 'seguros', 'real'),
             'sva': _get_sim_input(simulator_inputs, 'sva', 'real'),
         }
-        eletro_a = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
-        eletro_b = _get_sim_input(simulator_inputs, 'eletronicos_b', 'real')
-        ess_a = _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
-        ess_b = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
+        eletro_a = eletro_a_in
+        eletro_b = eletro_b_in
+        ess_a = ess_a_in
+        ess_b = ess_b_in
+        fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
+        fixa_revenue = proj_map['fixa']
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
             if override is not None:
@@ -1559,6 +1617,8 @@ def compute_coordenador_simulation(
             'commission_value': commission_value,
             'hunter2_value': hunter2_value,
             'hunter3_value': hunter3_value,
+            'quantity': fixa_quantity if key == 'fixa' else None,
+            'revenue': fixa_revenue if key == 'fixa' else None,
         })
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)

@@ -170,16 +170,16 @@
         {% endif %}
 
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {% for pillar in pillars %}
+          {% for pillar_key, pillar_label in pillars %}
           <div class="space-y-1">
-            <label for="hunter_{{ pillar }}" class="block text-xs sm:text-sm font-semibold text-gray-700">
+            <label for="hunter_{{ pillar_key }}" class="block text-xs sm:text-sm font-semibold text-gray-700">
               <i class="fas fa-circle text-primary text-[8px] mr-2"></i>
-              {{ pillar|title }}
+              {{ pillar_label }}
             </label>
-            <select name="hunter_{{ pillar }}" id="hunter_{{ pillar }}" class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-700">
-              <option value="0" {% if hunter_levels|get_dict_item:pillar == 0 %}selected{% endif %}>Nenhum</option>
-              <option value="2" {% if hunter_levels|get_dict_item:pillar == 2 %}selected{% endif %}>Hunter 2</option>
-              <option value="3" {% if hunter_levels|get_dict_item:pillar == 3 %}selected{% endif %}>Hunter 3</option>
+            <select name="hunter_{{ pillar_key }}" id="hunter_{{ pillar_key }}" class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-700">
+              <option value="0" {% if hunter_levels|get_dict_item:pillar_key == 0 %}selected{% endif %}>Nenhum</option>
+              <option value="2" {% if hunter_levels|get_dict_item:pillar_key == 2 %}selected{% endif %}>Hunter 2</option>
+              <option value="3" {% if hunter_levels|get_dict_item:pillar_key == 3 %}selected{% endif %}>Hunter 3</option>
             </select>
           </div>
           {% endfor %}
@@ -278,9 +278,9 @@
             <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Pilar</th>
             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Meta</th>
             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">{% if view_mode == 'realizado' %}Realizado{% elif view_mode == 'simulador' %}Simulado{% else %}Projeção{% endif %}</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Atingimento</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700 border-r-2 border-gray-500">Atingimento</th>
             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">% Comissão</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">R$ Comissão</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700 border-r-2 border-gray-500">R$ Comissão</th>
             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Hunter 2</th>
             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Hunter 3</th>
           </tr>
@@ -290,14 +290,21 @@
           <tr class="divide-x divide-gray-200 hover:bg-gray-50 transition-colors">
             <td class="px-4 py-3 text-sm font-semibold text-gray-900">{{ row.label }}</td>
             <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.meta|number_br:2 }}</td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.proj|number_br:2 }}</td>
-            <td class="px-4 py-3 text-sm text-right">
+            <td class="px-4 py-3 text-sm text-right text-gray-600">
+              {% if row.key == 'fixa' %}
+                <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
+                <div class="text-xs text-gray-500">{{ row.revenue|brl }}</div>
+              {% else %}
+                {{ row.proj|number_br:2 }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-sm text-right border-r-2 border-gray-500">
               <span class="px-3 py-1 rounded-full text-xs font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
                 {{ row.attainment|pct_br:1 }}
               </span>
             </td>
             <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
-            <td class="px-4 py-3 text-sm text-right font-bold text-gray-900">{{ row.commission_value|brl }}</td>
+            <td class="px-4 py-3 text-sm text-right font-bold text-gray-900 border-r-2 border-gray-500">{{ row.commission_value|brl }}</td>
             <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.hunter2_value|brl }}</td>
             <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.hunter3_value|brl }}</td>
           </tr>
@@ -353,11 +360,11 @@
             <th class="px-3 py-3 text-left font-semibold text-gray-700">Pilar</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Meta</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">{% if view_mode == 'realizado' %}Real{% elif view_mode == 'simulador' %}Simul.{% else %}Proj.{% endif %}</th>
-            <th class="px-3 py-3 text-right font-semibold text-gray-700">Ating.</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Ating.</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">% Com.</th>
-            <th class="px-3 py-3 text-right font-semibold text-gray-700">Comissão</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Comissão</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">% Prêm.</th>
-            <th class="px-3 py-3 text-right font-semibold text-gray-700">Premiação</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Premiação</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Total Indiv.</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Prêm. PDV</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Total+PDV</th>
@@ -370,16 +377,23 @@
           <tr class="divide-x divide-gray-200 hover:bg-gray-50 transition-colors">
             <td class="px-3 py-3 font-semibold text-gray-900">{{ row.label }}</td>
             <td class="px-3 py-3 text-right text-gray-600">{{ row.meta|number_br:2 }}</td>
-            <td class="px-3 py-3 text-right text-gray-600">{{ row.proj|number_br:2 }}</td>
-            <td class="px-3 py-3 text-right">
+            <td class="px-3 py-3 text-right text-gray-600">
+              {% if row.key == 'fixa' %}
+                <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
+                <div class="text-xs text-gray-500">{{ row.revenue|brl }}</div>
+              {% else %}
+                {{ row.proj|number_br:2 }}
+              {% endif %}
+            </td>
+            <td class="px-3 py-3 text-right border-r-2 border-gray-500">
               <span class="px-2 py-1 rounded text-xs font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
                 {{ row.attainment|pct_br:1 }}
               </span>
             </td>
             <td class="px-3 py-3 text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
-            <td class="px-3 py-3 text-right font-semibold text-gray-900">{{ row.commission_value|brl }}</td>
+            <td class="px-3 py-3 text-right font-semibold text-gray-900 border-r-2 border-gray-500">{{ row.commission_value|brl }}</td>
             <td class="px-3 py-3 text-right text-gray-600">{{ row.premium_rate|pct_br:2 }}</td>
-            <td class="px-3 py-3 text-right font-semibold text-gray-900">{{ row.premium_value|brl }}</td>
+            <td class="px-3 py-3 text-right font-semibold text-gray-900 border-r-2 border-gray-500">{{ row.premium_value|brl }}</td>
             <td class="px-3 py-3 text-right font-bold text-primary">{{ row.total_individual|brl }}</td>
             <td class="px-3 py-3 text-right text-gray-600">{{ row.pdv_premium_value|brl }}</td>
             <td class="px-3 py-3 text-right font-bold text-success">{{ row.total_with_pdv|brl }}</td>

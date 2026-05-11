@@ -8,7 +8,9 @@ from .services import (
     FACTOR_RANGE_SPECS,
     DEFAULT_META_BY_ROLE,
     PILLAR_ORDER,
+    HUNTER_PILLARS,
     SIMULATOR_INPUT_PILLARS,
+    SIMULATOR_INPUT_PILLARS_DISPLAY,
     VIEW_CHOICES,
     VIEW_PROJECAO,
     VIEW_REALIZADO,
@@ -164,10 +166,10 @@ def simulator_dashboard(request):
         'show_summary_only': show_summary_only,
         'is_superadmin': is_superadmin(current_user),
         'hunter_levels': hunter_levels,
-        'pillars': PILLAR_ORDER,
+        'pillars': HUNTER_PILLARS,
         'view_mode': view_mode,
         'view_choices': VIEW_CHOICES,
-        'simulator_input_pillars': SIMULATOR_INPUT_PILLARS,
+        'simulator_input_pillars': SIMULATOR_INPUT_PILLARS_DISPLAY,
         'simulator_inputs': simulator_inputs,
     }
 
