@@ -14,7 +14,7 @@
           <i class="fas fa-calculator text-primary"></i>
           Simulador de Comissionamento
         </h1>
-        <p class="text-gray-600 mt-2">Simule e ajuste seus ganhos por pilar de negócio</p>
+        <p class="text-gray-600 mt-2">Visualize Realizado, Projeção e simule cenários por pilar</p>
       </div>
       {% if is_superadmin %}
       <div class="flex gap-1 sm:gap-2 md:gap-3 flex-wrap">
@@ -52,6 +52,7 @@
             {% endfor %}
           </select>
         </div>
+        <input type="hidden" name="view" value="{{ view_mode }}">
         <div class="flex items-end">
           <button type="submit" class="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2 text-sm sm:text-base bg-primary hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-1 sm:gap-2">
             <i class="fas fa-search"></i>
@@ -80,25 +81,32 @@
       <p class="mt-1">Nenhuma simulação disponível para este usuário. Verifique se há dados carregados.</p>
     </div>
   </div>
+  {% elif simulation.error %}
+  <div class="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-start gap-3">
+    <i class="fas fa-times-circle mt-0.5"></i>
+    <div>
+      <strong>Erro:</strong> {{ simulation.error }}
+    </div>
+  </div>
   {% else %}
 
   <!-- User Info Cards -->
   <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6 md:mb-8">
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
       <div class="flex items-center justify-between">
-        <div>
+        <div class="min-w-0 flex-1">
           <p class="text-xs sm:text-sm text-gray-600">Usuário</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.user_name }}</p>
+          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate" title="{{ simulation.user_name }}">{{ simulation.first_name|default:simulation.user_name|first_word }}</p>
         </div>
         <i class="fas fa-user text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
       </div>
     </div>
-    
+
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
       <div class="flex items-center justify-between">
-        <div>
+        <div class="min-w-0 flex-1">
           <p class="text-xs sm:text-sm text-gray-600">PDV</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.pdv }}</p>
+          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.pdv|default:"—" }}</p>
         </div>
         <i class="fas fa-store text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
       </div>
@@ -106,9 +114,9 @@
 
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
       <div class="flex items-center justify-between">
-        <div>
+        <div class="min-w-0 flex-1">
           <p class="text-xs sm:text-sm text-gray-600">Coordenador</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.coordinator }}</p>
+          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.coordinator|default:"—"|first_word }}</p>
         </div>
         <i class="fas fa-user-tie text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
       </div>
@@ -116,20 +124,30 @@
 
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
       <div class="flex items-center justify-between">
-        <div>
+        <div class="min-w-0 flex-1">
           <p class="text-xs sm:text-sm text-gray-600">Papel</p>
           <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">
-            {% if target_role == "consultor" %}
-            Consultor
-            {% elif target_role == "gerente" %}
-            Gerente
-            {% elif target_role == "coordenador" %}
-            Coordenador
-            {% endif %}
+            {% if target_role == "consultor" %}Consultor{% elif target_role == "gerente" %}Gerente{% elif target_role == "coordenador" %}Coordenador{% endif %}
           </p>
         </div>
-        <i class="fas fa-badge text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
+        <i class="fas fa-id-badge text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
       </div>
+    </div>
+  </div>
+
+  <!-- View Tabs (Realizado / Projeção / Simulador) -->
+  <div class="mb-4 sm:mb-6 md:mb-8">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-1 inline-flex gap-1 flex-wrap w-full">
+      {% for v_key, v_label in view_choices %}
+      <a href="?{% if target_user %}user_id={{ target_user.id }}&{% endif %}view={{ v_key }}"
+         class="flex-1 text-center px-4 py-2 rounded-md text-sm sm:text-base font-semibold transition-colors duration-150
+                {% if view_mode == v_key %}bg-primary text-white shadow{% else %}text-gray-700 hover:bg-gray-100{% endif %}">
+        {% if v_key == 'realizado' %}<i class="fas fa-check-circle mr-2"></i>{% endif %}
+        {% if v_key == 'projecao' %}<i class="fas fa-chart-line mr-2"></i>{% endif %}
+        {% if v_key == 'simulador' %}<i class="fas fa-flask mr-2"></i>{% endif %}
+        {{ v_label }}
+      </a>
+      {% endfor %}
     </div>
   </div>
 
@@ -137,21 +155,28 @@
   <div class="mb-8">
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <i class="fas fa-bow-arrow text-primary"></i>
+        <i class="fas fa-bullseye text-primary"></i>
         Configuração de Níveis Hunter
       </h2>
-      
+
       <form method="get" class="space-y-4">
-        <input type="hidden" name="user_id" value="{{ target_user.id }}">
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% if target_user %}<input type="hidden" name="user_id" value="{{ target_user.id }}">{% endif %}
+        <input type="hidden" name="view" value="{{ view_mode }}">
+
+        {% if view_mode == 'simulador' %}
+          {% for pilar_key, pilar_label in simulator_input_pillars %}
+          <input type="hidden" name="sim__{{ pilar_key }}__real" value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}">
+          {% endfor %}
+        {% endif %}
+
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {% for pillar in pillars %}
-          <div class="space-y-2">
-            <label for="hunter_{{ pillar }}" class="block text-sm font-semibold text-gray-700">
-              <i class="fas fa-circle-dot text-primary text-xs mr-2"></i>
+          <div class="space-y-1">
+            <label for="hunter_{{ pillar }}" class="block text-xs sm:text-sm font-semibold text-gray-700">
+              <i class="fas fa-circle text-primary text-[8px] mr-2"></i>
               {{ pillar|title }}
             </label>
-            <select name="hunter_{{ pillar }}" id="hunter_{{ pillar }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-700">
+            <select name="hunter_{{ pillar }}" id="hunter_{{ pillar }}" class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-700">
               <option value="0" {% if hunter_levels|get_dict_item:pillar == 0 %}selected{% endif %}>Nenhum</option>
               <option value="2" {% if hunter_levels|get_dict_item:pillar == 2 %}selected{% endif %}>Hunter 2</option>
               <option value="3" {% if hunter_levels|get_dict_item:pillar == 3 %}selected{% endif %}>Hunter 3</option>
@@ -162,13 +187,78 @@
 
         <div class="pt-4 border-t border-gray-200">
           <button type="submit" class="px-6 py-2 bg-primary hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2">
-            <i class="fas fa-recycle"></i>
+            <i class="fas fa-sync-alt"></i>
             Recalcular Ganhos
           </button>
         </div>
       </form>
     </div>
   </div>
+
+  {% if view_mode == 'simulador' %}
+  <!-- Simulador inputs -->
+  <div class="mb-8">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+        <i class="fas fa-flask text-primary"></i>
+        Simulador de fato — informe os valores para projetar
+      </h2>
+      <p class="text-sm text-gray-600 mb-4">Preencha o realizado por pilar (individual e PDV). Em branco = 0.</p>
+
+      <form method="get" class="space-y-4">
+        {% if target_user %}<input type="hidden" name="user_id" value="{{ target_user.id }}">{% endif %}
+        <input type="hidden" name="view" value="simulador">
+        {% for k, v in hunter_levels.items %}<input type="hidden" name="hunter_{{ k }}" value="{{ v }}">{% endfor %}
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-100 text-gray-700">
+              <tr>
+                <th class="px-3 py-2 text-left font-semibold">Pilar</th>
+                <th class="px-3 py-2 text-right font-semibold">Meta (opcional)</th>
+                <th class="px-3 py-2 text-right font-semibold">Real Individual</th>
+                {% if target_role != 'coordenador' %}
+                <th class="px-3 py-2 text-right font-semibold">Real PDV</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for pilar_key, pilar_label in simulator_input_pillars %}
+              <tr class="border-b border-gray-200">
+                <td class="px-3 py-2 font-semibold text-gray-900">{{ pilar_label }}</td>
+                <td class="px-3 py-2 text-right">
+                  <input type="number" step="0.01" name="sim__{{ pilar_key }}__meta"
+                         value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                         class="w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                </td>
+                <td class="px-3 py-2 text-right">
+                  <input type="number" step="0.01" name="sim__{{ pilar_key }}__real"
+                         value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                         class="w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                </td>
+                {% if target_role != 'coordenador' %}
+                <td class="px-3 py-2 text-right">
+                  <input type="number" step="0.01" name="sim__{{ pilar_key }}__realpdv"
+                         value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                         class="w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" class="px-6 py-2 bg-primary hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors duration-200 inline-flex items-center gap-2">
+            <i class="fas fa-play"></i>
+            Simular
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Results Table -->
   {% if target_role == "coordenador" %}
@@ -177,39 +267,39 @@
     <div class="bg-gradient-to-r from-primary to-orange-600 px-6 py-4">
       <h3 class="text-lg font-bold text-white flex items-center gap-2">
         <i class="fas fa-chart-line"></i>
-        Comissionamento por Pilar
+        Comissionamento por Pilar — {% for k,l in view_choices %}{% if k == view_mode %}{{ l }}{% endif %}{% endfor %}
       </h3>
     </div>
-    
+
     <div class="overflow-x-auto">
       <table class="w-full">
         <thead class="bg-gray-100 border-b border-gray-200">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Pilar</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Meta</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Projeção</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Atingimento</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Taxa</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Comissão</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Hunter 2</th>
-            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Hunter 3</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Pilar</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Meta</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">{% if view_mode == 'realizado' %}Realizado{% elif view_mode == 'simulador' %}Simulado{% else %}Projeção{% endif %}</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Atingimento</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">% Comissão</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">R$ Comissão</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Hunter 2</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Hunter 3</th>
           </tr>
         </thead>
         <tbody>
           {% for row in simulation.rows %}
           <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-            <td class="px-6 py-4 text-sm font-semibold text-gray-900">{{ row.label }}</td>
-            <td class="px-6 py-4 text-sm text-right text-gray-600">{{ row.meta|floatformat:2 }}</td>
-            <td class="px-6 py-4 text-sm text-right text-gray-600">{{ row.proj|floatformat:2 }}</td>
-            <td class="px-6 py-4 text-sm text-right">
+            <td class="px-4 py-3 text-sm font-semibold text-gray-900">{{ row.label }}</td>
+            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.meta|number_br:2 }}</td>
+            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.proj|number_br:2 }}</td>
+            <td class="px-4 py-3 text-sm text-right">
               <span class="px-3 py-1 rounded-full text-xs font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.attainment|floatformat:"1%"|default:"--" }}
+                {{ row.attainment|pct_br:1 }}
               </span>
             </td>
-            <td class="px-6 py-4 text-sm text-right text-gray-600">{{ row.commission_rate|floatformat:"1%" }}</td>
-            <td class="px-6 py-4 text-sm text-right font-bold text-gray-900">R$ {{ row.commission_value|floatformat:2 }}</td>
-            <td class="px-6 py-4 text-sm text-right text-gray-600">R$ {{ row.hunter2_value|floatformat:2 }}</td>
-            <td class="px-6 py-4 text-sm text-right text-gray-600">R$ {{ row.hunter3_value|floatformat:2 }}</td>
+            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
+            <td class="px-4 py-3 text-sm text-right font-bold text-gray-900">{{ row.commission_value|brl }}</td>
+            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.hunter2_value|brl }}</td>
+            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.hunter3_value|brl }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -218,28 +308,29 @@
 
     <!-- Summary for Coordenador -->
     <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold">Total de Comissão</p>
-          <p class="text-lg font-bold text-gray-900">R$ {{ simulation.totals.total_commission|floatformat:2 }}</p>
+          <p class="text-lg font-bold text-gray-900">{{ simulation.totals.total_commission|brl }}</p>
         </div>
-        <div>
+        <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold">Hunter 2</p>
-          <p class="text-lg font-bold text-gray-900">R$ {{ simulation.totals.hunter2|floatformat:2 }}</p>
+          <p class="text-lg font-bold text-gray-900">{{ simulation.totals.hunter2|brl }}</p>
         </div>
-        <div>
+        <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold">Hunter 3</p>
-          <p class="text-lg font-bold text-gray-900">R$ {{ simulation.totals.hunter3|floatformat:2 }}</p>
+          <p class="text-lg font-bold text-gray-900">{{ simulation.totals.hunter3|brl }}</p>
         </div>
-        <div>
+        <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold">Bônus 6/7</p>
-          <p class="text-lg font-bold text-success">R$ {{ simulation.totals.bonus_6_7|floatformat:2 }}</p>
+          <p class="text-lg font-bold text-success">{{ simulation.totals.bonus_6_7|brl }}</p>
         </div>
-        <div class="md:col-span-4 pt-4 border-t border-gray-300">
-          <div class="flex items-center justify-between">
-            <p class="text-sm font-semibold text-gray-700">GANHO TOTAL</p>
-            <p class="text-2xl font-bold text-primary">R$ {{ simulation.totals.ganho_total|floatformat:2 }}</p>
-          </div>
+        <div class="bg-gradient-to-br from-primary to-orange-600 rounded-lg p-4 text-white">
+          <p class="text-xs uppercase font-semibold opacity-90">Ganho Total</p>
+          <p class="text-xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
+          {% if simulation.totals.ganho_total_sniper %}
+          <p class="text-xs opacity-90 mt-1">Sniper: {{ simulation.totals.ganho_total_sniper|brl }}</p>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -251,49 +342,49 @@
     <div class="bg-gradient-to-r from-primary to-orange-600 px-6 py-4">
       <h3 class="text-lg font-bold text-white flex items-center gap-2">
         <i class="fas fa-chart-line"></i>
-        Comissionamento Detalhado por Pilar
+        Comissionamento Detalhado por Pilar — {% for k,l in view_choices %}{% if k == view_mode %}{{ l }}{% endif %}{% endfor %}
       </h3>
     </div>
-    
+
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-100 border-b border-gray-200 sticky top-0">
           <tr>
-            <th class="px-4 py-3 text-left font-semibold text-gray-700">Pilar</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Meta</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Proj.</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Atingimento</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Taxa Com.</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Taxa Prem.</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Comissão</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Premiação</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Total Indiv.</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Prêm. PDV</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Total+PDV</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Hunter2</th>
-            <th class="px-4 py-3 text-right font-semibold text-gray-700">Hunter3</th>
+            <th class="px-3 py-3 text-left font-semibold text-gray-700">Pilar</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Meta</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">{% if view_mode == 'realizado' %}Real{% elif view_mode == 'simulador' %}Simul.{% else %}Proj.{% endif %}</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Ating.</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">% Com.</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">% Prêm.</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Comissão</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Premiação</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Total Indiv.</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Prêm. PDV</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Total+PDV</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Hunter2</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">Hunter3</th>
           </tr>
         </thead>
         <tbody>
           {% for row in simulation.rows %}
           <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-            <td class="px-4 py-3 font-semibold text-gray-900">{{ row.label }}</td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.meta|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.proj|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right">
+            <td class="px-3 py-3 font-semibold text-gray-900">{{ row.label }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.meta|number_br:2 }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.proj|number_br:2 }}</td>
+            <td class="px-3 py-3 text-right">
               <span class="px-2 py-1 rounded text-xs font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.attainment|floatformat:"0%"|default:"--" }}
+                {{ row.attainment|pct_br:1 }}
               </span>
             </td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.commission_rate|floatformat:"1%" }}</td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.premium_rate|floatformat:"1%" }}</td>
-            <td class="px-4 py-3 text-right font-semibold text-gray-900">{{ row.commission_value|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right font-semibold text-gray-900">{{ row.premium_value|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right font-bold text-primary">{{ row.total_individual|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.pdv_premium_value|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right font-bold text-success">{{ row.total_with_pdv|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.hunter2_value|floatformat:0 }}</td>
-            <td class="px-4 py-3 text-right text-gray-600">{{ row.hunter3_value|floatformat:0 }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.premium_rate|pct_br:2 }}</td>
+            <td class="px-3 py-3 text-right font-semibold text-gray-900">{{ row.commission_value|brl }}</td>
+            <td class="px-3 py-3 text-right font-semibold text-gray-900">{{ row.premium_value|brl }}</td>
+            <td class="px-3 py-3 text-right font-bold text-primary">{{ row.total_individual|brl }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.pdv_premium_value|brl }}</td>
+            <td class="px-3 py-3 text-right font-bold text-success">{{ row.total_with_pdv|brl }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.hunter2_value|brl }}</td>
+            <td class="px-3 py-3 text-right text-gray-600">{{ row.hunter3_value|brl }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -305,23 +396,23 @@
       <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Total com PDV</p>
-          <p class="text-xl font-bold text-gray-900">R$ {{ simulation.totals.total_with_pdv|floatformat:0 }}</p>
+          <p class="text-xl font-bold text-gray-900">{{ simulation.totals.total_with_pdv|brl }}</p>
         </div>
         <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Hunter 2</p>
-          <p class="text-xl font-bold text-gray-900">R$ {{ simulation.totals.hunter2|floatformat:0 }}</p>
+          <p class="text-xl font-bold text-gray-900">{{ simulation.totals.hunter2|brl }}</p>
         </div>
         <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Hunter 3</p>
-          <p class="text-xl font-bold text-gray-900">R$ {{ simulation.totals.hunter3|floatformat:0 }}</p>
+          <p class="text-xl font-bold text-gray-900">{{ simulation.totals.hunter3|brl }}</p>
         </div>
         <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Bônus 6/7</p>
-          <p class="text-xl font-bold text-success">R$ {{ simulation.totals.bonus_6_7|floatformat:0 }}</p>
+          <p class="text-xl font-bold text-success">{{ simulation.totals.bonus_6_7|brl }}</p>
         </div>
         <div class="bg-gradient-to-br from-primary to-orange-600 rounded-lg p-4 text-white">
-          <p class="text-xs uppercase font-semibold mb-1 opacity-90">GANHO TOTAL</p>
-          <p class="text-2xl font-bold">R$ {{ simulation.totals.ganho_total|floatformat:0 }}</p>
+          <p class="text-xs uppercase font-semibold mb-1 opacity-90">Ganho Total</p>
+          <p class="text-2xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
         </div>
       </div>
     </div>
@@ -332,10 +423,8 @@
 </div>
 
 <style>
-  /* Responsiveness para tabelas */
   @media (max-width: 768px) {
     table { font-size: 0.75rem; }
-    .px-6 { padding-left: 0.5rem; padding-right: 0.5rem; }
   }
 </style>
 {% endblock %}

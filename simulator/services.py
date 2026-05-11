@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,10 +14,38 @@ from users.models import User, Sector
 from .models import SimulatorFactorSet, CoordinatorStoreAccess
 
 
+logger = logging.getLogger(__name__)
+
+
 ROLE_CONSULTOR = 'consultor'
 ROLE_GERENTE = 'gerente'
 ROLE_COORDENADOR = 'coordenador'
 ROLE_SUPERADMIN = 'superadmin'
+
+# Modos de visualização do simulador (espelham as três áreas das planilhas
+# por loja/coordenador: PROJEÇÃO, REALIZADO e SIMULADOR).
+VIEW_PROJECAO = 'projecao'
+VIEW_REALIZADO = 'realizado'
+VIEW_SIMULADOR = 'simulador'
+
+VIEW_CHOICES = [
+    (VIEW_PROJECAO, 'Projeção'),
+    (VIEW_REALIZADO, 'Realizado'),
+    (VIEW_SIMULADOR, 'Simulador de fato'),
+]
+
+# Pilares utilizados no formulário do simulador (mesmas chaves de hunter)
+SIMULATOR_INPUT_PILLARS = [
+    ('movel', 'Móvel'),
+    ('fixa', 'Fixa'),
+    ('smartphones', 'Smartphones'),
+    ('eletronicos_a', 'Eletrônicos - A'),
+    ('eletronicos_b', 'Eletrônicos - B'),
+    ('essenciais_a', 'Essenciais - A'),
+    ('essenciais_b', 'Essenciais - B'),
+    ('seguros', 'Seguros'),
+    ('sva', 'SVA'),
+]
 
 WORKBOOK_FILES = {
     ROLE_CONSULTOR: 'CONSULTOR.xlsx',
@@ -551,7 +580,33 @@ def build_group_values(meta: float, proj_a: float, proj_b: float) -> Tuple[float
     return meta, proj_a, proj_b, attainment
 
 
-def compute_consultor_simulation(user: User, factor_data: Dict[str, Any], hunter_levels: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+def _get_sim_input(simulator_inputs: Optional[Dict[str, Any]], pillar: str, field: str, default: float = 0.0) -> float:
+    """Lê um valor enviado pelo formulário 'Simulador de fato' para um pilar."""
+    if not simulator_inputs:
+        return default
+    raw = simulator_inputs.get(f"{pillar}__{field}")
+    if raw is None or raw == '':
+        return default
+    return to_float(raw)
+
+
+def _get_sim_input_optional(simulator_inputs: Optional[Dict[str, Any]], pillar: str, field: str) -> Optional[float]:
+    """Igual ao _get_sim_input, mas devolve None se o usuário não preencheu."""
+    if not simulator_inputs:
+        return None
+    raw = simulator_inputs.get(f"{pillar}__{field}")
+    if raw is None or raw == '':
+        return None
+    return to_float(raw)
+
+
+def compute_consultor_simulation(
+    user: User,
+    factor_data: Dict[str, Any],
+    hunter_levels: Optional[Dict[str, int]] = None,
+    view_mode: str = VIEW_PROJECAO,
+    simulator_inputs: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     realized = load_dataframe(ROLE_CONSULTOR, 'REALIZADO')
     projection = load_dataframe(ROLE_CONSULTOR, 'PROJEÇÃO')
 
@@ -565,36 +620,64 @@ def compute_consultor_simulation(user: User, factor_data: Dict[str, Any], hunter
     pdv = str(real_row.get('PDV') or proj_row.get('PDV') or '').strip()
     coord_name = str(proj_row.get('COORDENAÇÃO') or '').strip()
 
-    meta_movel, proj_movel, att_movel = build_pillar_values(
-        to_float(real_row.get('META_MOVEL')),
-        to_float(proj_row.get('PROJ_MOVEL')),
-    )
-    meta_fixa, proj_fixa, att_fixa = build_pillar_values(
-        to_float(real_row.get('META_FIXA')),
-        to_float(proj_row.get('PROJ_FIXA')),
-    )
-    meta_smart, proj_smart, att_smart = build_pillar_values(
-        to_float(real_row.get('META_SMARTPHONE')),
-        to_float(proj_row.get('PROJ_APARELHO')),
-    )
+    # Metas vêm sempre da planilha REALIZADO (META_*), mas no modo Simulador
+    # podem ser sobrescritas pelo usuário.
+    base_meta = {
+        'movel': to_float(real_row.get('META_MOVEL')),
+        'fixa': to_float(real_row.get('META_FIXA')),
+        'smartphones': to_float(real_row.get('META_SMARTPHONE')),
+        'eletronicos': to_float(real_row.get('META_ACESSORIO')),
+        'essenciais': to_float(real_row.get('META_ESSENCIAIS')),
+        'seguros': to_float(real_row.get('META_SEGUROS')),
+        'sva': to_float(real_row.get('META_SVA')),
+    }
+
+    # Valores do indivíduo conforme o modo selecionado.
+    if view_mode == VIEW_REALIZADO:
+        # Realizado individual: usa AT_* da planilha REALIZADO
+        ind_values = {
+            'movel': to_float(real_row.get('AT_MOVEL')),
+            'fixa': to_float(real_row.get('AT_FIXA')),
+            'smartphones': to_float(real_row.get('AT_SMARTPHONE')),
+            'eletronicos_a': to_float(real_row.get('AT_ACESSORIOS_A')),
+            'eletronicos_b': to_float(real_row.get('AT_ACESSORIOS_B')),
+            'essenciais_a': to_float(real_row.get('AT_ESSENCIAIS_A')),
+            'essenciais_b': to_float(real_row.get('AT_ESSENCIAIS_B')),
+            'seguros': to_float(real_row.get('AT_SEGUROS')),
+            'sva': to_float(real_row.get('AT_SVA')),
+        }
+    elif view_mode == VIEW_SIMULADOR:
+        # Simulador: usa valores informados pelo usuário
+        ind_values = {p: _get_sim_input(simulator_inputs, p, 'real') for p, _ in SIMULATOR_INPUT_PILLARS}
+        # Permite sobrescrever metas individuais
+        for key in base_meta:
+            override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            if override is not None:
+                base_meta[key] = override
+    else:  # VIEW_PROJECAO
+        ind_values = {
+            'movel': to_float(proj_row.get('PROJ_MOVEL')),
+            'fixa': to_float(proj_row.get('PROJ_FIXA')),
+            'smartphones': to_float(proj_row.get('PROJ_APARELHO')),
+            'eletronicos_a': to_float(proj_row.get('PROJ_ELETRO_A')),
+            'eletronicos_b': to_float(proj_row.get('PROJ_ELETRO_B')),
+            'essenciais_a': to_float(proj_row.get('PROJ_ESSEN_A')),
+            'essenciais_b': to_float(proj_row.get('PROJ_ESSEN_B')),
+            'seguros': to_float(proj_row.get('PROJ_SEGURO')),
+            'sva': to_float(proj_row.get('PROJ_SVA')),
+        }
+
+    meta_movel, proj_movel, att_movel = build_pillar_values(base_meta['movel'], ind_values['movel'])
+    meta_fixa, proj_fixa, att_fixa = build_pillar_values(base_meta['fixa'], ind_values['fixa'])
+    meta_smart, proj_smart, att_smart = build_pillar_values(base_meta['smartphones'], ind_values['smartphones'])
     meta_eletro, proj_eletro_a, proj_eletro_b, att_eletro = build_group_values(
-        to_float(real_row.get('META_ACESSORIO')),
-        to_float(proj_row.get('PROJ_ELETRO_A')),
-        to_float(proj_row.get('PROJ_ELETRO_B')),
+        base_meta['eletronicos'], ind_values['eletronicos_a'], ind_values['eletronicos_b'],
     )
     meta_ess, proj_ess_a, proj_ess_b, att_ess = build_group_values(
-        to_float(real_row.get('META_ESSENCIAIS')),
-        to_float(proj_row.get('PROJ_ESSEN_A')),
-        to_float(proj_row.get('PROJ_ESSEN_B')),
+        base_meta['essenciais'], ind_values['essenciais_a'], ind_values['essenciais_b'],
     )
-    meta_seg, proj_seg, att_seg = build_pillar_values(
-        to_float(real_row.get('META_SEGUROS')),
-        to_float(proj_row.get('PROJ_SEGURO')),
-    )
-    meta_sva, proj_sva, att_sva = build_pillar_values(
-        to_float(real_row.get('META_SVA')),
-        to_float(proj_row.get('PROJ_SVA')),
-    )
+    meta_seg, proj_seg, att_seg = build_pillar_values(base_meta['seguros'], ind_values['seguros'])
+    meta_sva, proj_sva, att_sva = build_pillar_values(base_meta['sva'], ind_values['sva'])
 
     att_map = {
         'movel': att_movel,
@@ -606,6 +689,7 @@ def compute_consultor_simulation(user: User, factor_data: Dict[str, Any], hunter
         'sva': att_sva,
     }
 
+    # PDV: meta sempre = soma das metas dos consultores do PDV
     pdv_meta = {
         'movel': sumifs(realized, 'META_MOVEL', 'PDV', pdv),
         'fixa': sumifs(realized, 'META_FIXA', 'PDV', pdv),
@@ -615,15 +699,40 @@ def compute_consultor_simulation(user: User, factor_data: Dict[str, Any], hunter
         'seguros': sumifs(realized, 'META_SEGUROS', 'PDV', pdv),
         'sva': sumifs(realized, 'META_SVA', 'PDV', pdv),
     }
-    pdv_proj = {
-        'movel': sumifs(projection, 'PROJ_MOVEL', 'PDV', pdv),
-        'fixa': sumifs(projection, 'PROJ_FIXA', 'PDV', pdv),
-        'smartphones': sumifs(projection, 'PROJ_APARELHO', 'PDV', pdv),
-        'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv),
-        'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv),
-        'seguros': sumifs(projection, 'PROJ_SEGURO', 'PDV', pdv),
-        'sva': sumifs(projection, 'PROJ_SVA', 'PDV', pdv),
-    }
+
+    # PDV: realizado conforme o modo
+    if view_mode == VIEW_REALIZADO:
+        pdv_proj = {
+            'movel': sumifs(realized, 'AT_MOVEL', 'PDV', pdv),
+            'fixa': sumifs(realized, 'AT_FIXA', 'PDV', pdv),
+            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'PDV', pdv),
+            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv) + sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv),
+            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv) + sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv),
+            'seguros': sumifs(realized, 'AT_SEGUROS', 'PDV', pdv),
+            'sva': sumifs(realized, 'AT_SVA', 'PDV', pdv),
+        }
+    elif view_mode == VIEW_SIMULADOR:
+        pdv_proj = {
+            'movel': _get_sim_input(simulator_inputs, 'movel', 'realpdv'),
+            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'realpdv'),
+            'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'realpdv'),
+            'eletronicos': _get_sim_input(simulator_inputs, 'eletronicos_a', 'realpdv')
+                + _get_sim_input(simulator_inputs, 'eletronicos_b', 'realpdv'),
+            'essenciais': _get_sim_input(simulator_inputs, 'essenciais_a', 'realpdv')
+                + _get_sim_input(simulator_inputs, 'essenciais_b', 'realpdv'),
+            'seguros': _get_sim_input(simulator_inputs, 'seguros', 'realpdv'),
+            'sva': _get_sim_input(simulator_inputs, 'sva', 'realpdv'),
+        }
+    else:
+        pdv_proj = {
+            'movel': sumifs(projection, 'PROJ_MOVEL', 'PDV', pdv),
+            'fixa': sumifs(projection, 'PROJ_FIXA', 'PDV', pdv),
+            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'PDV', pdv),
+            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv),
+            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv),
+            'seguros': sumifs(projection, 'PROJ_SEGURO', 'PDV', pdv),
+            'sva': sumifs(projection, 'PROJ_SVA', 'PDV', pdv),
+        }
     pdv_att = {
         key: (pdv_proj[key] / pdv_meta[key] if pdv_meta[key] else 0.0)
         for key in pdv_meta
@@ -764,8 +873,10 @@ def compute_consultor_simulation(user: User, factor_data: Dict[str, Any], hunter
 
     return {
         'user_name': user_name,
+        'first_name': user.first_name or user_name.split(' ')[0],
         'pdv': pdv,
         'coordinator': coord_name,
+        'view_mode': view_mode,
         'rows': rows,
         'totals': {
             'total_with_pdv': total_p,
@@ -777,7 +888,13 @@ def compute_consultor_simulation(user: User, factor_data: Dict[str, Any], hunter
     }
 
 
-def compute_gerente_simulation(user: User, factor_data: Dict[str, Any], hunter_levels: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+def compute_gerente_simulation(
+    user: User,
+    factor_data: Dict[str, Any],
+    hunter_levels: Optional[Dict[str, int]] = None,
+    view_mode: str = VIEW_PROJECAO,
+    simulator_inputs: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     realized = load_dataframe(ROLE_GERENTE, 'REALIZADO')
     projection = load_dataframe(ROLE_GERENTE, 'PROJEÇÃO')
 
@@ -804,15 +921,56 @@ def compute_gerente_simulation(user: User, factor_data: Dict[str, Any], hunter_l
         'seguros': sumifs(realized, 'META_SEGUROS', 'PDV', pdv),
         'sva': sumifs(realized, 'META_SVA', 'PDV', pdv),
     }
-    proj_map = {
-        'movel': sumifs(projection, 'PROJ_MOVEL', 'PDV', pdv),
-        'fixa': sumifs(projection, 'PROJ_FIXA', 'PDV', pdv),
-        'smartphones': sumifs(projection, 'PROJ_APARELHO', 'PDV', pdv),
-        'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv),
-        'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv),
-        'seguros': sumifs(projection, 'PROJ_SEGURO', 'PDV', pdv),
-        'sva': sumifs(projection, 'PROJ_SVA', 'PDV', pdv),
-    }
+    if view_mode == VIEW_REALIZADO:
+        proj_map = {
+            'movel': sumifs(realized, 'AT_MOVEL', 'PDV', pdv),
+            'fixa': sumifs(realized, 'AT_FIXA', 'PDV', pdv),
+            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'PDV', pdv),
+            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv) + sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv),
+            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv) + sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv),
+            'seguros': sumifs(realized, 'AT_SEGUROS', 'PDV', pdv),
+            'sva': sumifs(realized, 'AT_SVA', 'PDV', pdv),
+        }
+        eletro_a_pdv = sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv)
+        eletro_b_pdv = sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv)
+        ess_a_pdv = sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv)
+        ess_b_pdv = sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv)
+    elif view_mode == VIEW_SIMULADOR:
+        # Para Gerente em modo Simulador: usuário define real (PDV) por pilar
+        proj_map = {
+            'movel': _get_sim_input(simulator_inputs, 'movel', 'real'),
+            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'real'),
+            'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'real'),
+            'eletronicos': _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
+                + _get_sim_input(simulator_inputs, 'eletronicos_b', 'real'),
+            'essenciais': _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
+                + _get_sim_input(simulator_inputs, 'essenciais_b', 'real'),
+            'seguros': _get_sim_input(simulator_inputs, 'seguros', 'real'),
+            'sva': _get_sim_input(simulator_inputs, 'sva', 'real'),
+        }
+        eletro_a_pdv = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
+        eletro_b_pdv = _get_sim_input(simulator_inputs, 'eletronicos_b', 'real')
+        ess_a_pdv = _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
+        ess_b_pdv = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
+        # Permite sobrescrever metas
+        for key in list(meta_map.keys()):
+            override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            if override is not None:
+                meta_map[key] = override
+    else:
+        proj_map = {
+            'movel': sumifs(projection, 'PROJ_MOVEL', 'PDV', pdv),
+            'fixa': sumifs(projection, 'PROJ_FIXA', 'PDV', pdv),
+            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'PDV', pdv),
+            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv),
+            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv),
+            'seguros': sumifs(projection, 'PROJ_SEGURO', 'PDV', pdv),
+            'sva': sumifs(projection, 'PROJ_SVA', 'PDV', pdv),
+        }
+        eletro_a_pdv = sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv)
+        eletro_b_pdv = sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv)
+        ess_a_pdv = sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv)
+        ess_b_pdv = sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv)
 
     coord_meta = {
         'movel': sumifs(realized, 'META_MOVEL', 'COORDENAÇÃO', coord_name),
@@ -823,15 +981,27 @@ def compute_gerente_simulation(user: User, factor_data: Dict[str, Any], hunter_l
         'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
-    coord_proj = {
-        'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
-        'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
-        'smartphones': sumifs(projection, 'PROJ_APARELHO', 'COORDENAÇÃO', coord_name),
-        'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name),
-        'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name),
-        'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
-        'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
-    }
+    if view_mode == VIEW_REALIZADO:
+        coord_proj = {
+            'movel': sumifs(realized, 'AT_MOVEL', 'COORDENAÇÃO', coord_name),
+            'fixa': sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name),
+            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'COORDENAÇÃO', coord_name),
+            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name),
+            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name),
+            'seguros': sumifs(realized, 'AT_SEGUROS', 'COORDENAÇÃO', coord_name),
+            'sva': sumifs(realized, 'AT_SVA', 'COORDENAÇÃO', coord_name),
+        }
+    else:
+        # Em modo Simulador, o coord_proj segue o realizado (PDV simulado isolado)
+        coord_proj = {
+            'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
+            'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
+            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'COORDENAÇÃO', coord_name),
+            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name),
+            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name),
+            'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
+            'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
+        }
 
     att_map = {
         key: (proj_map[key] / meta_map[key] if meta_map[key] else 0.0)
@@ -878,22 +1048,22 @@ def compute_gerente_simulation(user: User, factor_data: Dict[str, Any], hunter_l
             pdv_att_ref = coord_proj['smartphones'] / coord_meta['smartphones'] if coord_meta['smartphones'] else 0.0
         elif key == 'eletronicos_a':
             meta = meta_map['eletronicos']
-            proj = sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv)
+            proj = eletro_a_pdv
             att = att_map['eletronicos']
             pdv_att_ref = coord_proj['eletronicos'] / coord_meta['eletronicos'] if coord_meta['eletronicos'] else 0.0
         elif key == 'eletronicos_b':
             meta = None
-            proj = sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv)
+            proj = eletro_b_pdv
             att = att_map['eletronicos']
             pdv_att_ref = coord_proj['eletronicos'] / coord_meta['eletronicos'] if coord_meta['eletronicos'] else 0.0
         elif key == 'essenciais_a':
             meta = meta_map['essenciais']
-            proj = sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv)
+            proj = ess_a_pdv
             att = att_map['essenciais']
             pdv_att_ref = coord_proj['essenciais'] / coord_meta['essenciais'] if coord_meta['essenciais'] else 0.0
         elif key == 'essenciais_b':
             meta = None
-            proj = sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv)
+            proj = ess_b_pdv
             att = att_map['essenciais']
             pdv_att_ref = coord_proj['essenciais'] / coord_meta['essenciais'] if coord_meta['essenciais'] else 0.0
         elif key == 'seguros':
@@ -973,8 +1143,10 @@ def compute_gerente_simulation(user: User, factor_data: Dict[str, Any], hunter_l
 
     return {
         'user_name': user.get_full_name() or user.first_name or user.email,
+        'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
         'pdv': pdv,
         'coordinator': coord_name,
+        'view_mode': view_mode,
         'rows': rows,
         'totals': {
             'total_with_pdv': total_p,
@@ -986,7 +1158,13 @@ def compute_gerente_simulation(user: User, factor_data: Dict[str, Any], hunter_l
     }
 
 
-def compute_coordenador_simulation(user: User, factor_data: Dict[str, Any], hunter_levels: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+def compute_coordenador_simulation(
+    user: User,
+    factor_data: Dict[str, Any],
+    hunter_levels: Optional[Dict[str, int]] = None,
+    view_mode: str = VIEW_PROJECAO,
+    simulator_inputs: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     realized = load_dataframe(ROLE_COORDENADOR, 'REALIZADO')
     projection = load_dataframe(ROLE_COORDENADOR, 'PROJEÇÃO')
 
@@ -1010,6 +1188,45 @@ def compute_coordenador_simulation(user: User, factor_data: Dict[str, Any], hunt
         'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
         'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
     }
+    eletro_a = sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name)
+    eletro_b = sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name)
+    ess_a = sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name)
+    ess_b = sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name)
+
+    if view_mode == VIEW_REALIZADO:
+        proj_map = {
+            'movel': sumifs(realized, 'AT_MOVEL', 'COORDENAÇÃO', coord_name),
+            'fixa': sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name),
+            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'COORDENAÇÃO', coord_name),
+            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name),
+            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name),
+            'seguros': sumifs(realized, 'AT_SEGUROS', 'COORDENAÇÃO', coord_name),
+            'sva': sumifs(realized, 'AT_SVA', 'COORDENAÇÃO', coord_name),
+        }
+        eletro_a = sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name)
+        eletro_b = sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name)
+        ess_a = sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name)
+        ess_b = sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name)
+    elif view_mode == VIEW_SIMULADOR:
+        proj_map = {
+            'movel': _get_sim_input(simulator_inputs, 'movel', 'real'),
+            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'real'),
+            'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'real'),
+            'eletronicos': _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
+                + _get_sim_input(simulator_inputs, 'eletronicos_b', 'real'),
+            'essenciais': _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
+                + _get_sim_input(simulator_inputs, 'essenciais_b', 'real'),
+            'seguros': _get_sim_input(simulator_inputs, 'seguros', 'real'),
+            'sva': _get_sim_input(simulator_inputs, 'sva', 'real'),
+        }
+        eletro_a = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
+        eletro_b = _get_sim_input(simulator_inputs, 'eletronicos_b', 'real')
+        ess_a = _get_sim_input(simulator_inputs, 'essenciais_a', 'real')
+        ess_b = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
+        for key in list(meta_map.keys()):
+            override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            if override is not None:
+                meta_map[key] = override
 
     att_map = {
         key: (proj_map[key] / meta_map[key] if meta_map[key] else 0.0)
@@ -1048,19 +1265,19 @@ def compute_coordenador_simulation(user: User, factor_data: Dict[str, Any], hunt
             att = att_map['smartphones']
         elif key == 'eletronicos_a':
             meta = meta_map['eletronicos']
-            proj = sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name)
+            proj = eletro_a
             att = att_map['eletronicos']
         elif key == 'eletronicos_b':
             meta = None
-            proj = sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name)
+            proj = eletro_b
             att = att_map['eletronicos']
         elif key == 'essenciais_a':
             meta = meta_map['essenciais']
-            proj = sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name)
+            proj = ess_a
             att = att_map['essenciais']
         elif key == 'essenciais_b':
             meta = None
-            proj = sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name)
+            proj = ess_b
             att = att_map['essenciais']
         elif key == 'seguros':
             meta = meta_map['seguros']
@@ -1109,7 +1326,9 @@ def compute_coordenador_simulation(user: User, factor_data: Dict[str, Any], hunt
 
     return {
         'user_name': user.get_full_name() or user.first_name or user.email,
+        'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
         'coordinator': coord_name,
+        'view_mode': view_mode,
         'rows': rows,
         'totals': {
             'total_commission': total_commission,
@@ -1123,50 +1342,50 @@ def compute_coordenador_simulation(user: User, factor_data: Dict[str, Any], hunt
 
 
 def update_factor_sets_from_post(post_data: Dict[str, Any], updated_by: User) -> None:
-    import json
+    """Atualiza os fatores a partir do formulário interativo (campos numéricos).
+
+    Se o usuário marcar reset__<role>, o conjunto será recarregado a partir do
+    arquivo XLSX correspondente.
+    """
     with transaction.atomic():
         for role in [ROLE_CONSULTOR, ROLE_GERENTE, ROLE_COORDENADOR]:
             factor_set = get_factor_set(role, updated_by=updated_by)
-            
-            # Try to load JSON if provided
-            json_field = f"factor_json__{role}"
-            if json_field in post_data:
-                try:
-                    data = json.loads(post_data.get(json_field))
-                except (json.JSONDecodeError, ValueError):
-                    logger.warning(f"Invalid JSON for role {role}, keeping existing data")
-                    data = factor_set.data or {}
-            else:
-                # Fallback to old form-based input
-                data = factor_set.data or {}
-                ranges = data.get('ranges', {})
-                meta = data.get('meta', {})
 
-                for spec in FACTOR_RANGE_SPECS[role]:
-                    key = spec.key
-                    rows = ranges.get(key, [])
-                    for r_index, row in enumerate(rows):
-                        for c_index, _ in enumerate(row):
-                            field = f"range__{role}__{key}__{r_index}__{c_index}"
-                            if field in post_data:
-                                raw = post_data.get(field)
-                                if raw == '' or raw is None:
-                                    rows[r_index][c_index] = None
-                                else:
-                                    rows[r_index][c_index] = to_float(raw)
-                    ranges[key] = rows
+            if post_data.get(f"reset__{role}"):
+                fresh = load_default_factor_data(role)
+                factor_set.data = fresh
+                factor_set.updated_by = updated_by
+                factor_set.save()
+                continue
 
-                for meta_key in DEFAULT_META_BY_ROLE.get(role, {}):
-                    field = f"meta__{role}__{meta_key}"
-                    if field in post_data:
-                        raw = post_data.get(field)
-                        if raw == '' or raw is None:
-                            continue
-                        meta[meta_key] = to_float(raw)
+            data = factor_set.data or {}
+            ranges = data.get('ranges', {})
+            meta = data.get('meta', {})
 
-                data['ranges'] = ranges
-                data['meta'] = meta
+            for spec in FACTOR_RANGE_SPECS[role]:
+                key = spec.key
+                rows = [list(r) for r in ranges.get(key, [])]
+                for r_index, row in enumerate(rows):
+                    for c_index, _ in enumerate(row):
+                        field = f"range__{role}__{key}__{r_index}__{c_index}"
+                        if field in post_data:
+                            raw = post_data.get(field)
+                            if raw == '' or raw is None:
+                                rows[r_index][c_index] = None
+                            else:
+                                rows[r_index][c_index] = to_float(raw)
+                ranges[key] = rows
 
+            for meta_key in DEFAULT_META_BY_ROLE.get(role, {}):
+                field = f"meta__{role}__{meta_key}"
+                if field in post_data:
+                    raw = post_data.get(field)
+                    if raw == '' or raw is None:
+                        continue
+                    meta[meta_key] = to_float(raw)
+
+            data['ranges'] = ranges
+            data['meta'] = meta
             factor_set.data = data
             factor_set.updated_by = updated_by
             factor_set.save()

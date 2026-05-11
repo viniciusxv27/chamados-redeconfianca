@@ -6,7 +6,13 @@ from users.models import Sector, User
 from .models import CoordinatorStoreAccess
 from .services import (
     FACTOR_RANGE_SPECS,
+    DEFAULT_META_BY_ROLE,
     PILLAR_ORDER,
+    SIMULATOR_INPUT_PILLARS,
+    VIEW_CHOICES,
+    VIEW_PROJECAO,
+    VIEW_REALIZADO,
+    VIEW_SIMULADOR,
     ROLE_CONSULTOR,
     ROLE_COORDENADOR,
     ROLE_GERENTE,
@@ -50,6 +56,18 @@ def simulator_dashboard(request):
     current_user = request.user
     role = get_user_role(current_user)
     hunter_levels = get_hunter_levels_from_request(request)
+
+    # Modo de visualização (Realizado / Projeção / Simulador de fato)
+    view_mode = request.GET.get('view') or VIEW_PROJECAO
+    if view_mode not in {VIEW_PROJECAO, VIEW_REALIZADO, VIEW_SIMULADOR}:
+        view_mode = VIEW_PROJECAO
+
+    # Inputs do simulador (campos sim__<pilar>__<campo>)
+    simulator_inputs = {}
+    if view_mode == VIEW_SIMULADOR:
+        for key in request.GET:
+            if key.startswith('sim__'):
+                simulator_inputs[key[len('sim__'):]] = request.GET.get(key)
 
     available_targets = []
     target_user = None
@@ -130,11 +148,11 @@ def simulator_dashboard(request):
     if target_user and target_role:
         factor_set = get_factor_set(target_role)
         if target_role == ROLE_CONSULTOR:
-            simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels)
+            simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)
         elif target_role == ROLE_GERENTE:
-            simulation = compute_gerente_simulation(target_user, factor_set.data, hunter_levels)
+            simulation = compute_gerente_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)
         elif target_role == ROLE_COORDENADOR:
-            simulation = compute_coordenador_simulation(target_user, factor_set.data, hunter_levels)
+            simulation = compute_coordenador_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)
 
     context = {
         'user': current_user,
@@ -147,6 +165,10 @@ def simulator_dashboard(request):
         'is_superadmin': is_superadmin(current_user),
         'hunter_levels': hunter_levels,
         'pillars': PILLAR_ORDER,
+        'view_mode': view_mode,
+        'view_choices': VIEW_CHOICES,
+        'simulator_input_pillars': SIMULATOR_INPUT_PILLARS,
+        'simulator_inputs': simulator_inputs,
     }
 
     return render(request, 'simulator/dashboard.html', context)
@@ -172,6 +194,7 @@ def simulator_admin_factors(request):
     context = {
         'factor_sets': factor_sets,
         'range_specs': FACTOR_RANGE_SPECS,
+        'meta_specs': DEFAULT_META_BY_ROLE,
     }
     return render(request, 'simulator/admin_factors.html', context)
 
