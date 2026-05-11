@@ -31,7 +31,7 @@ VIEW_SIMULADOR = 'simulador'
 VIEW_CHOICES = [
     (VIEW_PROJECAO, 'Projeção'),
     (VIEW_REALIZADO, 'Realizado'),
-    (VIEW_SIMULADOR, 'Simulador de fato'),
+    (VIEW_SIMULADOR, 'Simulador'),
 ]
 
 # Pilares utilizados no formulário do simulador (mesmas chaves de hunter)
@@ -581,7 +581,7 @@ def build_group_values(meta: float, proj_a: float, proj_b: float) -> Tuple[float
 
 
 def _get_sim_input(simulator_inputs: Optional[Dict[str, Any]], pillar: str, field: str, default: float = 0.0) -> float:
-    """Lê um valor enviado pelo formulário 'Simulador de fato' para um pilar."""
+    """Lê um valor enviado pelo formulário 'Simulador' para um pilar."""
     if not simulator_inputs:
         return default
     raw = simulator_inputs.get(f"{pillar}__{field}")

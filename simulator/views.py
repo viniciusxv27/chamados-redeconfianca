@@ -57,7 +57,7 @@ def simulator_dashboard(request):
     role = get_user_role(current_user)
     hunter_levels = get_hunter_levels_from_request(request)
 
-    # Modo de visualização (Realizado / Projeção / Simulador de fato)
+    # Modo de visualização (Realizado / Projeção / Simulador)
     view_mode = request.GET.get('view') or VIEW_PROJECAO
     if view_mode not in {VIEW_PROJECAO, VIEW_REALIZADO, VIEW_SIMULADOR}:
         view_mode = VIEW_PROJECAO
