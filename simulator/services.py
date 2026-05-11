@@ -614,10 +614,19 @@ def compute_consultor_simulation(
     real_row = find_row_by_name(realized, 'CONSULTOR', user_name)
     proj_row = find_row_by_name(projection, 'CONSULTOR', user_name)
 
-    if real_row is None or proj_row is None:
-        return {'error': 'Usuário não encontrado na planilha.'}
+    # Se o usuário não existir na planilha, ainda permitimos o cálculo: as
+    # informações ficam em zero (modo Realizado/Projeção) ou vêm dos inputs do
+    # próprio usuário (modo Simulador). O motor de comissionamento aplica os
+    # mesmos fatores carregados do XLSX.
+    user_in_sheet = real_row is not None or proj_row is not None
+    if real_row is None:
+        real_row = pd.Series(dtype=object)
+    if proj_row is None:
+        proj_row = pd.Series(dtype=object)
 
     pdv = str(real_row.get('PDV') or proj_row.get('PDV') or '').strip()
+    if not pdv and getattr(user, 'sector', None):
+        pdv = user.sector.name or ''
     coord_name = str(proj_row.get('COORDENAÇÃO') or '').strip()
 
     # Metas vêm sempre da planilha REALIZADO (META_*), mas no modo Simulador
@@ -899,18 +908,17 @@ def compute_gerente_simulation(
     projection = load_dataframe(ROLE_GERENTE, 'PROJEÇÃO')
 
     pdv = ''
-    if user.sector:
-        pdv = user.sector.name
-    else:
-        pdv = ''
-    if not pdv:
-        return {'error': 'Setor principal não encontrado para o gerente.'}
+    if getattr(user, 'sector', None):
+        pdv = user.sector.name or ''
+    # Sem PDV vinculado: o gerente ainda pode usar o Simulador (valores
+    # informados manualmente). As metas/projeções da planilha ficarão zeradas.
 
     coord_name = ''
-    for _, row in realized.iterrows():
-        if normalize_text(row.get('PDV', '')) == normalize_text(pdv):
-            coord_name = str(row.get('COORDENAÇÃO') or '').strip()
-            break
+    if pdv:
+        for _, row in realized.iterrows():
+            if normalize_text(row.get('PDV', '')) == normalize_text(pdv):
+                coord_name = str(row.get('COORDENAÇÃO') or '').strip()
+                break
 
     meta_map = {
         'movel': sumifs(realized, 'META_MOVEL', 'PDV', pdv),
