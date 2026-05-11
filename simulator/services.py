@@ -600,6 +600,209 @@ def _get_sim_input_optional(simulator_inputs: Optional[Dict[str, Any]], pillar: 
     return to_float(raw)
 
 
+# ---------------------------------------------------------------------------
+# Metas vindas do módulo Power BI (/power-bi/metas/)
+# ---------------------------------------------------------------------------
+
+POWER_BI_PILAR_MAP = {
+    'MOVEL': 'movel',
+    'MÓVEL': 'movel',
+    'FIXA': 'fixa',
+    'SMARTPHONE': 'smartphones',
+    'SMARTPHONES': 'smartphones',
+    'ELETRONICOS': 'eletronicos',
+    'ELETRÔNICOS': 'eletronicos',
+    'ESSENCIAIS': 'essenciais',
+    'SEGURO': 'seguros',
+    'SEGUROS': 'seguros',
+    'SVA': 'sva',
+}
+
+
+def get_store_name_from_user(user) -> str:
+    """Extrai o nome da loja a partir do setor do usuário.
+
+    Aceita setores como "Loja Anchieta", "LOJA - JARDIM CAMBURI", etc.
+    Retorna a string normalizada (maiúsculas, sem acentos extras) usada nas
+    planilhas Power BI / Simulador.
+    """
+    sector = getattr(user, 'sector', None) or getattr(user, 'primary_sector', None)
+    if not sector:
+        return ''
+    raw = (sector.name or '').strip()
+    if not raw:
+        return ''
+    lowered = raw.lower()
+    if 'loja' not in lowered:
+        return raw.upper()
+    cleaned = raw
+    for prefix in ('Loja', 'LOJA', 'loja'):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):]
+            break
+    cleaned = cleaned.lstrip(' -–—:').strip()
+    return cleaned.upper()
+
+
+def _latest_goal_upload():
+    from power_bi.models import GoalUpload
+    return GoalUpload.objects.order_by('-year', '-month').first()
+
+
+def get_metas_from_power_bi(user_name: str = '', store_name: str = '') -> Dict[str, float]:
+    """Devolve metas (chave: pilar do simulador) para o consultor ou para o PDV.
+
+    - Se ``user_name`` for fornecido, busca em METAS_CN_REAL.
+    - Se ``store_name`` for fornecido, busca em META_PDV_REAL.
+    - Pilares ausentes ficam em 0.0.
+    """
+    from power_bi.models import GoalEntry
+
+    upload = _latest_goal_upload()
+    if not upload:
+        return {}
+
+    qs = GoalEntry.objects.filter(upload=upload)
+    if user_name:
+        qs = qs.filter(sheet_type='METAS_CN_REAL')
+        target = normalize_text(user_name)
+        rows = [g for g in qs if normalize_text(g.user_name) == target]
+    elif store_name:
+        qs = qs.filter(sheet_type='META_PDV_REAL')
+        target = normalize_text(store_name)
+        rows = [g for g in qs if normalize_text(g.store_name) == target]
+    else:
+        return {}
+
+    result: Dict[str, float] = {}
+    for entry in rows:
+        pilar_key = POWER_BI_PILAR_MAP.get((entry.pilar or '').upper().strip())
+        if not pilar_key:
+            continue
+        try:
+            value = float(entry.goal_value or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        result[pilar_key] = result.get(pilar_key, 0.0) + value
+    return result
+
+
+def get_pdv_metas_for_coordinator(coord_name: str) -> Dict[str, float]:
+    """Soma metas de PDV (META_PDV_REAL) para todos os PDVs do coordenador."""
+    from power_bi.models import GoalEntry
+
+    upload = _latest_goal_upload()
+    if not upload:
+        return {}
+
+    target = normalize_text(coord_name)
+    result: Dict[str, float] = {}
+    qs = GoalEntry.objects.filter(upload=upload, sheet_type='META_PDV_REAL')
+    for entry in qs:
+        coord_in_row = normalize_text((entry.row_data or {}).get('COORDENAÇÃO') or '')
+        if coord_in_row != target:
+            continue
+        pilar_key = POWER_BI_PILAR_MAP.get((entry.pilar or '').upper().strip())
+        if not pilar_key:
+            continue
+        try:
+            value = float(entry.goal_value or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        result[pilar_key] = result.get(pilar_key, 0.0) + value
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Pós-processamento para unir Eletrônicos A/B e Essenciais A/B em uma única
+# linha de exibição (mantendo os cálculos internos com taxas distintas).
+# ---------------------------------------------------------------------------
+
+_MERGE_GROUPS = {
+    'eletronicos': ('eletronicos_a', 'eletronicos_b', 'Eletrônicos'),
+    'essenciais': ('essenciais_a', 'essenciais_b', 'Essenciais'),
+}
+
+
+def _merge_grouped_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Une linhas A+B (Eletrônicos / Essenciais) em uma única linha somada."""
+    by_key = {row.get('key'): row for row in rows}
+    new_rows: List[Dict[str, Any]] = []
+    consumed = set()
+
+    for row in rows:
+        key = row.get('key')
+        if key in consumed:
+            continue
+        merge_pair = None
+        for base, (key_a, key_b, label) in _MERGE_GROUPS.items():
+            if key == key_a:
+                merge_pair = (base, key_a, key_b, label)
+                break
+            if key == key_b:
+                merge_pair = (base, key_a, key_b, label)
+                break
+        if not merge_pair:
+            new_rows.append(row)
+            continue
+
+        base, key_a, key_b, label = merge_pair
+        a = by_key.get(key_a)
+        b = by_key.get(key_b)
+        consumed.add(key_a)
+        consumed.add(key_b)
+        if a is None and b is None:
+            continue
+
+        def _sum(field, default=0.0):
+            va = (a or {}).get(field) if a else None
+            vb = (b or {}).get(field) if b else None
+            va = va if isinstance(va, (int, float)) else default
+            vb = vb if isinstance(vb, (int, float)) else default
+            return va + vb
+
+        meta = (a or {}).get('meta') if a else (b or {}).get('meta')
+        if meta is None:
+            meta = (b or {}).get('meta', 0.0)
+        proj = _sum('proj')
+        attainment = (proj / meta) if meta else 0.0
+        commission_value = _sum('commission_value')
+        premium_value = _sum('premium_value')
+        total_individual = _sum('total_individual')
+        pdv_premium_value = _sum('pdv_premium_value')
+        total_with_pdv = _sum('total_with_pdv')
+        hunter2_value = _sum('hunter2_value')
+        hunter3_value = _sum('hunter3_value')
+        # Taxas efetivas combinadas (R$ / base)
+        commission_rate = (commission_value / proj) if proj else 0.0
+        premium_rate = (premium_value / proj) if proj else 0.0
+
+        merged = {
+            'key': base,
+            'label': label,
+            'meta': meta or 0.0,
+            'proj': proj,
+            'attainment': attainment,
+            'commission_rate': commission_rate,
+            'premium_rate': premium_rate,
+            'commission_value': commission_value,
+            'premium_value': premium_value,
+            'total_individual': total_individual,
+            'pdv_meta': (a or {}).get('pdv_meta') if a else (b or {}).get('pdv_meta'),
+            'pdv_proj': (a or {}).get('pdv_proj') if a else (b or {}).get('pdv_proj'),
+            'pdv_attainment': (a or {}).get('pdv_attainment') if a else (b or {}).get('pdv_attainment'),
+            'pdv_premium_rate': (a or {}).get('pdv_premium_rate') if a else (b or {}).get('pdv_premium_rate'),
+            'pdv_premium_value': pdv_premium_value,
+            'total_with_pdv': total_with_pdv,
+            'hunter2_value': hunter2_value,
+            'hunter3_value': hunter3_value,
+        }
+        new_rows.append(merged)
+
+    return new_rows
+
+
+
 def compute_consultor_simulation(
     user: User,
     factor_data: Dict[str, Any],
@@ -640,6 +843,16 @@ def compute_consultor_simulation(
         'seguros': to_float(real_row.get('META_SEGUROS')),
         'sva': to_float(real_row.get('META_SVA')),
     }
+
+    # Sobrescreve com as metas oficiais cadastradas em /power-bi/metas/.
+    pb_metas = get_metas_from_power_bi(user_name=user_name)
+    if not pb_metas:
+        store_name = get_store_name_from_user(user) or pdv
+        if store_name:
+            pb_metas = get_metas_from_power_bi(store_name=store_name)
+    for k, v in (pb_metas or {}).items():
+        if v:
+            base_meta[k] = v
 
     # Valores do indivíduo conforme o modo selecionado.
     if view_mode == VIEW_REALIZADO:
@@ -708,6 +921,14 @@ def compute_consultor_simulation(
         'seguros': sumifs(realized, 'META_SEGUROS', 'PDV', pdv),
         'sva': sumifs(realized, 'META_SVA', 'PDV', pdv),
     }
+
+    # Sobrescreve metas do PDV com valores do Power BI (META_PDV_REAL)
+    store_for_pdv = get_store_name_from_user(user) or pdv
+    if store_for_pdv:
+        pdv_pb = get_metas_from_power_bi(store_name=store_for_pdv)
+        for k, v in (pdv_pb or {}).items():
+            if v:
+                pdv_meta[k] = v
 
     # PDV: realizado conforme o modo
     if view_mode == VIEW_REALIZADO:
@@ -880,6 +1101,7 @@ def compute_consultor_simulation(
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
     bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name) else 0.0
 
+    rows = _merge_grouped_rows(rows)
     return {
         'user_name': user_name,
         'first_name': user.first_name or user_name.split(' ')[0],
@@ -929,7 +1151,13 @@ def compute_gerente_simulation(
         'seguros': sumifs(realized, 'META_SEGUROS', 'PDV', pdv),
         'sva': sumifs(realized, 'META_SVA', 'PDV', pdv),
     }
-    if view_mode == VIEW_REALIZADO:
+    # Sobrescreve com metas oficiais (META_PDV_REAL)
+    store_for_pdv = get_store_name_from_user(user) or pdv
+    if store_for_pdv:
+        pdv_pb = get_metas_from_power_bi(store_name=store_for_pdv)
+        for k, v in (pdv_pb or {}).items():
+            if v:
+                meta_map[k] = v
         proj_map = {
             'movel': sumifs(realized, 'AT_MOVEL', 'PDV', pdv),
             'fixa': sumifs(realized, 'AT_FIXA', 'PDV', pdv),
@@ -1149,6 +1377,7 @@ def compute_gerente_simulation(
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
     bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name) else 0.0
 
+    rows = _merge_grouped_rows(rows)
     return {
         'user_name': user.get_full_name() or user.first_name or user.email,
         'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
@@ -1187,6 +1416,11 @@ def compute_coordenador_simulation(
         'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
+    # Sobrescreve com soma das metas de PDV cadastradas em /power-bi/metas/
+    coord_pb = get_pdv_metas_for_coordinator(coord_name)
+    for k, v in (coord_pb or {}).items():
+        if v:
+            meta_map[k] = v
     proj_map = {
         'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
         'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
@@ -1332,6 +1566,7 @@ def compute_coordenador_simulation(
     total_coordinator = total_commission + total_h2 + total_h3 + bonus_value
     sniper_rate = meta_config.get('sniper_rate', 0.75)
 
+    rows = _merge_grouped_rows(rows)
     return {
         'user_name': user.get_full_name() or user.first_name or user.email,
         'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
