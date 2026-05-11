@@ -297,15 +297,28 @@ def _build_transcription_system_prompt(today_str, compact=False):
     )
 
     return (
-        "Você é um assistente corporativo de alto nível especializado em análise de reuniões. "
-        "Analise a transcrição da reunião e retorne um JSON estruturado com a seguinte análise completa:\n\n"
+        "Você é um analista executivo sênior, especializado em interpretar reuniões corporativas e produzir "
+        "relatórios ricos, claros e acionáveis. Sua missão é ler a transcrição inteira da reunião e devolver "
+        "uma análise PROFUNDA, DETALHADA e FIEL ao que foi dito, sem inventar fatos. Use linguagem corporativa "
+        "objetiva em português do Brasil. Quando houver dúvida sobre nomes, papéis ou datas, escreva 'A definir' "
+        "em vez de inventar.\n\n"
+        "Analise a transcrição e retorne um JSON estruturado com a seguinte análise completa:\n\n"
         "RETORNE UM JSON com estas chaves:\n\n"
-        '1. "summary": Resumo executivo conciso (2-3 parágrafos) com os pontos mais importantes.\n\n'
-        '2. "sections": Lista de seções/partes da reunião. Cada seção é um objeto com:\n'
-        '   - "title": Título descritivo do tópico\n'
+        '1. "summary": Resumo executivo DETALHADO e ABRANGENTE da reunião, em Markdown, com pelo menos '
+        '6 parágrafos longos (mínimo de 1800 caracteres, ideal entre 2500 e 4500 caracteres). Estruture o '
+        'resumo cobrindo OBRIGATORIAMENTE: (a) contexto e objetivo da reunião; (b) principais tópicos '
+        'discutidos com explicações de cada um; (c) decisões tomadas e seus porquês; (d) divergências, '
+        'preocupações ou riscos levantados; (e) próximos passos, responsáveis e prazos; (f) conclusão geral '
+        'com avaliação do andamento. Use bullet points dentro dos parágrafos quando ajudar a leitura, cite '
+        'números, valores, prazos e nomes mencionados, e preserve nuances importantes da conversa. NÃO seja '
+        'genérico nem superficial: o leitor deve conseguir entender a reunião inteira lendo apenas o resumo.\n\n'
+        '2. "sections": Lista de seções/partes da reunião (gere de 4 a 12 seções, conforme a riqueza do '
+        'conteúdo). Cada seção é um objeto com:\n'
+        '   - "title": Título descritivo e específico do tópico\n'
         '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line")\n'
-        '   - "content": Resumo detalhado do que foi discutido nessa parte\n'
-        '   - "highlights": Lista de frases-chave ou citações importantes\n'
+        '   - "content": Resumo detalhado e narrativo do que foi discutido (mínimo 3 frases, idealmente um '
+        'parágrafo robusto explicando contexto, argumentos e conclusões da seção)\n'
+        '   - "highlights": Lista de 2 a 6 frases-chave ou citações importantes (literais quando possível)\n'
         '   - "duration_estimate": Estimativa de duração em minutos\n\n'
         '3. "key_decisions": Lista de decisões. Cada uma com:\n'
         '   - "decision": Texto da decisão\n'
@@ -344,11 +357,15 @@ def _generate_transcription_analysis_single(client, meeting_title, source_text, 
     attempts = [
         {
             'system_prompt': _build_transcription_system_prompt(today_str, compact=False),
-            'max_tokens': 6000,
+            'max_tokens': 12000,
+        },
+        {
+            'system_prompt': _build_transcription_system_prompt(today_str, compact=False),
+            'max_tokens': 8000,
         },
         {
             'system_prompt': _build_transcription_system_prompt(today_str, compact=True),
-            'max_tokens': 3500,
+            'max_tokens': 4500,
         },
     ]
 
@@ -451,7 +468,7 @@ def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
 
     summary = ''
     if summaries:
-        joined = '\n'.join([f'- {text}' for text in summaries if text])
+        joined = '\n\n---\n\n'.join([text for text in summaries if text])
         try:
             resp = client.chat.completions.create(
                 model="gpt-4o",
@@ -459,18 +476,26 @@ def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
                     {
                         "role": "system",
                         "content": (
-                            "Você consolida resumos de reuniões. Combine os pontos sem repetir, "
-                            "em 2-3 parágrafos objetivos."
+                            "Você é um analista executivo sênior. Consolide os resumos parciais de uma "
+                            "reunião longa em UM ÚNICO resumo executivo final, em português do Brasil, "
+                            "escrito em Markdown, sem repetir informações e preservando todos os detalhes "
+                            "relevantes (números, prazos, nomes, decisões, riscos e próximos passos). "
+                            "O resumo final deve ser DETALHADO e ABRANGENTE, com no mínimo 6 parágrafos "
+                            "longos (entre 2500 e 4500 caracteres), cobrindo: contexto e objetivo, "
+                            "principais tópicos discutidos, decisões tomadas, divergências e riscos, "
+                            "próximos passos com responsáveis e prazos, e uma conclusão geral. Use bullet "
+                            "points quando ajudar a leitura. Não invente fatos: use apenas o que está nos "
+                            "resumos parciais."
                         )
                     },
                     {"role": "user", "content": f"Resumos parciais da reunião '{meeting_title}':\n\n{joined}"},
                 ],
                 temperature=0.2,
-                max_tokens=800,
+                max_tokens=4000,
             )
             summary = (resp.choices[0].message.content or '').strip()
         except Exception:
-            summary = summaries[0]
+            summary = '\n\n'.join(summaries)
 
     key_decisions = _dedupe_by_text(key_decisions, 'decision')[:60]
     action_items = _dedupe_by_text(action_items, 'task')[:80]
