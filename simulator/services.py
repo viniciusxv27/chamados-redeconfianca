@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 from communications.models import CommunicationGroup
 from users.models import User, Sector
 from .models import SimulatorFactorSet, CoordinatorStoreAccess
+from .sql_realizado import get_realized_sales_from_mysql
 
 
 logger = logging.getLogger(__name__)
@@ -880,19 +881,21 @@ def compute_consultor_simulation(
 
     # Valores do indivíduo conforme o modo selecionado.
     if view_mode == VIEW_REALIZADO:
-        # Realizado individual: usa AT_* da planilha REALIZADO
+        # Realizado individual: agora vem do MySQL (vendas_produtos + vendas_servicos).
+        mysql_real = get_realized_sales_from_mysql(vendor=user_name)
         ind_values = {
-            'movel': to_float(real_row.get('AT_MOVEL')),
-            'fixa': to_float(real_row.get('F_M_FIXA')) if 'F_M_FIXA' in real_row.index else to_float(real_row.get('AT_FIXA')),
-            'smartphones': to_float(real_row.get('AT_SMARTPHONE')),
-            'eletronicos_a': to_float(real_row.get('AT_ACESSORIOS_A')),
-            'eletronicos_b': to_float(real_row.get('AT_ACESSORIOS_B')),
-            'essenciais_a': to_float(real_row.get('AT_ESSENCIAIS_A')),
-            'essenciais_b': to_float(real_row.get('AT_ESSENCIAIS_B')),
-            'seguros': to_float(real_row.get('AT_SEGUROS')),
-            'sva': to_float(real_row.get('AT_SVA')),
+            'movel': mysql_real.get('movel', 0.0),
+            'fixa': mysql_real.get('fixa', 0.0),
+            'smartphones': mysql_real.get('smartphones', 0.0),
+            # MySQL não separa A/B: todo o valor vai em _a, _b = 0 (a soma A+B é o que importa).
+            'eletronicos_a': mysql_real.get('eletronicos', 0.0),
+            'eletronicos_b': 0.0,
+            'essenciais_a': mysql_real.get('essenciais', 0.0),
+            'essenciais_b': 0.0,
+            'seguros': mysql_real.get('seguros', 0.0),
+            'sva': mysql_real.get('sva', 0.0),
         }
-        fixa_quantity = to_float(real_row.get('AT_FIXA'))
+        fixa_quantity = mysql_real.get('fixa_qty', 0.0)
         fixa_revenue = ind_values['fixa']
     elif view_mode == VIEW_SIMULADOR:
         # Simulador: usa valores informados pelo usuário.
@@ -963,14 +966,17 @@ def compute_consultor_simulation(
 
     # PDV: realizado conforme o modo
     if view_mode == VIEW_REALIZADO:
+        # Realizado do PDV vem do MySQL (loja do consultor).
+        pdv_lookup = get_store_name_from_user(user) or pdv
+        mysql_pdv = get_realized_sales_from_mysql(pdv=pdv_lookup)
         pdv_proj = {
-            'movel': sumifs(realized, 'AT_MOVEL', 'PDV', pdv),
-            'fixa': sumifs(realized, 'AT_FIXA', 'PDV', pdv),
-            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'PDV', pdv),
-            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv) + sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv),
-            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv) + sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv),
-            'seguros': sumifs(realized, 'AT_SEGUROS', 'PDV', pdv),
-            'sva': sumifs(realized, 'AT_SVA', 'PDV', pdv),
+            'movel': mysql_pdv.get('movel', 0.0),
+            'fixa': mysql_pdv.get('fixa', 0.0),
+            'smartphones': mysql_pdv.get('smartphones', 0.0),
+            'eletronicos': mysql_pdv.get('eletronicos', 0.0),
+            'essenciais': mysql_pdv.get('essenciais', 0.0),
+            'seguros': mysql_pdv.get('seguros', 0.0),
+            'sva': mysql_pdv.get('sva', 0.0),
         }
     elif view_mode == VIEW_SIMULADOR:
         pdv_proj = {
@@ -1197,20 +1203,22 @@ def compute_gerente_simulation(
                 meta_map[k] = v
 
     if view_mode == VIEW_REALIZADO:
+        # Gerente: realizado da loja inteira via MySQL.
+        mysql_pdv = get_realized_sales_from_mysql(pdv=pdv)
         proj_map = {
-            'movel': sumifs(realized, 'AT_MOVEL', 'PDV', pdv),
-            'fixa': sumifs(realized, 'F_M_FIXA', 'PDV', pdv) if 'F_M_FIXA' in realized.columns else sumifs(realized, 'AT_FIXA', 'PDV', pdv),
-            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'PDV', pdv),
-            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv) + sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv),
-            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv) + sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv),
-            'seguros': sumifs(realized, 'AT_SEGUROS', 'PDV', pdv),
-            'sva': sumifs(realized, 'AT_SVA', 'PDV', pdv),
+            'movel': mysql_pdv.get('movel', 0.0),
+            'fixa': mysql_pdv.get('fixa', 0.0),
+            'smartphones': mysql_pdv.get('smartphones', 0.0),
+            'eletronicos': mysql_pdv.get('eletronicos', 0.0),
+            'essenciais': mysql_pdv.get('essenciais', 0.0),
+            'seguros': mysql_pdv.get('seguros', 0.0),
+            'sva': mysql_pdv.get('sva', 0.0),
         }
-        eletro_a_pdv = sumifs(realized, 'AT_ACESSORIOS_A', 'PDV', pdv)
-        eletro_b_pdv = sumifs(realized, 'AT_ACESSORIOS_B', 'PDV', pdv)
-        ess_a_pdv = sumifs(realized, 'AT_ESSENCIAIS_A', 'PDV', pdv)
-        ess_b_pdv = sumifs(realized, 'AT_ESSENCIAIS_B', 'PDV', pdv)
-        fixa_quantity = sumifs(realized, 'AT_FIXA', 'PDV', pdv)
+        eletro_a_pdv = mysql_pdv.get('eletronicos', 0.0)
+        eletro_b_pdv = 0.0
+        ess_a_pdv = mysql_pdv.get('essenciais', 0.0)
+        ess_b_pdv = 0.0
+        fixa_quantity = mysql_pdv.get('fixa_qty', 0.0)
         fixa_revenue = proj_map['fixa']
     elif view_mode == VIEW_SIMULADOR:
         # Para Gerente em modo Simulador: usuário define real (PDV) por pilar.
@@ -1266,14 +1274,16 @@ def compute_gerente_simulation(
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
     if view_mode == VIEW_REALIZADO:
+        # Realizado do coordenador via MySQL (soma de todas as lojas que ele coordena).
+        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
         coord_proj = {
-            'movel': sumifs(realized, 'AT_MOVEL', 'COORDENAÇÃO', coord_name),
-            'fixa': sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name),
-            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'COORDENAÇÃO', coord_name),
-            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name),
-            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name),
-            'seguros': sumifs(realized, 'AT_SEGUROS', 'COORDENAÇÃO', coord_name),
-            'sva': sumifs(realized, 'AT_SVA', 'COORDENAÇÃO', coord_name),
+            'movel': mysql_coord.get('movel', 0.0),
+            'fixa': mysql_coord.get('fixa', 0.0),
+            'smartphones': mysql_coord.get('smartphones', 0.0),
+            'eletronicos': mysql_coord.get('eletronicos', 0.0),
+            'essenciais': mysql_coord.get('essenciais', 0.0),
+            'seguros': mysql_coord.get('seguros', 0.0),
+            'sva': mysql_coord.get('sva', 0.0),
         }
     else:
         # Em modo Simulador, o coord_proj segue o realizado (PDV simulado isolado)
@@ -1488,20 +1498,22 @@ def compute_coordenador_simulation(
     fixa_revenue = proj_map['fixa']
 
     if view_mode == VIEW_REALIZADO:
+        # Coordenador: realizado de todas as lojas coordenadas via MySQL.
+        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
         proj_map = {
-            'movel': sumifs(realized, 'AT_MOVEL', 'COORDENAÇÃO', coord_name),
-            'fixa': sumifs(realized, 'F_M_FIXA', 'COORDENAÇÃO', coord_name) if 'F_M_FIXA' in realized.columns else sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name),
-            'smartphones': sumifs(realized, 'AT_SMARTPHONE', 'COORDENAÇÃO', coord_name),
-            'eletronicos': sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name),
-            'essenciais': sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name) + sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name),
-            'seguros': sumifs(realized, 'AT_SEGUROS', 'COORDENAÇÃO', coord_name),
-            'sva': sumifs(realized, 'AT_SVA', 'COORDENAÇÃO', coord_name),
+            'movel': mysql_coord.get('movel', 0.0),
+            'fixa': mysql_coord.get('fixa', 0.0),
+            'smartphones': mysql_coord.get('smartphones', 0.0),
+            'eletronicos': mysql_coord.get('eletronicos', 0.0),
+            'essenciais': mysql_coord.get('essenciais', 0.0),
+            'seguros': mysql_coord.get('seguros', 0.0),
+            'sva': mysql_coord.get('sva', 0.0),
         }
-        eletro_a = sumifs(realized, 'AT_ACESSORIOS_A', 'COORDENAÇÃO', coord_name)
-        eletro_b = sumifs(realized, 'AT_ACESSORIOS_B', 'COORDENAÇÃO', coord_name)
-        ess_a = sumifs(realized, 'AT_ESSENCIAIS_A', 'COORDENAÇÃO', coord_name)
-        ess_b = sumifs(realized, 'AT_ESSENCIAIS_B', 'COORDENAÇÃO', coord_name)
-        fixa_quantity = sumifs(realized, 'AT_FIXA', 'COORDENAÇÃO', coord_name)
+        eletro_a = mysql_coord.get('eletronicos', 0.0)
+        eletro_b = 0.0
+        ess_a = mysql_coord.get('essenciais', 0.0)
+        ess_b = 0.0
+        fixa_quantity = mysql_coord.get('fixa_qty', 0.0)
         fixa_revenue = proj_map['fixa']
     elif view_mode == VIEW_SIMULADOR:
         eletro_a_in = _get_sim_input(simulator_inputs, 'eletronicos_a', 'real')
