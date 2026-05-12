@@ -367,6 +367,11 @@ class MeetingTranscription(models.Model):
 
     action_items = models.JSONField(blank=True, default=list, verbose_name='Itens de Ação')
     suggested_events = models.JSONField(blank=True, default=list, verbose_name='Eventos Sugeridos')
+    risks = models.JSONField(
+        blank=True, default=list,
+        verbose_name='Riscos identificados',
+        help_text='Riscos e bloqueios identificados pela IA na reunião.',
+    )
     duration_seconds = models.IntegerField(default=0, verbose_name='Duração (segundos)')
     status = models.CharField(
         max_length=20,

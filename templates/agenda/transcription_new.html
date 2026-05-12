@@ -173,6 +173,12 @@
                         </button>
                     </div>
 
+                    <div id="upload-progress-note" class="hidden mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-white/70 border border-orange-200 text-orange-700 text-xs rounded-full"></div>
+
+                    <div id="long-recording-hint" class="hidden mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                        <i class="fas fa-clock mr-1"></i> Você já gravou mais de 4 horas. Tudo está sendo enviado em pedaços ao servidor — pode continuar com tranquilidade.
+                    </div>
+
                     <div id="audio-preview" class="hidden mt-4 fade-slide">
                         <p class="text-xs text-gray-500 mb-2">Prévia do áudio capturado</p>
                         <audio id="audio-player" controls class="w-full"></audio>
@@ -250,13 +256,17 @@ let recordingTimer = null;
 let recordingSeconds = 0;
 let wakeLock = null;
 let stepInterval = null;
-const CHUNK_SIZE = 10 * 1024 * 1024;
-const LIVE_RECORD_CHUNK_MS = 10 * 60 * 1000;
+const CHUNK_SIZE = 8 * 1024 * 1024;
+// Cada chunk de gravação tem ~5 minutos. Combinado com upload incremental,
+// permite gravações de muitas horas sem estourar memória do navegador.
+const LIVE_RECORD_CHUNK_MS = 5 * 60 * 1000;
 let uploadQueue = Promise.resolve();
 let recordedUploadId = '';
 let recordedChunksCount = 0;
+let uploadedChunksCount = 0;
 let liveUploadActive = false;
 let recordedOriginalName = 'recording.webm';
+let finalizingFromRecording = false;
 
 const ROLE_OPTIONS = [
     { value: 'Moderador', icon: 'fa-chess-king' },
@@ -307,7 +317,14 @@ function updateSubmitState() {
     const hasRecorded = !!recordedBlob;
     const hasUpload = document.getElementById('audio-file-input').files.length > 0;
     const hasLiveRecording = recordedUploadId && recordedChunksCount > 0;
-    document.getElementById('btn-submit').disabled = !(hasRecorded || hasUpload || hasLiveRecording);
+    const isCurrentlyRecording = isRecording();
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = !(hasRecorded || hasUpload || hasLiveRecording || isCurrentlyRecording);
+    if (isCurrentlyRecording) {
+        btn.innerHTML = '<i class="fas fa-stop-circle mr-2"></i> Encerrar gravação e processar';
+    } else {
+        btn.innerHTML = '<i class="fas fa-magic mr-2"></i> Processar Transcrição';
+    }
 }
 
 function showBackgroundRecordingNote(show) {
@@ -400,20 +417,33 @@ async function startRecording() {
 
         mediaRecorder.start(LIVE_RECORD_CHUNK_MS);
         recordingSeconds = 0;
+        uploadedChunksCount = 0;
         document.getElementById('recording-indicator').classList.remove('hidden');
         document.getElementById('not-recording').classList.add('hidden');
         document.getElementById('btn-start-rec').classList.add('hidden');
         document.getElementById('btn-stop-rec').classList.remove('hidden');
         document.getElementById('audio-preview').classList.add('hidden');
+        const longHint = document.getElementById('long-recording-hint');
+        if (longHint) longHint.classList.add('hidden');
         showBackgroundRecordingNote(false);
+        updateRecordingUploadStatus();
         await requestWakeLock();
 
         recordingTimer = setInterval(() => {
             recordingSeconds++;
-            const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+            const hours = Math.floor(recordingSeconds / 3600);
+            const mins = String(Math.floor((recordingSeconds % 3600) / 60)).padStart(2, '0');
             const secs = String(recordingSeconds % 60).padStart(2, '0');
-            document.getElementById('recording-time').textContent = `${mins}:${secs}`;
+            const text = hours > 0 ? `${hours}:${mins}:${secs}` : `${mins}:${secs}`;
+            document.getElementById('recording-time').textContent = text;
+            // Avisa para sessões muito longas
+            if (recordingSeconds === 3600 * 4 && longHint) {
+                longHint.classList.remove('hidden');
+            }
         }, 1000);
+
+        // Habilita o botão de processar imediatamente, já que ele agora finaliza a gravação.
+        updateSubmitState();
 
     } catch (err) {
         alert('Erro ao acessar microfone: ' + err.message);
@@ -534,15 +564,35 @@ async function uploadRecordingChunk(chunk, chunkIndex) {
     form.append('total_chunks', '0');
     form.append('audio', chunk, recordedOriginalName);
 
-    const resp = await fetch('{% url "agenda:api_transcription_upload_chunk" %}', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-        body: form,
-    });
-
-    if (!resp.ok) {
-        throw new Error('Falha ao enviar chunk de gravação.');
+    let lastError = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+            const resp = await fetch('{% url "agenda:api_transcription_upload_chunk" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                body: form,
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            uploadedChunksCount += 1;
+            updateRecordingUploadStatus();
+            return;
+        } catch (err) {
+            lastError = err;
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        }
     }
+    throw lastError || new Error('Falha persistente ao enviar chunk de gravação.');
+}
+
+function updateRecordingUploadStatus() {
+    const el = document.getElementById('upload-progress-note');
+    if (!el) return;
+    if (!recordedUploadId) {
+        el.classList.add('hidden');
+        return;
+    }
+    el.classList.remove('hidden');
+    el.innerHTML = `<i class="fas fa-cloud-upload-alt mr-1"></i> ${uploadedChunksCount}/${recordedChunksCount} partes salvas no servidor`;
 }
 
 async function uploadChunks(audioBlob, originalName) {
@@ -610,7 +660,16 @@ async function submitTranscription() {
     }
 
     if (isRecording()) {
+        finalizingFromRecording = true;
+        const btn = document.getElementById('btn-submit');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Finalizando gravação e enviando últimas partes...';
         await stopRecordingAndWait();
+        // Garante que o último ondataavailable acionado pelo stop entre na fila
+        await new Promise(r => setTimeout(r, 200));
+        try {
+            await uploadQueue;
+        } catch (_) { /* tratado abaixo */ }
     }
 
     const formData = new FormData();

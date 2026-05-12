@@ -237,6 +237,39 @@
             </div>
             {% endif %}
 
+            <!-- Riscos identificados -->
+            {% if transcription.risks %}
+            <div class="bg-white trans-panel rounded-xl border border-rose-100 overflow-hidden">
+                <div class="px-5 py-3 border-b bg-gradient-to-r from-rose-50 to-red-50 flex items-center gap-2">
+                    <div class="w-7 h-7 bg-rose-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-exclamation-triangle text-rose-600 text-sm"></i>
+                    </div>
+                    <h3 class="font-bold text-rose-900 text-sm">Riscos & Bloqueios ({{ transcription.risks|length }})</h3>
+                </div>
+                <div class="divide-y divide-rose-50">
+                    {% for risk in transcription.risks %}
+                    <div class="px-5 py-3">
+                        <div class="flex items-start gap-3">
+                            <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide flex-shrink-0 mt-0.5
+                                {% if risk.severity == 'high' %}bg-red-100 text-red-700 border border-red-200
+                                {% elif risk.severity == 'medium' %}bg-amber-100 text-amber-700 border border-amber-200
+                                {% else %}bg-gray-100 text-gray-600 border border-gray-200{% endif %}">
+                                {% if risk.severity == 'high' %}Alto
+                                {% elif risk.severity == 'medium' %}Médio
+                                {% else %}Baixo{% endif %}
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-gray-800">{{ risk.risk|default:risk.description|default:risk }}</p>
+                                {% if risk.mitigation %}<p class="text-xs text-gray-500 mt-1"><i class="fas fa-shield-alt text-rose-400 mr-1"></i>{{ risk.mitigation }}</p>{% endif %}
+                                {% if risk.owner %}<p class="text-xs text-gray-400 mt-0.5"><i class="fas fa-user mr-1"></i>{{ risk.owner }}</p>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Transcrição Formatada -->
             <div class="bg-white trans-panel rounded-xl border overflow-hidden">
                 <div class="px-5 py-3 border-b bg-gray-50 flex justify-between items-center">

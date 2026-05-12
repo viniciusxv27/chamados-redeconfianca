@@ -194,6 +194,7 @@ def _normalize_transcription_analysis(payload, source_text):
     participants = _ensure_list(payload.get('participants_identified'))
     tags = _ensure_list(payload.get('tags'))
     suggested_events = _ensure_list(payload.get('suggested_events'))
+    risks = _ensure_list(payload.get('risks'))
 
     sentiment = payload.get('sentiment') or 'neutral'
     if sentiment not in {'positive', 'neutral', 'negative', 'mixed'}:
@@ -214,6 +215,7 @@ def _normalize_transcription_analysis(payload, source_text):
         'meeting_type_detected': meeting_type,
         'tags': tags,
         'suggested_events': suggested_events,
+        'risks': risks,
     }
 
 
@@ -291,54 +293,61 @@ def _build_participant_roles_context(participant_roles):
 def _build_transcription_system_prompt(today_str, compact=False):
     """Prompt de análise estruturada da transcrição."""
     formatted_instruction = (
-        '9. "formatted": Transcrição formatada em parágrafos com identificação de falantes quando possível.\n\n'
+        '9. "formatted": Transcrição reorganizada em parágrafos coesos por tópico, com identificação de '
+        'falantes quando possível ("Falante 1:", "Maria:" etc.), pontuação corrigida e sem inventar conteúdo.\n\n'
         if not compact else
-        '9. "formatted": Versão formatada e resumida da transcrição (máximo de 3500 caracteres).\n\n'
+        '9. "formatted": Versão formatada e resumida da transcrição (máximo de 3500 caracteres), preservando o sentido.\n\n'
     )
 
     return (
-        "Você é um analista executivo sênior, especializado em interpretar reuniões corporativas e produzir "
-        "relatórios ricos, claros e acionáveis. Sua missão é ler a transcrição inteira da reunião e devolver "
-        "uma análise PROFUNDA, DETALHADA e FIEL ao que foi dito, sem inventar fatos. Use linguagem corporativa "
-        "objetiva em português do Brasil. Quando houver dúvida sobre nomes, papéis ou datas, escreva 'A definir' "
-        "em vez de inventar.\n\n"
-        "Analise a transcrição e retorne um JSON estruturado com a seguinte análise completa:\n\n"
-        "RETORNE UM JSON com estas chaves:\n\n"
-        '1. "summary": Resumo executivo DETALHADO e ABRANGENTE da reunião, em Markdown, com pelo menos '
-        '6 parágrafos longos (mínimo de 1800 caracteres, ideal entre 2500 e 4500 caracteres). Estruture o '
-        'resumo cobrindo OBRIGATORIAMENTE: (a) contexto e objetivo da reunião; (b) principais tópicos '
-        'discutidos com explicações de cada um; (c) decisões tomadas e seus porquês; (d) divergências, '
-        'preocupações ou riscos levantados; (e) próximos passos, responsáveis e prazos; (f) conclusão geral '
-        'com avaliação do andamento. Use bullet points dentro dos parágrafos quando ajudar a leitura, cite '
-        'números, valores, prazos e nomes mencionados, e preserve nuances importantes da conversa. NÃO seja '
-        'genérico nem superficial: o leitor deve conseguir entender a reunião inteira lendo apenas o resumo.\n\n'
-        '2. "sections": Lista de seções/partes da reunião (gere de 4 a 12 seções, conforme a riqueza do '
-        'conteúdo). Cada seção é um objeto com:\n'
-        '   - "title": Título descritivo e específico do tópico\n'
-        '   - "icon": Ícone FontAwesome sugerido (ex: "fa-bullhorn", "fa-chart-line")\n'
-        '   - "content": Resumo detalhado e narrativo do que foi discutido (mínimo 3 frases, idealmente um '
-        'parágrafo robusto explicando contexto, argumentos e conclusões da seção)\n'
-        '   - "highlights": Lista de 2 a 6 frases-chave ou citações importantes (literais quando possível)\n'
+        "Você é um Chief of Staff sênior, analista executivo e facilitador de reuniões. Sua missão é ler a "
+        "transcrição inteira e produzir uma análise PROFUNDA, DENSA, ACIONÁVEL e FIEL ao que foi dito, sem "
+        "inventar fatos. Use português do Brasil corporativo, claro e direto. Quando faltar informação sobre "
+        "nomes, papéis ou datas, escreva 'A definir' em vez de inventar.\n\n"
+        "Diretrizes obrigatórias de qualidade:\n"
+        "- Cite NÚMEROS, VALORES, PRAZOS, METAS, NOMES e TERMOS exatos sempre que aparecerem.\n"
+        "- Evite frases vagas como 'foi discutido X' sem dizer o quê. Seja específico.\n"
+        "- Identifique riscos, bloqueios e oportunidades, mesmo quando implícitos.\n"
+        "- Para cada decisão e ação, conecte com o impacto no negócio quando inferível.\n"
+        "- Cada item de ação deve ser SMART (específico, mensurável, com responsável e prazo realista).\n"
+        "- Quando a transcrição mencionar 'semana que vem', 'até sexta', 'próxima reunião', calcule a data real "
+        f"a partir de hoje ({today_str}).\n\n"
+        "RETORNE UM JSON com EXATAMENTE estas chaves:\n\n"
+        '1. "summary": Resumo executivo DETALHADO em Markdown, com pelo menos 6 parágrafos densos '
+        '(mínimo 1800 caracteres, ideal 2500-5000). Cubra OBRIGATORIAMENTE: (a) contexto e objetivo da reunião; '
+        '(b) principais tópicos com explicações; (c) decisões e seus porquês; (d) divergências, preocupações ou '
+        'riscos; (e) próximos passos com responsáveis e prazos; (f) avaliação geral. Cite números, prazos e '
+        'nomes mencionados. NÃO seja superficial: o leitor deve entender a reunião inteira lendo só o resumo.\n\n'
+        '2. "sections": Lista de seções/partes (4 a 14 seções conforme a riqueza). Cada uma com:\n'
+        '   - "title": Título descritivo e específico (ex: "Revisão das metas Q3 - Comercial")\n'
+        '   - "icon": Ícone FontAwesome (ex: "fa-bullhorn", "fa-chart-line", "fa-handshake")\n'
+        '   - "content": Resumo detalhado e narrativo (mínimo 3 frases, idealmente um parágrafo robusto)\n'
+        '   - "highlights": 2 a 6 frases-chave/citações importantes (literais quando possível)\n'
         '   - "duration_estimate": Estimativa de duração em minutos\n\n'
-        '3. "key_decisions": Lista de decisões. Cada uma com:\n'
-        '   - "decision": Texto da decisão\n'
-        '   - "context": Breve contexto\n'
+        '3. "key_decisions": Lista de decisões objetivas. Cada uma com:\n'
+        '   - "decision": Texto curto e direto da decisão\n'
+        '   - "context": Por que foi tomada (1-2 frases)\n'
         '   - "impact": "high", "medium" ou "low"\n\n'
-        '4. "action_items": Lista de itens de ação. Cada um com:\n'
-        '   - "task": Descrição da tarefa\n'
+        '4. "action_items": Lista de itens de ação SMART. Cada um com:\n'
+        '   - "task": Descrição clara, iniciando com verbo no infinitivo\n'
         '   - "responsible": Nome do responsável (ou "A definir")\n'
-        '   - "deadline": Prazo ISO date ou null\n'
-        '   - "priority": "high", "medium" ou "low"\n\n'
-        '5. "participants_identified": Lista de nomes de participantes.\n\n'
+        '   - "deadline": Prazo em ISO date (YYYY-MM-DD) calculado a partir de hoje, ou null\n'
+        '   - "priority": "high", "medium" ou "low"\n'
+        '   - "success_criteria": Como saber que está concluído (1 frase curta)\n\n'
+        '5. "participants_identified": Lista de nomes de participantes detectados.\n\n'
         '6. "sentiment": "positive", "neutral", "negative" ou "mixed".\n\n'
         '7. "meeting_type_detected": "standup", "planning", "review", "brainstorm", '
         '"oneonone", "kickoff", "status", "decision" ou "general".\n\n'
-        '8. "tags": Lista de 3-8 tags relevantes.\n\n'
+        '8. "tags": Lista de 4-8 tags relevantes (palavras únicas, em minúsculo).\n\n'
         f'{formatted_instruction}'
-        '10. "suggested_events": Lista de compromissos futuros. Cada um com:\n'
+        '10. "suggested_events": Lista de follow-ups e novos compromissos sugeridos. Cada um com:\n'
         '    - "title": Título\n'
-        '    - "description": Descrição\n'
+        '    - "description": Pauta/objetivo\n'
         f'    - "suggested_date": Data sugerida em ISO (hoje é {today_str})\n\n'
+        '11. "risks": Lista de até 6 riscos/bloqueios identificados (pode ser lista vazia). Cada um com:\n'
+        '    - "risk": Descrição do risco\n'
+        '    - "mitigation": Ação sugerida para mitigar (1 frase)\n'
+        '    - "severity": "high", "medium" ou "low"\n\n'
         "Responda APENAS com JSON válido, sem markdown, sem ```."
     )
 
@@ -447,6 +456,7 @@ def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
     key_decisions = []
     action_items = []
     suggested_events = []
+    risks = []
     participants = set()
     meeting_types = []
     sentiments = []
@@ -457,6 +467,7 @@ def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
         key_decisions.extend(analysis.get('key_decisions') or [])
         action_items.extend(analysis.get('action_items') or [])
         suggested_events.extend(analysis.get('suggested_events') or [])
+        risks.extend(analysis.get('risks') or [])
         participants.update([p for p in (analysis.get('participants_identified') or []) if p])
         meeting_types.append(analysis.get('meeting_type_detected') or 'general')
         sentiments.append(analysis.get('sentiment') or 'neutral')
@@ -500,6 +511,7 @@ def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
     key_decisions = _dedupe_by_text(key_decisions, 'decision')[:60]
     action_items = _dedupe_by_text(action_items, 'task')[:80]
     suggested_events = _dedupe_by_text(suggested_events, 'title')[:40]
+    risks = _dedupe_by_text(risks, 'risk')[:20]
 
     sections = sections[:60]
     tags = [tag for tag, _ in tag_counter.most_common(8)]
@@ -524,6 +536,7 @@ def _merge_transcription_analyses(client, meeting_title, analyses, source_text):
         'meeting_type_detected': meeting_type,
         'tags': tags,
         'suggested_events': suggested_events,
+        'risks': risks,
     }
 
 
@@ -1837,6 +1850,7 @@ def _process_transcription_upload_job(transcription_id, client, source_path=None
         transcription.meeting_type_detected = analysis['meeting_type_detected']
         transcription.tags = analysis['tags']
         transcription.suggested_events = analysis['suggested_events']
+        transcription.risks = analysis.get('risks', [])
         transcription.status = 'completed'
         transcription.error_message = ''
         transcription.save()
@@ -1904,6 +1918,7 @@ def _process_transcription_reprocess_job(transcription_id, client, options=None)
     transcription.meeting_type_detected = analysis['meeting_type_detected']
     transcription.tags = analysis['tags']
     transcription.suggested_events = analysis['suggested_events']
+    transcription.risks = analysis.get('risks', [])
     transcription.status = 'completed'
     transcription.error_message = ''
     transcription.save()
