@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Feedbacks{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-cogs mr-2 text-purple-500"></i>Gerenciar Feedbacks</h1>
+      <div class="flex gap-2">
+        <a href="{% url 'feedback:assign' %}" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">Nova Atribuição</a>
+        <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm">Voltar</a>
+      </div>
+    </div>
+
+    <form method="get" class="mb-4">
+      <input type="text" name="q" value="{{ q }}" placeholder="Buscar por colaborador, avaliador ou setor..." class="w-full sm:w-96 px-4 py-2 border rounded-lg" />
+    </form>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white rounded-xl shadow overflow-hidden">
+        <div class="p-4 border-b bg-gray-100"><h2 class="font-semibold">Atribuições</h2></div>
+        {% if assignments %}
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600 text-left"><tr><th class="p-3">Avaliador</th><th class="p-3">Avaliado</th><th class="p-3">Status</th><th class="p-3">Prazo</th><th class="p-3"></th></tr></thead>
+            <tbody class="divide-y">
+              {% for a in assignments %}
+              <tr>
+                <td class="p-3">{{ a.evaluator.get_full_name|default:a.evaluator.username }}</td>
+                <td class="p-3">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}</td>
+                <td class="p-3"><span class="px-2 py-1 rounded text-xs {% if a.status == 'PENDING' %}bg-amber-100 text-amber-800{% elif a.status == 'COMPLETED' %}bg-emerald-100 text-emerald-800{% else %}bg-gray-100 text-gray-700{% endif %}">{{ a.get_status_display }}</span></td>
+                <td class="p-3">{{ a.due_date|default:"—" }}</td>
+                <td class="p-3"><form method="post" action="{% url 'feedback:delete_assignment' a.id %}" onsubmit="return confirm('Excluir atribuição?');">{% csrf_token %}<button class="text-red-600 hover:underline text-sm">Excluir</button></form></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="p-6 text-gray-500 text-sm">Sem atribuições.</p>
+        {% endif %}
+      </div>
+
+      <div class="bg-white rounded-xl shadow overflow-hidden">
+        <div class="p-4 border-b bg-gray-100"><h2 class="font-semibold">Feedbacks aplicados</h2></div>
+        {% if feedbacks %}
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600 text-left"><tr><th class="p-3">Data</th><th class="p-3">Avaliado</th><th class="p-3">Avaliador</th><th class="p-3">Média</th><th class="p-3"></th></tr></thead>
+            <tbody class="divide-y">
+              {% for f in feedbacks %}
+              <tr>
+                <td class="p-3">{{ f.data }}</td>
+                <td class="p-3"><a href="{% url 'feedback:user_history' f.evaluatee.id %}" class="text-indigo-600 hover:underline">{{ f.evaluatee.get_full_name|default:f.evaluatee.username }}</a></td>
+                <td class="p-3">{{ f.evaluator.get_full_name|default:f.evaluator.username }}</td>
+                <td class="p-3 font-semibold">{{ f.average_score|default:"—" }}</td>
+                <td class="p-3"><a href="{% url 'feedback:detail' f.id %}" class="text-indigo-600 hover:underline">Ver</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="p-6 text-gray-500 text-sm">Sem feedbacks registrados.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow mt-6 p-6">
+      <h2 class="font-semibold mb-3">Top colaboradores avaliados</h2>
+      {% if user_stats %}
+        <ul class="divide-y text-sm">
+          {% for s in user_stats %}
+            <li class="py-2 flex items-center justify-between">
+              <a href="{% url 'feedback:user_history' s.evaluatee_id %}" class="text-indigo-600 hover:underline">{{ s.evaluatee__first_name }} {{ s.evaluatee__last_name }}</a>
+              <span class="text-gray-600">{{ s.total }} feedback(s)</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-gray-500 text-sm">Sem dados.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

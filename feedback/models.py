@@ -1,0 +1,197 @@
+from django.conf import settings
+from django.db import models
+from django.utils import timezone
+
+
+SCALE_CHOICES = [(i, str(i)) for i in range(0, 11)]
+
+
+class FeedbackAssignment(models.Model):
+    """Define quem deve dar feedback em quem.
+
+    Uma pessoa (evaluator) pode ter várias atribuições (vários evaluatees).
+    """
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente'),
+        ('COMPLETED', 'Concluído'),
+        ('CANCELLED', 'Cancelado'),
+    ]
+
+    evaluator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='feedback_assignments_to_give',
+        verbose_name='Avaliador (quem dará o feedback)',
+    )
+    evaluatee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='feedback_assignments_to_receive',
+        verbose_name='Avaliado (quem receberá o feedback)',
+    )
+    due_date = models.DateField(null=True, blank=True, verbose_name='Prazo')
+    notes = models.TextField(blank=True, verbose_name='Observações da atribuição')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='feedback_assignments_created',
+        verbose_name='Criado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Atribuição de Feedback'
+        verbose_name_plural = 'Atribuições de Feedback'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.evaluator} → {self.evaluatee} ({self.get_status_display()})'
+
+
+class Feedback(models.Model):
+    """Feedback aplicado por um avaliador a um colaborador.
+
+    Replica os campos do formulário FM-005 - FEEDBACK GERAL.
+    """
+
+    assignment = models.ForeignKey(
+        FeedbackAssignment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='feedbacks',
+        verbose_name='Atribuição de origem',
+    )
+    evaluator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='feedbacks_given',
+        verbose_name='Avaliador',
+    )
+    evaluatee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='feedbacks_received',
+        verbose_name='Colaborador avaliado',
+    )
+
+    # Cabeçalho do formulário
+    setor_area = models.CharField(max_length=200, blank=True, verbose_name='Setor / Área')
+    data = models.DateField(default=timezone.now, verbose_name='Data')
+    nome_colaborador = models.CharField(max_length=200, blank=True, verbose_name='Nome do Colaborador(a)')
+    gestor_imediato = models.CharField(max_length=200, blank=True, verbose_name='Gestor Imediato')
+    gestor_mediato = models.CharField(max_length=200, blank=True, verbose_name='Gestor Mediato')
+
+    # Bloco AVALIAÇÃO (texto)
+    pontos_fortes = models.TextField(blank=True, verbose_name='Pontos Fortes')
+    oportunidades_melhoria = models.TextField(blank=True, verbose_name='Oportunidades de Melhoria')
+    acoes_propostas = models.TextField(blank=True, verbose_name='Ações Propostas')
+
+    # AVALIAÇÃO DE DESEMPENHO E COMPETÊNCIAS (escalas 0-10)
+    nota_comunicacao = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Comunicação (0-10)',
+        help_text='Como você avalia sua comunicação (0 insatisfeito, 10 muito satisfeito).',
+    )
+    nota_trabalho_equipe = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Trabalho em equipe (0-10)',
+    )
+    nota_organizacao = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Organização (0-10)',
+    )
+    comunicacao_clara_texto = models.TextField(
+        blank=True,
+        verbose_name='Você sente que se comunica de forma clara e eficaz com sua equipe e superiores?',
+    )
+    nota_ferramentas_recursos = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Possui as ferramentas e recursos necessários (0-10)',
+    )
+    nota_iniciativa = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Tomou iniciativa / foi além (0-10)',
+    )
+    nota_mudancas = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Lida com mudanças e imprevistos (0-10)',
+    )
+    nota_conflitos = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=SCALE_CHOICES,
+        verbose_name='Lida com conflitos / desentendimentos (0-10)',
+    )
+    cumpriu_metas_texto = models.TextField(
+        blank=True,
+        verbose_name='Você acredita que cumpriu as metas estabelecidas para este período? Por quê?',
+    )
+    suporte_orientacao_texto = models.TextField(
+        blank=True,
+        verbose_name='Como avalia o suporte e a orientação que recebe de seus superiores?',
+    )
+
+    # Campo de evolução
+    evolution_notes = models.TextField(
+        blank=True,
+        verbose_name='Evolução do colaborador',
+        help_text='Considerações sobre a evolução do colaborador desde o último feedback.',
+    )
+
+    # Resumo gerado por IA (visível para superadmin)
+    ai_summary = models.TextField(
+        blank=True,
+        verbose_name='Resumo gerado por IA',
+    )
+    ai_summary_generated_at = models.DateTimeField(null=True, blank=True)
+    ai_summary_error = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Feedback'
+        verbose_name_plural = 'Feedbacks'
+        ordering = ['-data', '-created_at']
+
+    def __str__(self):
+        return f'Feedback de {self.evaluator} para {self.evaluatee} em {self.data}'
+
+    SCALE_FIELDS = [
+        ('nota_comunicacao', 'Comunicação'),
+        ('nota_trabalho_equipe', 'Trabalho em equipe'),
+        ('nota_organizacao', 'Organização'),
+        ('nota_ferramentas_recursos', 'Ferramentas e recursos'),
+        ('nota_iniciativa', 'Iniciativa'),
+        ('nota_mudancas', 'Lida com mudanças'),
+        ('nota_conflitos', 'Lida com conflitos'),
+    ]
+
+    def average_score(self):
+        values = [getattr(self, f) for f, _ in self.SCALE_FIELDS if getattr(self, f) is not None]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 2)
+
+    def previous_feedback(self):
+        return (
+            Feedback.objects
+            .filter(evaluatee=self.evaluatee, created_at__lt=self.created_at)
+            .order_by('-created_at')
+            .first()
+        )
+
+    def evolution_delta(self):
+        """Diferença entre média atual e média do feedback anterior do mesmo colaborador."""
+        prev = self.previous_feedback()
+        if not prev:
+            return None
+        prev_avg = prev.average_score()
+        cur_avg = self.average_score()
+        if prev_avg is None or cur_avg is None:
+            return None
+        return round(cur_avg - prev_avg, 2)

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Aplicar Feedback{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-comments mr-2 text-indigo-500"></i>Aplicar Feedback</h1>
+      <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg hover:bg-gray-50 text-sm">Voltar</a>
+    </div>
+
+    {% if not evaluatee %}
+      <div class="bg-white rounded-xl shadow p-6">
+        <p class="mb-4 text-gray-700">Selecione o colaborador que receberá o feedback:</p>
+        <input id="user-search" type="text" placeholder="Digite o nome..." class="w-full px-4 py-2 border rounded-lg" />
+        <div id="user-results" class="mt-4 space-y-2"></div>
+      </div>
+      <script>
+        const inp = document.getElementById('user-search');
+        const out = document.getElementById('user-results');
+        let t;
+        inp.addEventListener('input', () => {
+          clearTimeout(t);
+          t = setTimeout(async () => {
+            const r = await fetch('{% url "feedback:api_search_users" %}?q=' + encodeURIComponent(inp.value));
+            const d = await r.json();
+            out.innerHTML = d.results.map(u => `<a href="?evaluatee=${u.id}" class="block p-3 border rounded hover:bg-gray-50"><strong>${u.name}</strong><br><span class="text-sm text-gray-500">${u.email} · ${u.sector || ''}</span></a>`).join('');
+          }, 250);
+        });
+      </script>
+    {% else %}
+      <div class="bg-white rounded-xl shadow overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 text-white">
+          <h2 class="text-xl font-semibold">Avaliando: {{ evaluatee.get_full_name|default:evaluatee.username }}</h2>
+          <p class="text-indigo-100 text-sm">{{ evaluatee.email }}</p>
+        </div>
+        <form method="post" class="p-6 space-y-8">
+          {% csrf_token %}
+          <input type="hidden" name="evaluatee" value="{{ evaluatee.id }}">
+
+          <section>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">Identificação</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><label class="block text-sm text-gray-600 mb-1">Setor / Área</label>{{ form.setor_area }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Data</label>{{ form.data }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Nome do Colaborador(a)</label>{{ form.nome_colaborador }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Gestor Imediato</label>{{ form.gestor_imediato }}</div>
+              <div class="sm:col-span-2"><label class="block text-sm text-gray-600 mb-1">Gestor Mediato</label>{{ form.gestor_mediato }}</div>
+            </div>
+          </section>
+
+          <section>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">Avaliação</h3>
+            <div class="grid grid-cols-1 gap-4">
+              <div><label class="block text-sm text-gray-600 mb-1">Pontos Fortes</label>{{ form.pontos_fortes }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Oportunidades de Melhoria</label>{{ form.oportunidades_melhoria }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Ações Propostas</label>{{ form.acoes_propostas }}</div>
+            </div>
+          </section>
+
+          <section>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">Avaliação de Desempenho e Competências (0-10)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><label class="block text-sm text-gray-600 mb-1">Comunicação</label>{{ form.nota_comunicacao }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Trabalho em equipe</label>{{ form.nota_trabalho_equipe }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Organização</label>{{ form.nota_organizacao }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Ferramentas e recursos</label>{{ form.nota_ferramentas_recursos }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Iniciativa</label>{{ form.nota_iniciativa }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Lida com mudanças/imprevistos</label>{{ form.nota_mudancas }}</div>
+              <div><label class="block text-sm text-gray-600 mb-1">Lida com conflitos</label>{{ form.nota_conflitos }}</div>
+            </div>
+
+            <div class="mt-4"><label class="block text-sm text-gray-600 mb-1">Você sente que se comunica de forma clara e eficaz com sua equipe e superiores?</label>{{ form.comunicacao_clara_texto }}</div>
+            <div class="mt-4"><label class="block text-sm text-gray-600 mb-1">Você acredita que cumpriu as metas estabelecidas para este período? Por quê?</label>{{ form.cumpriu_metas_texto }}</div>
+            <div class="mt-4"><label class="block text-sm text-gray-600 mb-1">Como você avalia o suporte e a orientação que recebe de seus superiores?</label>{{ form.suporte_orientacao_texto }}</div>
+          </section>
+
+          <section>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">Evolução</h3>
+            <label class="block text-sm text-gray-600 mb-1">Considerações sobre a evolução do colaborador</label>
+            {{ form.evolution_notes }}
+          </section>
+
+          <div class="flex justify-end gap-2">
+            <a href="{% url 'feedback:dashboard' %}" class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">Cancelar</a>
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Salvar Feedback</button>
+          </div>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

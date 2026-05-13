@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Histórico de {{ target.get_full_name }}{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-5xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-history mr-2 text-indigo-500"></i>Histórico de Feedbacks</h1>
+        <p class="text-gray-500">Colaborador: <strong>{{ target.get_full_name|default:target.username }}</strong></p>
+      </div>
+      <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+    </div>
+
+    {% if timeline %}
+      <div class="bg-white rounded-xl shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold mb-3">Evolução das médias</h2>
+        <canvas id="evoChart" height="80"></canvas>
+      </div>
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      <script>
+        const data = {{ timeline|safe }};
+        new Chart(document.getElementById('evoChart'), {
+          type: 'line',
+          data: {
+            labels: data.map(d => d.date),
+            datasets: [{ label: 'Média geral', data: data.map(d => d.avg), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.15)', tension: 0.3, fill: true }]
+          },
+          options: { scales: { y: { min: 0, max: 10 } } }
+        });
+      </script>
+    {% endif %}
+
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      {% if feedbacks %}
+        <table class="w-full text-sm">
+          <thead class="bg-gray-100 text-gray-600 text-left">
+            <tr><th class="p-3">Data</th><th class="p-3">Avaliador</th><th class="p-3">Média</th><th class="p-3">Δ Evolução</th><th class="p-3"></th></tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for f in feedbacks %}
+              <tr>
+                <td class="p-3">{{ f.data }}</td>
+                <td class="p-3">{{ f.evaluator.get_full_name|default:f.evaluator.username }}</td>
+                <td class="p-3 font-semibold">{{ f.average_score|default:"—" }}</td>
+                <td class="p-3">{% with d=f.evolution_delta %}{% if d is not None %}<span class="{% if d >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if d >= 0 %}+{% endif %}{{ d }}</span>{% else %}—{% endif %}{% endwith %}</td>
+                <td class="p-3"><a href="{% url 'feedback:detail' f.id %}" class="text-indigo-600 hover:underline">Ver</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="p-6 text-gray-500">Nenhum feedback registrado para este colaborador.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

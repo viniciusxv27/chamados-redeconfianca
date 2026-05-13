@@ -115,6 +115,7 @@ urlpatterns = [
     path('experiencia/', include('experiencia.urls')),  # Experiência Vivo
     path('power-bi/', include('power_bi.urls')),  # Dashboards Power BI
     path('simulator/', include('simulator.urls')),  # Simulador
+    path('feedback/', include('feedback.urls')),  # Módulo de Feedback Geral
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training

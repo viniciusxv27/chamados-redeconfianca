@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'experiencia',  # Experiência Vivo
     'power_bi',  # Dashboards Power BI
     'simulator',  # Simulador de comissionamento
+    'feedback',  # Módulo de Feedback Geral (FM-005)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

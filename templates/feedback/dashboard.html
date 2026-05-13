@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Feedback{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-8">
+      <div class="flex items-center space-x-4">
+        <div class="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+          <i class="fas fa-comments text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Feedback Geral</h1>
+          <p class="text-gray-600">Aplique, acompanhe e veja o histórico de feedbacks.</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        {% if is_superadmin %}
+          <a href="{% url 'feedback:assign' %}" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow"><i class="fas fa-user-plus mr-2"></i>Atribuir</a>
+          <a href="{% url 'feedback:manage' %}" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow"><i class="fas fa-cogs mr-2"></i>Gerenciar</a>
+        {% endif %}
+        <a href="{% url 'feedback:pending' %}" class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 shadow"><i class="fas fa-list-check mr-2"></i>Pendentes</a>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Pendentes para você dar</p>
+        <p class="text-3xl font-bold text-indigo-600">{{ stats.pending_count }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Feedbacks que você aplicou</p>
+        <p class="text-3xl font-bold text-emerald-600">{{ stats.given_count }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Feedbacks recebidos</p>
+        <p class="text-3xl font-bold text-purple-600">{{ stats.received_count }}</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white rounded-xl shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-clock mr-2 text-indigo-500"></i>Pendentes (você precisa avaliar)</h2>
+          <a href="{% url 'feedback:pending' %}" class="text-sm text-indigo-600 hover:underline">Ver todos</a>
+        </div>
+        {% if pending %}
+          <ul class="divide-y">
+            {% for a in pending|slice:":5" %}
+              <li class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-800">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}</p>
+                  <p class="text-sm text-gray-500">Prazo: {{ a.due_date|default:"—" }}</p>
+                </div>
+                <a href="{% url 'feedback:create_from_assignment' a.id %}" class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Aplicar</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-gray-500 text-sm">Nenhuma atribuição pendente.</p>
+        {% endif %}
+      </div>
+
+      <div class="bg-white rounded-xl shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4"><i class="fas fa-paper-plane mr-2 text-emerald-500"></i>Últimos que você aplicou</h2>
+        {% if given %}
+          <ul class="divide-y">
+            {% for f in given %}
+              <li class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-800">{{ f.evaluatee.get_full_name|default:f.evaluatee.username }}</p>
+                  <p class="text-sm text-gray-500">{{ f.data }} · Média {{ f.average_score|default:"—" }}</p>
+                </div>
+                <a href="{% url 'feedback:detail' f.id %}" class="text-sm text-indigo-600 hover:underline">Ver</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-gray-500 text-sm">Você ainda não aplicou feedbacks.</p>
+        {% endif %}
+      </div>
+
+      <div class="bg-white rounded-xl shadow p-6 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-inbox mr-2 text-purple-500"></i>Seus feedbacks recebidos</h2>
+          <a href="{% url 'feedback:user_history' request.user.id %}" class="text-sm text-indigo-600 hover:underline">Ver histórico completo</a>
+        </div>
+        {% if received %}
+          <ul class="divide-y">
+            {% for f in received %}
+              <li class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-800">por {{ f.evaluator.get_full_name|default:f.evaluator.username }}</p>
+                  <p class="text-sm text-gray-500">{{ f.data }} · Média {{ f.average_score|default:"—" }}</p>
+                </div>
+                <a href="{% url 'feedback:detail' f.id %}" class="text-sm text-indigo-600 hover:underline">Ver</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-gray-500 text-sm">Você ainda não recebeu feedbacks.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

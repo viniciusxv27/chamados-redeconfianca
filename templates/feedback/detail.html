@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Feedback - {{ fb.evaluatee.get_full_name }}{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-5xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-comments mr-2 text-indigo-500"></i>Feedback de {{ fb.evaluatee.get_full_name|default:fb.evaluatee.username }}</h1>
+        <p class="text-gray-500 text-sm">Aplicado por {{ fb.evaluator.get_full_name|default:fb.evaluator.username }} em {{ fb.data }}</p>
+      </div>
+      <div class="flex gap-2">
+        <a href="{% url 'feedback:user_history' fb.evaluatee.id %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50"><i class="fas fa-history mr-1"></i>Histórico do colaborador</a>
+        <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+      </div>
+    </div>
+
+    {% if show_ai %}
+      <div class="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-6 mb-6 shadow">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-semibold text-indigo-800"><i class="fas fa-robot mr-2"></i>Resumo gerado por IA</h2>
+          <form method="post" action="{% url 'feedback:regenerate_ai' fb.id %}">{% csrf_token %}<button class="text-sm text-indigo-700 hover:underline" type="submit"><i class="fas fa-sync mr-1"></i>Regenerar</button></form>
+        </div>
+        {% if ai_text %}
+          <div class="text-gray-800 whitespace-pre-line">{{ ai_text }}</div>
+          {% if fb.ai_summary_generated_at %}<p class="text-xs text-gray-500 mt-3">Gerado em {{ fb.ai_summary_generated_at }}</p>{% endif %}
+        {% else %}
+          <p class="text-gray-600 text-sm">Resumo IA indisponível.{% if fb.ai_summary_error %} <span class="text-red-600">({{ fb.ai_summary_error }})</span>{% endif %}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Média geral</p>
+        <p class="text-3xl font-bold text-indigo-600">{{ fb.average_score|default:"—" }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Feedback anterior</p>
+        {% if previous %}
+          <p class="text-base font-medium text-gray-800">{{ previous.data }} · média {{ previous.average_score|default:"—" }}</p>
+          <a href="{% url 'feedback:detail' previous.id %}" class="text-xs text-indigo-600 hover:underline">Ver anterior</a>
+        {% else %}
+          <p class="text-gray-500">Sem histórico anterior.</p>
+        {% endif %}
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Evolução (Δ)</p>
+        {% if evolution_delta is not None %}
+          <p class="text-3xl font-bold {% if evolution_delta >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if evolution_delta >= 0 %}+{% endif %}{{ evolution_delta }}</p>
+        {% else %}
+          <p class="text-gray-500">—</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-6 space-y-6">
+      <section>
+        <h3 class="text-lg font-semibold mb-3">Identificação</h3>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div><dt class="text-gray-500">Setor / Área</dt><dd>{{ fb.setor_area|default:"—" }}</dd></div>
+          <div><dt class="text-gray-500">Data</dt><dd>{{ fb.data }}</dd></div>
+          <div><dt class="text-gray-500">Colaborador</dt><dd>{{ fb.nome_colaborador|default:fb.evaluatee.get_full_name }}</dd></div>
+          <div><dt class="text-gray-500">Gestor Imediato</dt><dd>{{ fb.gestor_imediato|default:"—" }}</dd></div>
+          <div class="sm:col-span-2"><dt class="text-gray-500">Gestor Mediato</dt><dd>{{ fb.gestor_mediato|default:"—" }}</dd></div>
+        </dl>
+      </section>
+
+      <section>
+        <h3 class="text-lg font-semibold mb-3">Avaliação</h3>
+        <div class="space-y-3 text-sm">
+          <div><p class="text-gray-500">Pontos Fortes</p><p class="whitespace-pre-line">{{ fb.pontos_fortes|default:"—" }}</p></div>
+          <div><p class="text-gray-500">Oportunidades de Melhoria</p><p class="whitespace-pre-line">{{ fb.oportunidades_melhoria|default:"—" }}</p></div>
+          <div><p class="text-gray-500">Ações Propostas</p><p class="whitespace-pre-line">{{ fb.acoes_propostas|default:"—" }}</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="text-lg font-semibold mb-3">Notas (0-10)</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Comunicação</p><p class="text-xl font-bold">{{ fb.nota_comunicacao|default:"—" }}</p></div>
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Trab. equipe</p><p class="text-xl font-bold">{{ fb.nota_trabalho_equipe|default:"—" }}</p></div>
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Organização</p><p class="text-xl font-bold">{{ fb.nota_organizacao|default:"—" }}</p></div>
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Ferramentas</p><p class="text-xl font-bold">{{ fb.nota_ferramentas_recursos|default:"—" }}</p></div>
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Iniciativa</p><p class="text-xl font-bold">{{ fb.nota_iniciativa|default:"—" }}</p></div>
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Mudanças</p><p class="text-xl font-bold">{{ fb.nota_mudancas|default:"—" }}</p></div>
+          <div class="bg-gray-50 p-3 rounded"><p class="text-gray-500">Conflitos</p><p class="text-xl font-bold">{{ fb.nota_conflitos|default:"—" }}</p></div>
+        </div>
+        <div class="mt-4 space-y-3 text-sm">
+          <div><p class="text-gray-500">Comunicação clara e eficaz</p><p class="whitespace-pre-line">{{ fb.comunicacao_clara_texto|default:"—" }}</p></div>
+          <div><p class="text-gray-500">Cumprimento de metas</p><p class="whitespace-pre-line">{{ fb.cumpriu_metas_texto|default:"—" }}</p></div>
+          <div><p class="text-gray-500">Suporte e orientação</p><p class="whitespace-pre-line">{{ fb.suporte_orientacao_texto|default:"—" }}</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="text-lg font-semibold mb-3">Evolução</h3>
+        <p class="whitespace-pre-line text-sm">{{ fb.evolution_notes|default:"—" }}</p>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}
