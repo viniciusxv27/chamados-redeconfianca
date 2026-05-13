@@ -13,8 +13,7 @@ class FeedbackAssignment(models.Model):
     """
 
     STATUS_CHOICES = [
-        ('PENDING', 'Pendente'),
-        ('COMPLETED', 'Concluído'),
+        ('ACTIVE', 'Ativo'),
         ('CANCELLED', 'Cancelado'),
     ]
 
@@ -30,9 +29,8 @@ class FeedbackAssignment(models.Model):
         related_name='feedback_assignments_to_receive',
         verbose_name='Avaliado (quem receberá o feedback)',
     )
-    due_date = models.DateField(null=True, blank=True, verbose_name='Prazo')
     notes = models.TextField(blank=True, verbose_name='Observações da atribuição')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

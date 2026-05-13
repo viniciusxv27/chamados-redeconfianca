@@ -27,13 +27,21 @@ def _build_prompt(feedback) -> str:
     else:
         prev_str = 'Não há feedback anterior registrado para este colaborador.'
 
-    return f"""Você é um analista de RH. Gere um RESUMO EXECUTIVO em português (máx. 200 palavras) sobre o feedback abaixo.
-Inclua:
-1) panorama geral do desempenho
-2) principais pontos fortes
-3) principais oportunidades de melhoria
-4) evolução em relação ao feedback anterior (se houver)
-5) recomendações práticas
+    return f"""Você é um analista de RH. Gere uma ANÁLISE estruturada em português (máx. 300 palavras) sobre o feedback abaixo.
+
+Responda EXATAMENTE com 3 seções, nesta ordem e com estes títulos em markdown:
+
+## Resumo
+Um parágrafo executivo descrevendo o desempenho geral do colaborador, incluindo a evolução em relação ao feedback anterior (se houver).
+
+## Pontos Fortes
+Lista em bullets dos principais pontos fortes identificados.
+
+## Pontos de Melhoria
+Lista em bullets das principais oportunidades de melhoria e recomendações práticas.
+
+---
+Dados do feedback:
 
 Colaborador avaliado: {feedback.evaluatee.get_full_name() or feedback.evaluatee.username}
 Avaliador: {feedback.evaluator.get_full_name() or feedback.evaluator.username}
@@ -47,8 +55,8 @@ Notas (0-10):
 Média geral: {avg_str}
 {prev_str}
 
-Pontos Fortes: {feedback.pontos_fortes or '-'}
-Oportunidades de Melhoria: {feedback.oportunidades_melhoria or '-'}
+Pontos Fortes (texto do avaliador): {feedback.pontos_fortes or '-'}
+Oportunidades de Melhoria (texto do avaliador): {feedback.oportunidades_melhoria or '-'}
 Ações Propostas: {feedback.acoes_propostas or '-'}
 
 Auto-percepção - comunicação clara: {feedback.comunicacao_clara_texto or '-'}
@@ -81,7 +89,7 @@ def generate_ai_summary(feedback, force: bool = False) -> str:
                 {'role': 'user', 'content': prompt},
             ],
             temperature=0.3,
-            max_tokens=600,
+            max_tokens=900,
         )
         text = (resp.choices[0].message.content or '').strip()
         feedback.ai_summary = text

@@ -57,10 +57,6 @@ class AssignmentForm(forms.Form):
         widget=forms.HiddenInput(),
         help_text='IDs dos avaliados separados por vírgula.',
     )
-    due_date = forms.DateField(
-        required=False,
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'w-full px-4 py-2 border border-gray-300 rounded-lg'}),
-    )
     notes = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={'rows': 2, 'class': 'w-full px-4 py-2 border border-gray-300 rounded-lg'}),

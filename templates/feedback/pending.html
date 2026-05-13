@@ -1,32 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Feedbacks Pendentes{% endblock %}
+{% block title %}Meus Avaliados{% endblock %}
 {% block content %}
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
   <div class="max-w-4xl mx-auto">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-list-check mr-2 text-indigo-500"></i>Feedbacks Pendentes</h1>
+      <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-users mr-2 text-indigo-500"></i>Pessoas que você pode avaliar</h1>
       <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg hover:bg-gray-50 text-sm">Voltar</a>
     </div>
 
     <div class="bg-white rounded-xl shadow overflow-hidden">
-      {% if pending %}
+      {% if my_targets %}
         <table class="w-full text-sm">
           <thead class="bg-gray-100 text-gray-600 text-left">
-            <tr><th class="p-3">Avaliado</th><th class="p-3">Prazo</th><th class="p-3">Atribuído por</th><th class="p-3">Ações</th></tr>
+            <tr><th class="p-3">Avaliado</th><th class="p-3">Atribuído por</th><th class="p-3">Histórico</th><th class="p-3">Ações</th></tr>
           </thead>
           <tbody class="divide-y">
-            {% for a in pending %}
+            {% for a in my_targets %}
               <tr>
                 <td class="p-3 font-medium">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}</td>
-                <td class="p-3">{{ a.due_date|default:"—" }}</td>
                 <td class="p-3">{{ a.created_by.get_full_name|default:"—" }}</td>
-                <td class="p-3"><a href="{% url 'feedback:create_from_assignment' a.id %}" class="px-3 py-1.5 bg-indigo-600 text-white rounded">Aplicar</a></td>
+                <td class="p-3"><a href="{% url 'feedback:user_history' a.evaluatee.id %}" class="text-indigo-600 hover:underline">Ver histórico</a></td>
+                <td class="p-3"><a href="{% url 'feedback:create_from_assignment' a.id %}" class="px-3 py-1.5 bg-indigo-600 text-white rounded">Aplicar feedback</a></td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       {% else %}
-        <p class="p-6 text-gray-500">Nenhuma atribuição pendente.</p>
+        <p class="p-6 text-gray-500">Você ainda não foi designado como avaliador.</p>
       {% endif %}
     </div>
   </div>

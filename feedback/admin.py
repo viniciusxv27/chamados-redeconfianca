@@ -4,7 +4,7 @@ from .models import Feedback, FeedbackAssignment
 
 @admin.register(FeedbackAssignment)
 class FeedbackAssignmentAdmin(admin.ModelAdmin):
-    list_display = ('evaluator', 'evaluatee', 'status', 'due_date', 'created_at')
+    list_display = ('evaluator', 'evaluatee', 'status', 'created_at')
     list_filter = ('status',)
     search_fields = (
         'evaluator__first_name', 'evaluator__last_name', 'evaluator__email',

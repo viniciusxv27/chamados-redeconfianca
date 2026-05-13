@@ -36,21 +36,21 @@ def superadmin_required(view_func):
 @login_required
 def dashboard(request):
     user = request.user
-    pending = FeedbackAssignment.objects.filter(
-        evaluator=user, status='PENDING'
-    ).select_related('evaluatee').order_by('due_date', '-created_at')
+    my_targets = FeedbackAssignment.objects.filter(
+        evaluator=user, status='ACTIVE'
+    ).select_related('evaluatee').order_by('-created_at')
 
     given = Feedback.objects.filter(evaluator=user).select_related('evaluatee').order_by('-created_at')[:10]
     received = Feedback.objects.filter(evaluatee=user).select_related('evaluator').order_by('-created_at')[:10]
 
     stats = {
-        'pending_count': pending.count(),
+        'targets_count': my_targets.count(),
         'given_count': Feedback.objects.filter(evaluator=user).count(),
         'received_count': Feedback.objects.filter(evaluatee=user).count(),
     }
 
     context = {
-        'pending': pending,
+        'my_targets': my_targets,
         'given': given,
         'received': received,
         'stats': stats,
@@ -61,10 +61,10 @@ def dashboard(request):
 
 @login_required
 def my_pending(request):
-    pending = FeedbackAssignment.objects.filter(
-        evaluator=request.user, status='PENDING'
-    ).select_related('evaluatee').order_by('due_date', '-created_at')
-    return render(request, 'feedback/pending.html', {'pending': pending})
+    my_targets = FeedbackAssignment.objects.filter(
+        evaluator=request.user, status='ACTIVE'
+    ).select_related('evaluatee').order_by('-created_at')
+    return render(request, 'feedback/pending.html', {'my_targets': my_targets})
 
 
 @login_required
@@ -85,7 +85,7 @@ def create_feedback(request, assignment_id=None):
             evaluatee = get_object_or_404(User, pk=target_id)
             if not _is_superadmin(request.user):
                 has_assignment = FeedbackAssignment.objects.filter(
-                    evaluator=request.user, evaluatee=evaluatee, status='PENDING'
+                    evaluator=request.user, evaluatee=evaluatee, status='ACTIVE'
                 ).exists()
                 if not has_assignment:
                     return HttpResponseForbidden('Você não tem atribuição para avaliar este colaborador.')
@@ -104,10 +104,6 @@ def create_feedback(request, assignment_id=None):
             if not fb.nome_colaborador:
                 fb.nome_colaborador = evaluatee.get_full_name() or evaluatee.username
             fb.save()
-
-            if assignment and assignment.status == 'PENDING':
-                assignment.status = 'COMPLETED'
-                assignment.save(update_fields=['status', 'updated_at'])
 
             # Tenta gerar resumo IA imediatamente (silencioso em caso de falha).
             try:
@@ -263,14 +259,13 @@ def assign_view(request):
                 if not evaluatee:
                     continue
                 exists = FeedbackAssignment.objects.filter(
-                    evaluator=evaluator, evaluatee=evaluatee, status='PENDING'
+                    evaluator=evaluator, evaluatee=evaluatee, status='ACTIVE'
                 ).exists()
                 if exists:
                     continue
                 FeedbackAssignment.objects.create(
                     evaluator=evaluator,
                     evaluatee=evaluatee,
-                    due_date=form.cleaned_data.get('due_date'),
                     notes=form.cleaned_data.get('notes') or '',
                     created_by=request.user,
                 )
