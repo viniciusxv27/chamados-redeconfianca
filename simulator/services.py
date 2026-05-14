@@ -611,10 +611,16 @@ def build_group_values(meta: float, proj_a: float, proj_b: float) -> Tuple[float
 def get_business_days_info(reference_date: Optional[date] = None) -> Tuple[int, int]:
     """Retorna (dias_uteis_passados_ate_ontem, dias_uteis_totais_no_mes).
 
-    Considera apenas seg-sex (sem feriados específicos). Usa sempre D-1
-    (ontem) como corte — o dia atual ainda não conta porque os dados de
-    venda só estão completos no fechamento do dia anterior.
+    Considera seg-sex e exclui feriados nacionais brasileiros (lib `holidays`).
+    Usa sempre D-1 (ontem) como corte — o dia atual não conta porque os
+    dados de venda só ficam consolidados no fechamento do dia anterior.
     """
+    try:
+        import holidays as _holidays_lib
+        br_holidays = _holidays_lib.country_holidays('BR')
+    except Exception:
+        br_holidays = set()
+
     if reference_date is None:
         reference_date = timezone.localdate()
     cutoff = reference_date - timedelta(days=1)
@@ -625,10 +631,13 @@ def get_business_days_info(reference_date: Optional[date] = None) -> Tuple[int, 
     passed_du = 0
     for day in range(1, days_in_month + 1):
         d = date(year, month, day)
-        if d.weekday() < 5:  # 0=seg, 4=sex
-            total_du += 1
-            if d <= cutoff:
-                passed_du += 1
+        if d.weekday() >= 5:  # sáb/dom
+            continue
+        if d in br_holidays:
+            continue
+        total_du += 1
+        if d <= cutoff:
+            passed_du += 1
     return passed_du, total_du
 
 

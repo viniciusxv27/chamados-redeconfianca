@@ -22,6 +22,7 @@ django-debug-toolbar==4.4.6
 
 # Date and Time utilities
 python-dateutil==2.9.0
+holidays==0.96
 
 # HTTP Requests
 requests==2.32.3
