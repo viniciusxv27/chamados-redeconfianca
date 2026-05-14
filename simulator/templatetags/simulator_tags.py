@@ -56,6 +56,15 @@ def get_dict_item(dict_obj, key):
     return dict_obj.get(key)
 
 
+@register.filter
+def get_list_item(seq, index):
+    """Get item by index from list/tuple: seq|get_list_item:idx"""
+    try:
+        return seq[int(index)]
+    except (TypeError, IndexError, ValueError):
+        return None
+
+
 def _to_decimal(value):
     try:
         if value is None or value == '':

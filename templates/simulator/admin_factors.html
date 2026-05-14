@@ -79,25 +79,29 @@
               <span class="text-xs text-gray-500 font-mono">{{ spec.cell_range }}</span>
             </div>
             <div class="overflow-x-auto p-3">
-              <table class="text-sm">
+              <table class="text-sm w-full">
                 <thead>
-                  <tr class="text-xs text-gray-600">
-                    <th class="px-2 py-1 text-left font-semibold">Linha</th>
+                  <tr class="text-xs text-gray-600 bg-gray-50">
+                    <th class="px-2 py-1 text-left font-semibold">#</th>
                     {% for col_idx in rows.0 %}
-                    <th class="px-2 py-1 text-right font-semibold">Col {{ forloop.counter }}</th>
+                    <th class="px-2 py-1 text-right font-semibold whitespace-nowrap">
+                      {% with col_label=spec.columns|get_list_item:forloop.counter0 %}
+                        {% if col_label %}{{ col_label }}{% else %}Col {{ forloop.counter }}{% endif %}
+                      {% endwith %}
+                    </th>
                     {% endfor %}
                   </tr>
                 </thead>
                 <tbody>
                   {% for row in rows %}
-                  <tr class="border-t border-gray-100">
+                  <tr class="border-t border-gray-100 hover:bg-orange-50">
                     <td class="px-2 py-1 text-xs text-gray-500 font-mono">{{ forloop.counter }}</td>
                     {% for cell in row %}
                     <td class="px-1 py-1">
                       <input type="number" step="0.0001"
                              name="range__{{ role }}__{{ spec.key }}__{{ forloop.parentloop.counter0 }}__{{ forloop.counter0 }}"
                              value="{{ cell|raw_value }}"
-                             class="w-24 px-2 py-1 border border-gray-300 rounded text-right text-sm">
+                             class="w-28 px-2 py-1 border border-gray-300 rounded text-right text-sm focus:border-primary focus:ring-1 focus:ring-primary">
                     </td>
                     {% endfor %}
                   </tr>
