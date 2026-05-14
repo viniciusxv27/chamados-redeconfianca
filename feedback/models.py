@@ -31,6 +31,11 @@ class FeedbackAssignment(models.Model):
     )
     notes = models.TextField(blank=True, verbose_name='Observações da atribuição')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
+    monthly = models.BooleanField(
+        default=False,
+        verbose_name='Fazer todo mês',
+        help_text='Se marcado, o avaliador será lembrado todo mês (10 dias antes do fim) para aplicar este feedback.',
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -193,3 +198,23 @@ class Feedback(models.Model):
         if prev_avg is None or cur_avg is None:
             return None
         return round(cur_avg - prev_avg, 2)
+
+
+class FeedbackReminderDismissal(models.Model):
+    """Registra que um lembrete específico foi dispensado pelo usuário (para não exibir o popup novamente)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='feedback_reminder_dismissals',
+    )
+    key = models.CharField(max_length=120, db_index=True)
+    dismissed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'key')
+        verbose_name = 'Lembrete dispensado'
+        verbose_name_plural = 'Lembretes dispensados'
+
+    def __str__(self):
+        return f'{self.user} dispensou {self.key}'

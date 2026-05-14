@@ -57,6 +57,11 @@ class AssignmentForm(forms.Form):
         widget=forms.HiddenInput(),
         help_text='IDs dos avaliados separados por vírgula.',
     )
+    monthly = forms.BooleanField(
+        required=False,
+        label='Fazer todo mês',
+        help_text='Lembrete automático 10 dias antes do fim do mês se ainda não tiver feedback no mês atual.',
+    )
     notes = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={'rows': 2, 'class': 'w-full px-4 py-2 border border-gray-300 rounded-lg'}),

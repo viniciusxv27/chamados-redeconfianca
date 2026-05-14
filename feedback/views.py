@@ -12,7 +12,8 @@ from users.models import User
 
 from .ai import generate_ai_summary
 from .forms import AssignmentForm, FeedbackForm
-from .models import Feedback, FeedbackAssignment
+from .models import Feedback, FeedbackAssignment, FeedbackReminderDismissal
+from .reminders import get_pending_reminders
 
 
 def _is_superadmin(user) -> bool:
@@ -267,6 +268,7 @@ def assign_view(request):
                     evaluator=evaluator,
                     evaluatee=evaluatee,
                     notes=form.cleaned_data.get('notes') or '',
+                    monthly=form.cleaned_data.get('monthly') or False,
                     created_by=request.user,
                 )
                 created += 1
@@ -307,3 +309,19 @@ def api_search_users(request):
             for u in qs
         ]
     })
+
+
+@login_required
+def api_reminders(request):
+    reminders = get_pending_reminders(request.user)
+    return JsonResponse({'reminders': reminders, 'count': len(reminders)})
+
+
+@login_required
+@require_POST
+def api_dismiss_reminder(request):
+    key = (request.POST.get('key') or '').strip()
+    if not key:
+        return JsonResponse({'ok': False, 'error': 'key requerido'}, status=400)
+    FeedbackReminderDismissal.objects.get_or_create(user=request.user, key=key)
+    return JsonResponse({'ok': True})

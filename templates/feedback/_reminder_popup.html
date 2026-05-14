@@ -1,0 +1,108 @@
+{% load static %}
+{% if user.is_authenticated %}
+<div id="feedback-reminder-modal" class="hidden fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3 text-white">
+        <i class="fas fa-bell text-xl"></i>
+        <h3 class="text-lg font-semibold">Lembretes de Feedback</h3>
+      </div>
+      <button id="feedback-reminder-close" class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+    </div>
+    <div class="px-6 py-4">
+      <p class="text-sm text-gray-600 mb-3">Você tem feedbacks pendentes para aplicar:</p>
+      <ul id="feedback-reminder-list" class="space-y-3 max-h-80 overflow-y-auto"></ul>
+    </div>
+    <div class="px-6 py-3 bg-gray-50 flex justify-between items-center">
+      <button id="feedback-reminder-dismiss-all" class="text-sm text-gray-500 hover:text-gray-700">Dispensar todos</button>
+      <button id="feedback-reminder-later" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-100">Lembrar depois</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.__feedbackReminderInit) return;
+  window.__feedbackReminderInit = true;
+
+  const SESSION_KEY = 'feedback_reminder_shown_session';
+  const csrfToken = (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value
+    || (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+  async function fetchReminders() {
+    try {
+      const r = await fetch('{% url "feedback:api_reminders" %}', { credentials: 'same-origin' });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (e) { return null; }
+  }
+
+  async function dismiss(key) {
+    try {
+      const fd = new FormData();
+      fd.append('key', key);
+      await fetch('{% url "feedback:api_dismiss_reminder" %}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: fd,
+      });
+    } catch (e) {}
+  }
+
+  function render(reminders) {
+    const list = document.getElementById('feedback-reminder-list');
+    if (!list) return;
+    list.innerHTML = '';
+    reminders.forEach(rem => {
+      const li = document.createElement('li');
+      li.className = 'p-3 border rounded-lg flex items-start justify-between gap-3 ' +
+        (rem.type === 'experience_window' ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-200');
+      li.innerHTML = `
+        <div class="flex-1">
+          <p class="text-sm font-medium text-gray-800">${rem.evaluatee_name}</p>
+          <p class="text-xs text-gray-600">${rem.message}</p>
+        </div>
+        <div class="flex flex-col gap-1">
+          <a href="${rem.action_url}" class="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 text-center">Aplicar</a>
+          <button data-key="${rem.key}" class="dismiss-btn text-xs text-gray-500 hover:text-red-600">Dispensar</button>
+        </div>`;
+      list.appendChild(li);
+    });
+    list.querySelectorAll('.dismiss-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await dismiss(btn.dataset.key);
+        btn.closest('li').remove();
+        if (!list.children.length) hide();
+      });
+    });
+  }
+
+  function show() {
+    const m = document.getElementById('feedback-reminder-modal');
+    if (m) m.classList.remove('hidden');
+  }
+  function hide() {
+    const m = document.getElementById('feedback-reminder-modal');
+    if (m) m.classList.add('hidden');
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (sessionStorage.getItem(SESSION_KEY)) return;
+    const data = await fetchReminders();
+    if (!data || !data.reminders || !data.reminders.length) return;
+    render(data.reminders);
+    show();
+    sessionStorage.setItem(SESSION_KEY, '1');
+
+    document.getElementById('feedback-reminder-close').addEventListener('click', hide);
+    document.getElementById('feedback-reminder-later').addEventListener('click', hide);
+    document.getElementById('feedback-reminder-dismiss-all').addEventListener('click', async () => {
+      const items = document.querySelectorAll('#feedback-reminder-list .dismiss-btn');
+      for (const btn of items) await dismiss(btn.dataset.key);
+      hide();
+    });
+  });
+})();
+</script>
+{% endif %}

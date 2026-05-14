@@ -20,12 +20,13 @@
         <div class="p-4 border-b bg-gray-100"><h2 class="font-semibold">Atribuições</h2></div>
         {% if assignments %}
           <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-600 text-left"><tr><th class="p-3">Avaliador</th><th class="p-3">Avaliado</th><th class="p-3">Status</th><th class="p-3"></th></tr></thead>
+            <thead class="bg-gray-50 text-gray-600 text-left"><tr><th class="p-3">Avaliador</th><th class="p-3">Avaliado</th><th class="p-3">Recorrência</th><th class="p-3">Status</th><th class="p-3"></th></tr></thead>
             <tbody class="divide-y">
               {% for a in assignments %}
               <tr>
                 <td class="p-3">{{ a.evaluator.get_full_name|default:a.evaluator.username }}</td>
-                <td class="p-3">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}</td>
+                <td class="p-3">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}{% if a.evaluatee.has_experience_window %} <span class="ml-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">Janela exp.</span>{% endif %}</td>
+                <td class="p-3">{% if a.monthly %}<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs"><i class="fas fa-calendar-alt mr-1"></i>Mensal</span>{% else %}<span class="text-gray-400 text-xs">Eventual</span>{% endif %}</td>
                 <td class="p-3"><span class="px-2 py-1 rounded text-xs {% if a.status == 'ACTIVE' %}bg-emerald-100 text-emerald-800{% else %}bg-gray-100 text-gray-700{% endif %}">{{ a.get_status_display }}</span></td>
                 <td class="p-3"><form method="post" action="{% url 'feedback:delete_assignment' a.id %}" onsubmit="return confirm('Excluir atribuição?');">{% csrf_token %}<button class="text-red-600 hover:underline text-sm">Excluir</button></form></td>
               </tr>

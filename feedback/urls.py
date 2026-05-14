@@ -19,4 +19,6 @@ urlpatterns = [
 
     # APIs
     path('api/usuarios/', views.api_search_users, name='api_search_users'),
+    path('api/reminders/', views.api_reminders, name='api_reminders'),
+    path('api/reminders/dismiss/', views.api_dismiss_reminder, name='api_dismiss_reminder'),
 ]
