@@ -129,9 +129,14 @@ def get_realized_sales_from_mysql(
     except ImportError:
         return dict(EMPTY_RESULT)
 
+    from datetime import timedelta
     now = timezone.now()
     year = year or now.year
     month = month or now.month
+    # Corte D-1: considera apenas vendas até ontem (dados do dia atual
+    # ainda não estão fechados/consolidados na origem).
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
 
     try:
         conn = pymysql.connect(**_mysql_config())
@@ -153,8 +158,8 @@ def get_realized_sales_from_mysql(
 
             vendor_norm = _normalize(vendor)
 
-            base_where = ['YEAR(DATA_SYS) = %s', 'MONTH(DATA_SYS) = %s']
-            base_params: list = [year, month]
+            base_where = ['YEAR(DATA_SYS) = %s', 'MONTH(DATA_SYS) = %s', 'DATE(DATA_SYS) <= %s']
+            base_params: list = [year, month, yesterday]
 
             if vendor_norm:
                 base_where.append('UPPER({col}) = %s')

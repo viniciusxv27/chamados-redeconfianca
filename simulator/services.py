@@ -609,13 +609,15 @@ def build_group_values(meta: float, proj_a: float, proj_b: float) -> Tuple[float
 
 
 def get_business_days_info(reference_date: Optional[date] = None) -> Tuple[int, int]:
-    """Retorna (dias_uteis_passados_ate_hoje, dias_uteis_totais_no_mes).
+    """Retorna (dias_uteis_passados_ate_ontem, dias_uteis_totais_no_mes).
 
-    Considera apenas seg-sex (sem feriados específicos). O dia atual conta
-    como passado se já for um dia útil.
+    Considera apenas seg-sex (sem feriados específicos). Usa sempre D-1
+    (ontem) como corte — o dia atual ainda não conta porque os dados de
+    venda só estão completos no fechamento do dia anterior.
     """
     if reference_date is None:
         reference_date = timezone.localdate()
+    cutoff = reference_date - timedelta(days=1)
     year, month = reference_date.year, reference_date.month
     _, days_in_month = calendar.monthrange(year, month)
 
@@ -625,7 +627,7 @@ def get_business_days_info(reference_date: Optional[date] = None) -> Tuple[int, 
         d = date(year, month, day)
         if d.weekday() < 5:  # 0=seg, 4=sex
             total_du += 1
-            if d <= reference_date:
+            if d <= cutoff:
                 passed_du += 1
     return passed_du, total_du
 
