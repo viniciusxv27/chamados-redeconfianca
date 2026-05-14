@@ -608,24 +608,57 @@ def build_group_values(meta: float, proj_a: float, proj_b: float) -> Tuple[float
     return meta, proj_a, proj_b, attainment
 
 
+def _easter_sunday(year: int) -> date:
+    """Calcula o domingo de Páscoa (algoritmo de Meeus/Jones/Butcher)."""
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def _br_national_holidays(year: int) -> set:
+    """Feriados nacionais brasileiros (fixos + móveis baseados na Páscoa)."""
+    easter = _easter_sunday(year)
+    return {
+        date(year, 1, 1),   # Confraternização Universal
+        easter - timedelta(days=48),  # Carnaval (segunda)
+        easter - timedelta(days=47),  # Carnaval (terça)
+        easter - timedelta(days=2),   # Sexta-feira Santa
+        date(year, 4, 21),  # Tiradentes
+        date(year, 5, 1),   # Dia do Trabalho
+        easter + timedelta(days=60),  # Corpus Christi
+        date(year, 9, 7),   # Independência
+        date(year, 10, 12), # N. S. Aparecida
+        date(year, 11, 2),  # Finados
+        date(year, 11, 15), # Proclamação da República
+        date(year, 12, 25), # Natal
+    }
+
+
 def get_business_days_info(reference_date: Optional[date] = None) -> Tuple[int, int]:
     """Retorna (dias_uteis_passados_ate_ontem, dias_uteis_totais_no_mes).
 
-    Considera seg-sex e exclui feriados nacionais brasileiros (lib `holidays`).
+    Considera seg-sex e exclui feriados nacionais brasileiros (fixos + móveis).
     Usa sempre D-1 (ontem) como corte — o dia atual não conta porque os
     dados de venda só ficam consolidados no fechamento do dia anterior.
     """
-    try:
-        import holidays as _holidays_lib
-        br_holidays = _holidays_lib.country_holidays('BR')
-    except Exception:
-        br_holidays = set()
-
     if reference_date is None:
         reference_date = timezone.localdate()
     cutoff = reference_date - timedelta(days=1)
     year, month = reference_date.year, reference_date.month
     _, days_in_month = calendar.monthrange(year, month)
+    br_holidays = _br_national_holidays(year)
 
     total_du = 0
     passed_du = 0
