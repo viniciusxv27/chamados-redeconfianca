@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from datetime import date, timedelta
+import calendar
 import logging
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
@@ -7,6 +9,7 @@ import pandas as pd
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.utils import timezone
 from openpyxl import load_workbook
 
 from communications.models import CommunicationGroup
@@ -605,6 +608,38 @@ def build_group_values(meta: float, proj_a: float, proj_b: float) -> Tuple[float
     return meta, proj_a, proj_b, attainment
 
 
+def get_business_days_info(reference_date: Optional[date] = None) -> Tuple[int, int]:
+    """Retorna (dias_uteis_passados_ate_hoje, dias_uteis_totais_no_mes).
+
+    Considera apenas seg-sex (sem feriados específicos). O dia atual conta
+    como passado se já for um dia útil.
+    """
+    if reference_date is None:
+        reference_date = timezone.localdate()
+    year, month = reference_date.year, reference_date.month
+    _, days_in_month = calendar.monthrange(year, month)
+
+    total_du = 0
+    passed_du = 0
+    for day in range(1, days_in_month + 1):
+        d = date(year, month, day)
+        if d.weekday() < 5:  # 0=seg, 4=sex
+            total_du += 1
+            if d <= reference_date:
+                passed_du += 1
+    return passed_du, total_du
+
+
+def project_from_realized(realized_value: float, du_passed: int, du_total: int) -> float:
+    """Projeta valor mensal: realizado / DU_passados * DU_totais.
+
+    Se ainda não houve dia útil no mês, retorna o próprio realizado.
+    """
+    if du_passed <= 0:
+        return float(realized_value or 0.0)
+    return float(realized_value or 0.0) / du_passed * du_total
+
+
 def _get_sim_input(simulator_inputs: Optional[Dict[str, Any]], pillar: str, field: str, default: float = 0.0) -> float:
     """Lê um valor enviado pelo formulário 'Simulador' para um pilar."""
     if not simulator_inputs:
@@ -909,22 +944,29 @@ def compute_consultor_simulation(
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
         fixa_revenue = ind_values.get('fixa', 0.0)
     else:  # VIEW_PROJECAO
+        # Projeção dinâmica: pega o realizado do MySQL e projeta pelo DU.
+        # Fórmula: projeção = realizado / DU_passados_até_hoje * DU_totais_do_mês
+        mysql_real = get_realized_sales_from_mysql(vendor=user_name)
+        du_passed, du_total = get_business_days_info()
         ind_values = {
-            'movel': to_float(proj_row.get('PROJ_MOVEL')),
-            'fixa': to_float(proj_row.get('PROJ_FIXA')),
-            'smartphones': to_float(proj_row.get('PROJ_APARELHO')),
-            'eletronicos_a': to_float(proj_row.get('PROJ_ELETRO_A')),
-            'eletronicos_b': to_float(proj_row.get('PROJ_ELETRO_B')),
-            'essenciais_a': to_float(proj_row.get('PROJ_ESSEN_A')),
-            'essenciais_b': to_float(proj_row.get('PROJ_ESSEN_B')),
-            'seguros': to_float(proj_row.get('PROJ_SEGURO')),
-            'sva': to_float(proj_row.get('PROJ_SVA')),
+            'movel': project_from_realized(mysql_real.get('movel', 0.0), du_passed, du_total),
+            'fixa': project_from_realized(mysql_real.get('fixa', 0.0), du_passed, du_total),
+            'smartphones': project_from_realized(mysql_real.get('smartphones', 0.0), du_passed, du_total),
+            # MySQL não separa A/B: todo o valor projetado vai em _a, _b = 0.
+            'eletronicos_a': project_from_realized(mysql_real.get('eletronicos', 0.0), du_passed, du_total),
+            'eletronicos_b': 0.0,
+            'essenciais_a': project_from_realized(mysql_real.get('essenciais', 0.0), du_passed, du_total),
+            'essenciais_b': 0.0,
+            'seguros': project_from_realized(mysql_real.get('seguros', 0.0), du_passed, du_total),
+            'sva': project_from_realized(mysql_real.get('sva', 0.0), du_passed, du_total),
         }
-        fixa_quantity = to_float(proj_row.get('PROJ_BL'))
+        fixa_quantity = project_from_realized(mysql_real.get('fixa_qty', 0.0), du_passed, du_total)
         fixa_revenue = ind_values['fixa']
 
     meta_movel, proj_movel, att_movel = build_pillar_values(base_meta['movel'], ind_values['movel'])
     meta_fixa, proj_fixa, att_fixa = build_pillar_values(base_meta['fixa'], ind_values['fixa'])
+    # Fixa: o atingimento é calculado pela quantidade vendida ÷ meta (que também está em quantidade).
+    att_fixa = (fixa_quantity / meta_fixa) if meta_fixa else 0.0
     meta_smart, proj_smart, att_smart = build_pillar_values(base_meta['smartphones'], ind_values['smartphones'])
     meta_eletro, proj_eletro_a, proj_eletro_b, att_eletro = build_group_values(
         base_meta['eletronicos'], ind_values['eletronicos_a'], ind_values['eletronicos_b'],
@@ -1248,20 +1290,23 @@ def compute_gerente_simulation(
             if override is not None:
                 meta_map[key] = override
     else:
+        # Projeção dinâmica do PDV: realizado MySQL × DU.
+        mysql_pdv = get_realized_sales_from_mysql(pdv=pdv)
+        du_passed, du_total = get_business_days_info()
         proj_map = {
-            'movel': sumifs(projection, 'PROJ_MOVEL', 'PDV', pdv),
-            'fixa': sumifs(projection, 'PROJ_FIXA', 'PDV', pdv),
-            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'PDV', pdv),
-            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv),
-            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv),
-            'seguros': sumifs(projection, 'PROJ_SEGURO', 'PDV', pdv),
-            'sva': sumifs(projection, 'PROJ_SVA', 'PDV', pdv),
+            'movel': project_from_realized(mysql_pdv.get('movel', 0.0), du_passed, du_total),
+            'fixa': project_from_realized(mysql_pdv.get('fixa', 0.0), du_passed, du_total),
+            'smartphones': project_from_realized(mysql_pdv.get('smartphones', 0.0), du_passed, du_total),
+            'eletronicos': project_from_realized(mysql_pdv.get('eletronicos', 0.0), du_passed, du_total),
+            'essenciais': project_from_realized(mysql_pdv.get('essenciais', 0.0), du_passed, du_total),
+            'seguros': project_from_realized(mysql_pdv.get('seguros', 0.0), du_passed, du_total),
+            'sva': project_from_realized(mysql_pdv.get('sva', 0.0), du_passed, du_total),
         }
-        eletro_a_pdv = sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv)
-        eletro_b_pdv = sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv)
-        ess_a_pdv = sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv)
-        ess_b_pdv = sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv)
-        fixa_quantity = sumifs(projection, 'PROJ_BL', 'PDV', pdv) if 'PROJ_BL' in projection.columns else 0.0
+        eletro_a_pdv = proj_map['eletronicos']
+        eletro_b_pdv = 0.0
+        ess_a_pdv = proj_map['essenciais']
+        ess_b_pdv = 0.0
+        fixa_quantity = project_from_realized(mysql_pdv.get('fixa_qty', 0.0), du_passed, du_total)
         fixa_revenue = proj_map['fixa']
 
     coord_meta = {
@@ -1301,6 +1346,8 @@ def compute_gerente_simulation(
         key: (proj_map[key] / meta_map[key] if meta_map[key] else 0.0)
         for key in meta_map
     }
+    # Fixa: atingimento por quantidade (qty_vendida ÷ meta_qty).
+    att_map['fixa'] = (fixa_quantity / meta_map['fixa']) if meta_map['fixa'] else 0.0
 
     meta_config = factor_data.get('meta', {})
     ranges = factor_data.get('ranges', {})
@@ -1539,11 +1586,32 @@ def compute_coordenador_simulation(
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
             if override is not None:
                 meta_map[key] = override
+    else:
+        # VIEW_PROJECAO: projeção dinâmica = realizado MySQL / DU_passados * DU_totais.
+        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        du_passed, du_total = get_business_days_info()
+        proj_map = {
+            'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed, du_total),
+            'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed, du_total),
+            'smartphones': project_from_realized(mysql_coord.get('smartphones', 0.0), du_passed, du_total),
+            'eletronicos': project_from_realized(mysql_coord.get('eletronicos', 0.0), du_passed, du_total),
+            'essenciais': project_from_realized(mysql_coord.get('essenciais', 0.0), du_passed, du_total),
+            'seguros': project_from_realized(mysql_coord.get('seguros', 0.0), du_passed, du_total),
+            'sva': project_from_realized(mysql_coord.get('sva', 0.0), du_passed, du_total),
+        }
+        eletro_a = proj_map['eletronicos']
+        eletro_b = 0.0
+        ess_a = proj_map['essenciais']
+        ess_b = 0.0
+        fixa_quantity = project_from_realized(mysql_coord.get('fixa_qty', 0.0), du_passed, du_total)
+        fixa_revenue = proj_map['fixa']
 
     att_map = {
         key: (proj_map[key] / meta_map[key] if meta_map[key] else 0.0)
         for key in meta_map
     }
+    # Fixa: atingimento por quantidade (qty_vendida ÷ meta_qty).
+    att_map['fixa'] = (fixa_quantity / meta_map['fixa']) if meta_map['fixa'] else 0.0
 
     meta_config = factor_data.get('meta', {})
     ranges = factor_data.get('ranges', {})
