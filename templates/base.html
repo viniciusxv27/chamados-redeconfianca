@@ -390,6 +390,48 @@
                                         </li>
                                     </ul>
                                 </li>
+
+                                <li class="pt-2">
+                                    <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
+                                         onclick="toggleSubmenu('gestao-feedback-menu')" title="Feedback">
+                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold flex-1">Feedback</span>
+                                        <i class="fas fa-chevron-down text-gray-500 submenu-toggle transition-transform duration-300 text-[10px]" id="gestao-feedback-menu-icon"></i>
+                                    </div>
+                                </li>
+                                <li class="ml-3 submenu-content hidden" id="gestao-feedback-menu">
+                                    <ul class="space-y-1">
+                                        <li>
+                                            <a href="{% url 'feedback:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Painel de Feedback">
+                                                <i class="fas fa-comments text-indigo-400 flex-shrink-0"></i>
+                                                <span>Painel</span>
+                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="{% url 'feedback:my_pending' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Pessoas que posso avaliar">
+                                                <i class="fas fa-user-check text-blue-400 flex-shrink-0"></i>
+                                                <span>Avaliar Pessoas</span>
+                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                            </a>
+                                        </li>
+                                        {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
+                                            <li>
+                                                <a href="{% url 'feedback:manage_all' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Feedbacks">
+                                                    <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
+                                                    <span>Gerenciar</span>
+                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a href="{% url 'feedback:assign' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Atribuir Avaliadores">
+                                                    <i class="fas fa-user-plus text-green-400 flex-shrink-0"></i>
+                                                    <span>Atribuir</span>
+                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                                </a>
+                                            </li>
+                                        {% endif %}
+                                    </ul>
+                                </li>
                             </ul>
                         </li>
 
@@ -1499,6 +1541,7 @@
                 'gestao-checklists-menu',
                 'gestao-tarefas-menu',
                 'gestao-suprimentos-menu',
+                'gestao-feedback-menu',
                 'trainings-menu',
                 'tickets-menu',
                 'projects-menu',
