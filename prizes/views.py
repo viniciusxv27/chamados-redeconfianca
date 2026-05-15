@@ -21,6 +21,7 @@ def marketplace_view(request):
     # Filtros
     category_filter = request.GET.get('category')
     search = request.GET.get('search', '')
+    ordering = request.GET.get('ordering', 'relevance')
     
     prizes = Prize.objects.filter(is_active=True)
     
@@ -30,8 +31,15 @@ def marketplace_view(request):
     if search:
         prizes = prizes.filter(name__icontains=search)
     
-    # Ordenação: produtos com desconto primeiro, depois por prioridade
-    prizes = prizes.order_by('-has_discount', '-priority', 'name')
+    # Ordenação
+    ordering_map = {
+        'value_asc': ('value_cs', 'name'),
+        'value_desc': ('-value_cs', 'name'),
+        'recent': ('-created_at',),
+        'relevance': ('-has_discount', '-priority', 'name'),
+    }
+    order_fields = ordering_map.get(ordering, ordering_map['relevance'])
+    prizes = prizes.order_by(*order_fields)
     
     # Paginação
     paginator = Paginator(prizes, 12)
@@ -44,6 +52,7 @@ def marketplace_view(request):
         'user_balance': request.user.balance_cs,
         'current_category': category_filter,
         'search': search,
+        'current_ordering': ordering,
     }
     return render(request, 'prizes/marketplace.html', context)
 
