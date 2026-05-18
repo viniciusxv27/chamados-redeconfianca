@@ -549,13 +549,54 @@ def get_coordinator_sectors(user: User) -> List[Sector]:
     return list(Sector.objects.filter(name__icontains='loja'))
 
 
+def _group_member_ids(name_filter: str, exact: bool = False) -> List[int]:
+    """Retorna ids dos membros de um CommunicationGroup pelo nome."""
+    qs = CommunicationGroup.objects.all()
+    if exact:
+        qs = qs.filter(name__iexact=name_filter)
+    else:
+        qs = qs.filter(name__icontains=name_filter)
+    group = qs.first()
+    if not group:
+        return []
+    return list(group.members.values_list('id', flat=True))
+
+
+def get_simulator_excluded_user_ids() -> set:
+    """IDs de usuários que devem ser ocultados na seleção do /simulator:
+    - PADRÃO que pertencem aos grupos ADMINS ou RECEPCIONISTAS
+    - Não-PADRÃO que pertencem aos grupos GERENTES ou COORDENADORES
+    """
+    admin_ids = set(_group_member_ids('ADMINS', exact=True))
+    recep_ids = set(_group_member_ids('RECEPCIONISTAS'))
+    gerente_ids = set(_group_member_ids('GERENTES'))
+    coord_ids = set(_group_member_ids('COORDENADORES'))
+
+    excluded: set = set()
+    # PADRÃO em ADMINS/RECEPCIONISTAS
+    padrao_in_admin_or_recep = User.objects.filter(
+        hierarchy='PADRAO', id__in=(admin_ids | recep_ids)
+    ).values_list('id', flat=True)
+    excluded.update(padrao_in_admin_or_recep)
+    # Não-PADRÃO em GERENTES/COORDENADORES
+    non_padrao_in_ger_or_coord = User.objects.filter(
+        id__in=(gerente_ids | coord_ids)
+    ).exclude(hierarchy='PADRAO').values_list('id', flat=True)
+    excluded.update(non_padrao_in_ger_or_coord)
+    return excluded
+
+
 def get_all_consultors() -> List[User]:
     gerente_group = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
     gerente_ids = []
     if gerente_group:
         gerente_ids = list(gerente_group.members.values_list('id', flat=True))
+    excluded = get_simulator_excluded_user_ids()
     return list(
-        User.objects.filter(hierarchy='PADRAO', is_active=True).exclude(id__in=gerente_ids).order_by('first_name', 'last_name')
+        User.objects.filter(hierarchy='PADRAO', is_active=True)
+        .exclude(id__in=gerente_ids)
+        .exclude(id__in=excluded)
+        .order_by('first_name', 'last_name')
     )
 
 
@@ -563,12 +604,18 @@ def get_all_gerentes() -> List[User]:
     gerente_group = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
     if not gerente_group:
         return []
-    return list(gerente_group.members.filter(is_active=True).order_by('first_name', 'last_name'))
+    excluded = get_simulator_excluded_user_ids()
+    return list(
+        gerente_group.members.filter(is_active=True)
+        .exclude(id__in=excluded)
+        .order_by('first_name', 'last_name')
+    )
 
 
 def get_all_coordinators() -> List[User]:
+    excluded = get_simulator_excluded_user_ids()
     coordinators = []
-    for user in User.objects.filter(hierarchy='SUPERVISOR', is_active=True):
+    for user in User.objects.filter(hierarchy='SUPERVISOR', is_active=True).exclude(id__in=excluded):
         primary_sector = getattr(user, 'primary_sector', None)
         sector_name = (primary_sector.name if primary_sector else '').lower()
         if 'comercial' in sector_name:

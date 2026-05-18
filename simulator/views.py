@@ -25,6 +25,7 @@ from .services import (
     get_coordinator_sectors,
     get_factor_set,
     get_hunter_levels_from_request,
+    get_simulator_excluded_user_ids,
     get_user_role,
     compute_consultor_simulation,
     compute_gerente_simulation,
@@ -40,16 +41,22 @@ def is_superadmin(user: User) -> bool:
 def get_sector_users(user: User) -> list[User]:
     if not user.sector:
         return []
+    excluded = get_simulator_excluded_user_ids()
     return list(
-        User.objects.filter(is_active=True, sector=user.sector).order_by('first_name', 'last_name')
+        User.objects.filter(is_active=True, sector=user.sector)
+        .exclude(id__in=excluded)
+        .order_by('first_name', 'last_name')
     )
 
 
 def get_sector_consultors(user: User) -> list[User]:
     if not user.sector:
         return []
+    excluded = get_simulator_excluded_user_ids()
     return list(
-        User.objects.filter(is_active=True, sector=user.sector, hierarchy='PADRAO').order_by('first_name', 'last_name')
+        User.objects.filter(is_active=True, sector=user.sector, hierarchy='PADRAO')
+        .exclude(id__in=excluded)
+        .order_by('first_name', 'last_name')
     )
 
 
@@ -95,7 +102,12 @@ def simulator_dashboard(request):
             show_summary_only = True
     elif role == ROLE_COORDENADOR:
         sectors = get_coordinator_sectors(current_user)
-        users_qs = User.objects.filter(is_active=True, sector__in=sectors).order_by('first_name', 'last_name')
+        excluded = get_simulator_excluded_user_ids()
+        users_qs = (
+            User.objects.filter(is_active=True, sector__in=sectors)
+            .exclude(id__in=excluded)
+            .order_by('first_name', 'last_name')
+        )
         available_targets = [
             {'id': user.id, 'label': user.get_full_name() or user.email, 'role': get_user_role(user)}
             for user in users_qs
