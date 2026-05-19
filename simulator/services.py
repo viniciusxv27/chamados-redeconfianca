@@ -527,6 +527,11 @@ def get_user_role(user: User) -> str:
     if user.is_superuser or getattr(user, 'hierarchy', None) == 'SUPERADMIN':
         return ROLE_SUPERADMIN
 
+    # Grupo COORDENADORES tem prioridade (membros podem ter qualquer hierarquia).
+    coord_group = CommunicationGroup.objects.filter(name__icontains='COORDENADORES').first()
+    if coord_group and coord_group.members.filter(id=user.id).exists():
+        return ROLE_COORDENADOR
+
     if getattr(user, 'hierarchy', None) == 'SUPERVISOR':
         primary_sector = getattr(user, 'primary_sector', None)
         sector_name = (primary_sector.name if primary_sector else '').lower()
@@ -565,24 +570,15 @@ def _group_member_ids(name_filter: str, exact: bool = False) -> List[int]:
 def get_simulator_excluded_user_ids() -> set:
     """IDs de usuários que devem ser ocultados na seleção do /simulator:
     - PADRÃO que pertencem aos grupos ADMINS ou RECEPCIONISTAS
-    - Não-PADRÃO que pertencem aos grupos GERENTES ou COORDENADORES
     """
     admin_ids = set(_group_member_ids('ADMINS', exact=True))
     recep_ids = set(_group_member_ids('RECEPCIONISTAS'))
-    gerente_ids = set(_group_member_ids('GERENTES'))
-    coord_ids = set(_group_member_ids('COORDENADORES'))
 
     excluded: set = set()
-    # PADRÃO em ADMINS/RECEPCIONISTAS
     padrao_in_admin_or_recep = User.objects.filter(
         hierarchy='PADRAO', id__in=(admin_ids | recep_ids)
     ).values_list('id', flat=True)
     excluded.update(padrao_in_admin_or_recep)
-    # Não-PADRÃO em GERENTES/COORDENADORES
-    non_padrao_in_ger_or_coord = User.objects.filter(
-        id__in=(gerente_ids | coord_ids)
-    ).exclude(hierarchy='PADRAO').values_list('id', flat=True)
-    excluded.update(non_padrao_in_ger_or_coord)
     return excluded
 
 
@@ -591,10 +587,15 @@ def get_all_consultors() -> List[User]:
     gerente_ids = []
     if gerente_group:
         gerente_ids = list(gerente_group.members.values_list('id', flat=True))
+    coord_group = CommunicationGroup.objects.filter(name__icontains='COORDENADORES').first()
+    coord_ids = []
+    if coord_group:
+        coord_ids = list(coord_group.members.values_list('id', flat=True))
     excluded = get_simulator_excluded_user_ids()
     return list(
         User.objects.filter(hierarchy='PADRAO', is_active=True)
         .exclude(id__in=gerente_ids)
+        .exclude(id__in=coord_ids)
         .exclude(id__in=excluded)
         .order_by('first_name', 'last_name')
     )
@@ -604,23 +605,30 @@ def get_all_gerentes() -> List[User]:
     gerente_group = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
     if not gerente_group:
         return []
+    coord_group = CommunicationGroup.objects.filter(name__icontains='COORDENADORES').first()
+    coord_ids = []
+    if coord_group:
+        coord_ids = list(coord_group.members.values_list('id', flat=True))
     excluded = get_simulator_excluded_user_ids()
     return list(
         gerente_group.members.filter(is_active=True)
+        .exclude(id__in=coord_ids)
         .exclude(id__in=excluded)
         .order_by('first_name', 'last_name')
     )
 
 
 def get_all_coordinators() -> List[User]:
+    """Coordenadores = membros do grupo COORDENADORES (CommunicationGroup)."""
+    coord_group = CommunicationGroup.objects.filter(name__icontains='COORDENADORES').first()
+    if not coord_group:
+        return []
     excluded = get_simulator_excluded_user_ids()
-    coordinators = []
-    for user in User.objects.filter(hierarchy='SUPERVISOR', is_active=True).exclude(id__in=excluded):
-        primary_sector = getattr(user, 'primary_sector', None)
-        sector_name = (primary_sector.name if primary_sector else '').lower()
-        if 'comercial' in sector_name:
-            coordinators.append(user)
-    return coordinators
+    return list(
+        coord_group.members.filter(is_active=True)
+        .exclude(id__in=excluded)
+        .order_by('first_name', 'last_name')
+    )
 
 
 def get_hunter_levels_from_request(request) -> Dict[str, int]:
@@ -1137,14 +1145,18 @@ def compute_consultor_simulation(
             'sva': _get_sim_input(simulator_inputs, 'sva', 'realpdv'),
         }
     else:
+        # VIEW_PROJECAO: projeção dinâmica do PDV via MySQL D-1 (ontem) projetado por DU.
+        pdv_lookup = get_store_name_from_user(user) or pdv
+        mysql_pdv = get_realized_sales_from_mysql(pdv=pdv_lookup)
+        du_passed, du_total = get_business_days_info()
         pdv_proj = {
-            'movel': sumifs(projection, 'PROJ_MOVEL', 'PDV', pdv),
-            'fixa': sumifs(projection, 'PROJ_FIXA', 'PDV', pdv),
-            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'PDV', pdv),
-            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ELETRO_B', 'PDV', pdv),
-            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'PDV', pdv) + sumifs(projection, 'PROJ_ESSEN_B', 'PDV', pdv),
-            'seguros': sumifs(projection, 'PROJ_SEGURO', 'PDV', pdv),
-            'sva': sumifs(projection, 'PROJ_SVA', 'PDV', pdv),
+            'movel': project_from_realized(mysql_pdv.get('movel', 0.0), du_passed, du_total),
+            'fixa': project_from_realized(mysql_pdv.get('fixa', 0.0), du_passed, du_total),
+            'smartphones': project_from_realized(mysql_pdv.get('smartphones', 0.0), du_passed, du_total),
+            'eletronicos': project_from_realized(mysql_pdv.get('eletronicos', 0.0), du_passed, du_total),
+            'essenciais': project_from_realized(mysql_pdv.get('essenciais', 0.0), du_passed, du_total),
+            'seguros': project_from_realized(mysql_pdv.get('seguros', 0.0), du_passed, du_total),
+            'sva': project_from_realized(mysql_pdv.get('sva', 0.0), du_passed, du_total),
         }
     pdv_att = {
         key: (pdv_proj[key] / pdv_meta[key] if pdv_meta[key] else 0.0)
@@ -1173,14 +1185,17 @@ def compute_consultor_simulation(
             'sva': mysql_coord.get('sva', 0.0),
         }
     else:
+        # VIEW_PROJECAO: projeção dinâmica da Coordenação via MySQL D-1 projetado por DU.
+        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
-            'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
-            'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
-            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'COORDENAÇÃO', coord_name),
-            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name),
-            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name),
-            'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
-            'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
+            'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
+            'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed_c, du_total_c),
+            'smartphones': project_from_realized(mysql_coord.get('smartphones', 0.0), du_passed_c, du_total_c),
+            'eletronicos': project_from_realized(mysql_coord.get('eletronicos', 0.0), du_passed_c, du_total_c),
+            'essenciais': project_from_realized(mysql_coord.get('essenciais', 0.0), du_passed_c, du_total_c),
+            'seguros': project_from_realized(mysql_coord.get('seguros', 0.0), du_passed_c, du_total_c),
+            'sva': project_from_realized(mysql_coord.get('sva', 0.0), du_passed_c, du_total_c),
         }
     coord_att = {
         key: (coord_proj[key] / coord_meta[key] if coord_meta[key] else 0.0)
@@ -1374,7 +1389,15 @@ def compute_gerente_simulation(
         for _, row in realized.iterrows():
             if normalize_text(row.get('PDV', '')) == target_pdv:
                 coord_name = str(row.get('COORDENAÇÃO') or '').strip()
-                break
+                if coord_name:
+                    break
+        # Fallback: tenta na planilha de PROJEÇÃO se não achou em REALIZADO.
+        if not coord_name:
+            for _, row in projection.iterrows():
+                if normalize_text(row.get('PDV', '')) == target_pdv:
+                    coord_name = str(row.get('COORDENAÇÃO') or '').strip()
+                    if coord_name:
+                        break
 
     meta_map = {
         'movel': sumifs(realized, 'META_MOVEL', 'PDV', pdv),
@@ -1480,15 +1503,17 @@ def compute_gerente_simulation(
             'sva': mysql_coord.get('sva', 0.0),
         }
     else:
-        # Em modo Simulador, o coord_proj segue o realizado (PDV simulado isolado)
+        # VIEW_PROJECAO / VIEW_SIMULADOR: coord_proj via MySQL D-1 projetado por DU.
+        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
-            'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
-            'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
-            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'COORDENAÇÃO', coord_name),
-            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name),
-            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name),
-            'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
-            'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
+            'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
+            'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed_c, du_total_c),
+            'smartphones': project_from_realized(mysql_coord.get('smartphones', 0.0), du_passed_c, du_total_c),
+            'eletronicos': project_from_realized(mysql_coord.get('eletronicos', 0.0), du_passed_c, du_total_c),
+            'essenciais': project_from_realized(mysql_coord.get('essenciais', 0.0), du_passed_c, du_total_c),
+            'seguros': project_from_realized(mysql_coord.get('seguros', 0.0), du_passed_c, du_total_c),
+            'sva': project_from_realized(mysql_coord.get('sva', 0.0), du_passed_c, du_total_c),
         }
 
     att_map = {
