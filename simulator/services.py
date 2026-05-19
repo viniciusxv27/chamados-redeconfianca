@@ -492,6 +492,27 @@ def sumifs(df: pd.DataFrame, sum_col: str, filter_col: str, filter_value: str) -
     return total
 
 
+def get_pdvs_of_coord(df: pd.DataFrame, coord_name: str) -> List[str]:
+    """Lista PDVs únicos (normalizados) da planilha que pertencem a uma COORDENAÇÃO."""
+    if not coord_name or 'COORDENAÇÃO' not in df.columns or 'PDV' not in df.columns:
+        return []
+    target = normalize_text(coord_name)
+    seen: set = set()
+    result: List[str] = []
+    for _, row in df.iterrows():
+        if normalize_text(row.get('COORDENAÇÃO', '')) != target:
+            continue
+        pdv_val = str(row.get('PDV') or '').strip()
+        if not pdv_val:
+            continue
+        key = normalize_text(pdv_val)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(pdv_val)
+    return result
+
+
 def vlookup(value: float, table: List[List[Optional[float]]], col_index: int) -> float:
     if not table:
         return 0.0
@@ -1174,20 +1195,9 @@ def compute_consultor_simulation(
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
     if view_mode == VIEW_REALIZADO:
-        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
-        coord_proj = {
-            'movel': mysql_coord.get('movel', 0.0),
-            'fixa': mysql_coord.get('fixa', 0.0),
-            'smartphones': mysql_coord.get('smartphones', 0.0),
-            'eletronicos': mysql_coord.get('eletronicos', 0.0),
-            'essenciais': mysql_coord.get('essenciais', 0.0),
-            'seguros': mysql_coord.get('seguros', 0.0),
-            'sva': mysql_coord.get('sva', 0.0),
-        }
-    else:
-        # VIEW_PROJECAO: projeção dinâmica da Coordenação via MySQL D-1 projetado por DU.
-        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
-        du_passed_c, du_total_c = get_business_days_info()
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
+        coord_proj = {k: mysql_coord.get(k, 0.0) for k in ['movel','fixa','smartphones','eletronicos','essenciais','seguros','sva']}
         coord_proj = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
             'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed_c, du_total_c),
@@ -1492,7 +1502,8 @@ def compute_gerente_simulation(
     }
     if view_mode == VIEW_REALIZADO:
         # Realizado do coordenador via MySQL (soma de todas as lojas que ele coordena).
-        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         coord_proj = {
             'movel': mysql_coord.get('movel', 0.0),
             'fixa': mysql_coord.get('fixa', 0.0),
@@ -1504,7 +1515,8 @@ def compute_gerente_simulation(
         }
     else:
         # VIEW_PROJECAO / VIEW_SIMULADOR: coord_proj via MySQL D-1 projetado por DU.
-        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
@@ -1723,7 +1735,8 @@ def compute_coordenador_simulation(
 
     if view_mode == VIEW_REALIZADO:
         # Coordenador: realizado de todas as lojas coordenadas via MySQL.
-        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         proj_map = {
             'movel': mysql_coord.get('movel', 0.0),
             'fixa': mysql_coord.get('fixa', 0.0),
@@ -1765,7 +1778,8 @@ def compute_coordenador_simulation(
                 meta_map[key] = override
     else:
         # VIEW_PROJECAO: projeção dinâmica = realizado MySQL / DU_passados * DU_totais.
-        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         du_passed, du_total = get_business_days_info()
         proj_map = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed, du_total),
