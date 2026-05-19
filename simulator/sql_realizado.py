@@ -208,6 +208,26 @@ def get_realized_sales_from_mysql(
                 result[key] = result.get(key, 0.0) + _to_float(total_valor)
                 if key == 'fixa':
                     result['fixa_qty'] = result.get('fixa_qty', 0.0) + float(qtd or 0)
+
+            # ---------- Serviço Técnico: "Alta Banda Larga" / "Alta TV" entram em Fixa ----------
+            # Soma receita + quantidade dessas linhas (excluindo as que já foram contadas como pilar=FIXA).
+            where_st = ' AND '.join(w.format(col='nome_do_vendedor' if vendor_norm else 'PDV') for w in base_where)
+            cur.execute(
+                f"""
+                SELECT SUM(COALESCE(receita_calculada, Receita, 0)) AS total_valor,
+                       COUNT(*) AS qtd
+                FROM vendas_servicos
+                WHERE {where_st}
+                  AND UPPER(servico_tecnico) IN ('ALTA BANDA LARGA', 'ALTA TV')
+                  AND (UPPER(COALESCE(pilar, '')) <> 'FIXA')
+                """,
+                tuple(base_params),
+            )
+            row_st = cur.fetchone()
+            if row_st:
+                add_valor, add_qtd = row_st
+                result['fixa'] = result.get('fixa', 0.0) + _to_float(add_valor)
+                result['fixa_qty'] = result.get('fixa_qty', 0.0) + float(add_qtd or 0)
     finally:
         try:
             conn.close()
