@@ -1198,6 +1198,11 @@ def compute_consultor_simulation(
         coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         coord_proj = {k: mysql_coord.get(k, 0.0) for k in ['movel','fixa','smartphones','eletronicos','essenciais','seguros','sva']}
+    else:
+        # VIEW_PROJECAO / VIEW_SIMULADOR: projeção dinâmica da Coordenação via MySQL D-1 projetado por DU.
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
+        du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
             'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed_c, du_total_c),
