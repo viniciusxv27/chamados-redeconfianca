@@ -1363,15 +1363,33 @@ def api_transcription_upload_chunk(request):
     upload_dir = _get_upload_dir(upload_id)
     os.makedirs(upload_dir, exist_ok=True)
     part_path = os.path.join(upload_dir, f'part_{chunk_index:06d}')
+    tmp_path = part_path + '.tmp'
 
-    with open(part_path, 'wb') as target:
-        for data in audio_chunk.chunks():
-            target.write(data)
+    # Escrita atômica: grava em .tmp e renomeia ao final para evitar partes corrompidas
+    # caso o cliente reenvie o mesmo índice após uma falha de rede.
+    try:
+        with open(tmp_path, 'wb') as target:
+            for data in audio_chunk.chunks():
+                target.write(data)
+            target.flush()
+            try:
+                os.fsync(target.fileno())
+            except OSError:
+                pass
+        os.replace(tmp_path, part_path)
+    except Exception as exc:
+        try:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+        except OSError:
+            pass
+        return JsonResponse({'error': f'Falha ao salvar parte: {exc}'}, status=500)
 
     return JsonResponse({
         'upload_id': upload_id,
         'chunk_index': chunk_index,
         'received': True,
+        'size': os.path.getsize(part_path),
     })
 
 
@@ -1417,8 +1435,14 @@ def api_transcription_upload_finalize(request):
         ]
     )
 
-    if len(parts) != total_chunks:
-        return JsonResponse({'error': 'Upload incompleto. Envie todos os chunks.'}, status=400)
+    if not parts:
+        return JsonResponse({'error': 'Nenhuma parte do áudio foi recebida. Tente gravar novamente.'}, status=400)
+
+    # Tolerância: se faltarem algumas partes (ex.: queda momentânea de rede),
+    # processamos o que está disponível em vez de descartar todo o áudio.
+    missing_chunks = 0
+    if total_chunks > 0 and len(parts) < total_chunks:
+        missing_chunks = total_chunks - len(parts)
 
     original_audio_name = request.POST.get('original_audio_name', '') or 'audio.webm'
     _, ext = os.path.splitext(original_audio_name)
@@ -1479,6 +1503,8 @@ def api_transcription_upload_finalize(request):
         'status': 'processing',
         'redirect': f'/agenda/transcricoes/{transcription.pk}/',
         'message': 'Upload concluído e transcrição iniciada em segundo plano.',
+        'missing_chunks': missing_chunks,
+        'parts_received': len(parts),
     }, status=202)
 
 

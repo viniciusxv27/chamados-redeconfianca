@@ -267,6 +267,10 @@ let uploadedChunksCount = 0;
 let liveUploadActive = false;
 let recordedOriginalName = 'recording.webm';
 let finalizingFromRecording = false;
+// Map<index, { blob, status: 'pending'|'uploading'|'done'|'failed', attempts }>
+const chunkRegistry = new Map();
+let chunkWorkerRunning = false;
+let lastUploadErrorMessage = '';
 
 const ROLE_OPTIONS = [
     { value: 'Moderador', icon: 'fa-chess-king' },
@@ -376,6 +380,9 @@ async function startRecording() {
         recordedBlob = null;
         recordedUploadId = createUploadId();
         recordedChunksCount = 0;
+        uploadedChunksCount = 0;
+        chunkRegistry.clear();
+        lastUploadErrorMessage = '';
         liveUploadActive = true;
         recordedOriginalName = 'recording.webm';
         uploadQueue = Promise.resolve();
@@ -389,11 +396,7 @@ async function startRecording() {
 
             const chunkIndex = recordedChunksCount;
             recordedChunksCount += 1;
-
-            uploadQueue = uploadQueue.then(() => uploadRecordingChunk(e.data, chunkIndex));
-            uploadQueue.catch(() => {
-                alert('Erro ao enviar parte do áudio. Verifique sua conexão e tente novamente.');
-            });
+            registerChunkForUpload(e.data, chunkIndex);
             updateSubmitState();
         };
 
@@ -564,24 +567,81 @@ async function uploadRecordingChunk(chunk, chunkIndex) {
     form.append('total_chunks', '0');
     form.append('audio', chunk, recordedOriginalName);
 
-    let lastError = null;
-    for (let attempt = 0; attempt < 4; attempt++) {
+    const resp = await fetch('{% url "agenda:api_transcription_upload_chunk" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        body: form,
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+}
+
+function registerChunkForUpload(blob, index) {
+    chunkRegistry.set(index, { blob, status: 'pending', attempts: 0 });
+    updateRecordingUploadStatus();
+    ensureChunkWorker();
+}
+
+function ensureChunkWorker() {
+    if (chunkWorkerRunning) return;
+    chunkWorkerRunning = true;
+    (async () => {
         try {
-            const resp = await fetch('{% url "agenda:api_transcription_upload_chunk" %}', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-                body: form,
-            });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            uploadedChunksCount += 1;
-            updateRecordingUploadStatus();
-            return;
-        } catch (err) {
-            lastError = err;
-            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            while (true) {
+                // Pega o próximo chunk pendente em ordem
+                let nextEntry = null;
+                let nextIndex = -1;
+                const sortedKeys = Array.from(chunkRegistry.keys()).sort((a, b) => a - b);
+                for (const k of sortedKeys) {
+                    const entry = chunkRegistry.get(k);
+                    if (entry.status === 'pending' || entry.status === 'failed') {
+                        nextEntry = entry; nextIndex = k; break;
+                    }
+                }
+                if (!nextEntry) break;
+
+                nextEntry.status = 'uploading';
+                nextEntry.attempts += 1;
+                updateRecordingUploadStatus();
+                try {
+                    await uploadRecordingChunk(nextEntry.blob, nextIndex);
+                    nextEntry.status = 'done';
+                    nextEntry.blob = null; // libera memória
+                    uploadedChunksCount = Array.from(chunkRegistry.values()).filter(e => e.status === 'done').length;
+                    lastUploadErrorMessage = '';
+                    updateRecordingUploadStatus();
+                } catch (err) {
+                    nextEntry.status = 'failed';
+                    lastUploadErrorMessage = (err && err.message) || 'erro de rede';
+                    updateRecordingUploadStatus();
+                    // Backoff exponencial limitado a 30s; nunca desiste
+                    const wait = Math.min(30000, 1500 * Math.pow(1.6, Math.min(nextEntry.attempts, 8)));
+                    await new Promise(r => setTimeout(r, wait));
+                }
+            }
+        } finally {
+            chunkWorkerRunning = false;
         }
-    }
-    throw lastError || new Error('Falha persistente ao enviar chunk de gravação.');
+    })();
+}
+
+function pendingChunksCount() {
+    let count = 0;
+    chunkRegistry.forEach(e => { if (e.status !== 'done') count += 1; });
+    return count;
+}
+
+function waitForAllChunks(timeoutMs) {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const tick = () => {
+            const pending = pendingChunksCount();
+            if (pending === 0) { resolve(true); return; }
+            if (timeoutMs && (Date.now() - start) > timeoutMs) { resolve(false); return; }
+            ensureChunkWorker();
+            setTimeout(tick, 500);
+        };
+        tick();
+    });
 }
 
 function updateRecordingUploadStatus() {
@@ -592,7 +652,15 @@ function updateRecordingUploadStatus() {
         return;
     }
     el.classList.remove('hidden');
-    el.innerHTML = `<i class="fas fa-cloud-upload-alt mr-1"></i> ${uploadedChunksCount}/${recordedChunksCount} partes salvas no servidor`;
+    const pending = pendingChunksCount();
+    let html = `<i class="fas fa-cloud-upload-alt mr-1"></i> ${uploadedChunksCount}/${recordedChunksCount} partes salvas`;
+    if (pending > 0) {
+        html += ` <span class="ml-2 text-xs text-orange-600"><i class="fas fa-sync fa-spin mr-1"></i>${pending} pendentes</span>`;
+    }
+    if (lastUploadErrorMessage) {
+        html += ` <span class="ml-2 text-xs text-red-600"><i class="fas fa-exclamation-circle mr-1"></i>tentando reconectar...</span>`;
+    }
+    el.innerHTML = html;
 }
 
 async function uploadChunks(audioBlob, originalName) {
@@ -663,13 +731,40 @@ async function submitTranscription() {
         finalizingFromRecording = true;
         const btn = document.getElementById('btn-submit');
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Finalizando gravação e enviando últimas partes...';
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Finalizando gravação...';
         await stopRecordingAndWait();
-        // Garante que o último ondataavailable acionado pelo stop entre na fila
-        await new Promise(r => setTimeout(r, 200));
-        try {
-            await uploadQueue;
-        } catch (_) { /* tratado abaixo */ }
+        // Garante que o último ondataavailable acionado pelo stop entre no registro
+        await new Promise(r => setTimeout(r, 300));
+    }
+
+    // Espera pelos uploads restantes antes de finalizar, mostrando progresso
+    if (recordedUploadId && pendingChunksCount() > 0) {
+        const btn = document.getElementById('btn-submit');
+        btn.disabled = true;
+        const progressNote = document.getElementById('upload-progress-note');
+        if (progressNote) progressNote.classList.remove('hidden');
+        // Atualiza o botão periodicamente
+        const tickBtn = setInterval(() => {
+            const pending = pendingChunksCount();
+            btn.innerHTML = `<i class="fas fa-cloud-upload-alt mr-2"></i> Enviando últimas partes (${pending} restantes)...`;
+        }, 500);
+        // Espera até 5 minutos pelos uploads restantes (com retry contínuo no worker)
+        await waitForAllChunks(5 * 60 * 1000);
+        clearInterval(tickBtn);
+        if (pendingChunksCount() > 0) {
+            const ok = confirm(
+                `Ainda há ${pendingChunksCount()} parte(s) do áudio que não conseguimos enviar. ` +
+                `Deseja processar mesmo assim com o que já foi salvo? ` +
+                `Se preferir, clique em Cancelar e verifique sua conexão — tentaremos novamente automaticamente.`
+            );
+            if (!ok) {
+                btn.disabled = false;
+                updateSubmitState();
+                return;
+            }
+            // Atualiza o contador para refletir apenas o que efetivamente subiu
+            recordedChunksCount = uploadedChunksCount;
+        }
     }
 
     const formData = new FormData();
@@ -780,6 +875,9 @@ async function submitTranscription() {
 
         const data = await resp.json();
         if (resp.ok && data.redirect) {
+            if (data.missing_chunks && data.missing_chunks > 0) {
+                alert(`Atenção: ${data.missing_chunks} parte(s) do áudio não chegaram ao servidor, mas o processamento foi iniciado com ${data.parts_received} partes recebidas.`);
+            }
             window.location.href = data.redirect;
         } else {
             alert(data.error || 'Erro ao processar transcrição.');
