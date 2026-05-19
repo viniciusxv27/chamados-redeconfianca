@@ -218,7 +218,7 @@
                 <th class="px-3 py-2 text-right font-semibold">Meta (opcional)</th>
                 <th class="px-3 py-2 text-right font-semibold">Real Individual</th>
                 {% if target_role != 'coordenador' %}
-                <th class="px-3 py-2 text-right font-semibold">Real PDV</th>
+                <th class="px-3 py-2 text-right font-semibold">{% if target_role == 'gerente' %}Real Coordenação{% else %}Real PDV{% endif %}</th>
                 {% endif %}
               </tr>
             </thead>
@@ -363,13 +363,21 @@
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Meta</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">{% if view_mode == 'realizado' %}Real{% elif view_mode == 'simulador' %}Simul.{% else %}Proj.{% endif %}</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Ating.</th>
+            {% if target_role == 'consultor' %}
+            <th class="px-3 py-3 text-right font-semibold text-blue-700 bg-blue-50">Meta PDV</th>
+            <th class="px-3 py-3 text-right font-semibold text-blue-700 bg-blue-50">{% if view_mode == 'realizado' %}Real PDV{% else %}Proj. PDV{% endif %}</th>
+            <th class="px-3 py-3 text-right font-semibold text-blue-700 bg-blue-50 border-r-2 border-gray-500">Ating. PDV</th>
+            {% endif %}
+            <th class="px-3 py-3 text-right font-semibold text-purple-700 bg-purple-50">Meta Coord.</th>
+            <th class="px-3 py-3 text-right font-semibold text-purple-700 bg-purple-50">{% if view_mode == 'realizado' %}Real Coord.{% else %}Proj. Coord.{% endif %}</th>
+            <th class="px-3 py-3 text-right font-semibold text-purple-700 bg-purple-50 border-r-2 border-gray-500">Ating. Coord.</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">% Com.</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Comissão</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">% Prêm.</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Premiação</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Total Indiv.</th>
-            <th class="px-3 py-3 text-right font-semibold text-gray-700">Prêm. PDV</th>
-            <th class="px-3 py-3 text-right font-semibold text-gray-700">Total+PDV</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">{% if target_role == 'gerente' %}Prêm. Coord.{% else %}Prêm. PDV{% endif %}</th>
+            <th class="px-3 py-3 text-right font-semibold text-gray-700">{% if target_role == 'gerente' %}Total+Coord.{% else %}Total+PDV{% endif %}</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Hunter2</th>
             <th class="px-3 py-3 text-right font-semibold text-gray-700">Hunter3</th>
           </tr>
@@ -394,6 +402,26 @@
                 {{ row.attainment|pct_br:1 }}
               </span>
             </td>
+            {% if target_role == 'consultor' %}
+            <td class="px-3 py-3 text-right text-blue-700 bg-blue-50">{% if row.pdv_meta is not None %}{{ row.pdv_meta|brl }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-3 text-right text-blue-700 bg-blue-50">{% if row.pdv_proj is not None %}{{ row.pdv_proj|brl }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-3 text-right bg-blue-50 border-r-2 border-gray-500">
+              {% if row.pdv_attainment is not None %}
+              <span class="px-2 py-1 rounded text-xs font-semibold {% if row.pdv_attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.pdv_attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
+                {{ row.pdv_attainment|pct_br:1 }}
+              </span>
+              {% else %}—{% endif %}
+            </td>
+            {% endif %}
+            <td class="px-3 py-3 text-right text-purple-700 bg-purple-50">{% if row.coord_meta is not None %}{{ row.coord_meta|brl }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-3 text-right text-purple-700 bg-purple-50">{% if row.coord_proj is not None %}{{ row.coord_proj|brl }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-3 text-right bg-purple-50 border-r-2 border-gray-500">
+              {% if row.coord_attainment is not None %}
+              <span class="px-2 py-1 rounded text-xs font-semibold {% if row.coord_attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.coord_attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
+                {{ row.coord_attainment|pct_br:1 }}
+              </span>
+              {% else %}—{% endif %}
+            </td>
             <td class="px-3 py-3 text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
             <td class="px-3 py-3 text-right font-semibold text-gray-900 border-r-2 border-gray-500">{{ row.commission_value|brl }}</td>
             <td class="px-3 py-3 text-right text-gray-600">{{ row.premium_rate|pct_br:2 }}</td>
@@ -413,7 +441,7 @@
     <div class="bg-gray-50 px-6 py-6 border-t border-gray-200">
       <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Total com PDV</p>
+          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">{% if target_role == 'gerente' %}Total com Coord.{% else %}Total com PDV{% endif %}</p>
           <p class="text-xl font-bold text-gray-900">{{ simulation.totals.total_with_pdv|brl }}</p>
         </div>
         <div class="bg-white rounded-lg p-4 border border-gray-200">

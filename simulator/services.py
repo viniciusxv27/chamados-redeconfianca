@@ -955,6 +955,9 @@ def _merge_grouped_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             'pdv_premium_rate': (a or {}).get('pdv_premium_rate') if a else (b or {}).get('pdv_premium_rate'),
             'pdv_premium_value': pdv_premium_value,
             'total_with_pdv': total_with_pdv,
+            'coord_meta': (a or {}).get('coord_meta') if a else (b or {}).get('coord_meta'),
+            'coord_proj': (a or {}).get('coord_proj') if a else (b or {}).get('coord_proj'),
+            'coord_attainment': (a or {}).get('coord_attainment') if a else (b or {}).get('coord_attainment'),
             'hunter2_value': hunter2_value,
             'hunter3_value': hunter3_value,
         }
@@ -1148,6 +1151,42 @@ def compute_consultor_simulation(
         for key in pdv_meta
     }
 
+    # COORDENAÇÃO: meta = soma das metas dos consultores da coordenação.
+    coord_meta = {
+        'movel': sumifs(realized, 'META_MOVEL', 'COORDENAÇÃO', coord_name),
+        'fixa': sumifs(realized, 'META_FIXA', 'COORDENAÇÃO', coord_name),
+        'smartphones': sumifs(realized, 'META_SMARTPHONE', 'COORDENAÇÃO', coord_name),
+        'eletronicos': sumifs(realized, 'META_ACESSORIO', 'COORDENAÇÃO', coord_name),
+        'essenciais': sumifs(realized, 'META_ESSENCIAIS', 'COORDENAÇÃO', coord_name),
+        'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
+        'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
+    }
+    if view_mode == VIEW_REALIZADO:
+        mysql_coord = get_realized_sales_from_mysql(coord_name=coord_name)
+        coord_proj = {
+            'movel': mysql_coord.get('movel', 0.0),
+            'fixa': mysql_coord.get('fixa', 0.0),
+            'smartphones': mysql_coord.get('smartphones', 0.0),
+            'eletronicos': mysql_coord.get('eletronicos', 0.0),
+            'essenciais': mysql_coord.get('essenciais', 0.0),
+            'seguros': mysql_coord.get('seguros', 0.0),
+            'sva': mysql_coord.get('sva', 0.0),
+        }
+    else:
+        coord_proj = {
+            'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
+            'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
+            'smartphones': sumifs(projection, 'PROJ_APARELHO', 'COORDENAÇÃO', coord_name),
+            'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name),
+            'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name),
+            'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
+            'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
+        }
+    coord_att = {
+        key: (coord_proj[key] / coord_meta[key] if coord_meta[key] else 0.0)
+        for key in coord_meta
+    }
+
     meta_config = factor_data.get('meta', {})
     ranges = factor_data.get('ranges', {})
     hunter_levels = hunter_levels or {}
@@ -1236,10 +1275,16 @@ def compute_consultor_simulation(
         pdv_meta_value = pdv_meta.get(pdv_group_key, 0.0)
         pdv_proj_value = pdv_proj.get(pdv_group_key, 0.0)
         pdv_att_value = pdv_proj_value / pdv_meta_value if pdv_meta_value else 0.0
+        coord_meta_value = coord_meta.get(pdv_group_key, 0.0)
+        coord_proj_value = coord_proj.get(pdv_group_key, 0.0)
+        coord_att_value = coord_proj_value / coord_meta_value if coord_meta_value else 0.0
         if key.endswith('_b'):
             pdv_meta_value = None
             pdv_proj_value = None
             pdv_att_value = None
+            coord_meta_value = None
+            coord_proj_value = None
+            coord_att_value = None
         pdv_threshold, pdv_rate = pdv_threshold_rate(ranges.get(pdv_premium_key, []), pdv_rate_col)
         pdv_rate_value = pdv_rate if pdv_att_ref >= pdv_threshold else 0.0
         pdv_premium_value = proj * pdv_rate_value if (att >= 1.0 and all_ok) else 0.0
@@ -1274,6 +1319,9 @@ def compute_consultor_simulation(
             'pdv_premium_rate': pdv_rate_value,
             'pdv_premium_value': pdv_premium_value,
             'total_with_pdv': total_with_pdv,
+            'coord_meta': coord_meta_value,
+            'coord_proj': coord_proj_value,
+            'coord_attainment': coord_att_value,
             'hunter2_value': hunter2_value,
             'hunter3_value': hunter3_value,
             'quantity': fixa_quantity if key == 'fixa' else None,
@@ -1576,6 +1624,9 @@ def compute_gerente_simulation(
             'pdv_premium_rate': pdv_rate_value,
             'pdv_premium_value': pdv_premium_value,
             'total_with_pdv': total_with_pdv,
+            'coord_meta': pdv_meta_value,
+            'coord_proj': pdv_proj_value,
+            'coord_attainment': pdv_att_value,
             'hunter2_value': hunter2_value,
             'hunter3_value': hunter3_value,
             'quantity': fixa_quantity if key == 'fixa' else None,
