@@ -623,6 +623,15 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% if user.id == 163 or user.id == 70 %}
+                                <li>
+                                    <a href="{% url 'simulator:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Simulador de Comissão">
+                                        <i class="fas fa-calculator text-lime-400 flex-shrink-0"></i>
+                                        <span>Simulador</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-lime-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
                                 <li>
                                     <a href="{% url 'power_bi:goals_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Metas">
                                         <i class="fas fa-bullseye text-emerald-400 flex-shrink-0"></i>
