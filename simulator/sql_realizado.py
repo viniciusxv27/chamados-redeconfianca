@@ -17,7 +17,7 @@ from django.utils import timezone
 
 DEFAULT_MYSQL_URI = (
     'mysql://redeconfiancaadm:redeconfianca2025@'
-    'painel.dev.redeconfianca.com.br:3306/rede_confianca_data'
+    'painel.dev.redeconfianca.com.br:3306/vivogo'
 )
 
 # Mapeia o pilar bruto vindo do MySQL → chave usada pelo simulador.
@@ -87,19 +87,28 @@ def _to_float(value) -> float:
 
 
 def _coordinator_pdvs(cursor, coord_name: str) -> list[str]:
-    """Devolve lista de PDVs (já normalizados em UPPER) para um coordenador."""
+    """Devolve lista de PDVs (já normalizados em UPPER) para um coordenador.
+
+    Observação: o banco ``vivogo`` não possui as tabelas ``coordenador`` /
+    ``coordenador_pdv``. Mantemos a função por compatibilidade, mas devolvemos
+    lista vazia em caso de erro (o caller deve passar ``pdvs=[...]`` extraídos
+    da planilha quando filtrar por coordenador).
+    """
     if not coord_name:
         return []
     target = _normalize(coord_name)
-    cursor.execute(
-        """
-        SELECT cp.pdv
-        FROM coordenador c
-        JOIN coordenador_pdv cp ON cp.coordenador_id = c.id
-        WHERE UPPER(c.nome) LIKE %s OR UPPER(c.nome) = %s
-        """,
-        (f'{target}%', target),
-    )
+    try:
+        cursor.execute(
+            """
+            SELECT cp.pdv
+            FROM coordenador c
+            JOIN coordenador_pdv cp ON cp.coordenador_id = c.id
+            WHERE UPPER(c.nome) LIKE %s OR UPPER(c.nome) = %s
+            """,
+            (f'{target}%', target),
+        )
+    except Exception:
+        return []
     pdvs = [_normalize(row[0]) for row in cursor.fetchall() if row and row[0]]
     return [p for p in pdvs if p]
 
@@ -158,7 +167,9 @@ def get_realized_sales_from_mysql(
 
             vendor_norm = _normalize(vendor)
 
-            base_where = ['YEAR(DATA_SYS) = %s', 'MONTH(DATA_SYS) = %s', 'DATE(DATA_SYS) <= %s']
+            # Filtro de competência usa `data_da_venda` (presente em vendas_produto e vendas_servicos).
+            # Corte D-1: considera apenas vendas até ontem.
+            base_where = ['YEAR(data_da_venda) = %s', 'MONTH(data_da_venda) = %s', 'data_da_venda <= %s']
             base_params: list = [year, month, yesterday]
 
             if vendor_norm:
@@ -172,12 +183,12 @@ def get_realized_sales_from_mysql(
                 # Sem filtro = não retornar todas as vendas da rede
                 return result
 
-            # ---------- vendas_produtos (Smartphone / Eletronicos / Essenciais) ----------
-            where_p = ' AND '.join(w.format(col='nome_do_vendedor' if vendor_norm else 'PDV') for w in base_where)
+            # ---------- vendas_produto (Smartphone / Eletronicos / Essenciais) ----------
+            where_p = ' AND '.join(w.format(col='nome_do_vendedor' if vendor_norm else 'pdv') for w in base_where)
             cur.execute(
                 f"""
-                SELECT pilar, SUM(CAST(NULLIF(valor_liquido_de_venda_do_produto,'') AS DECIMAL(18,4)))
-                FROM vendas_produtos
+                SELECT pilar, SUM(`valor_líquido_de_venda_do_produto`)
+                FROM vendas_produto
                 WHERE {where_p}
                 GROUP BY pilar
                 """,
@@ -188,8 +199,10 @@ def get_realized_sales_from_mysql(
                 if key:
                     result[key] = result.get(key, 0.0) + _to_float(total)
 
-            # ---------- vendas_servicos (Movel / Fixa / SVA / Seguros) ----------
-            where_s = ' AND '.join(w.format(col='nome_do_vendedor' if vendor_norm else 'PDV') for w in base_where)
+            # ---------- vendas_servicos (Movel / SVA / Seguros) ----------
+            # Filtros extras: Venda_ativa='1' AND Status_do_Serviço='Confirmado'.
+            where_s = ' AND '.join(w.format(col='Nome_do_vendedor' if vendor_norm else 'PDV') for w in base_where)
+            where_s += " AND Venda_ativa = '1' AND `Status_do_Serviço` = 'Confirmado'"
             cur.execute(
                 f"""
                 SELECT pilar,
@@ -205,21 +218,22 @@ def get_realized_sales_from_mysql(
                 key = PILAR_TO_KEY.get(_normalize(pilar))
                 if not key:
                     continue
-                result[key] = result.get(key, 0.0) + _to_float(total_valor)
+                # Pilar 'Fixa' agora é definido EXCLUSIVAMENTE pelo Serviço Técnico
+                # ('Alta Banda Larga' / 'Alta TV') — ignora o pilar bruto do banco.
                 if key == 'fixa':
-                    result['fixa_qty'] = result.get('fixa_qty', 0.0) + float(qtd or 0)
+                    continue
+                result[key] = result.get(key, 0.0) + _to_float(total_valor)
 
-            # ---------- Serviço Técnico: "Alta Banda Larga" / "Alta TV" entram em Fixa ----------
-            # Soma receita + quantidade dessas linhas (excluindo as que já foram contadas como pilar=FIXA).
-            where_st = ' AND '.join(w.format(col='nome_do_vendedor' if vendor_norm else 'PDV') for w in base_where)
+            # ---------- Pilar Fixa = Serviço Técnico 'Alta Banda Larga' / 'Alta TV' ----------
+            where_st = ' AND '.join(w.format(col='Nome_do_vendedor' if vendor_norm else 'PDV') for w in base_where)
+            where_st += " AND Venda_ativa = '1' AND `Status_do_Serviço` = 'Confirmado'"
             cur.execute(
                 f"""
                 SELECT SUM(COALESCE(receita_calculada, Receita, 0)) AS total_valor,
                        COUNT(*) AS qtd
                 FROM vendas_servicos
                 WHERE {where_st}
-                  AND UPPER(servico_tecnico) IN ('ALTA BANDA LARGA', 'ALTA TV')
-                  AND (UPPER(COALESCE(pilar, '')) <> 'FIXA')
+                  AND UPPER(`Serviço_Técnico`) IN ('ALTA BANDA LARGA', 'ALTA TV')
                 """,
                 tuple(base_params),
             )
