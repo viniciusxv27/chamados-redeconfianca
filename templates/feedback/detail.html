@@ -29,6 +29,7 @@
       </div>
     {% endif %}
 
+    {% if not is_evaluatee_only %}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
       <div class="bg-white rounded-xl p-5 shadow">
         <p class="text-sm text-gray-500">Média geral</p>
@@ -52,6 +53,7 @@
         {% endif %}
       </div>
     </div>
+    {% endif %}
 
     <div class="bg-white rounded-xl shadow p-6 space-y-6">
       <section>

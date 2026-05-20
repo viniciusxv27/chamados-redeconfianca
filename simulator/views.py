@@ -106,24 +106,46 @@ def simulator_dashboard(request):
         users_qs = (
             User.objects.filter(is_active=True, sector__in=sectors)
             .exclude(id__in=excluded)
+            .exclude(id=current_user.id)
             .order_by('first_name', 'last_name')
         )
-        available_targets = [
-            {'id': user.id, 'label': user.get_full_name() or user.email, 'role': get_user_role(user)}
-            for user in users_qs
-        ]
+
+        def _role_label(u):
+            r = get_user_role(u)
+            if r == ROLE_CONSULTOR:
+                return 'Consultor'
+            if r == ROLE_GERENTE:
+                return 'Gerente'
+            if r == ROLE_COORDENADOR:
+                return 'Coordenador'
+            return ''
+
+        # O próprio coordenador aparece primeiro, para ver seu comissionamento.
+        available_targets = [{
+            'id': current_user.id,
+            'label': f"{current_user.get_full_name() or current_user.email} (Coordenador)",
+            'role': ROLE_COORDENADOR,
+        }]
+        for user in users_qs:
+            label_role = _role_label(user)
+            base_label = user.get_full_name() or user.email
+            label = f"{base_label} ({label_role})" if label_role else base_label
+            available_targets.append({
+                'id': user.id,
+                'label': label,
+                'role': get_user_role(user),
+            })
 
         target_user_id = request.GET.get('user_id')
         if target_user_id:
             target_user = get_object_or_404(User, id=target_user_id, is_active=True)
-            if target_user.sector not in sectors:
+            if target_user.id != current_user.id and target_user.sector not in sectors:
                 messages.error(request, 'Este usuário não pertence às suas lojas.')
                 return redirect('simulator:dashboard')
             target_role = get_user_role(target_user)
         else:
             target_user = current_user
             target_role = ROLE_COORDENADOR
-            show_summary_only = True
     elif role == ROLE_GERENTE:
         sector_users = get_sector_users(current_user)
         available_targets = [

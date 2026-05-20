@@ -151,12 +151,20 @@ def feedback_detail(request, feedback_id):
     if show_ai:
         ai_text = fb.ai_summary or generate_ai_summary(fb)
 
+    # O avaliado (sem ser admin nem o avaliador) não deve ver a nota geral.
+    is_evaluatee_only = (
+        not is_admin
+        and request.user.id == fb.evaluatee_id
+        and request.user.id != fb.evaluator_id
+    )
+
     return render(request, 'feedback/detail.html', {
         'fb': fb,
         'show_ai': show_ai,
         'ai_text': ai_text,
         'previous': fb.previous_feedback(),
         'evolution_delta': fb.evolution_delta(),
+        'is_evaluatee_only': is_evaluatee_only,
     })
 
 
