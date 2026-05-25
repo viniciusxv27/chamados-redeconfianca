@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Relatório de Fibras{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 max-w-6xl mx-auto">
+  <a href="{% url 'fibras:kanban' %}" class="text-sm text-primary hover:underline">&larr; Voltar ao Kanban</a>
+
+  <h1 class="text-2xl font-bold text-gray-900 mt-2 mb-4">
+    <i class="fas fa-chart-bar text-primary"></i> Relatório de Fibras
+  </h1>
+
+  <div class="bg-white rounded-lg border p-4 mb-4">
+    <p class="text-sm text-gray-600">Total no mês: <strong>{{ total }}</strong> · Receita total: <strong>R$ {{ receita_total }}</strong></p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+    {% for b in blocos %}
+    <a href="{% url 'fibras:kanban' %}?status={{ b.key }}" class="bg-white rounded-lg border p-4 hover:shadow">
+      <p class="text-xs uppercase font-semibold text-gray-500">{{ b.label }}</p>
+      <p class="text-2xl font-bold text-gray-900">{{ b.qtd }} <span class="text-sm text-gray-500">({{ b.percent }}%)</span></p>
+      <p class="text-sm text-primary font-semibold">R$ {{ b.receita }}</p>
+    </a>
+    {% endfor %}
+  </div>
+
+  <div class="bg-white rounded-lg border p-4">
+    <h3 class="font-bold mb-2">Principais motivos de cancelamento</h3>
+    {% for m in motivos %}
+    <div class="flex justify-between text-sm border-t py-1">
+      <span>{{ m.retorno_myrella|truncatechars:100 }}</span>
+      <span class="font-semibold">{{ m.n }}</span>
+    </div>
+    {% empty %}
+    <p class="text-sm text-gray-400 italic">Sem cancelamentos com motivo registrado.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

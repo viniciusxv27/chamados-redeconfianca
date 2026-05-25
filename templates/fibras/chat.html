@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Chat - Fibra {{ fibra.numero_da_venda }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 max-w-3xl mx-auto">
+  <a href="{% url 'fibras:detail' fibra.pk %}" class="text-sm text-primary hover:underline">&larr; Voltar à fibra</a>
+
+  <div class="bg-white rounded-lg border mt-3 flex flex-col" style="height:75vh;">
+    <div class="px-4 py-3 border-b">
+      <h2 class="font-bold">Chat — {{ fibra.cliente|default:fibra.numero_da_venda }}</h2>
+      <p class="text-xs text-gray-500">Venda {{ fibra.numero_da_venda }}</p>
+    </div>
+    <div class="flex-1 overflow-y-auto p-3 space-y-2">
+      {% for msg in mensagens %}
+      <div class="{% if msg.autor == request.user %}text-right{% endif %}">
+        <div class="inline-block px-3 py-2 rounded-lg text-sm {% if msg.autor == request.user %}bg-primary text-white{% else %}bg-gray-100{% endif %}">
+          <div class="text-[10px] opacity-70">{{ msg.autor.get_full_name|default:msg.autor.username }} · {{ msg.criado_em|date:"d/m H:i" }}</div>
+          {{ msg.texto|linebreaksbr }}
+        </div>
+      </div>
+      {% empty %}
+      <p class="text-sm text-gray-400 italic text-center mt-4">Sem mensagens ainda.</p>
+      {% endfor %}
+    </div>
+    <form method="post" action="{% url 'fibras:chat_post' fibra.pk %}" class="border-t p-3 flex gap-2">{% csrf_token %}
+      <input type="text" name="texto" class="flex-1 px-3 py-2 border rounded" placeholder="Escreva uma mensagem..." required>
+      <button class="px-4 py-2 bg-primary text-white rounded">Enviar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

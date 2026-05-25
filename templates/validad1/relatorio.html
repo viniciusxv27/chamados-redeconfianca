@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load simulator_tags %}
+{% block title %}Relatório D-1{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 max-w-6xl mx-auto">
+  <a href="{% url 'validad1:lista' %}" class="text-sm text-primary hover:underline">&larr; Voltar</a>
+
+  <h1 class="text-2xl font-bold text-gray-900 mt-2 mb-4">
+    <i class="fas fa-chart-bar text-primary"></i> Relatório D-1
+  </h1>
+
+  <p class="text-sm text-gray-600 mb-3">Total de vendas no portal: <strong>{{ total }}</strong></p>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+    {% for s in por_status %}
+    <div class="bg-white rounded-lg border p-4">
+      <p class="text-xs uppercase font-semibold text-gray-500">{{ s.label }}</p>
+      <p class="text-2xl font-bold text-gray-900">{{ s.qtd }} <span class="text-sm text-gray-500">({{ s.percent }}%)</span></p>
+      <p class="text-sm text-primary font-semibold">R$ {{ s.receita }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="bg-white rounded-lg border p-4">
+    <h3 class="font-bold mb-2">Divergências por tipo</h3>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-3 py-2 text-left">Tipo</th>
+          <th class="px-3 py-2 text-right">Quantidade</th>
+          <th class="px-3 py-2 text-right">Receita</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in por_divergencia %}
+        <tr class="border-t">
+          <td class="px-3 py-2">{{ tipo_labels|get_dict_item:d.tipo_divergencia|default:d.tipo_divergencia|default:"—" }}</td>
+          <td class="px-3 py-2 text-right font-semibold">{{ d.n }}</td>
+          <td class="px-3 py-2 text-right text-primary font-semibold">R$ {{ d.receita|default:"0,00" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="px-3 py-6 text-center text-gray-400">Sem divergências.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

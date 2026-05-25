@@ -364,6 +364,16 @@ def to_float(value: Any) -> float:
     try:
         if value is None:
             return 0.0
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return 0.0
+            # remove prefixo monetário e espaços
+            s = s.replace('R$', '').replace('r$', '').replace(' ', '')
+            # aceita formato brasileiro "1.234,56" e formato simples "1234.56"
+            if ',' in s:
+                s = s.replace('.', '').replace(',', '.')
+            return float(s)
         return float(value)
     except (TypeError, ValueError):
         return 0.0

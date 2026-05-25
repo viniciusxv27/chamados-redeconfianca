@@ -227,20 +227,32 @@
               <tr class="border-b border-gray-200">
                 <td class="px-3 py-2 font-semibold text-gray-900">{{ pilar_label }}</td>
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" name="sim__{{ pilar_key }}__meta"
-                         value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
-                         class="w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                  <div class="relative inline-block w-36">
+                    <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
+                    <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__meta"
+                           value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                           placeholder="0,00"
+                           class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
+                  </div>
                 </td>
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" name="sim__{{ pilar_key }}__real"
-                         value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
-                         class="w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                  <div class="relative inline-block w-36">
+                    <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
+                    <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__real"
+                           value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                           placeholder="0,00"
+                           class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
+                  </div>
                 </td>
                 {% if target_role != 'coordenador' %}
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" name="sim__{{ pilar_key }}__realpdv"
-                         value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
-                         class="w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                  <div class="relative inline-block w-36">
+                    <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
+                    <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__realpdv"
+                           value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                           placeholder="0,00"
+                           class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
+                  </div>
                 </td>
                 {% endif %}
               </tr>
@@ -477,4 +489,70 @@
     table { font-size: 0.75rem; }
   }
 </style>
+
+<script>
+(function () {
+  function formatBRL(value) {
+    var digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    // remove zeros à esquerda mantendo ao menos 1 dígito
+    digits = digits.replace(/^0+(?=\d)/, '');
+    while (digits.length < 3) digits = '0' + digits;
+    var intPart = digits.slice(0, digits.length - 2);
+    var decPart = digits.slice(digits.length - 2);
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return intPart + ',' + decPart;
+  }
+
+  function toFloatStr(value) {
+    if (!value) return '';
+    return String(value).replace(/\./g, '').replace(',', '.');
+  }
+
+  function initialFormat(raw) {
+    if (raw === null || raw === undefined) return '';
+    var s = String(raw).trim();
+    if (!s) return '';
+    // se vier "1234.56" ou "1234,56" ou "1.234,56"
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      // formato numérico simples (ex: vindo do backend)
+      var n = parseFloat(s);
+      if (isNaN(n)) return '';
+      return formatBRL(Math.round(n * 100).toString());
+    }
+    // já vem em formato brl ou apenas dígitos
+    return formatBRL(s);
+  }
+
+  function attach(el) {
+    el.value = initialFormat(el.value);
+
+    el.addEventListener('input', function () {
+      var caretAtEnd = (el.selectionStart === el.value.length);
+      el.value = formatBRL(el.value);
+      if (caretAtEnd) {
+        try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
+      }
+    });
+
+    el.addEventListener('focus', function () {
+      // posiciona o cursor no fim para facilitar digitação
+      setTimeout(function () {
+        try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
+      }, 0);
+    });
+  }
+
+  document.querySelectorAll('input.brl-mask').forEach(attach);
+
+  // Antes do submit, converte para formato numérico (1234.56) — backend amigável
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      form.querySelectorAll('input.brl-mask').forEach(function (el) {
+        if (el.value) el.value = toFloatStr(el.value);
+      });
+    });
+  });
+})();
+</script>
 {% endblock %}

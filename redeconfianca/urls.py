@@ -116,6 +116,8 @@ urlpatterns = [
     path('power-bi/', include('power_bi.urls')),  # Dashboards Power BI
     path('simulator/', include('simulator.urls')),  # Simulador
     path('feedback/', include('feedback.urls')),  # Módulo de Feedback Geral
+    path('fibras/', include('fibras.urls')),  # Acompanhamento de Fibras
+    path('validad1/', include('validad1.urls')),  # Validação D-1
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training

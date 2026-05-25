@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Fibra {{ fibra.numero_da_venda }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 max-w-5xl mx-auto">
+  <a href="{% url 'fibras:kanban' %}" class="text-sm text-primary hover:underline">&larr; Voltar ao Kanban</a>
+
+  <div class="bg-white rounded-lg border p-6 mt-3">
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">{{ fibra.cliente|default:"—" }}</h1>
+        <p class="text-sm text-gray-500">Venda <strong>{{ fibra.numero_da_venda }}</strong> · CPF {{ fibra.cpf|default:"—" }}</p>
+      </div>
+      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-primary text-white">
+        {{ fibra.get_status_display }}
+      </span>
+    </div>
+
+    <dl class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4 text-sm">
+      <div><dt class="text-gray-500">Endereço</dt><dd class="font-semibold">{{ fibra.endereco|default:"—" }}</dd></div>
+      <div><dt class="text-gray-500">Plano</dt><dd class="font-semibold">{{ fibra.plano|default:"—" }}</dd></div>
+      <div><dt class="text-gray-500">Nº de acesso</dt><dd class="font-semibold">{{ fibra.numero_acesso|default:"—" }}</dd></div>
+      <div><dt class="text-gray-500">Valor</dt><dd class="font-semibold text-primary">R$ {{ fibra.valor }}</dd></div>
+      <div><dt class="text-gray-500">Vendedor</dt><dd class="font-semibold">{{ fibra.vendedor|default:"—" }}</dd></div>
+      <div><dt class="text-gray-500">PDV</dt><dd class="font-semibold">{{ fibra.pdv|default:"—" }}</dd></div>
+      <div><dt class="text-gray-500">Data da venda</dt><dd class="font-semibold">{{ fibra.data_da_venda|date:"d/m/Y" }}</dd></div>
+      <div><dt class="text-gray-500">Serviço técnico</dt><dd class="font-semibold">{{ fibra.servico_tecnico|default:"—" }}</dd></div>
+    </dl>
+
+    {% if fibra.retorno_myrella %}
+    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+      <p class="text-xs text-gray-500 font-semibold uppercase mb-1">Retorno da Ilha</p>
+      <p class="text-sm">{{ fibra.retorno_myrella }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if messages %}{% for m in messages %}<div class="mt-3 p-3 rounded bg-blue-50 text-sm">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="grid md:grid-cols-2 gap-4 mt-4">
+    <!-- Ações da Ilha -->
+    {% if is_ilha %}
+    <div class="bg-white rounded-lg border p-4">
+      <h3 class="font-bold mb-2">Alterar status</h3>
+      <form method="post" action="{% url 'fibras:change_status' fibra.pk %}" class="space-y-2">{% csrf_token %}
+        <select name="status" class="w-full px-2 py-1.5 border rounded text-sm">
+          {% for k, l in status_choices %}<option value="{{ k }}" {% if k == fibra.status %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+        <textarea name="retorno" rows="2" class="w-full px-2 py-1.5 border rounded text-sm" placeholder="Retorno (opcional)">{{ fibra.retorno_myrella }}</textarea>
+        <button class="px-3 py-1.5 bg-primary text-white rounded text-sm w-full">Salvar</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- Abrir incidente -->
+    <div class="bg-white rounded-lg border p-4">
+      <h3 class="font-bold mb-2">Abrir incidente / pedir ajuste</h3>
+      <form method="post" action="{% url 'fibras:abrir_incidente' fibra.pk %}" class="space-y-2">{% csrf_token %}
+        <textarea name="observacao" rows="3" class="w-full px-2 py-1.5 border rounded text-sm" placeholder="Descreva o ajuste solicitado..." required></textarea>
+        <button class="px-3 py-1.5 bg-orange-500 text-white rounded text-sm w-full">
+          <i class="fas fa-exclamation-circle"></i> Abrir incidente
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Incidentes -->
+  <div class="bg-white rounded-lg border p-4 mt-4">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-bold">Incidentes</h3>
+      <a href="{% url 'fibras:chat' fibra.pk %}" class="text-sm text-primary hover:underline">
+        <i class="fas fa-comments"></i> Chat reverso
+      </a>
+    </div>
+    {% for i in incidentes %}
+    <div class="border-t py-2 text-sm">
+      <div class="flex justify-between text-xs text-gray-500">
+        <span>{{ i.aberto_por.get_full_name|default:i.aberto_por.username }}</span>
+        <span>{{ i.aberto_em|date:"d/m/Y H:i" }} · {{ i.get_status_display }}</span>
+      </div>
+      <p class="mt-1">{{ i.observacao }}</p>
+      {% if i.resposta %}<p class="mt-1 text-gray-700 italic">Ilha: {{ i.resposta }}</p>{% endif %}
+    </div>
+    {% empty %}
+    <p class="text-sm text-gray-400 italic">Nenhum incidente registrado.</p>
+    {% endfor %}
+  </div>
+
+  <!-- Histórico -->
+  <div class="bg-white rounded-lg border p-4 mt-4">
+    <h3 class="font-bold mb-2">Histórico de status</h3>
+    {% for h in historico %}
+    <div class="text-xs border-t py-1 flex justify-between">
+      <span>{{ h.status_anterior|default:"—" }} → <strong>{{ h.status_novo }}</strong> ({{ h.alterado_por.get_full_name|default:h.alterado_por.username }})</span>
+      <span class="text-gray-500">{{ h.alterado_em|date:"d/m/Y H:i" }}</span>
+    </div>
+    {% empty %}
+    <p class="text-sm text-gray-400 italic">Sem histórico.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

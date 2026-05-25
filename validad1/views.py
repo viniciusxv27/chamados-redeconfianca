@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+from decimal import Decimal
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Sum
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage
+from .services import expire_deadlines, is_ilha, sync_d1, vendas_for_user
+
+
+@login_required
+def lista(request):
+    # Sempre que carrega a lista, expira deadlines vencidas (cheap).
+    expire_deadlines()
+
+    qs = vendas_for_user(request.user)
+
+    show_expired = request.GET.get('expirados') == '1'
+    if not show_expired:
+        qs = qs.exclude(acordo_status=VendaD1.ACORDO_EXPIRADO)
+
+    status = (request.GET.get('status') or '').strip()
+    if status:
+        qs = qs.filter(status=status)
+
+    pdv = (request.GET.get('pdv') or '').strip()
+    if pdv:
+        qs = qs.filter(pdv__icontains=pdv)
+
+    vendedor = (request.GET.get('vendedor') or '').strip()
+    if vendedor:
+        qs = qs.filter(vendedor__icontains=vendedor)
+
+    return render(request, 'validad1/lista.html', {
+        'vendas': qs.order_by('-data_da_venda', '-id'),
+        'is_ilha': is_ilha(request.user),
+        'status_choices': VendaD1.STATUS_CHOICES,
+        'filtro_status': status,
+        'filtro_pdv': pdv,
+        'filtro_vendedor': vendedor,
+        'show_expired': show_expired,
+    })
+
+
+@login_required
+def detail(request, pk: int):
+    venda = get_object_or_404(VendaD1, pk=pk)
+    contestacoes = venda.contestacoes.all()
+    return render(request, 'validad1/detail.html', {
+        'venda': venda,
+        'contestacoes': contestacoes,
+        'is_ilha': is_ilha(request.user),
+        'tipo_divergencia_choices': VendaD1.TIPO_DIVERGENCIA_CHOICES,
+        'penalidade_choices': VendaD1.PENALIDADE_CHOICES,
+    })
+
+
+@login_required
+@require_POST
+def sinalizar(request, pk: int):
+    if not is_ilha(request.user):
+        messages.error(request, 'Apenas a Ilha pode sinalizar vendas.')
+        return redirect('validad1:detail', pk=pk)
+
+    venda = get_object_or_404(VendaD1, pk=pk)
+    acao = request.POST.get('acao')
+    observacao = (request.POST.get('observacao') or '').strip()
+
+    if acao == 'conformidade':
+        venda.set_conformidade(por_usuario=request.user)
+        messages.success(request, 'Venda marcada como em conformidade.')
+    elif acao == 'divergente':
+        tipo = request.POST.get('tipo_divergencia') or ''
+        penalidade = request.POST.get('penalidade') or VendaD1.PEN_NENHUMA
+        venda.acao_realizada_no_go = bool(request.POST.get('acao_realizada_no_go'))
+        venda.set_divergente(
+            tipo=tipo, penalidade=penalidade, observacao=observacao,
+            por_usuario=request.user,
+        )
+        venda.save()
+        messages.success(request, 'Venda sinalizada como divergente. Gerente tem 48h para responder.')
+    else:
+        messages.error(request, 'Ação inválida.')
+
+    return redirect('validad1:detail', pk=pk)
+
+
+@login_required
+@require_POST
+def de_acordo(request, pk: int):
+    venda = get_object_or_404(VendaD1, pk=pk)
+    if venda.acordo_status != VendaD1.ACORDO_PENDENTE:
+        messages.warning(request, 'Esta venda já teve seu acordo respondido.')
+        return redirect('validad1:detail', pk=pk)
+    venda.acordo_status = VendaD1.ACORDO_DE_ACORDO
+    venda.acordo_respondido_por = request.user
+    venda.acordo_respondido_em = timezone.now()
+    venda.save()
+    messages.success(request, 'De acordo registrado.')
+    return redirect('validad1:detail', pk=pk)
+
+
+@login_required
+@require_POST
+def contestar(request, pk: int):
+    venda = get_object_or_404(VendaD1, pk=pk)
+    if venda.acordo_status != VendaD1.ACORDO_PENDENTE:
+        messages.warning(request, 'Esta venda já teve seu acordo respondido.')
+        return redirect('validad1:detail', pk=pk)
+
+    motivo = (request.POST.get('motivo') or '').strip()
+    if not motivo:
+        messages.error(request, 'Descreva o motivo da contestação.')
+        return redirect('validad1:detail', pk=pk)
+
+    contestacao = VendaD1Contestacao.objects.create(
+        venda=venda, aberto_por=request.user, motivo=motivo,
+    )
+    venda.acordo_status = VendaD1.ACORDO_CONTESTADO
+    venda.acordo_respondido_por = request.user
+    venda.acordo_respondido_em = timezone.now()
+    venda.save()
+    messages.success(request, 'Contestação aberta — Ilha de Qualidade notificada.')
+    return redirect('validad1:contestacao_detail', pk=contestacao.pk)
+
+
+@login_required
+def contestacao_detail(request, pk: int):
+    contestacao = get_object_or_404(VendaD1Contestacao, pk=pk)
+    return render(request, 'validad1/contestacao.html', {
+        'contestacao': contestacao,
+        'mensagens_chat': contestacao.mensagens.select_related('autor').all(),
+        'is_ilha': is_ilha(request.user),
+    })
+
+
+@login_required
+@require_POST
+def contestacao_post(request, pk: int):
+    contestacao = get_object_or_404(VendaD1Contestacao, pk=pk)
+    texto = (request.POST.get('texto') or '').strip()
+    if texto:
+        VendaD1ChatMessage.objects.create(
+            contestacao=contestacao, autor=request.user, texto=texto,
+        )
+    return redirect('validad1:contestacao_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def contestacao_resolver(request, pk: int):
+    if not is_ilha(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('validad1:contestacao_detail', pk=pk)
+    contestacao = get_object_or_404(VendaD1Contestacao, pk=pk)
+    decisao = request.POST.get('decisao')
+    resposta = (request.POST.get('resposta') or '').strip()
+
+    if decisao == 'procedente':
+        contestacao.status = VendaD1Contestacao.STATUS_PROCEDENTE
+        # Se a Ilha concorda com o gerente, deve ajustar no Vivo GO.
+        contestacao.venda.acao_realizada_no_go = True
+        contestacao.venda.status = VendaD1.STATUS_CONFORMIDADE
+        contestacao.venda.save()
+    elif decisao == 'improcedente':
+        contestacao.status = VendaD1Contestacao.STATUS_IMPROCEDENTE
+    else:
+        messages.error(request, 'Decisão inválida.')
+        return redirect('validad1:contestacao_detail', pk=pk)
+
+    contestacao.resposta = resposta
+    contestacao.respondido_por = request.user
+    contestacao.save()
+    messages.success(request, 'Contestação resolvida.')
+    return redirect('validad1:contestacao_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def sync_now(request):
+    if not is_ilha(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('validad1:lista')
+    stats = sync_d1()
+    messages.success(
+        request,
+        f"Sync D-1 ({stats['target_date']}): {stats['created']} importadas, "
+        f"{stats['expired']} expiradas (de {stats['total_in_source']} na fonte).",
+    )
+    return redirect('validad1:lista')
+
+
+@login_required
+def relatorio(request):
+    qs = vendas_for_user(request.user)
+    total = qs.count() or 1
+
+    por_status = []
+    for k, l in VendaD1.STATUS_CHOICES:
+        sub = qs.filter(status=k)
+        cnt = sub.count()
+        por_status.append({
+            'key': k, 'label': l, 'qtd': cnt,
+            'percent': round((cnt / total) * 100, 1),
+            'receita': sub.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
+        })
+
+    por_divergencia = (
+        qs.filter(status=VendaD1.STATUS_DIVERGENTE)
+        .values('tipo_divergencia')
+        .annotate(n=Count('id'), receita=Sum('valor'))
+        .order_by('-n')
+    )
+
+    return render(request, 'validad1/relatorio.html', {
+        'total': qs.count(),
+        'por_status': por_status,
+        'por_divergencia': por_divergencia,
+        'tipo_labels': dict(VendaD1.TIPO_DIVERGENCIA_CHOICES),
+    })
