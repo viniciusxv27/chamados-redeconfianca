@@ -21,6 +21,9 @@
         <p class="text-sm text-gray-600 mt-1">Visão geral do mês corrente · acompanhamento Myrella</p>
       </div>
       <div class="flex gap-2">
+        <a href="{% url 'fibras:export_excel' %}" class="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-lg text-sm font-semibold shadow hover:shadow-lg transition-all">
+          <i class="fas fa-file-excel"></i> Exportar Excel
+        </a>
         <a href="{% url 'fibras:lista' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50 shadow-sm">
           <i class="fas fa-list"></i> Lista
         </a>

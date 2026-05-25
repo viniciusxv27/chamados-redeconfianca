@@ -8,8 +8,8 @@
     <!-- Header -->
     <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
       <div>
-        <a href="{% url 'validad1:kanban' %}" class="text-sm text-primary hover:underline">
-          <i class="fas fa-arrow-left"></i> Voltar ao Kanban
+        <a href="{% url 'validad1:lista' %}" class="text-sm text-primary hover:underline">
+          <i class="fas fa-arrow-left"></i> Voltar à lista
         </a>
         <h1 class="text-3xl font-bold text-gray-900 mt-2 flex items-center gap-3">
           <span class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center shadow-lg">
@@ -18,6 +18,11 @@
           Relatório Valida D+1
         </h1>
         <p class="text-sm text-gray-600 mt-1">Análise de conformidade e divergências (mês corrente)</p>
+      </div>
+      <div class="flex gap-2">
+        <a href="{% url 'validad1:export_excel' %}" class="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-lg text-sm font-semibold shadow hover:shadow-lg transition-all">
+          <i class="fas fa-file-excel"></i> Exportar Excel
+        </a>
       </div>
     </div>
 

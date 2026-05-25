@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -265,3 +266,62 @@ def relatorio(request):
         'div_chart_labels': div_labels,
         'div_chart_data': div_data,
     })
+
+
+@login_required
+def export_excel(request):
+    """Exporta as vendas D-1 do mês corrente para um arquivo .xlsx."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    qs = vendas_for_user(request.user).order_by('-data_da_venda', '-id')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Valida D+1'
+
+    headers = [
+        'Nº Venda', 'CPF', 'Nº Acesso', 'Produto', 'Valor',
+        'PDV', 'Vendedor', 'Data da Venda', 'Pilar', 'Serviços',
+        'Status', 'Tipo Divergência', 'Penalidade',
+        'Ação no Vivo GO', 'Observação Ilha',
+        'Acordo Gerente', 'Acordo Deadline',
+    ]
+    ws.append(headers)
+
+    header_fill = PatternFill('solid', fgColor='660099')
+    header_font = Font(bold=True, color='FFFFFF', name='Calibri', size=11)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    for v in qs:
+        ws.append([
+            v.numero_da_venda, v.cpf, v.numero_acesso, v.produto,
+            float(v.valor or 0), v.pdv, v.vendedor,
+            v.data_da_venda.strftime('%d/%m/%Y') if v.data_da_venda else '',
+            v.pilar, v.servicos,
+            v.get_status_display(),
+            v.get_tipo_divergencia_display() if v.tipo_divergencia else '',
+            v.get_penalidade_display(),
+            'Sim' if v.acao_realizada_no_go else 'Não',
+            v.observacao,
+            v.get_acordo_status_display(),
+            timezone.localtime(v.acordo_deadline).strftime('%d/%m/%Y %H:%M') if v.acordo_deadline else '',
+        ])
+
+    widths = [16, 16, 16, 28, 12, 22, 24, 14, 12, 22, 18, 22, 18, 14, 40, 18, 20]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = 'A2'
+
+    filename = f'validad1_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response

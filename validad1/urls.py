@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.lista, name='lista'),
     path('sync/', views.sync_now, name='sync_now'),
     path('relatorio/', views.relatorio, name='relatorio'),
+    path('export/excel/', views.export_excel, name='export_excel'),
     path('<int:pk>/', views.detail, name='detail'),
     path('<int:pk>/sinalizar/', views.sinalizar, name='sinalizar'),
     path('<int:pk>/de-acordo/', views.de_acordo, name='de_acordo'),

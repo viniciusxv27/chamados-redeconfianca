@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -251,3 +251,57 @@ def relatorio(request):
         'chart_receita': chart_receita,
         'chart_colors': chart_colors,
     })
+
+
+@login_required
+def export_excel(request):
+    """Exporta as fibras do mês corrente para um arquivo .xlsx."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    qs = fibras_for_user(request.user).order_by('-data_da_venda', '-id')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Fibras'
+
+    headers = [
+        'Nº Venda', 'CPF', 'Cliente', 'Endereço', 'Nº Acesso', 'Plano',
+        'Valor', 'PDV', 'Vendedor', 'Data da Venda', 'Pilar',
+        'Serviço Técnico', 'Status', 'Retorno Myrella',
+        'Primeira sincronização', 'Última sincronização',
+    ]
+    ws.append(headers)
+
+    header_fill = PatternFill('solid', fgColor='FF6B35')
+    header_font = Font(bold=True, color='FFFFFF', name='Calibri', size=11)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    for f in qs:
+        ws.append([
+            f.numero_da_venda, f.cpf, f.cliente, f.endereco, f.numero_acesso,
+            f.plano, float(f.valor or 0), f.pdv, f.vendedor,
+            f.data_da_venda.strftime('%d/%m/%Y') if f.data_da_venda else '',
+            f.pilar, f.servico_tecnico, f.get_status_display(),
+            f.retorno_myrella,
+            timezone.localtime(f.first_seen_at).strftime('%d/%m/%Y %H:%M') if f.first_seen_at else '',
+            timezone.localtime(f.last_synced_at).strftime('%d/%m/%Y %H:%M') if f.last_synced_at else '',
+        ])
+
+    widths = [16, 16, 28, 36, 16, 28, 12, 22, 24, 14, 14, 18, 16, 40, 20, 20]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = 'A2'
+
+    filename = f'fibras_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response

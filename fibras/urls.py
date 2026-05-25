@@ -9,6 +9,7 @@ urlpatterns = [
     path('lista/', views.lista, name='lista'),
     path('sync/', views.sync_now, name='sync_now'),
     path('relatorio/', views.relatorio, name='relatorio'),
+    path('export/excel/', views.export_excel, name='export_excel'),
     path('<int:pk>/', views.detail, name='detail'),
     path('<int:pk>/status/', views.change_status_view, name='change_status'),
     path('<int:pk>/status/ajax/', views.change_status_ajax, name='change_status_ajax'),
