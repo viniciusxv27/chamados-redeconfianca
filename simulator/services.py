@@ -1085,7 +1085,9 @@ def compute_consultor_simulation(
             if override is not None:
                 base_meta[key] = override
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
-        fixa_revenue = ind_values.get('fixa', 0.0)
+        # Fixa simulado é quantidade-only: zera a receita (form não envia 'real' p/ fixa).
+        ind_values['fixa'] = 0.0
+        fixa_revenue = 0.0
     else:  # VIEW_PROJECAO
         # Projeção dinâmica: pega o realizado do MySQL e projeta pelo DU.
         # Fórmula: projeção = realizado / DU_passados_até_hoje * DU_totais_do_mês
@@ -1166,7 +1168,8 @@ def compute_consultor_simulation(
     elif view_mode == VIEW_SIMULADOR:
         pdv_proj = {
             'movel': _get_sim_input(simulator_inputs, 'movel', 'realpdv'),
-            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'realpdv'),
+            # Fixa: PDV é em QUANTIDADE de vendas (campo 'qtypdv'), não receita.
+            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'qtypdv'),
             'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'realpdv'),
             'eletronicos': _get_sim_input(simulator_inputs, 'eletronicos_a', 'realpdv')
                 + _get_sim_input(simulator_inputs, 'eletronicos_b', 'realpdv'),
@@ -1468,7 +1471,8 @@ def compute_gerente_simulation(
         ess_b_in = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
         proj_map = {
             'movel': _get_sim_input(simulator_inputs, 'movel', 'real'),
-            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'real'),
+            # Fixa: input do gerente para PDV/coordenação é em QUANTIDADE ('qty').
+            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'qty'),
             'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'real'),
             'eletronicos': eletro_a_in + eletro_b_in,
             'essenciais': ess_a_in + ess_b_in,
@@ -1480,7 +1484,7 @@ def compute_gerente_simulation(
         ess_a_pdv = ess_a_in
         ess_b_pdv = ess_b_in
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
-        fixa_revenue = proj_map['fixa']
+        fixa_revenue = 0.0  # Fixa simulado é quantidade-only; sem receita estimada.
         # Permite sobrescrever metas
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
@@ -1774,7 +1778,8 @@ def compute_coordenador_simulation(
         ess_b_in = _get_sim_input(simulator_inputs, 'essenciais_b', 'real')
         proj_map = {
             'movel': _get_sim_input(simulator_inputs, 'movel', 'real'),
-            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'real'),
+            # Fixa: coordenador informa QUANTIDADE de vendas ('qty'), não receita.
+            'fixa': _get_sim_input(simulator_inputs, 'fixa', 'qty'),
             'smartphones': _get_sim_input(simulator_inputs, 'smartphones', 'real'),
             'eletronicos': eletro_a_in + eletro_b_in,
             'essenciais': ess_a_in + ess_b_in,
@@ -1786,7 +1791,7 @@ def compute_coordenador_simulation(
         ess_a = ess_a_in
         ess_b = ess_b_in
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
-        fixa_revenue = proj_map['fixa']
+        fixa_revenue = 0.0  # Fixa simulado é quantidade-only; sem receita estimada.
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
             if override is not None:

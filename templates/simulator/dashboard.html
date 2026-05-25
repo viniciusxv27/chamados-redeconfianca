@@ -339,7 +339,7 @@
             <td class="px-4 py-3 text-sm text-right text-gray-600">
               {% if row.key == 'fixa' %}
                 <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
-                <div class="text-xs text-gray-500">{{ row.revenue|brl }}</div>
+                {% if row.revenue %}<div class="text-xs text-gray-500">{{ row.revenue|brl }}</div>{% endif %}
               {% else %}
                 {{ row.proj|brl }}
               {% endif %}
@@ -438,7 +438,7 @@
             <td class="px-2 py-2 text-right text-gray-600">
               {% if row.key == 'fixa' %}
                 <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
-                <div class="text-[10px] text-gray-500">{{ row.revenue|brl }}</div>
+                {% if row.revenue %}<div class="text-[10px] text-gray-500">{{ row.revenue|brl }}</div>{% endif %}
               {% else %}
                 {{ row.proj|brl }}
               {% endif %}
@@ -449,8 +449,8 @@
               </span>
             </td>
             {% if target_role == 'consultor' %}
-            <td class="px-2 py-2 text-right text-blue-700 bg-blue-50">{% if row.pdv_meta is not None %}{{ row.pdv_meta|brl }}{% else %}—{% endif %}</td>
-            <td class="px-2 py-2 text-right text-blue-700 bg-blue-50">{% if row.pdv_proj is not None %}{{ row.pdv_proj|brl }}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right text-blue-700 bg-blue-50">{% if row.pdv_meta is not None %}{% if row.key == 'fixa' %}{{ row.pdv_meta|number_br:0 }}{% else %}{{ row.pdv_meta|brl }}{% endif %}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right text-blue-700 bg-blue-50">{% if row.pdv_proj is not None %}{% if row.key == 'fixa' %}{{ row.pdv_proj|number_br:0 }}{% else %}{{ row.pdv_proj|brl }}{% endif %}{% else %}—{% endif %}</td>
             <td class="px-2 py-2 text-right bg-blue-50 border-r-2 border-gray-500">
               {% if row.pdv_attainment is not None %}
               <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if row.pdv_attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.pdv_attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
@@ -460,8 +460,8 @@
             </td>
             {% endif %}
             {% if target_role != 'consultor' %}
-            <td class="px-2 py-2 text-right text-purple-700 bg-purple-50">{% if row.coord_meta is not None %}{{ row.coord_meta|brl }}{% else %}—{% endif %}</td>
-            <td class="px-2 py-2 text-right text-purple-700 bg-purple-50">{% if row.coord_proj is not None %}{{ row.coord_proj|brl }}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right text-purple-700 bg-purple-50">{% if row.coord_meta is not None %}{% if row.key == 'fixa' %}{{ row.coord_meta|number_br:0 }}{% else %}{{ row.coord_meta|brl }}{% endif %}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right text-purple-700 bg-purple-50">{% if row.coord_proj is not None %}{% if row.key == 'fixa' %}{{ row.coord_proj|number_br:0 }}{% else %}{{ row.coord_proj|brl }}{% endif %}{% else %}—{% endif %}</td>
             <td class="px-2 py-2 text-right bg-purple-50 border-r-2 border-gray-500">
               {% if row.coord_attainment is not None %}
               <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if row.coord_attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.coord_attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
