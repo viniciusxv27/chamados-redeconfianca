@@ -2,13 +2,14 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Max, Q
 from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from users.models import User
+from users.models import Sector, User
 
 from .ai import generate_ai_summary
 from .forms import AssignmentForm, FeedbackForm
@@ -316,6 +317,147 @@ def api_search_users(request):
             }
             for u in qs
         ]
+    })
+
+
+# ---------------------------------------------------------------------------
+# Relatórios de cumprimento de feedback por período (regra por tempo de casa)
+# ---------------------------------------------------------------------------
+
+# Regras de periodicidade (em dias), conforme tempo de casa do colaborador.
+PERIOD_RULES = [
+    {'key': 'novato_15d', 'label': 'Novato (até 4 meses)', 'max_months': 4, 'period_days': 15, 'period_label': '15 em 15 dias'},
+    {'key': 'novato_30d', 'label': 'Novato (5 a 12 meses)', 'max_months': 12, 'period_days': 30, 'period_label': '1 em 1 mês'},
+    {'key': 'veterano_90d', 'label': 'Veterano (mais de 12 meses)', 'max_months': None, 'period_days': 90, 'period_label': '3 em 3 meses'},
+]
+
+
+def _tenure_months(user, today):
+    """Meses de casa baseados em date_joined (data de criação do usuário)."""
+    base = getattr(user, 'date_joined', None)
+    if not base:
+        return 0
+    base_date = base.date() if hasattr(base, 'date') else base
+    days = max((today - base_date).days, 0)
+    return days / 30.44
+
+
+def _rule_for_user(user, today):
+    months = _tenure_months(user, today)
+    for rule in PERIOD_RULES:
+        if rule['max_months'] is None or months <= rule['max_months']:
+            return rule, months
+    return PERIOD_RULES[-1], months
+
+
+@superadmin_required
+def reports(request):
+    today = timezone.localdate()
+    sector_filter_id = request.GET.get('sector')
+    status_filter = (request.GET.get('status') or '').strip().lower()  # '', 'ok', 'pending'
+
+    # Universo: usuários ativos. Exclui superuser explicito do relatório.
+    users_qs = (
+        User.objects.filter(is_active=True)
+        .select_related('sector')
+        .order_by('first_name', 'last_name')
+    )
+
+    # Pré-carrega contagem de feedbacks por evaluatee dentro de janela máxima (90 dias).
+    max_window_start = today - timezone.timedelta(days=90)
+    recent_feedbacks = (
+        Feedback.objects
+        .filter(created_at__date__gte=max_window_start)
+        .values('evaluatee_id', 'created_at')
+    )
+    feedbacks_by_user = {}
+    for row in recent_feedbacks:
+        feedbacks_by_user.setdefault(row['evaluatee_id'], []).append(row['created_at'].date() if hasattr(row['created_at'], 'date') else row['created_at'])
+
+    # Última data de feedback por usuário (qualquer data, para mostrar referência).
+    last_feedback_by_user = dict(
+        Feedback.objects
+        .values('evaluatee_id')
+        .annotate(last=Max('created_at'))
+        .values_list('evaluatee_id', 'last')
+    )
+
+    rows = []
+    for u in users_qs:
+        rule, months = _rule_for_user(u, today)
+        period_start = today - timezone.timedelta(days=rule['period_days'])
+        dates = feedbacks_by_user.get(u.id, [])
+        in_period = [d for d in dates if d >= period_start]
+        compliant = len(in_period) > 0
+        last_dt = last_feedback_by_user.get(u.id)
+        rows.append({
+            'user': u,
+            'sector': u.sector,
+            'rule': rule,
+            'tenure_months': round(months, 1),
+            'period_start': period_start,
+            'count_in_period': len(in_period),
+            'compliant': compliant,
+            'last_feedback': last_dt,
+        })
+
+    # Visão geral por setor (PDV).
+    sectors_map = {}
+    for r in rows:
+        sec = r['sector']
+        sec_key = sec.id if sec else 0
+        bucket = sectors_map.setdefault(sec_key, {
+            'sector': sec,
+            'sector_name': sec.name if sec else 'Sem setor',
+            'total': 0,
+            'ok': 0,
+            'pending': 0,
+        })
+        bucket['total'] += 1
+        if r['compliant']:
+            bucket['ok'] += 1
+        else:
+            bucket['pending'] += 1
+
+    overview = sorted(
+        sectors_map.values(),
+        key=lambda b: (b['sector_name'] or '').lower(),
+    )
+    for b in overview:
+        b['ok_pct'] = round((b['ok'] / b['total']) * 100, 1) if b['total'] else 0.0
+
+    # Detalhamento por setor selecionado (ou todos quando sem filtro).
+    detailed = rows
+    selected_sector = None
+    if sector_filter_id:
+        try:
+            sid = int(sector_filter_id)
+            selected_sector = Sector.objects.filter(id=sid).first()
+            detailed = [r for r in rows if (r['sector'].id if r['sector'] else 0) == sid]
+        except (TypeError, ValueError):
+            pass
+
+    if status_filter == 'ok':
+        detailed = [r for r in detailed if r['compliant']]
+    elif status_filter == 'pending':
+        detailed = [r for r in detailed if not r['compliant']]
+
+    totals = {
+        'total': len(rows),
+        'ok': sum(1 for r in rows if r['compliant']),
+        'pending': sum(1 for r in rows if not r['compliant']),
+    }
+    totals['ok_pct'] = round((totals['ok'] / totals['total']) * 100, 1) if totals['total'] else 0.0
+
+    return render(request, 'feedback/reports.html', {
+        'overview': overview,
+        'detailed': detailed,
+        'totals': totals,
+        'rules': PERIOD_RULES,
+        'today': today,
+        'selected_sector': selected_sector,
+        'status_filter': status_filter,
+        'all_sectors': Sector.objects.all().order_by('name'),
     })
 
 

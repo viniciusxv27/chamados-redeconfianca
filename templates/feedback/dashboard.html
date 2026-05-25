@@ -16,6 +16,7 @@
       <div class="flex gap-2">
         {% if is_superadmin %}
           <a href="{% url 'feedback:assign' %}" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow"><i class="fas fa-user-plus mr-2"></i>Atribuir</a>
+          <a href="{% url 'feedback:reports' %}" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 shadow"><i class="fas fa-chart-bar mr-2"></i>Relatórios</a>
           <a href="{% url 'feedback:manage' %}" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow"><i class="fas fa-cogs mr-2"></i>Gerenciar</a>
         {% endif %}
         <a href="{% url 'feedback:pending' %}" class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 shadow"><i class="fas fa-users mr-2"></i>Meus avaliados</a>

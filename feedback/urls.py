@@ -14,6 +14,7 @@ urlpatterns = [
 
     # Superadmin
     path('gerenciar/', views.manage_all, name='manage'),
+    path('relatorios/', views.reports, name='reports'),
     path('atribuir/', views.assign_view, name='assign'),
     path('atribuicoes/<int:assignment_id>/excluir/', views.delete_assignment, name='delete_assignment'),
 
