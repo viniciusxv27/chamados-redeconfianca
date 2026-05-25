@@ -6,8 +6,49 @@ from decimal import Decimal
 from core.storage import get_media_storage
 
 
+class ExclusionSyncBatch(models.Model):
+    """Lote de importação da planilha BASE_EXCLUSAO.
+
+    Cada clique em "Sincronizar Planilha" gera um novo lote. Os registros
+    importados ficam vinculados ao lote, permitindo:
+      - Exibir apenas as vendas da planilha mais recente nas telas de
+        contestação (lotes antigos permanecem no banco apenas para auditoria).
+      - Reabrir todas as lojas para uma nova rodada de contestação, já que
+        as contestações antigas continuam vinculadas aos registros do lote
+        anterior.
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exclusion_sync_batches',
+        verbose_name='Sincronizado por',
+    )
+    record_count = models.PositiveIntegerField(default=0, verbose_name='Registros importados')
+    notes = models.TextField(blank=True, default='', verbose_name='Observações')
+
+    class Meta:
+        verbose_name = 'Lote de Sincronização de Exclusões'
+        verbose_name_plural = 'Lotes de Sincronização de Exclusões'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Lote #{self.pk} – {self.record_count} registros ({self.created_at:%d/%m/%Y %H:%M})'
+
+
 class ExclusionRecord(models.Model):
     """Registro importado da planilha BASE_EXCLUSAO."""
+    sync_batch = models.ForeignKey(
+        ExclusionSyncBatch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='records',
+        verbose_name='Lote de Sincronização',
+    )
     filial = models.CharField(max_length=100, verbose_name='Filial')
     vendedor = models.CharField(max_length=200, verbose_name='Vendedor')
     receita = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='Receita')
@@ -32,6 +73,7 @@ class ExclusionRecord(models.Model):
             models.Index(fields=['filial']),
             models.Index(fields=['vendedor']),
             models.Index(fields=['pilar']),
+            models.Index(fields=['sync_batch']),
         ]
 
     def __str__(self):

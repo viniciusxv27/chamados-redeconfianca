@@ -16,7 +16,7 @@ from django.db.models import Count, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
 
-from .models import ExclusionRecord, Contestation, ContestationHistory, ContestationCartDraft
+from .models import ExclusionRecord, ExclusionSyncBatch, Contestation, ContestationHistory, ContestationCartDraft
 from users.models import SystemConfig, User
 
 
@@ -433,6 +433,11 @@ def _get_last_sync_at():
     return last_sync.created_at if last_sync else None
 
 
+def _get_latest_sync_batch():
+    """Retorna o lote de sincronização mais recente (ou None)."""
+    return ExclusionSyncBatch.objects.order_by('-created_at').first()
+
+
 def _get_sync_window_state():
     now = timezone.now()
     last_sync_at = _get_last_sync_at()
@@ -575,11 +580,13 @@ def sync_exclusions(request):
         messages.error(request, 'Colunas obrigatórias não encontradas na planilha (FILIAL, VENDEDOR, RECEITA, PILAR).')
         return redirect('contestacao:exclusion_list')
 
-    # Apagar apenas registros SEM contestações ativas — nunca apagar os que têm contestação
-    contested_ids = set(
-        Contestation.objects.values_list('exclusion_id', flat=True)
-    )
-    ExclusionRecord.objects.exclude(pk__in=contested_ids).delete()
+    # Cria um novo lote de sincronização. Registros antigos NÃO são apagados —
+    # ficam preservados no banco para auditoria/conferência das rodadas
+    # anteriores. As telas de contestação passam a exibir somente os registros
+    # do lote mais recente, reabrindo automaticamente todas as lojas para uma
+    # nova rodada de contestação (as contestações antigas permanecem
+    # vinculadas aos registros do lote anterior).
+    sync_batch = ExclusionSyncBatch.objects.create(created_by=request.user)
 
     records = []
     for _, row in df.iterrows():
@@ -593,6 +600,7 @@ def sync_exclusions(request):
             receita_val = 0
 
         records.append(ExclusionRecord(
+            sync_batch=sync_batch,
             filial=str(row.get(filial_col, '')).strip(),
             vendedor=vendedor_val,
             receita=receita_val,
@@ -610,10 +618,13 @@ def sync_exclusions(request):
         ))
 
     ExclusionRecord.objects.bulk_create(records, batch_size=500)
+    sync_batch.record_count = len(records)
+    sync_batch.save(update_fields=['record_count'])
     ContestationHistory.objects.create(
         action='synced',
         user=request.user,
         notes=f'{len(records)} registros importados',
+        extra_data={'sync_batch_id': sync_batch.pk},
     )
     messages.success(request, f'{len(records)} registros de exclusão importados com sucesso!')
     return redirect('contestacao:exclusion_list')
@@ -628,18 +639,15 @@ def exclusion_list(request):
 
     qs = ExclusionRecord.objects.all()
 
-    # Mostra apenas os registros com data da venda no mês anterior.
-    now = timezone.localtime(timezone.now()).date()
-    current_month_start = now.replace(day=1)
-    previous_month_end = current_month_start
-    previous_month_start = (current_month_start - datetime.timedelta(days=1)).replace(day=1)
-
-    sale_date_ids = []
-    for record in qs:
-        sale_date = _parse_sale_date_value(record.data_venda)
-        if sale_date and previous_month_start <= sale_date < previous_month_end:
-            sale_date_ids.append(record.id)
-    qs = qs.filter(id__in=sale_date_ids)
+    # Mostra apenas os registros importados no lote mais recente
+    # (última "Sincronizar Planilha"). Lotes anteriores ficam preservados no
+    # banco para auditoria, mas não aparecem na tela de contestação — assim,
+    # todas as lojas voltam a poder contestar sobre as novas vendas.
+    latest_batch = _get_latest_sync_batch()
+    if latest_batch is not None:
+        qs = qs.filter(sync_batch=latest_batch)
+    else:
+        qs = qs.none()
 
     # Superadmin vê tudo; outros filtram por setor
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
