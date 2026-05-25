@@ -279,7 +279,7 @@ def export_excel(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = 'Valida D+1'
+    ws.title = 'Valida D-1'
 
     headers = [
         'Nº Venda', 'CPF', 'Nº Acesso', 'Produto', 'Valor',
