@@ -210,16 +210,58 @@ def relatorio(request):
             'receita': sub.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
         })
 
-    por_divergencia = (
+    por_divergencia_raw = list(
         qs.filter(status=VendaD1.STATUS_DIVERGENTE)
         .values('tipo_divergencia')
         .annotate(n=Count('id'), receita=Sum('valor'))
         .order_by('-n')
     )
+    _tipo_map = dict(VendaD1.TIPO_DIVERGENCIA_CHOICES)
+    por_divergencia = [
+        {**d, 'tipo_label': _tipo_map.get(d['tipo_divergencia'], d['tipo_divergencia'] or 'Não classificado')}
+        for d in por_divergencia_raw
+    ]
+
+    # Acordo (gerentes)
+    por_acordo = []
+    for k, l in VendaD1.ACORDO_CHOICES:
+        cnt = qs.filter(acordo_status=k).count()
+        por_acordo.append({'key': k, 'label': l, 'qtd': cnt})
+
+    # Penalidades
+    por_penalidade = []
+    for k, l in VendaD1.PENALIDADE_CHOICES:
+        cnt = qs.filter(penalidade=k, status=VendaD1.STATUS_DIVERGENTE).count()
+        if cnt:
+            por_penalidade.append({'key': k, 'label': l, 'qtd': cnt})
+
+    receita_total = qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
+
+    # Datasets para Chart.js
+    tipo_labels_map = dict(VendaD1.TIPO_DIVERGENCIA_CHOICES)
+    div_labels = [tipo_labels_map.get(d['tipo_divergencia'], d['tipo_divergencia'] or 'Não classificado') for d in por_divergencia]
+    div_data = [d['n'] for d in por_divergencia]
+
+    status_colors_map = {
+        VendaD1.STATUS_PENDENTE: '#6B7280',
+        VendaD1.STATUS_CONFORMIDADE: '#10B981',
+        VendaD1.STATUS_DIVERGENTE: '#EF4444',
+    }
+    status_chart_labels = [s['label'] for s in por_status]
+    status_chart_data = [s['qtd'] for s in por_status]
+    status_chart_colors = [status_colors_map.get(s['key'], '#6B7280') for s in por_status]
 
     return render(request, 'validad1/relatorio.html', {
         'total': qs.count(),
+        'receita_total': receita_total,
         'por_status': por_status,
         'por_divergencia': por_divergencia,
-        'tipo_labels': dict(VendaD1.TIPO_DIVERGENCIA_CHOICES),
+        'por_acordo': por_acordo,
+        'por_penalidade': por_penalidade,
+        'tipo_labels': tipo_labels_map,
+        'status_chart_labels': status_chart_labels,
+        'status_chart_data': status_chart_data,
+        'status_chart_colors': status_chart_colors,
+        'div_chart_labels': div_labels,
+        'div_chart_data': div_data,
     })

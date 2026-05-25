@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -54,6 +54,30 @@ def kanban(request):
 
 
 @login_required
+def lista(request):
+    """Visão em lista (tabela) alternativa ao kanban."""
+    qs = fibras_for_user(request.user)
+    pdv = (request.GET.get('pdv') or '').strip()
+    vendedor = (request.GET.get('vendedor') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    if pdv:
+        qs = qs.filter(pdv__icontains=pdv)
+    if vendedor:
+        qs = qs.filter(vendedor__icontains=vendedor)
+    if status:
+        qs = qs.filter(status=status)
+
+    return render(request, 'fibras/lista.html', {
+        'fibras': qs.order_by('-data_da_venda', '-id'),
+        'is_ilha': _is_ilha(request.user),
+        'filtro_pdv': pdv,
+        'filtro_vendedor': vendedor,
+        'filtro_status': status,
+        'status_choices': Fibra.STATUS_CHOICES,
+    })
+
+
+@login_required
 def detail(request, pk: int):
     fibra = get_object_or_404(Fibra, pk=pk)
     incidentes = fibra.incidentes.select_related('aberto_por').all()
@@ -82,6 +106,26 @@ def change_status_view(request, pk: int):
     except ValueError as e:
         messages.error(request, str(e))
     return redirect('fibras:detail', pk=pk)
+
+
+@login_required
+@require_POST
+def change_status_ajax(request, pk: int):
+    """Endpoint usado pelo drag&drop do Kanban — retorna JSON."""
+    if not _is_ilha(request.user):
+        return JsonResponse({'ok': False, 'error': 'permission'}, status=403)
+    fibra = get_object_or_404(Fibra, pk=pk)
+    new_status = (request.POST.get('status') or '').strip()
+    try:
+        change_status(fibra, new_status, changed_by=request.user, retorno='')
+    except ValueError as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+    return JsonResponse({
+        'ok': True,
+        'pk': fibra.pk,
+        'status': fibra.status,
+        'status_label': fibra.get_status_display(),
+    })
 
 
 @login_required
@@ -167,9 +211,43 @@ def relatorio(request):
         .order_by('-n')[:5]
     )
 
+    # KPIs principais
+    qtd_cancel = qs.filter(status=Fibra.STATUS_CANCELADO).count()
+    qtd_install = qs.filter(status=Fibra.STATUS_INSTALADO).count()
+    receita_cancel = qs.filter(status=Fibra.STATUS_CANCELADO).aggregate(
+        t=Sum('valor'))['t'] or Decimal('0')
+    receita_install = qs.filter(status=Fibra.STATUS_INSTALADO).aggregate(
+        t=Sum('valor'))['t'] or Decimal('0')
+    real_total = qs.count() or 1
+
+    # Top 5 vendedores por receita
+    top_vendedores = list(
+        qs.exclude(vendedor='')
+        .values('vendedor')
+        .annotate(qtd=Count('id'), receita=Sum('valor'))
+        .order_by('-receita')[:5]
+    )
+
+    # Dataset para os gráficos (Chart.js) — serializado em JSON no template.
+    chart_labels = [b['label'] for b in blocos]
+    chart_qtd = [b['qtd'] for b in blocos]
+    chart_receita = [float(b['receita']) for b in blocos]
+    chart_colors = ['#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#6B7280']
+
     return render(request, 'fibras/relatorio.html', {
         'blocos': blocos,
         'total': qs.count(),
         'receita_total': receita_total,
         'motivos': motivos,
+        'qtd_cancel': qtd_cancel,
+        'qtd_install': qtd_install,
+        'receita_cancel': receita_cancel,
+        'receita_install': receita_install,
+        'percent_cancel': round((qtd_cancel / real_total) * 100, 1),
+        'percent_install': round((qtd_install / real_total) * 100, 1),
+        'top_vendedores': top_vendedores,
+        'chart_labels': chart_labels,
+        'chart_qtd': chart_qtd,
+        'chart_receita': chart_receita,
+        'chart_colors': chart_colors,
     })
