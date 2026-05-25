@@ -28,7 +28,11 @@ def _norm(value) -> str:
 
 
 def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
-    """Busca as vendas do dia anterior (`target_date`, padrão = ontem)."""
+    """Busca as vendas do dia anterior (`target_date`, padrão = ontem).
+
+    Combina ``vendas_servicos`` (qualquer pilar) **e** ``vendas_produto`` —
+    conforme requisito do D-1: ambas as tabelas precisam ser auditadas.
+    """
     try:
         import pymysql  # type: ignore
     except ImportError:
@@ -43,16 +47,21 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
         return []
 
     rows: list[dict] = []
+    cols = [
+        'numero_da_venda', 'produto', 'valor', 'cpf', 'numero_acesso',
+        'data_da_venda', 'pilar', 'vendedor', 'pdv', 'servicos',
+    ]
     try:
         with conn.cursor() as cur:
+            # --- vendas_servicos (PascalCase + acentos) ---
             cur.execute(
                 """
                 SELECT
-                    `Numero_da_venda`,
-                    `Plano`,
+                    `ID_da_venda`,
+                    `Plano_novo`,
                     COALESCE(`receita_calculada`, `Receita`, 0) AS valor,
-                    `CPF`,
-                    `Numero_de_Acesso`,
+                    `CPF_do_cliente`,
+                    `Nº_acesso`,
                     `data_da_venda`,
                     `pilar`,
                     `Nome_do_vendedor`,
@@ -60,14 +69,33 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
                     `Serviço_Técnico`
                 FROM vendas_servicos
                 WHERE data_da_venda = %s
-                  AND Venda_ativa = '1'
+                  AND `Venda_ativa` = '1'
                 """,
                 (target_date,),
             )
-            cols = [
-                'numero_da_venda', 'produto', 'valor', 'cpf', 'numero_acesso',
-                'data_da_venda', 'pilar', 'vendedor', 'pdv', 'servicos',
-            ]
+            for row in cur.fetchall():
+                rows.append(dict(zip(cols, row)))
+
+            # --- vendas_produto (lowercase) ---
+            cur.execute(
+                """
+                SELECT
+                    `id_da_venda`,
+                    `plano`,
+                    COALESCE(`valor_líquido_de_venda_do_produto`, 0) AS valor,
+                    `cpf_do_cliente`,
+                    `Nº_acesso`,
+                    `data_da_venda`,
+                    `pilar`,
+                    `nome_do_vendedor`,
+                    `pdv`,
+                    `nome_do_produto`
+                FROM vendas_produto
+                WHERE data_da_venda = %s
+                  AND `venda_ativa` = '1'
+                """,
+                (target_date,),
+            )
             for row in cur.fetchall():
                 rows.append(dict(zip(cols, row)))
     finally:
@@ -80,65 +108,74 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
 
 
 def sync_d1(*, target_date: Optional[date] = None) -> dict:
-    """Insere as vendas de D-1 no banco local (acumula vendas não ajustadas).
+    """Insere as vendas de D-1 no banco local de forma idempotente.
 
-    - Cria novas linhas (não atualiza existentes, conforme requisito de acúmulo).
-    - Aplica regra de duplicidade: mesmo CPF, número da venda, plano, data,
-      número de acesso e serviços → marca como `is_duplicate=True`.
+    - Se já existe uma linha local idêntica (mesmo número da venda, CPF,
+      produto, data, número de acesso e serviços), o registro é pulado —
+      evita inflar duplicatas a cada sync.
+    - Quando a fonte (MySQL) traz mais de uma ocorrência do mesmo combo,
+      a partir da segunda é marcada como `is_duplicate=True`.
     - Expira automaticamente vendas com `acordo_deadline < now`.
     """
     raw = fetch_d1_from_mysql(target_date=target_date)
     created = 0
+    skipped = 0
+    seen: dict[tuple, VendaD1] = {}
+
+    def _s(value) -> str:
+        return (str(value).strip() if value is not None else '')
+
     for r in raw:
-        numero = (r.get('numero_da_venda') or '').strip()
+        numero = _s(r.get('numero_da_venda'))
         if not numero:
             continue
 
-        # Dedup check: já existe linha com mesma combinação?
-        match = VendaD1.objects.filter(
-            numero_da_venda=numero,
-            cpf=(r.get('cpf') or '').strip(),
-            produto=(r.get('produto') or '').strip(),
-            data_da_venda=r.get('data_da_venda'),
-            numero_acesso=(r.get('numero_acesso') or '').strip(),
-            servicos=(r.get('servicos') or '').strip(),
-        ).first()
+        cpf = _s(r.get('cpf'))
+        produto = _s(r.get('produto'))
+        numero_acesso = _s(r.get('numero_acesso'))
+        servicos = _s(r.get('servicos'))
+        data_venda = r.get('data_da_venda')
 
-        if match:
-            # Cria a nova como duplicata da existente (acompanhamento).
-            obj = VendaD1.objects.create(
-                numero_da_venda=numero,
-                produto=(r.get('produto') or '').strip(),
-                valor=Decimal(str(r.get('valor') or 0)),
-                cpf=(r.get('cpf') or '').strip(),
-                numero_acesso=(r.get('numero_acesso') or '').strip(),
-                data_da_venda=r.get('data_da_venda'),
-                pilar=(r.get('pilar') or '').strip(),
-                vendedor=(r.get('vendedor') or '').strip(),
-                pdv=(r.get('pdv') or '').strip(),
-                servicos=(r.get('servicos') or '').strip(),
-                is_duplicate=True,
-                duplicate_of=match,
-            )
-        else:
-            VendaD1.objects.create(
-                numero_da_venda=numero,
-                produto=(r.get('produto') or '').strip(),
-                valor=Decimal(str(r.get('valor') or 0)),
-                cpf=(r.get('cpf') or '').strip(),
-                numero_acesso=(r.get('numero_acesso') or '').strip(),
-                data_da_venda=r.get('data_da_venda'),
-                pilar=(r.get('pilar') or '').strip(),
-                vendedor=(r.get('vendedor') or '').strip(),
-                pdv=(r.get('pdv') or '').strip(),
-                servicos=(r.get('servicos') or '').strip(),
-            )
+        key = (numero, cpf, produto, str(data_venda), numero_acesso, servicos)
+
+        # Já existe localmente? → pula (idempotente).
+        existing = VendaD1.objects.filter(
+            numero_da_venda=numero,
+            cpf=cpf,
+            produto=produto,
+            data_da_venda=data_venda,
+            numero_acesso=numero_acesso,
+            servicos=servicos,
+        ).first()
+        if existing:
+            seen.setdefault(key, existing)
+            skipped += 1
+            continue
+
+        # Segunda ocorrência do mesmo combo no fetch atual → duplicata.
+        parent = seen.get(key)
+        obj = VendaD1.objects.create(
+            numero_da_venda=numero,
+            produto=produto,
+            valor=Decimal(str(r.get('valor') or 0)),
+            cpf=cpf,
+            numero_acesso=numero_acesso,
+            data_da_venda=data_venda,
+            pilar=_s(r.get('pilar')),
+            vendedor=_s(r.get('vendedor')),
+            pdv=_s(r.get('pdv')),
+            servicos=servicos,
+            is_duplicate=bool(parent),
+            duplicate_of=parent,
+        )
+        seen.setdefault(key, obj)
         created += 1
 
     expired = expire_deadlines()
 
     return {
         'created': created,
+        'skipped': skipped,
         'total_in_source': len(raw),
         'expired': expired,
         'target_date': str(target_date or (timezone.localdate() - timedelta(days=1))),

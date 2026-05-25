@@ -31,7 +31,7 @@ def fetch_fibras_from_mysql(
 ) -> list[dict]:
     """Lê as vendas de Fibra do MySQL do mês corrente.
 
-    Considera Pilar=FIXA E Serviço_Técnico em ('Alta Banda Larga', 'Alta TV').
+    Fibra = ``vendas_servicos`` com ``pilar = 'FIXA'``.
     """
     try:
         import pymysql  # type: ignore
@@ -53,29 +53,30 @@ def fetch_fibras_from_mysql(
             cur.execute(
                 """
                 SELECT
-                    `Numero_da_venda`,
-                    `CPF`,
+                    `ID_da_venda`,
+                    `CPF_do_cliente`,
                     `Nome_do_cliente`,
-                    `Endereço`,
-                    `Numero_de_Acesso`,
-                    `Plano`,
+                    `endereço_do_cliente`,
+                    `Nº_acesso`,
+                    `Plano_novo`,
                     COALESCE(`receita_calculada`, `Receita`, 0) AS valor,
                     `PDV`,
                     `Nome_do_vendedor`,
                     `data_da_venda`,
                     `pilar`,
-                    `Serviço_Técnico`
+                    `Serviço_Técnico`,
+                    `Venda_ativa`
                 FROM vendas_servicos
                 WHERE YEAR(data_da_venda) = %s
                   AND MONTH(data_da_venda) = %s
-                  AND UPPER(`Serviço_Técnico`) IN ('ALTA BANDA LARGA', 'ALTA TV')
+                  AND UPPER(`pilar`) = 'FIXA'
                 """,
                 (year, month),
             )
             cols = [
                 'numero_da_venda', 'cpf', 'cliente', 'endereco', 'numero_acesso',
                 'plano', 'valor', 'pdv', 'vendedor', 'data_da_venda',
-                'pilar', 'servico_tecnico',
+                'pilar', 'servico_tecnico', 'venda_ativa',
             ]
             for row in cur.fetchall():
                 rows.append(dict(zip(cols, row)))
@@ -91,36 +92,56 @@ def fetch_fibras_from_mysql(
 def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> dict:
     """Atualiza/insere registros de Fibra a partir do MySQL.
 
-    Não sobrescreve `status` nem `retorno_myrella` para vendas já existentes.
+    Para vendas já existentes localmente NÃO sobrescreve ``status`` nem
+    ``retorno_myrella`` (Myrella já pode ter mexido). Exceção: se a venda
+    foi cancelada no MySQL (``Venda_ativa='0'``), o status local vira
+    ``STATUS_CANCELADO`` automaticamente.
+
     Retorna estatísticas (created, updated).
     """
     raw = fetch_fibras_from_mysql(year=year, month=month)
     created = 0
     updated = 0
     for r in raw:
-        numero = (r.get('numero_da_venda') or '').strip()
+        numero = (str(r.get('numero_da_venda') or '')).strip()
         if not numero:
             continue
-        defaults = {
-            'cpf': (r.get('cpf') or '').strip(),
-            'cliente': (r.get('cliente') or '').strip(),
-            'endereco': (r.get('endereco') or '').strip(),
-            'numero_acesso': (r.get('numero_acesso') or '').strip(),
-            'plano': (r.get('plano') or '').strip(),
+
+        venda_ativa = (str(r.get('venda_ativa') or '')).strip()
+        cancelada = venda_ativa == '0'
+
+        common = {
+            'cpf': (r.get('cpf') or '').strip() if r.get('cpf') else '',
+            'cliente': (r.get('cliente') or '').strip() if r.get('cliente') else '',
+            'endereco': (r.get('endereco') or '').strip() if r.get('endereco') else '',
+            'numero_acesso': (str(r.get('numero_acesso') or '')).strip(),
+            'plano': (r.get('plano') or '').strip() if r.get('plano') else '',
             'valor': Decimal(str(r.get('valor') or 0)),
-            'pdv': (r.get('pdv') or '').strip(),
-            'vendedor': (r.get('vendedor') or '').strip(),
+            'pdv': (r.get('pdv') or '').strip() if r.get('pdv') else '',
+            'vendedor': (r.get('vendedor') or '').strip() if r.get('vendedor') else '',
             'data_da_venda': r.get('data_da_venda'),
-            'pilar': (r.get('pilar') or '').strip(),
-            'servico_tecnico': (r.get('servico_tecnico') or '').strip(),
+            'pilar': (r.get('pilar') or '').strip() if r.get('pilar') else '',
+            'servico_tecnico': (r.get('servico_tecnico') or '').strip() if r.get('servico_tecnico') else '',
         }
-        obj, was_created = Fibra.objects.update_or_create(
-            numero_da_venda=numero, defaults=defaults,
-        )
-        if was_created:
-            created += 1
-        else:
+
+        existing = Fibra.objects.filter(numero_da_venda=numero).first()
+        if existing:
+            for field, value in common.items():
+                setattr(existing, field, value)
+            # Cancelada no MySQL → reflete localmente.
+            if cancelada and existing.status != Fibra.STATUS_CANCELADO:
+                existing.status = Fibra.STATUS_CANCELADO
+            existing.save()
             updated += 1
+        else:
+            initial_status = Fibra.STATUS_CANCELADO if cancelada else Fibra.STATUS_AGENDADO
+            Fibra.objects.create(
+                numero_da_venda=numero,
+                status=initial_status,
+                **common,
+            )
+            created += 1
+
     return {'created': created, 'updated': updated, 'total_in_source': len(raw)}
 
 
