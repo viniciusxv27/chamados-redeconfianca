@@ -26,6 +26,14 @@
       <div><dt class="text-gray-500">Data da venda</dt><dd class="font-semibold">{{ fibra.data_da_venda|date:"d/m/Y" }}</dd></div>
       <div><dt class="text-gray-500">Serviço técnico</dt><dd class="font-semibold">{{ fibra.servico_tecnico|default:"—" }}</dd></div>
       <div>
+        <dt class="text-gray-500">Nº do protocolo</dt>
+        <dd class="font-semibold">{{ fibra.numero_protocolo|default:"—" }}</dd>
+      </div>
+      <div>
+        <dt class="text-gray-500">Ordem (planilha)</dt>
+        <dd class="font-semibold">{{ fibra.ordem_planilha|default:"—" }}</dd>
+      </div>
+      <div>
         <dt class="text-gray-500">SLA Agenda</dt>
         <dd class="font-semibold">{{ fibra.sla_agenda|default:"—" }}</dd>
       </div>
