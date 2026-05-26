@@ -25,7 +25,20 @@
       <div><dt class="text-gray-500">PDV</dt><dd class="font-semibold">{{ fibra.pdv|default:"—" }}</dd></div>
       <div><dt class="text-gray-500">Data da venda</dt><dd class="font-semibold">{{ fibra.data_da_venda|date:"d/m/Y" }}</dd></div>
       <div><dt class="text-gray-500">Serviço técnico</dt><dd class="font-semibold">{{ fibra.servico_tecnico|default:"—" }}</dd></div>
+      <div>
+        <dt class="text-gray-500">SLA Agenda</dt>
+        <dd class="font-semibold">{{ fibra.sla_agenda|default:"—" }}</dd>
+      </div>
     </dl>
+
+    {% if fibra.motivo_planilha %}
+    <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+      <p class="text-xs text-red-600 font-semibold uppercase mb-1">
+        <i class="fas fa-exclamation-triangle"></i> Motivo (planilha)
+      </p>
+      <p class="text-sm">{{ fibra.motivo_planilha }}</p>
+    </div>
+    {% endif %}
 
     {% if fibra.retorno_myrella %}
     <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">

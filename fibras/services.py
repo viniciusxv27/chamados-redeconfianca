@@ -394,8 +394,19 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
             None,
         )
 
+    # Coluna 'SLA AGENDA' (ou contendo SLA + AGEND); fallback só SLA.
+    sla_idx = next(
+        (j for j, c in enumerate(headers) if 'SLA' in c and 'AGEND' in c),
+        None,
+    )
+    if sla_idx is None:
+        sla_idx = next((j for j, c in enumerate(headers) if 'SLA' in c), None)
+
+    # Coluna 'MOTIVO' (usada em vendas com problema).
+    motivo_idx = next((j for j, c in enumerate(headers) if 'MOTIVO' in c), None)
+
     # 1ª passada: coleta protocolos e status_raw mantendo a ordem da planilha.
-    parsed: list[tuple[str, str]] = []  # (proto, status_raw)
+    parsed: list[tuple[str, str, str, str]] = []  # (proto, status_raw, sla, motivo)
     for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
         if not row or all(c is None or str(c).strip() == '' for c in row):
             continue
@@ -403,10 +414,16 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
         status_raw = ''
         if status_idx is not None and status_idx < len(row) and row[status_idx] is not None:
             status_raw = str(row[status_idx]).strip()
-        parsed.append((proto, status_raw))
+        sla_val = ''
+        if sla_idx is not None and sla_idx < len(row) and row[sla_idx] is not None:
+            sla_val = str(row[sla_idx]).strip()
+        motivo_val = ''
+        if motivo_idx is not None and motivo_idx < len(row) and row[motivo_idx] is not None:
+            motivo_val = str(row[motivo_idx]).strip()
+        parsed.append((proto, status_raw, sla_val, motivo_val))
 
     total_rows = len(parsed)
-    protocols = [p for p, _ in parsed if p]
+    protocols = [p for p, _, _, _ in parsed if p]
 
     # Cross com o banco local; o que faltar buscamos no MySQL e fazemos upsert.
     existing_map: dict[str, Fibra] = {
@@ -459,7 +476,7 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
     # Mantém um mapa proto -> status_raw para registrar inconsistências.
     unmatched_status: dict[str, str] = {}
 
-    for ordem, (proto, status_raw) in enumerate(parsed, start=1):
+    for ordem, (proto, status_raw, sla_val, motivo_val) in enumerate(parsed, start=1):
         if not proto:
             continue
         fibra = existing_map.get(proto)
@@ -471,7 +488,12 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
         fibra.ordem_planilha = ordem
         fibra.last_planilha_at = now
         fibra.status_planilha_raw = status_raw[:120]
-        update_fields = ['ordem_planilha', 'last_planilha_at', 'status_planilha_raw']
+        fibra.sla_agenda = sla_val[:120]
+        fibra.motivo_planilha = motivo_val[:255]
+        update_fields = [
+            'ordem_planilha', 'last_planilha_at', 'status_planilha_raw',
+            'sla_agenda', 'motivo_planilha',
+        ]
 
         mapped = _map_planilha_status(status_raw)
         if mapped and mapped != fibra.status:
@@ -513,6 +535,12 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
     # Fibra.numero_protocolo é considerada resolvida e removida.
     inc_resolved = _sweep_inconsistencias()
 
+    # --- Limpeza: fibras FIXA que estavam em planilhas anteriores mas não
+    # vieram nesta importação podem sair, EXCETO se foram "mexidas" (retorno
+    # da ilha preenchido, histórico de status com alteração manual, mensagens
+    # de chat) ou estão "em tratativa" (incidente aberto/em andamento).
+    pruned = _prune_stale_fibras(import_ts=now)
+
     return {
         'rows': total_rows,
         'matched': matched,
@@ -523,6 +551,7 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
         'inconsistencias_novas': inc_created,
         'inconsistencias_atualizadas': inc_updated,
         'inconsistencias_resolvidas': inc_resolved,
+        'removidas': pruned,
     }
 
 
@@ -568,6 +597,61 @@ def _sweep_inconsistencias() -> int:
     if not achados:
         return 0
     deleted, _ = PlanilhaOrdemInconsistente.objects.filter(ordem__in=achados).delete()
+    return int(deleted)
+
+
+def _prune_stale_fibras(*, import_ts) -> int:
+    """Remove fibras FIXA que sumiram da planilha atual.
+
+    Critérios para apagar:
+      - pilar contém 'FIXA' (ou está vazio — fibras criadas só via planilha);
+      - já tinha sido vista em uma planilha antes (``last_planilha_at`` não nulo)
+        e essa última visita é anterior à importação atual (``import_ts``).
+
+    Critérios de PROTEÇÃO (NÃO apaga):
+      - ``retorno_myrella`` preenchido (a ilha já interagiu);
+      - existe ``FibraIncidente`` em status ``aberto`` ou ``em_tratativa``;
+      - existe ``FibraStatusHistory`` com ``alterado_por`` não nulo
+        (alteração manual de status feita por alguém);
+      - existe ``FibraChatMessage`` (chat reverso teve mensagem).
+    """
+    from django.db.models import Q, Exists, OuterRef
+
+    from .models import (
+        FibraChatMessage, FibraIncidente, FibraStatusHistory,
+    )
+
+    base = Fibra.objects.filter(
+        last_planilha_at__isnull=False,
+        last_planilha_at__lt=import_ts,
+    ).filter(Q(pilar__icontains='FIXA') | Q(pilar=''))
+
+    if not base.exists():
+        return 0
+
+    tratativa = FibraIncidente.objects.filter(
+        fibra_id=OuterRef('pk'),
+        status__in=[FibraIncidente.STATUS_ABERTO, FibraIncidente.STATUS_EM_TRATATIVA],
+    )
+    historico_manual = FibraStatusHistory.objects.filter(
+        fibra_id=OuterRef('pk'),
+        alterado_por__isnull=False,
+    )
+    chat_msg = FibraChatMessage.objects.filter(chat__fibra_id=OuterRef('pk'))
+
+    candidatas = (
+        base.annotate(
+            _tratativa=Exists(tratativa),
+            _hist=Exists(historico_manual),
+            _chat=Exists(chat_msg),
+        )
+        .exclude(_tratativa=True)
+        .exclude(_hist=True)
+        .exclude(_chat=True)
+        .exclude(retorno_myrella__gt='')
+    )
+
+    deleted, _detail = candidatas.delete()
     return int(deleted)
 
 

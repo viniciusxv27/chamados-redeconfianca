@@ -195,7 +195,8 @@ def importar_planilha(request):
         f"{stats['not_found_count']} protocolos não encontrados "
         f"(de {stats['rows']} linhas). "
         f"Inconsistências: +{stats.get('inconsistencias_novas', 0)} novas, "
-        f"{stats.get('inconsistencias_resolvidas', 0)} resolvidas."
+        f"{stats.get('inconsistencias_resolvidas', 0)} resolvidas. "
+        f"Removidas (sumiram da planilha e sem tratativa): {stats.get('removidas', 0)}."
     )
     return redirect('fibras:kanban')
 

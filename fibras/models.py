@@ -67,6 +67,14 @@ class Fibra(models.Model):
         'Status bruto da planilha', max_length=120, blank=True,
         help_text='Texto original da coluna de status da planilha (auditoria).',
     )
+    sla_agenda = models.CharField(
+        'SLA Agenda (planilha)', max_length=120, blank=True,
+        help_text='Valor da coluna SLA AGENDA na última importação.',
+    )
+    motivo_planilha = models.CharField(
+        'Motivo (planilha)', max_length=255, blank=True,
+        help_text='Valor da coluna MOTIVO na última importação (vendas com problema).',
+    )
 
     class Meta:
         verbose_name = 'Fibra'
