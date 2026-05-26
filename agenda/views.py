@@ -182,6 +182,37 @@ def _ensure_list(value):
     return []
 
 
+def _friendly_openai_error(err):
+    """Converte erros da OpenAI/IA em mensagens claras para o usuário final."""
+    raw = str(err or '').strip()
+    low = raw.lower()
+    cls = err.__class__.__name__.lower() if err is not None else ''
+
+    if 'insufficient_quota' in low or 'insufficient quota' in low or 'exceeded your current quota' in low:
+        return (
+            'Cota da API OpenAI esgotada. Recarregue os créditos no painel da OpenAI '
+            'e clique em "Reiniciar Processamento" para tentar de novo.'
+        )
+    if 'ratelimit' in cls or 'rate_limit' in low or 'rate limit' in low or 'too many requests' in low:
+        return (
+            'Limite de requisições da OpenAI atingido temporariamente. Aguarde alguns minutos '
+            'e clique em "Reiniciar Processamento".'
+        )
+    if 'context_length_exceeded' in low or 'maximum context length' in low or 'context window' in low:
+        return (
+            'Transcrição muito longa para o modelo. Reduza o texto bruto e clique em '
+            '"Reiniciar Processamento".'
+        )
+    if 'invalid_api_key' in low or 'incorrect api key' in low or 'authentication' in low:
+        return 'Chave da API OpenAI inválida. Avise o administrador e tente reprocessar depois.'
+    if 'timeout' in cls or 'timed out' in low or 'timeout' in low:
+        return 'A OpenAI demorou para responder. Clique em "Reiniciar Processamento" para tentar de novo.'
+    if 'apiconnectionerror' in cls or 'connection' in low and 'openai' in low:
+        return 'Falha de conexão com a OpenAI. Verifique a internet e clique em "Reiniciar Processamento".'
+
+    return raw or 'Erro desconhecido durante o processamento.'
+
+
 def _normalize_transcription_analysis(payload, source_text):
     """Normaliza o payload da IA para os campos esperados pelo portal."""
     payload = payload or {}
@@ -318,12 +349,24 @@ def _build_transcription_system_prompt(today_str, compact=False):
         '(b) principais tópicos com explicações; (c) decisões e seus porquês; (d) divergências, preocupações ou '
         'riscos; (e) próximos passos com responsáveis e prazos; (f) avaliação geral. Cite números, prazos e '
         'nomes mencionados. NÃO seja superficial: o leitor deve entender a reunião inteira lendo só o resumo.\n\n'
-        '2. "sections": Lista de seções/partes (4 a 14 seções conforme a riqueza). Cada uma com:\n'
+        '2. "sections": Lista de seções/partes da reunião (MÍNIMO 6, idealmente entre 8 e 16, conforme '
+        'a riqueza da reunião — quanto mais tópicos distintos, mais seções). NUNCA agrupe vários assuntos '
+        'numa mesma seção: prefira QUEBRAR em mais seções menores e específicas. Cada seção deve ter:\n'
         '   - "title": Título descritivo e específico (ex: "Revisão das metas Q3 - Comercial")\n'
         '   - "icon": Ícone FontAwesome (ex: "fa-bullhorn", "fa-chart-line", "fa-handshake")\n'
-        '   - "content": Resumo detalhado e narrativo (mínimo 3 frases, idealmente um parágrafo robusto)\n'
-        '   - "highlights": 2 a 6 frases-chave/citações importantes (literais quando possível)\n'
-        '   - "duration_estimate": Estimativa de duração em minutos\n\n'
+        '   - "content": Resumo NARRATIVO, DETALHADO e DENSO em Markdown, com 2 a 4 parágrafos coesos '
+        '(mínimo 900 caracteres, ideal 1200-2200). DEVE cobrir, sempre que possível: (a) contexto da '
+        'discussão e por que o tema entrou na pauta; (b) principais pontos abordados, citando NÚMEROS, '
+        'VALORES, METAS, NOMES e DATAS EXATOS mencionados; (c) divergências, dúvidas ou consensos '
+        'expressos pelos participantes; (d) encaminhamentos específicos surgidos nesta parte da reunião. '
+        'Proibido ser superficial ou genérico — reproduza o conteúdo real desta parte da conversa.\n'
+        '   - "highlights": 3 a 8 frases-chave ou citações importantes (literais quando possível, entre '
+        'aspas se for citação direta), com pelo menos uma contendo número/valor/prazo quando houver.\n'
+        '   - "topics_discussed": Lista de 3 a 8 sub-tópicos discutidos nesta seção (frases curtas, '
+        'iniciando com substantivo, ex: "Meta de vendas de outubro", "Renegociação com fornecedor X").\n'
+        '   - "decisions_in_section": Lista (pode ser vazia) das decisões pontuais tomadas dentro desta '
+        'seção (frases curtas e objetivas).\n'
+        '   - "duration_estimate": Estimativa de duração em minutos.\n\n'
         '3. "key_decisions": Lista de decisões objetivas. Cada uma com:\n'
         '   - "decision": Texto curto e direto da decisão\n'
         '   - "context": Por que foi tomada (1-2 frases)\n'
@@ -2003,7 +2046,20 @@ def _run_transcription_background_job(transcription_id, api_key, mode, options=N
         transcription = MeetingTranscription.objects.filter(pk=transcription_id).first()
         if transcription:
             source_text = (transcription.raw_transcription or '').strip() or (transcription.formatted_transcription or '').strip()
-            error_msg = str(err)[:500]  # Limita a mensagem de erro\n            \n            # Se temos transcrição bruta, marca como sucesso parcial\n            if source_text:\n                transcription.formatted_transcription = transcription.formatted_transcription or source_text\n                transcription.summary = (\n                    transcription.summary\n                    or f'Transcrição bruta processada. (Análise de IA: {error_msg[:100]})'\n                )\n                # Atribui tipo genérico já que a análise completa falhou\n                if not transcription.meeting_type_detected:\n                    transcription.meeting_type_detected = 'general'\n                if not transcription.sentiment:\n                    transcription.sentiment = 'neutral'\n                \n                transcription.status = 'completed'\n                transcription.error_message = ''  # Considerado \"sucesso\"\n                transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message', 'meeting_type_detected', 'sentiment'])\n            else:\n                # Nenhuma transcrição, falha real\n                transcription.status = 'error'\n                transcription.error_message = error_msg\n                transcription.save(update_fields=['status', 'error_message'])\n    finally:\n        close_old_connections()
+            error_msg = _friendly_openai_error(err)[:500]
+
+            # Sempre marcar como erro para liberar o "Reiniciar Processamento" e
+            # exibir a mensagem amigável na tela do usuário. A transcrição bruta
+            # continua disponível para nova tentativa.
+            transcription.status = 'error'
+            transcription.error_message = error_msg
+            if source_text and not transcription.formatted_transcription:
+                transcription.formatted_transcription = source_text
+                transcription.save(update_fields=['status', 'error_message', 'formatted_transcription'])
+            else:
+                transcription.save(update_fields=['status', 'error_message'])
+    finally:
+        close_old_connections()
 
 
 def _start_transcription_background_job(transcription_id, api_key, mode='upload', options=None):
@@ -2083,11 +2139,21 @@ def transcription_detail(request, pk):
 def api_transcription_status(request, pk):
     """Retorna status resumido da transcrição para polling da interface."""
     transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+
+    # Detecta "Processando" travado: sem updates há mais de 3 minutos.
+    is_stale = False
+    stale_seconds = 0
+    if transcription.status == 'processing' and transcription.updated_at:
+        stale_seconds = int((timezone.now() - transcription.updated_at).total_seconds())
+        is_stale = stale_seconds >= 180
+
     return JsonResponse({
         'id': transcription.pk,
         'status': transcription.status,
         'error_message': transcription.error_message,
         'updated_at': transcription.updated_at.isoformat(),
+        'is_stale': is_stale,
+        'stale_seconds': stale_seconds,
         'redirect': f'/agenda/transcricoes/{transcription.pk}/',
     })
 
