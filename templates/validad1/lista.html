@@ -12,6 +12,10 @@
       <p class="text-sm text-gray-600">Vendas do dia anterior — comparação com o Vivo GO.</p>
     </div>
     <div class="flex gap-2">
+      <div class="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden text-sm shadow-sm">
+        <button type="button" class="px-3 py-2 bg-primary text-white"><i class="fas fa-list"></i> Lista</button>
+        <a href="{% url 'validad1:kanban' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="px-3 py-2 hover:bg-gray-50 text-gray-700"><i class="fas fa-columns"></i> Kanban</a>
+      </div>
       <a href="{% url 'validad1:relatorio' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
         <i class="fas fa-chart-bar"></i> Relatório
       </a>
@@ -29,6 +33,10 @@
     <select name="status" class="px-2 py-1.5 border rounded text-sm">
       <option value="">Todos os status</option>
       {% for k, l in status_choices %}<option value="{{ k }}" {% if k == filtro_status %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="pilar" class="px-2 py-1.5 border rounded text-sm">
+      <option value="">Todos os pilares</option>
+      {% for p in pilares %}<option value="{{ p }}" {% if p == filtro_pilar %}selected{% endif %}>{{ p }}</option>{% endfor %}
     </select>
     <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Loja (PDV)" class="px-3 py-1.5 border rounded text-sm">
     <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Vendedor" class="px-3 py-1.5 border rounded text-sm">
@@ -50,15 +58,19 @@
           <th class="px-3 py-2 text-right">Valor</th>
           <th class="px-3 py-2 text-left">Vendedor / Loja</th>
           <th class="px-3 py-2 text-left">Data</th>
-          <th class="px-3 py-2 text-center">Status</th>
+          <th class="px-3 py-2 text-center">Situação conferência</th>
           <th class="px-3 py-2 text-center">Acordo</th>
           <th class="px-3 py-2"></th>
         </tr>
       </thead>
       <tbody>
         {% for v in vendas %}
-        <tr class="border-t {% if v.is_duplicate %}bg-yellow-50{% endif %}">
-          <td class="px-3 py-2 font-mono text-xs">{{ v.numero_da_venda }}{% if v.is_duplicate %} <span class="text-yellow-700 text-[10px]">(dup)</span>{% endif %}</td>
+        <tr class="border-t cursor-pointer hover:bg-gray-50 {% if v.is_duplicate %}bg-yellow-50{% endif %} {% for c in v.contestacoes.all %}{% if c.has_unread_reply_for_opener and c.aberto_por_id == request.user.id %} !bg-indigo-50 ring-1 ring-indigo-300{% endif %}{% endfor %}"
+            data-href="{% url 'validad1:detail' v.pk %}"
+            onclick="window.location='{% url 'validad1:detail' v.pk %}'">
+          <td class="px-3 py-2 font-mono text-xs">{{ v.numero_da_venda }}{% if v.is_duplicate %} <span class="text-yellow-700 text-[10px]">(dup)</span>{% endif %}
+            {% for c in v.contestacoes.all %}{% if c.has_unread_reply_for_opener and c.aberto_por_id == request.user.id %}<span class="ml-1 inline-flex items-center gap-1 text-[10px] text-indigo-700 font-semibold"><i class="fas fa-circle text-[6px] animate-pulse"></i> nova resposta</span>{% endif %}{% endfor %}
+          </td>
           <td class="px-3 py-2">{{ v.cpf }}<br><span class="text-xs text-gray-500">{{ v.numero_acesso }}</span></td>
           <td class="px-3 py-2">{{ v.produto|truncatechars:40 }}</td>
           <td class="px-3 py-2 text-right font-semibold text-primary">R$ {{ v.valor }}</td>
@@ -74,7 +86,7 @@
           </td>
           <td class="px-3 py-2 text-center text-xs">{{ v.get_acordo_status_display }}</td>
           <td class="px-3 py-2 text-right">
-            <a href="{% url 'validad1:detail' v.pk %}" class="text-primary text-xs hover:underline">Abrir</a>
+            <a href="{% url 'validad1:detail' v.pk %}" class="text-primary text-xs hover:underline" onclick="event.stopPropagation();">Abrir</a>
           </td>
         </tr>
         {% empty %}

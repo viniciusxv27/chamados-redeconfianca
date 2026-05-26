@@ -281,6 +281,12 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Sistema Rede Confiança <noreply@redeconfianca.com.br>')
 
+# Z-API (WhatsApp) — usado, por exemplo, no fluxo de "esqueci minha senha".
+ZAPI_INSTANCE_ID = config('ZAPI_INSTANCE_ID', default='3F310110BFE0B22369E7667E83726768')
+ZAPI_TOKEN = config('ZAPI_TOKEN', default='D264A10FFCED2A1CC3EF40DF')
+ZAPI_CLIENT_TOKEN = config('ZAPI_CLIENT_TOKEN', default='F6690f6a3b4674d268fd389104abf8ab7S')
+ZAPI_BASE_URL = config('ZAPI_BASE_URL', default='https://api.z-api.io')
+
 # VAPID Configuration for Web Push Notifications
 VAPID_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg/JoLTjAHWVdb35iE

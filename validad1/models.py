@@ -56,7 +56,7 @@ class VendaD1(models.Model):
     ACORDO_CONTESTADO = 'contestado'
     ACORDO_EXPIRADO = 'expirado'
     ACORDO_CHOICES = [
-        (ACORDO_PENDENTE, 'Aguardando gerente'),
+        (ACORDO_PENDENTE, 'Aguardando'),
         (ACORDO_DE_ACORDO, 'De acordo'),
         (ACORDO_CONTESTADO, 'Contestado'),
         (ACORDO_EXPIRADO, 'Expirado (48h)'),
@@ -169,12 +169,27 @@ class VendaD1Contestacao(models.Model):
     )
     aberto_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    # Última vez que o autor da contestação (vendedor/gerente) abriu a tratativa.
+    # Usado para destacar visualmente o card quando há resposta nova da Ilha.
+    last_opener_view_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-aberto_em']
 
     def __str__(self):
         return f"Contestação {self.id} - Venda {self.venda.numero_da_venda}"
+
+    @property
+    def has_unread_reply_for_opener(self) -> bool:
+        """True quando há mensagem de outra pessoa que não o autor após a
+        última visita do autor (vendedor/gerente)."""
+        ref = self.last_opener_view_at
+        qs = self.mensagens.all()
+        if self.aberto_por_id:
+            qs = qs.exclude(autor_id=self.aberto_por_id)
+        if ref:
+            qs = qs.filter(criado_em__gt=ref)
+        return qs.exists()
 
 
 class VendaD1ChatMessage(models.Model):

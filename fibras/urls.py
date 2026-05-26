@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.kanban, name='kanban'),
     path('lista/', views.lista, name='lista'),
     path('sync/', views.sync_now, name='sync_now'),
+    path('importar/', views.importar_planilha, name='importar_planilha'),
     path('relatorio/', views.relatorio, name='relatorio'),
     path('export/excel/', views.export_excel, name='export_excel'),
     path('<int:pk>/', views.detail, name='detail'),

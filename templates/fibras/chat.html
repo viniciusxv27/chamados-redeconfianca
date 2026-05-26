@@ -8,19 +8,33 @@
   <div class="bg-white rounded-lg border mt-3 flex flex-col" style="height:75vh;">
     <div class="px-4 py-3 border-b">
       <h2 class="font-bold">Chat — {{ fibra.cliente|default:fibra.numero_da_venda }}</h2>
-      <p class="text-xs text-gray-500">Venda {{ fibra.numero_da_venda }}</p>
+      <p class="text-xs text-gray-500">Venda {{ fibra.numero_da_venda }}{% if support_chat %} · Protocolo Suporte: <span class="font-mono">{{ support_chat.protocol }}</span>{% endif %}</p>
+      {% if support_chat %}<p class="text-[11px] text-indigo-700 mt-1"><i class="fas fa-link"></i> Conectado ao chat de Suporte (categoria SUPORTE FIXA).</p>{% endif %}
     </div>
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
-      {% for msg in mensagens %}
-      <div class="{% if msg.autor == request.user %}text-right{% endif %}">
-        <div class="inline-block px-3 py-2 rounded-lg text-sm {% if msg.autor == request.user %}bg-primary text-white{% else %}bg-gray-100{% endif %}">
-          <div class="text-[10px] opacity-70">{{ msg.autor.get_full_name|default:msg.autor.username }} · {{ msg.criado_em|date:"d/m H:i" }}</div>
-          {{ msg.texto|linebreaksbr }}
+      {% if support_chat %}
+        {% for msg in mensagens_support %}
+        <div class="{% if msg.user_id == request.user.id %}text-right{% endif %}">
+          <div class="inline-block px-3 py-2 rounded-lg text-sm {% if msg.user_id == request.user.id %}bg-primary text-white{% else %}bg-gray-100{% endif %}">
+            <div class="text-[10px] opacity-70">{{ msg.user.get_full_name|default:msg.user.username }} · {{ msg.created_at|date:"d/m H:i" }}</div>
+            {{ msg.message|linebreaksbr }}
+          </div>
         </div>
-      </div>
-      {% empty %}
-      <p class="text-sm text-gray-400 italic text-center mt-4">Sem mensagens ainda.</p>
-      {% endfor %}
+        {% empty %}
+        <p class="text-sm text-gray-400 italic text-center mt-4">Sem mensagens ainda.</p>
+        {% endfor %}
+      {% else %}
+        {% for msg in mensagens %}
+        <div class="{% if msg.autor == request.user %}text-right{% endif %}">
+          <div class="inline-block px-3 py-2 rounded-lg text-sm {% if msg.autor == request.user %}bg-primary text-white{% else %}bg-gray-100{% endif %}">
+            <div class="text-[10px] opacity-70">{{ msg.autor.get_full_name|default:msg.autor.username }} · {{ msg.criado_em|date:"d/m H:i" }}</div>
+            {{ msg.texto|linebreaksbr }}
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-sm text-gray-400 italic text-center mt-4">Sem mensagens ainda.</p>
+        {% endfor %}
+      {% endif %}
     </div>
     <form method="post" action="{% url 'fibras:chat_post' fibra.pk %}" class="border-t p-3 flex gap-2">{% csrf_token %}
       <input type="text" name="texto" class="flex-1 px-3 py-2 border rounded" placeholder="Escreva uma mensagem..." required>

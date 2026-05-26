@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Validação D-1 - Kanban{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4">
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <i class="fas fa-clipboard-check text-primary"></i>
+        Validação D-1 — Kanban
+      </h1>
+      <p class="text-sm text-gray-600">Status: Pendente análise · Divergente · Em conformidade.</p>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <div class="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden text-sm shadow-sm">
+        <a href="{% url 'validad1:lista' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="px-3 py-2 hover:bg-gray-50 text-gray-700"><i class="fas fa-list"></i> Lista</a>
+        <button type="button" class="px-3 py-2 bg-primary text-white"><i class="fas fa-columns"></i> Kanban</button>
+      </div>
+      <a href="{% url 'validad1:relatorio' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+        <i class="fas fa-chart-bar"></i> Relatório
+      </a>
+      {% if is_ilha %}
+      <form method="post" action="{% url 'validad1:sync_now' %}">{% csrf_token %}
+        <button class="px-3 py-2 bg-primary text-white rounded-lg text-sm hover:bg-orange-600">
+          <i class="fas fa-sync"></i> Sincronizar agora
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="get" class="bg-white border rounded-lg p-3 mb-4 flex flex-wrap gap-2">
+    <select name="pilar" class="px-2 py-1.5 border rounded text-sm">
+      <option value="">Todos os pilares</option>
+      {% for p in pilares %}<option value="{{ p }}" {% if p == filtro_pilar %}selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+    <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Loja (PDV)" class="px-3 py-1.5 border rounded text-sm">
+    <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Vendedor" class="px-3 py-1.5 border rounded text-sm">
+    <label class="text-sm inline-flex items-center gap-1">
+      <input type="checkbox" name="expirados" value="1" {% if show_expired %}checked{% endif %}> Mostrar expiradas
+    </label>
+    <button class="px-3 py-1.5 bg-gray-100 border rounded text-sm">Filtrar</button>
+    <a href="{% url 'validad1:kanban' %}" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Limpar</a>
+  </form>
+
+  {% if messages %}{% for m in messages %}<div class="mb-3 p-3 rounded bg-blue-50 text-sm">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    {% for col in colunas %}
+    <div class="bg-white rounded-lg border border-gray-200 flex flex-col shadow-sm">
+      <div class="px-3 py-2 border-b rounded-t-lg
+        {% if col.key == 'pendente' %}bg-gray-100
+        {% elif col.key == 'divergente' %}bg-red-50
+        {% elif col.key == 'conformidade' %}bg-green-50
+        {% else %}bg-gray-100{% endif %}">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full
+            {% if col.key == 'pendente' %}bg-gray-500
+            {% elif col.key == 'divergente' %}bg-red-500
+            {% elif col.key == 'conformidade' %}bg-green-500
+            {% else %}bg-gray-500{% endif %}"></span>
+          <h3 class="text-sm font-bold
+            {% if col.key == 'pendente' %}text-gray-800
+            {% elif col.key == 'divergente' %}text-red-800
+            {% elif col.key == 'conformidade' %}text-green-800
+            {% else %}text-gray-800{% endif %}">{{ col.label }}</h3>
+        </div>
+        <p class="text-xs text-gray-600 mt-0.5">
+          <span class="font-semibold">{{ col.count }}</span> venda(s) · <span class="font-semibold">R$ {{ col.total }}</span>
+        </p>
+      </div>
+      <div class="p-2 space-y-2 overflow-y-auto" style="max-height: 75vh; min-height: 80px;">
+        {% for v in col.items %}
+        {% with has_unread=False %}{% for c in v.contestacoes.all %}{% if c.has_unread_reply_for_opener and c.aberto_por_id == request.user.id %}{% with has_unread=True %}{% endwith %}{% endif %}{% endfor %}{% endwith %}
+        <a href="{% url 'validad1:detail' v.pk %}" class="block p-2 border rounded bg-white hover:bg-gray-50 hover:shadow transition-all
+          {% for c in v.contestacoes.all %}{% if c.has_unread_reply_for_opener and c.aberto_por_id == request.user.id %} !bg-indigo-50 ring-2 ring-indigo-400{% endif %}{% endfor %}
+          {% if v.is_duplicate %} ring-1 ring-yellow-300{% endif %}">
+          <div class="flex items-start justify-between gap-1">
+            <div class="font-semibold text-sm text-gray-900 truncate flex-1">{{ v.produto|default:"—"|truncatechars:32 }}</div>
+            <span class="text-xs font-semibold text-primary whitespace-nowrap">R$ {{ v.valor }}</span>
+          </div>
+          <div class="text-xs text-gray-500 truncate">{{ v.cpf }} · {{ v.numero_acesso }}</div>
+          <div class="text-xs text-gray-700 truncate">{{ v.vendedor|default:"—" }} · {{ v.pdv|default:"—" }}</div>
+          <div class="text-[11px] mt-1 flex items-center justify-between">
+            <span class="text-gray-500">{{ v.data_da_venda|date:"d/m/Y" }}{% if v.pilar %} · {{ v.pilar }}{% endif %}</span>
+            <span class="text-gray-500">{{ v.get_acordo_status_display }}</span>
+          </div>
+          {% for c in v.contestacoes.all %}{% if c.has_unread_reply_for_opener and c.aberto_por_id == request.user.id %}
+            <div class="mt-1 text-[10px] inline-flex items-center gap-1 text-indigo-700 font-semibold">
+              <i class="fas fa-circle text-[6px] animate-pulse"></i> Nova resposta da Ilha
+            </div>
+          {% endif %}{% endfor %}
+        </a>
+        {% empty %}
+        <p class="text-xs text-gray-400 italic text-center py-4">Nenhuma venda.</p>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -202,16 +202,67 @@ def expire_deadlines() -> int:
 # Visibilidade por usuário
 # ---------------------------------------------------------------------------
 
+def is_gerente(user) -> bool:
+    """True quando o usuário Padrão pertence ao grupo de comunicação GERENTES."""
+    if not user or not user.is_authenticated:
+        return False
+    try:
+        return user.communication_groups.filter(name__iexact='GERENTES').exists()
+    except Exception:
+        return False
+
+
+def _user_loja_names(user) -> list[str]:
+    """Lista dos nomes de loja/setor associados ao usuário (sector + sectors)."""
+    names: list[str] = []
+    try:
+        if getattr(user, 'sector_id', None) and user.sector:
+            names.append(user.sector.name)
+        for s in user.sectors.all():
+            if s.name and s.name not in names:
+                names.append(s.name)
+    except Exception:
+        pass
+    return [n for n in names if n]
+
+
 def vendas_for_user(user) -> 'models.QuerySet[VendaD1]':
     qs = VendaD1.objects.all()
+    # PRE PAGO não entra na conferência D-1.
+    from django.db.models import Q
+    qs = qs.exclude(
+        Q(pilar__icontains='PRE PAGO')
+        | Q(pilar__icontains='PRÉ PAGO')
+        | Q(pilar__icontains='PRE-PAGO')
+        | Q(pilar__icontains='PRÉ-PAGO')
+        | Q(pilar__icontains='PRE_PAGO')
+        | Q(pilar__icontains='PREPAGO')
+        | Q(produto__icontains='PRE PAGO')
+        | Q(produto__icontains='PRÉ PAGO')
+        | Q(produto__icontains='PRE-PAGO')
+        | Q(produto__icontains='PRÉ-PAGO')
+    )
     hierarchy = getattr(user, 'hierarchy', 'PADRAO')
+
     if hierarchy == 'PADRAO':
+        # Gerente: vê todas as vendas das lojas (setores) dele.
+        if is_gerente(user):
+            lojas = _user_loja_names(user)
+            if not lojas:
+                return qs.none()
+            cond = Q()
+            for nome in lojas:
+                cond |= Q(pdv__icontains=nome)
+            return qs.filter(cond)
+
+        # Vendedor comum: somente as vendas em que ele é o vendedor.
         nome = _norm(user.get_full_name() or user.username)
         ids = [
             v.id for v in qs.only('id', 'vendedor')
             if _norm(v.vendedor) == nome
         ]
         return qs.filter(id__in=ids)
+
     return qs
 
 

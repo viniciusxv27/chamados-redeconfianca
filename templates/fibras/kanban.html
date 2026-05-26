@@ -29,6 +29,18 @@
         </button>
       </form>
       {% endif %}
+      {% if can_import %}
+      <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="inline-flex items-center gap-2 bg-white border rounded-lg px-2 py-1">{% csrf_token %}
+        <label class="text-xs font-semibold text-gray-700 flex items-center gap-1 cursor-pointer">
+          <i class="fas fa-file-excel text-green-700"></i>
+          <span>Planilha:</span>
+          <input type="file" name="planilha" accept=".xlsx" required class="text-xs">
+        </label>
+        <button class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700" title="Atualiza o status das fibras pela coluna Nº_protocolo">
+          <i class="fas fa-upload"></i> Importar
+        </button>
+      </form>
+      {% endif %}
     </div>
   </div>
 
@@ -71,14 +83,15 @@
            data-status="{{ col.key }}"
            style="max-height:70vh; min-height: 80px;">
         {% for f in col.items %}
-        <div class="kanban-card group block p-2 border rounded bg-white hover:bg-gray-50 hover:shadow transition-all {% if is_ilha %}cursor-grab active:cursor-grabbing{% else %}cursor-pointer{% endif %}"
+        {% with inc=f.incidentes.first %}
+        <div class="kanban-card group block p-2 border rounded bg-white hover:bg-gray-50 hover:shadow transition-all {% if is_ilha %}cursor-grab active:cursor-grabbing{% else %}cursor-pointer{% endif %} {% if inc and inc.has_unread_reply_for_opener and inc.aberto_por_id == request.user.id %}!bg-indigo-50 ring-2 ring-indigo-400{% endif %}"
              data-pk="{{ f.pk }}"
              data-url="{% url 'fibras:detail' f.pk %}">
           <div class="flex items-start justify-between gap-1">
             <div class="font-semibold text-sm text-gray-900 truncate flex-1">{{ f.cliente|default:"—" }}</div>
             {% if is_ilha %}<i class="fas fa-grip-vertical text-gray-300 group-hover:text-gray-500 text-xs mt-0.5"></i>{% endif %}
           </div>
-          <div class="text-xs text-gray-500">{{ f.cpf }} · Venda {{ f.numero_da_venda }}</div>
+          <div class="text-xs text-gray-500">{{ f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}</div>
           <div class="text-xs text-gray-700 truncate">{{ f.endereco|default:"" }}</div>
           <div class="text-xs mt-1 flex items-center justify-between">
             <span class="text-gray-600 truncate">{{ f.vendedor }}</span>
@@ -89,7 +102,13 @@
             <i class="fas fa-comment text-yellow-600"></i> {{ f.retorno_myrella }}
           </div>
           {% endif %}
+          {% if inc and inc.has_unread_reply_for_opener and inc.aberto_por_id == request.user.id %}
+          <div class="mt-1 text-[10px] inline-flex items-center gap-1 text-indigo-700 font-semibold">
+            <i class="fas fa-circle text-[6px] animate-pulse"></i> Nova resposta do Suporte
+          </div>
+          {% endif %}
         </div>
+        {% endwith %}
         {% empty %}
         <p class="text-xs text-gray-400 italic text-center py-4">Nenhuma venda.</p>
         {% endfor %}

@@ -54,6 +54,7 @@ def fetch_fibras_from_mysql(
                 """
                 SELECT
                     `ID_da_venda`,
+                    `Nº_protocolo`,
                     `CPF_do_cliente`,
                     `Nome_do_cliente`,
                     `endereço_do_cliente`,
@@ -74,7 +75,7 @@ def fetch_fibras_from_mysql(
                 (year, month),
             )
             cols = [
-                'numero_da_venda', 'cpf', 'cliente', 'endereco', 'numero_acesso',
+                'numero_da_venda', 'numero_protocolo', 'cpf', 'cliente', 'endereco', 'numero_acesso',
                 'plano', 'valor', 'pdv', 'vendedor', 'data_da_venda',
                 'pilar', 'servico_tecnico', 'venda_ativa',
             ]
@@ -111,6 +112,7 @@ def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> d
         cancelada = venda_ativa == '0'
 
         common = {
+            'numero_protocolo': (str(r.get('numero_protocolo') or '')).strip(),
             'cpf': (r.get('cpf') or '').strip() if r.get('cpf') else '',
             'cliente': (r.get('cliente') or '').strip() if r.get('cliente') else '',
             'endereco': (r.get('endereco') or '').strip() if r.get('endereco') else '',
@@ -149,24 +151,189 @@ def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> d
 # Filtragem por usuário (consultor / coordenador / gerente)
 # ---------------------------------------------------------------------------
 
+def is_gerente(user) -> bool:
+    """Gerente = hierarchy PADRAO e está no grupo de comunicação 'GERENTES'."""
+    if getattr(user, 'hierarchy', '') != 'PADRAO':
+        return False
+    try:
+        return user.communication_groups.filter(name__iexact='GERENTES').exists()
+    except Exception:
+        return False
+
+
+def _user_loja_names(user) -> list[str]:
+    """Nome(s) de loja do gerente, a partir de ``user.sector`` e ``user.sectors``."""
+    names: list[str] = []
+    sector = getattr(user, 'sector', None)
+    if sector and getattr(sector, 'name', ''):
+        names.append(sector.name.strip())
+    try:
+        for s in user.sectors.all():
+            n = (getattr(s, 'name', '') or '').strip()
+            if n and n not in names:
+                names.append(n)
+    except Exception:
+        pass
+    return names
+
+
 def fibras_for_user(user) -> 'models.QuerySet[Fibra]':
     """Devolve um queryset das fibras visíveis para o usuário.
 
-    - Padrão (consultor): apenas as fibras em que ele é o vendedor.
-    - Gerente/Coordenador/Admin: todas (filtros aplicados na view).
+    - Padrão consultor: apenas as fibras em que ele é o vendedor.
+    - Gerente (PADRAO + grupo GERENTES): todas as fibras do(s) seu(s) setor(es)
+      (match por PDV contendo o nome da loja).
+    - Coordenador/Admin/SuperAdmin: todas (filtros aplicados na view).
     """
+    from django.db.models import Q
+
     qs = Fibra.objects.all()
     hierarchy = getattr(user, 'hierarchy', 'PADRAO')
-    if hierarchy == 'PADRAO':
-        nome = _normalize(user.get_full_name() or user.username)
-        # comparação case-insensitive contra `vendedor`
-        # (usa filtro Python como fallback se MySQL/SQLite divergem em UPPER)
-        ids = [
-            f.id for f in qs.only('id', 'vendedor')
-            if _normalize(f.vendedor) == nome
-        ]
-        return qs.filter(id__in=ids)
-    return qs
+    if hierarchy != 'PADRAO':
+        return qs
+
+    if is_gerente(user):
+        lojas = _user_loja_names(user)
+        if not lojas:
+            return qs.none()
+        cond = Q()
+        for nome in lojas:
+            cond |= Q(pdv__icontains=nome)
+        return qs.filter(cond)
+
+    nome = _normalize(user.get_full_name() or user.username)
+    ids = [
+        f.id for f in qs.only('id', 'vendedor')
+        if _normalize(f.vendedor) == nome
+    ]
+    return qs.filter(id__in=ids)
+
+
+# ---------------------------------------------------------------------------
+# Importação da planilha diária
+# ---------------------------------------------------------------------------
+
+# Mapeia palavras-chave do texto bruto de status na planilha para o status
+# interno do Fibra. A correspondência é por substring após normalização.
+_PLANILHA_STATUS_MAP = (
+    ('INSTALAD', Fibra.STATUS_INSTALADO),
+    ('CONCLU',   Fibra.STATUS_INSTALADO),
+    ('ATIVAD',   Fibra.STATUS_INSTALADO),
+    ('AGENDAD',  Fibra.STATUS_AGENDADO),
+    ('CANCELAD', Fibra.STATUS_CANCELADO),
+    ('PENDENTE', Fibra.STATUS_PENDENTE),
+    ('AGUARDAN', Fibra.STATUS_PENDENTE),
+    ('PROBLEM',  Fibra.STATUS_PROBLEMA),
+    ('IMPRODUT', Fibra.STATUS_PROBLEMA),
+)
+
+
+def _map_planilha_status(raw: str) -> Optional[str]:
+    n = _normalize(raw)
+    if not n:
+        return None
+    for needle, status in _PLANILHA_STATUS_MAP:
+        if needle in n:
+            return status
+    return None
+
+
+def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
+    """Importa a planilha diária e atualiza as fibras casando por ``Nº_protocolo``.
+
+    Lê o arquivo .xlsx com ``openpyxl``, localiza:
+      - Coluna de protocolo (header contém 'protocolo')
+      - Coluna de status (header contém 'status' / 'situa')
+    Para cada linha:
+      - Casa com ``Fibra.numero_protocolo`` (match exato após strip).
+      - Atualiza ``ordem_planilha`` (posição da linha na planilha) e, se houver,
+        deriva o ``status`` interno via :func:`_map_planilha_status`.
+      - Grava o texto original em ``status_planilha_raw`` para auditoria.
+
+    Retorna ``{'matched', 'updated_status', 'not_found', 'rows'}``.
+    """
+    try:
+        import openpyxl  # type: ignore
+    except ImportError as e:
+        raise RuntimeError('openpyxl não instalado no servidor.') from e
+
+    wb = openpyxl.load_workbook(file_obj, data_only=True, read_only=True)
+    ws = wb.active
+
+    # Encontra a linha de cabeçalho.
+    header_row_idx = None
+    headers: list[str] = []
+    for i, row in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=True), start=1):
+        norm = [_normalize(c) for c in row]
+        if any('PROTOCOLO' in c for c in norm):
+            header_row_idx = i
+            headers = norm
+            break
+    if header_row_idx is None:
+        raise RuntimeError("Coluna 'Nº_protocolo' não encontrada na planilha.")
+
+    proto_idx = next((j for j, c in enumerate(headers) if 'PROTOCOLO' in c), None)
+    status_idx = next(
+        (j for j, c in enumerate(headers) if 'STATUS' in c or 'SITUA' in c),
+        None,
+    )
+
+    matched = 0
+    updated_status = 0
+    not_found: list[str] = []
+    total_rows = 0
+    now = timezone.now()
+    ordem = 0
+
+    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
+        if not row or all(c is None or str(c).strip() == '' for c in row):
+            continue
+        total_rows += 1
+        ordem += 1
+        proto = (str(row[proto_idx]).strip() if row[proto_idx] is not None else '')
+        if not proto:
+            continue
+        status_raw = ''
+        if status_idx is not None and status_idx < len(row) and row[status_idx] is not None:
+            status_raw = str(row[status_idx]).strip()
+
+        fibra = Fibra.objects.filter(numero_protocolo=proto).first()
+        if not fibra:
+            not_found.append(proto)
+            continue
+        matched += 1
+        fibra.ordem_planilha = ordem
+        fibra.last_planilha_at = now
+        fibra.status_planilha_raw = status_raw[:120]
+        update_fields = ['ordem_planilha', 'last_planilha_at', 'status_planilha_raw']
+
+        mapped = _map_planilha_status(status_raw)
+        if mapped and mapped != fibra.status:
+            old = fibra.status
+            fibra.status = mapped
+            update_fields.append('status')
+            updated_status += 1
+            try:
+                FibraStatusHistory.objects.create(
+                    fibra=fibra,
+                    status_anterior=old,
+                    status_novo=mapped,
+                    retorno=f'Import planilha: {status_raw[:80]}',
+                    alterado_por=by_user,
+                )
+            except Exception:
+                pass
+            _notify_vendor(fibra, old, mapped)
+
+        fibra.save(update_fields=update_fields)
+
+    return {
+        'rows': total_rows,
+        'matched': matched,
+        'updated_status': updated_status,
+        'not_found': not_found[:20],
+        'not_found_count': len(not_found),
+    }
 
 
 # ---------------------------------------------------------------------------

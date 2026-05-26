@@ -2345,65 +2345,71 @@ def tutorial_detail_view(request, tutorial_id):
 
 
 def forgot_password_view(request):
-    """Solicitar redefinição de senha"""
+    """Solicitar redefinição de senha — envia o link via WhatsApp (Z-API)."""
     if request.user.is_authenticated:
         return redirect('dashboard')
-    
+
     if request.method == 'POST':
-        email = request.POST.get('email')
-        
+        email = (request.POST.get('email') or '').strip()
+
         if not email:
             messages.error(request, 'Por favor, insira seu email.')
             return render(request, 'users/forgot_password.html')
-        
+
+        # Mensagem genérica de sucesso para não revelar se o email existe.
+        generic_success = (
+            'Se o email existir em nosso sistema, enviaremos um WhatsApp com as '
+            'instruções para o número cadastrado.'
+        )
+
         try:
-            user = User.objects.get(email=email, is_active=True)
-            
-            # Gerar token de redefinição
-            from django.contrib.auth.tokens import default_token_generator
-            from django.utils.http import urlsafe_base64_encode
-            from django.utils.encoding import force_bytes
-            from django.core.mail import send_mail
-            from django.conf import settings
-            from django.template.loader import render_to_string
-            
-            token = default_token_generator.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            
-            # Criar link de redefinição
-            reset_link = request.build_absolute_uri(f'/reset-password/{uid}/{token}/')
-            
-            # Renderizar template do email
-            email_context = {
-                'user': user,
-                'reset_link': reset_link,
-                'site_name': 'Sistema Rede Confiança',
-            }
-            
-            email_subject = 'Redefinição de Senha - Sistema Rede Confiança'
-            email_body = render_to_string('emails/password_reset.html', email_context)
-            
-            # Enviar email
-            send_mail(
-                subject=email_subject,
-                message='',  # Texto simples (vazio pois usaremos HTML)
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[email],
-                html_message=email_body,
-                fail_silently=False,
-            )
-            
-            messages.success(request, 'Instruções de redefinição de senha foram enviadas para seu email.')
-            return redirect('login')
-            
+            user = User.objects.get(email__iexact=email, is_active=True)
         except User.DoesNotExist:
-            # Por segurança, não revelamos se o email existe
-            messages.success(request, 'Se o email existir em nosso sistema, você receberá as instruções.')
+            messages.success(request, generic_success)
             return redirect('login')
-        except Exception as e:
-            messages.error(request, 'Erro ao enviar email. Tente novamente.')
+
+        phone = (getattr(user, 'phone', '') or '').strip()
+        if not phone:
+            messages.error(
+                request,
+                'Não há um número de WhatsApp cadastrado para este email. '
+                'Procure o administrador do sistema.',
+            )
             return render(request, 'users/forgot_password.html')
-    
+
+        # Gerar token + link de redefinição.
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+
+        token = default_token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        reset_link = request.build_absolute_uri(f'/reset-password/{uid}/{token}/')
+
+        wa_message = (
+            f"Olá, {user.first_name or user.username}! 👋\n\n"
+            "Recebemos uma solicitação para redefinir a sua senha no "
+            "Sistema Rede Confiança.\n\n"
+            f"Acesse o link abaixo para criar uma nova senha (válido por algumas horas):\n{reset_link}\n\n"
+            "Se você não solicitou esta redefinição, basta ignorar esta mensagem."
+        )
+
+        try:
+            from core.zapi import send_whatsapp_message
+            ok, detail = send_whatsapp_message(phone, wa_message)
+        except Exception:  # noqa: BLE001
+            ok, detail = False, 'falha inesperada'
+
+        if ok:
+            messages.success(request, generic_success)
+            return redirect('login')
+
+        messages.error(
+            request,
+            'Não foi possível enviar a mensagem de WhatsApp agora. Tente novamente em instantes.',
+        )
+        return render(request, 'users/forgot_password.html')
+
     return render(request, 'users/forgot_password.html')
 
 

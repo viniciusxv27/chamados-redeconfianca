@@ -1211,7 +1211,11 @@ def manage_contestations(request):
     status_filter = request.GET.get('status', 'pending')
 
     # Filtro por mês de abertura (aplicado apenas em "todas").
+    # Quando "Todas" está selecionado e nenhum mês foi informado, usa o mês corrente
+    # como padrão para evitar listar todo o histórico.
     opened_month_filter = request.GET.get('opened_month', '').strip()
+    if status_filter == '' and not opened_month_filter and 'opened_month' not in request.GET:
+        opened_month_filter = timezone.localdate().strftime('%Y-%m')
     if status_filter == '' and opened_month_filter:
         try:
             opened_month_date = datetime.datetime.strptime(opened_month_filter, '%Y-%m').date()

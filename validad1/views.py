@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -14,6 +14,35 @@ from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage
 from .services import expire_deadlines, is_ilha, sync_d1, vendas_for_user
 
 
+def _apply_common_filters(qs, request):
+    """Filtros compartilhados entre a Lista e o Kanban."""
+    status = (request.GET.get('status') or '').strip()
+    if status:
+        qs = qs.filter(status=status)
+    pdv = (request.GET.get('pdv') or '').strip()
+    if pdv:
+        qs = qs.filter(pdv__icontains=pdv)
+    vendedor = (request.GET.get('vendedor') or '').strip()
+    if vendedor:
+        qs = qs.filter(vendedor__icontains=vendedor)
+    pilar = (request.GET.get('pilar') or '').strip()
+    if pilar:
+        qs = qs.filter(pilar__iexact=pilar)
+    return qs, {
+        'filtro_status': status,
+        'filtro_pdv': pdv,
+        'filtro_vendedor': vendedor,
+        'filtro_pilar': pilar,
+    }
+
+
+def _available_pilares(qs):
+    return sorted(
+        p for p in qs.exclude(pilar='').values_list('pilar', flat=True).distinct()
+        if p
+    )
+
+
 @login_required
 def lista(request):
     # Sempre que carrega a lista, expira deadlines vencidas (cheap).
@@ -25,26 +54,49 @@ def lista(request):
     if not show_expired:
         qs = qs.exclude(acordo_status=VendaD1.ACORDO_EXPIRADO)
 
-    status = (request.GET.get('status') or '').strip()
-    if status:
-        qs = qs.filter(status=status)
-
-    pdv = (request.GET.get('pdv') or '').strip()
-    if pdv:
-        qs = qs.filter(pdv__icontains=pdv)
-
-    vendedor = (request.GET.get('vendedor') or '').strip()
-    if vendedor:
-        qs = qs.filter(vendedor__icontains=vendedor)
+    pilares = _available_pilares(qs)
+    qs, filtros = _apply_common_filters(qs, request)
 
     return render(request, 'validad1/lista.html', {
         'vendas': qs.order_by('-data_da_venda', '-id'),
         'is_ilha': is_ilha(request.user),
         'status_choices': VendaD1.STATUS_CHOICES,
-        'filtro_status': status,
-        'filtro_pdv': pdv,
-        'filtro_vendedor': vendedor,
+        'pilares': pilares,
         'show_expired': show_expired,
+        **filtros,
+    })
+
+
+@login_required
+def kanban(request):
+    """Visão Kanban dos 3 status principais."""
+    expire_deadlines()
+    qs = vendas_for_user(request.user)
+    show_expired = request.GET.get('expirados') == '1'
+    if not show_expired:
+        qs = qs.exclude(acordo_status=VendaD1.ACORDO_EXPIRADO)
+
+    pilares = _available_pilares(qs)
+    qs, filtros = _apply_common_filters(qs, request)
+
+    colunas = []
+    for key, label in VendaD1.STATUS_CHOICES:
+        col_qs = qs.filter(status=key).order_by('-data_da_venda', '-id')
+        colunas.append({
+            'key': key,
+            'label': label,
+            'items': list(col_qs),
+            'count': col_qs.count(),
+            'total': col_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
+        })
+
+    return render(request, 'validad1/kanban.html', {
+        'colunas': colunas,
+        'is_ilha': is_ilha(request.user),
+        'status_choices': VendaD1.STATUS_CHOICES,
+        'pilares': pilares,
+        'show_expired': show_expired,
+        **filtros,
     })
 
 
@@ -59,6 +111,41 @@ def detail(request, pk: int):
         'tipo_divergencia_choices': VendaD1.TIPO_DIVERGENCIA_CHOICES,
         'penalidade_choices': VendaD1.PENALIDADE_CHOICES,
     })
+
+
+@login_required
+@require_POST
+def editar_venda(request, pk: int):
+    """Permite à Ilha (quem confere/valida) corrigir telefone (nº acesso) e valor."""
+    if not is_ilha(request.user):
+        messages.error(request, 'Apenas a Ilha pode editar a venda.')
+        return redirect('validad1:detail', pk=pk)
+
+    venda = get_object_or_404(VendaD1, pk=pk)
+    novo_acesso = (request.POST.get('numero_acesso') or '').strip()
+    novo_valor_raw = (request.POST.get('valor') or '').strip().replace('.', '').replace(',', '.')
+
+    alterados = []
+    if novo_acesso != venda.numero_acesso:
+        venda.numero_acesso = novo_acesso
+        alterados.append('número de acesso')
+
+    if novo_valor_raw:
+        try:
+            novo_valor = Decimal(novo_valor_raw)
+            if novo_valor != venda.valor:
+                venda.valor = novo_valor
+                alterados.append('valor')
+        except (InvalidOperation, ValueError):
+            messages.error(request, 'Valor informado é inválido.')
+            return redirect('validad1:detail', pk=pk)
+
+    if alterados:
+        venda.save(update_fields=['numero_acesso', 'valor', 'last_synced_at'])
+        messages.success(request, 'Atualizado: ' + ', '.join(alterados) + '.')
+    else:
+        messages.info(request, 'Nada para alterar.')
+    return redirect('validad1:detail', pk=pk)
 
 
 @login_required
@@ -133,6 +220,11 @@ def contestar(request, pk: int):
 @login_required
 def contestacao_detail(request, pk: int):
     contestacao = get_object_or_404(VendaD1Contestacao, pk=pk)
+    # Marca como visualizada quando o autor abre a tratativa (para destacar
+    # respostas novas da Ilha na lista/kanban).
+    if contestacao.aberto_por_id == request.user.id:
+        contestacao.last_opener_view_at = timezone.now()
+        contestacao.save(update_fields=['last_opener_view_at'])
     return render(request, 'validad1/contestacao.html', {
         'contestacao': contestacao,
         'mensagens_chat': contestacao.mensagens.select_related('autor').all(),

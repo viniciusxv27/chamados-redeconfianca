@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import Fibra, FibraIncidente, FibraChat, FibraChatMessage
-from .services import change_status, fibras_for_user, sync_fibras
+from .services import change_status, fibras_for_user, import_planilha_xlsx, is_gerente, sync_fibras
 
 
 def _is_ilha(user) -> bool:
@@ -20,6 +20,10 @@ def _is_ilha(user) -> bool:
     return user.is_superuser or getattr(user, 'hierarchy', '') in (
         'ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO',
     )
+
+
+def _can_import_planilha(user) -> bool:
+    return _is_ilha(user) or is_gerente(user)
 
 
 @login_required
@@ -35,7 +39,8 @@ def kanban(request):
 
     colunas = []
     for key, label in Fibra.STATUS_CHOICES:
-        col_qs = qs.filter(status=key).order_by('-data_da_venda')
+        # Ordena pela posição na planilha (quando disponível) e depois pela data.
+        col_qs = qs.filter(status=key).order_by('ordem_planilha', '-data_da_venda')
         colunas.append({
             'key': key,
             'label': label,
@@ -47,6 +52,7 @@ def kanban(request):
     return render(request, 'fibras/kanban.html', {
         'colunas': colunas,
         'is_ilha': _is_ilha(request.user),
+        'can_import': _can_import_planilha(request.user),
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'status_choices': Fibra.STATUS_CHOICES,
@@ -68,8 +74,9 @@ def lista(request):
         qs = qs.filter(status=status)
 
     return render(request, 'fibras/lista.html', {
-        'fibras': qs.order_by('-data_da_venda', '-id'),
+        'fibras': qs.order_by('ordem_planilha', '-data_da_venda', '-id'),
         'is_ilha': _is_ilha(request.user),
+        'can_import': _can_import_planilha(request.user),
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'filtro_status': status,
@@ -111,7 +118,11 @@ def change_status_view(request, pk: int):
 @login_required
 @require_POST
 def change_status_ajax(request, pk: int):
-    """Endpoint usado pelo drag&drop do Kanban — retorna JSON."""
+    """Endpoint usado pelo drag&drop do Kanban — retorna JSON.
+
+    Mantido para compatibilidade, porém o status passa a ser ditado pela
+    planilha diária: por isso só a Ilha (Supervisor/Admin) pode mudar manualmente.
+    """
     if not _is_ilha(request.user):
         return JsonResponse({'ok': False, 'error': 'permission'}, status=403)
     fibra = get_object_or_404(Fibra, pk=pk)
@@ -130,30 +141,112 @@ def change_status_ajax(request, pk: int):
 
 @login_required
 @require_POST
+def importar_planilha(request):
+    """Upload manual da planilha diária (.xlsx). Atualiza o Kanban/Lista."""
+    if not _can_import_planilha(request.user):
+        messages.error(request, 'Sem permissão para importar planilha.')
+        return redirect('fibras:kanban')
+    file_obj = request.FILES.get('planilha')
+    if not file_obj:
+        messages.error(request, 'Selecione o arquivo .xlsx da planilha.')
+        return redirect('fibras:kanban')
+    if not file_obj.name.lower().endswith('.xlsx'):
+        messages.error(request, 'Envie um arquivo .xlsx.')
+        return redirect('fibras:kanban')
+    try:
+        stats = import_planilha_xlsx(file_obj, by_user=request.user)
+    except Exception as e:
+        messages.error(request, f'Falha ao importar planilha: {e}')
+        return redirect('fibras:kanban')
+    messages.success(
+        request,
+        f"Planilha importada: {stats['matched']} fibras casadas, "
+        f"{stats['updated_status']} com status atualizado, "
+        f"{stats['not_found_count']} protocolos não encontrados "
+        f"(de {stats['rows']} linhas).",
+    )
+    return redirect('fibras:kanban')
+
+
+@login_required
+@require_POST
 def abrir_incidente(request, pk: int):
     fibra = get_object_or_404(Fibra, pk=pk)
     observacao = (request.POST.get('observacao') or '').strip()
     if not observacao:
         messages.error(request, 'Descreva a observação do incidente.')
         return redirect('fibras:detail', pk=pk)
-    FibraIncidente.objects.create(
+
+    incidente = FibraIncidente.objects.create(
         fibra=fibra, aberto_por=request.user, observacao=observacao,
     )
-    messages.success(request, 'Incidente aberto para a Ilha.')
+
+    # Cria/vincula um SupportChat na categoria "SUPORTE FIXA" para que a
+    # tratativa apareça também em /projects/support/admin/template/ e o chat
+    # seja único entre vendedor/gerente e a atendente do suporte.
+    try:
+        from projects.models_chat import SupportCategory, SupportChat, SupportChatMessage
+
+        sector = getattr(request.user, 'sector', None)
+        category = SupportCategory.objects.filter(name__iexact='SUPORTE FIXA').first()
+        if not category and sector:
+            category = SupportCategory.objects.create(
+                name='SUPORTE FIXA',
+                sector=sector,
+                description='Tratativas de incidentes de Fibra (módulo /fibras/).',
+            )
+        if category:
+            chat = SupportChat.objects.create(
+                user=request.user,
+                category=category,
+                sector=category.sector or sector,
+                title=f"Fibra {fibra.numero_da_venda} — {fibra.cliente or 'cliente'}",
+                priority='ALTA',
+                status='ABERTO',
+            )
+            SupportChatMessage.objects.create(
+                chat=chat, user=request.user, message=observacao,
+            )
+            incidente.support_chat = chat
+            incidente.save(update_fields=['support_chat'])
+    except Exception:
+        # Não bloqueia o fluxo se o módulo de suporte estiver indisponível.
+        pass
+
+    messages.success(request, 'Tratativa aberta para a Ilha (visível também em Suporte → SUPORTE FIXA).')
     return redirect('fibras:detail', pk=pk)
 
 
 @login_required
 def chat_view(request, pk: int):
+    """Chat da tratativa. Se houver SupportChat vinculado, usa-o como fonte única."""
     fibra = get_object_or_404(Fibra, pk=pk)
+    incidente = fibra.incidentes.filter(support_chat__isnull=False).order_by('-aberto_em').first()
+
+    if incidente and incidente.support_chat_id:
+        support_chat = incidente.support_chat
+        mensagens_support = support_chat.messages.select_related('user').all()
+        # Marca como visualizado para o autor (some o badge de "resposta nova").
+        if incidente.aberto_por_id == request.user.id:
+            incidente.last_opener_view_at = timezone.now()
+            incidente.save(update_fields=['last_opener_view_at'])
+        return render(request, 'fibras/chat.html', {
+            'fibra': fibra,
+            'support_chat': support_chat,
+            'mensagens_support': mensagens_support,
+            'incidente': incidente,
+            'is_ilha': _is_ilha(request.user),
+        })
+
+    # Fallback: chat legado (FibraChat).
     chat, _ = FibraChat.objects.get_or_create(fibra=fibra)
     mensagens = chat.mensagens.select_related('autor').all()
-    # marca mensagens não-suas como lidas
     chat.mensagens.filter(lida_em__isnull=True).exclude(autor=request.user).update(
         lida_em=timezone.now()
     )
     return render(request, 'fibras/chat.html', {
         'fibra': fibra, 'chat': chat, 'mensagens': mensagens,
+        'is_ilha': _is_ilha(request.user),
     })
 
 
@@ -161,10 +254,24 @@ def chat_view(request, pk: int):
 @require_POST
 def chat_post(request, pk: int):
     fibra = get_object_or_404(Fibra, pk=pk)
-    chat, _ = FibraChat.objects.get_or_create(fibra=fibra)
     texto = (request.POST.get('texto') or '').strip()
-    if texto:
-        FibraChatMessage.objects.create(chat=chat, autor=request.user, texto=texto)
+    if not texto:
+        return redirect('fibras:chat', pk=pk)
+
+    # Se houver incidente com SupportChat, escreve lá (chat unificado).
+    incidente = fibra.incidentes.filter(support_chat__isnull=False).order_by('-aberto_em').first()
+    if incidente and incidente.support_chat_id:
+        try:
+            from projects.models_chat import SupportChatMessage
+            SupportChatMessage.objects.create(
+                chat=incidente.support_chat, user=request.user, message=texto,
+            )
+            return redirect('fibras:chat', pk=pk)
+        except Exception:
+            pass
+
+    chat, _ = FibraChat.objects.get_or_create(fibra=fibra)
+    FibraChatMessage.objects.create(chat=chat, autor=request.user, texto=texto)
     return redirect('fibras:chat', pk=pk)
 
 

@@ -28,6 +28,10 @@ class Fibra(models.Model):
     ]
 
     numero_da_venda = models.CharField('Número da venda', max_length=60, unique=True)
+    numero_protocolo = models.CharField(
+        'Nº do protocolo', max_length=60, blank=True, db_index=True,
+        help_text='Usado para casar com a planilha diária (coluna Nº_protocolo).',
+    )
     cpf = models.CharField('CPF', max_length=20, blank=True)
     cliente = models.CharField('Nome do cliente', max_length=200, blank=True)
     endereco = models.CharField('Endereço', max_length=300, blank=True)
@@ -50,6 +54,19 @@ class Fibra(models.Model):
     # Bookkeeping
     first_seen_at = models.DateTimeField('Primeira sincronização', default=timezone.now)
     last_synced_at = models.DateTimeField('Última sincronização', auto_now=True)
+
+    # Importação da planilha diária (visual, define ordem no kanban)
+    ordem_planilha = models.IntegerField(
+        'Ordem (planilha)', null=True, blank=True, db_index=True,
+        help_text='Posição na planilha do último import. Define a ordem visual no Kanban.',
+    )
+    last_planilha_at = models.DateTimeField(
+        'Última atualização via planilha', null=True, blank=True,
+    )
+    status_planilha_raw = models.CharField(
+        'Status bruto da planilha', max_length=120, blank=True,
+        help_text='Texto original da coluna de status da planilha (auditoria).',
+    )
 
     class Meta:
         verbose_name = 'Fibra'
@@ -113,6 +130,15 @@ class FibraIncidente(models.Model):
     )
     aberto_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    # Chat unificado no /projects/support/admin/template/ (categoria "SUPORTE FIXA").
+    # Quando preenchido, as mensagens da tratativa moram em SupportChatMessage.
+    support_chat = models.OneToOneField(
+        'projects.SupportChat', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='fibra_incidente',
+    )
+    # Última visualização da tratativa pelo autor (vendedor/gerente), para
+    # destacar visualmente quando há resposta nova da atendente do suporte.
+    last_opener_view_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-aberto_em']
@@ -121,6 +147,29 @@ class FibraIncidente(models.Model):
 
     def __str__(self):
         return f"Incidente {self.id} - {self.fibra.numero_da_venda}"
+
+    @property
+    def has_unread_reply_for_opener(self) -> bool:
+        """True quando há resposta da atendente do suporte que o autor não viu."""
+        ref = self.last_opener_view_at
+        if self.support_chat_id:
+            qs = self.support_chat.messages.all()
+            if self.aberto_por_id:
+                qs = qs.exclude(user_id=self.aberto_por_id)
+            if ref:
+                qs = qs.filter(created_at__gt=ref)
+            return qs.exists()
+        # Fallback: usa o chat reverso antigo (FibraChat).
+        try:
+            chat = self.fibra.chat
+        except Exception:
+            return False
+        qs = chat.mensagens.all()
+        if self.aberto_por_id:
+            qs = qs.exclude(autor_id=self.aberto_por_id)
+        if ref:
+            qs = qs.filter(criado_em__gt=ref)
+        return qs.exists()
 
 
 class FibraChat(models.Model):
