@@ -41,6 +41,8 @@
     </select>
     <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="px-3 py-1.5 border rounded text-sm">
     <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="px-3 py-1.5 border rounded text-sm">
+    <input type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="px-3 py-1.5 border rounded text-sm">
+    <input type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="px-3 py-1.5 border rounded text-sm">
     <button class="px-3 py-1.5 bg-gray-100 border rounded text-sm hover:bg-gray-200">Filtrar</button>
     <a href="{% url 'fibras:lista' %}" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Limpar</a>
   </form>

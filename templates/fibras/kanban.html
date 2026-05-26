@@ -40,7 +40,10 @@
   <form method="get" class="bg-white border rounded-lg p-3 mb-4 flex gap-2 flex-wrap">
     <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="px-3 py-1.5 border rounded text-sm">
     <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="px-3 py-1.5 border rounded text-sm">
+    <input type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="px-3 py-1.5 border rounded text-sm">
+    <input type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="px-3 py-1.5 border rounded text-sm">
     <button class="px-3 py-1.5 bg-gray-100 border rounded text-sm">Filtrar</button>
+    <a href="{% url 'fibras:kanban' %}" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Limpar</a>
   </form>
 
   {% if messages %}{% for m in messages %}<div class="mb-3 p-3 rounded bg-blue-50 text-sm">{{ m }}</div>{% endfor %}{% endif %}

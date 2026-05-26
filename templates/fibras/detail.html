@@ -29,12 +29,16 @@
         <dt class="text-gray-500">SLA Agenda</dt>
         <dd class="font-semibold">{{ fibra.sla_agenda|default:"—" }}</dd>
       </div>
+      <div>
+        <dt class="text-gray-500">Motivo (planilha)</dt>
+        <dd class="font-semibold">{{ fibra.motivo_planilha|default:"—" }}</dd>
+      </div>
     </dl>
 
     {% if fibra.motivo_planilha %}
     <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded">
       <p class="text-xs text-red-600 font-semibold uppercase mb-1">
-        <i class="fas fa-exclamation-triangle"></i> Motivo (planilha)
+        <i class="fas fa-exclamation-triangle"></i> Motivo da planilha
       </p>
       <p class="text-sm">{{ fibra.motivo_planilha }}</p>
     </div>

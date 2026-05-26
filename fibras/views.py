@@ -28,30 +28,32 @@ def _can_import_planilha(user) -> bool:
 
 @login_required
 def kanban(request):
+    from django.db.models import Q as _Q
     qs = fibras_for_user(request.user)
     # filtros simples
     pdv = (request.GET.get('pdv') or '').strip()
     vendedor = (request.GET.get('vendedor') or '').strip()
+    venda = (request.GET.get('venda') or '').strip()
+    ordem = (request.GET.get('ordem') or '').strip()
     if pdv:
         qs = qs.filter(pdv__icontains=pdv)
     if vendedor:
         qs = qs.filter(vendedor__icontains=vendedor)
-
-    colunas = []
-    for key, label in Fibra.STATUS_CHOICES:
-        # Ordena pela posição na planilha (quando disponível) e depois pela data.
-        col_qs = qs.filter(status=key).order_by('ordem_planilha', '-data_da_venda')
-        colunas.append({
-            'key': key,
-            'label': label,
-            'items': list(col_qs),
-            'count': col_qs.count(),
-            'total': col_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
-        })
+    if venda:
+        qs = qs.filter(numero_da_venda__icontains=venda)
+    if ordem:
+        # Aceita o nº de ORDEM da planilha (== numero_protocolo) ou a posição
+        # numérica (ordem_planilha). Tenta os dois para ser flexível.
+        cond = _Q(numero_protocolo__icontains=ordem)
+        if ordem.isdigit():
+            cond |= _Q(ordem_planilha=int(ordem))
+        qs = qs.filter(cond)
 
     # Coluna "Não localizado": vendas de fibra cujo protocolo não aparece na
     # planilha atual (last_planilha_at antes do último import OU nulo). Só
     # considera vendas FIXA não canceladas/instaladas para não poluir a tela.
+    # IMPORTANTE: calculada ANTES das colunas por status para que possamos
+    # excluir esses IDs das outras colunas e evitar duplicação no kanban.
     from django.db.models import Max, Q
     from .models import PlanilhaOrdemInconsistente
     latest_import = Fibra.objects.aggregate(m=Max('last_planilha_at'))['m']
@@ -65,11 +67,31 @@ def kanban(request):
     else:
         nao_qs = nao_qs.filter(last_planilha_at__isnull=True)
     nao_qs = nao_qs.order_by('-data_da_venda', '-id')
+    nao_items = list(nao_qs)
+    nao_ids = {f.id for f in nao_items}
+
+    colunas = []
+    for key, label in Fibra.STATUS_CHOICES:
+        # Ordena pela posição na planilha (quando disponível) e depois pela data.
+        # Exclui fibras que estão na coluna "Não localizado" para não duplicar.
+        col_qs = (
+            qs.filter(status=key)
+              .exclude(id__in=nao_ids)
+              .order_by('ordem_planilha', '-data_da_venda')
+        )
+        colunas.append({
+            'key': key,
+            'label': label,
+            'items': list(col_qs),
+            'count': col_qs.count(),
+            'total': col_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
+        })
+
     colunas.append({
         'key': 'nao_localizado',
         'label': 'Não localizado',
-        'items': list(nao_qs),
-        'count': nao_qs.count(),
+        'items': nao_items,
+        'count': len(nao_items),
         'total': nao_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
     })
 
@@ -83,6 +105,8 @@ def kanban(request):
         'can_import': _can_import_planilha(request.user),
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
+        'filtro_venda': venda,
+        'filtro_ordem': ordem,
         'status_choices': Fibra.STATUS_CHOICES,
         'inconsistencias': inconsistencias,
         'inconsistencias_count': len(inconsistencias),
@@ -92,16 +116,26 @@ def kanban(request):
 @login_required
 def lista(request):
     """Visão em lista (tabela) alternativa ao kanban."""
+    from django.db.models import Q as _Q
     qs = fibras_for_user(request.user)
     pdv = (request.GET.get('pdv') or '').strip()
     vendedor = (request.GET.get('vendedor') or '').strip()
     status = (request.GET.get('status') or '').strip()
+    venda = (request.GET.get('venda') or '').strip()
+    ordem = (request.GET.get('ordem') or '').strip()
     if pdv:
         qs = qs.filter(pdv__icontains=pdv)
     if vendedor:
         qs = qs.filter(vendedor__icontains=vendedor)
     if status:
         qs = qs.filter(status=status)
+    if venda:
+        qs = qs.filter(numero_da_venda__icontains=venda)
+    if ordem:
+        cond = _Q(numero_protocolo__icontains=ordem)
+        if ordem.isdigit():
+            cond |= _Q(ordem_planilha=int(ordem))
+        qs = qs.filter(cond)
 
     return render(request, 'fibras/lista.html', {
         'fibras': qs.order_by('ordem_planilha', '-data_da_venda', '-id'),
@@ -110,6 +144,8 @@ def lista(request):
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'filtro_status': status,
+        'filtro_venda': venda,
+        'filtro_ordem': ordem,
         'status_choices': Fibra.STATUS_CHOICES,
     })
 
@@ -329,21 +365,10 @@ def relatorio(request):
     total = qs.count() or 1  # evita divisão por zero
     receita_total = qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
 
-    blocos = []
-    for key, label in Fibra.STATUS_CHOICES:
-        sub = qs.filter(status=key)
-        cnt = sub.count()
-        receita = sub.aggregate(t=Sum('valor'))['t'] or Decimal('0')
-        blocos.append({
-            'key': key,
-            'label': label,
-            'qtd': cnt,
-            'receita': receita,
-            'percent': round((cnt / total) * 100, 1),
-        })
-
     # Bloco "Não localizada": vendas FIXA (não canceladas/instaladas) cujo
     # protocolo não bateu com nenhuma ORDEM da planilha mais recente.
+    # Calculado ANTES dos blocos por status para podermos excluir esses IDs
+    # das outras categorias e evitar dupla contagem.
     from django.db.models import Max, Q
     latest_import = Fibra.objects.aggregate(m=Max('last_planilha_at'))['m']
     nao_qs = qs.filter(
@@ -357,6 +382,21 @@ def relatorio(request):
         nao_qs = nao_qs.filter(last_planilha_at__isnull=True)
     qtd_nao_loc = nao_qs.count()
     receita_nao_loc = nao_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
+    nao_ids = set(nao_qs.values_list('id', flat=True))
+
+    blocos = []
+    for key, label in Fibra.STATUS_CHOICES:
+        sub = qs.filter(status=key).exclude(id__in=nao_ids)
+        cnt = sub.count()
+        receita = sub.aggregate(t=Sum('valor'))['t'] or Decimal('0')
+        blocos.append({
+            'key': key,
+            'label': label,
+            'qtd': cnt,
+            'receita': receita,
+            'percent': round((cnt / total) * 100, 1),
+        })
+
     blocos.append({
         'key': 'nao_localizado',
         'label': 'Não localizada',
