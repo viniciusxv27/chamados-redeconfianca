@@ -68,6 +68,16 @@
       </div>
     </div>
 
+    <!-- GRÁFICO EMPILHADO POR PDV -->
+    {% if pdv_chart_labels %}
+    <div class="bg-white rounded-xl border shadow-sm p-5 mb-6">
+      <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+        <i class="fas fa-store text-primary"></i> Status por PDV
+      </h3>
+      <div style="height: 360px;"><canvas id="chartPdvStack"></canvas></div>
+    </div>
+    {% endif %}
+
     <!-- LISTAS -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="bg-white rounded-xl border shadow-sm p-5">
@@ -123,6 +133,8 @@
 {{ status_chart_colors|json_script:"vd-status-colors" }}
 {{ div_chart_labels|json_script:"vd-div-labels" }}
 {{ div_chart_data|json_script:"vd-div-data" }}
+{{ pdv_chart_labels|json_script:"vd-pdv-labels" }}
+{{ pdv_chart_datasets|json_script:"vd-pdv-datasets" }}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -153,6 +165,31 @@
       scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
     },
   });
+
+  const pdvLabelsEl = document.getElementById('vd-pdv-labels');
+  const pdvDatasetsEl = document.getElementById('vd-pdv-datasets');
+  const pdvCanvas = document.getElementById('chartPdvStack');
+  if (pdvLabelsEl && pdvDatasetsEl && pdvCanvas) {
+    const pl = JSON.parse(pdvLabelsEl.textContent);
+    const pds = JSON.parse(pdvDatasetsEl.textContent).map(d => Object.assign({}, d, { borderRadius: 4, borderSkipped: false }));
+    if (pl.length) {
+      new Chart(pdvCanvas, {
+        type: 'bar',
+        data: { labels: pl, datasets: pds },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Montserrat', size: 11 } } },
+            tooltip: { mode: 'index', intersect: false },
+          },
+          scales: {
+            x: { stacked: true, ticks: { font: { size: 10 }, autoSkip: false, maxRotation: 60, minRotation: 30 } },
+            y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+          },
+        },
+      });
+    }
+  }
 })();
 </script>
 {% endblock %}

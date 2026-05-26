@@ -37,10 +37,22 @@ def _apply_common_filters(qs, request):
 
 
 def _available_pilares(qs):
-    return sorted(
-        p for p in qs.exclude(pilar='').values_list('pilar', flat=True).distinct()
-        if p
-    )
+    """Lista distinta de pilares para o filtro (sem vazios e sem 'Erro')."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for p in qs.exclude(pilar='').values_list('pilar', flat=True).distinct():
+        if not p:
+            continue
+        norm = p.strip()
+        if not norm or norm.upper() == 'ERRO':
+            continue
+        key = norm.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(norm)
+    result.sort(key=str.upper)
+    return result
 
 
 @login_required
@@ -344,6 +356,32 @@ def relatorio(request):
     status_chart_data = [s['qtd'] for s in por_status]
     status_chart_colors = [status_colors_map.get(s['key'], '#6B7280') for s in por_status]
 
+    # Empilhado por PDV: cada barra = 1 PDV; segmentos = contagem por status.
+    pdv_rows = (
+        qs.exclude(pdv='')
+        .values('pdv', 'status')
+        .annotate(n=Count('id'))
+    )
+    pdv_totais: dict[str, dict[str, int]] = {}
+    for row in pdv_rows:
+        pdv = (row['pdv'] or '').strip() or '—'
+        bucket = pdv_totais.setdefault(pdv, {k: 0 for k, _ in VendaD1.STATUS_CHOICES})
+        bucket[row['status']] = bucket.get(row['status'], 0) + row['n']
+
+    # Ordena por total decrescente para a barra mais cheia aparecer primeiro.
+    pdv_sorted = sorted(
+        pdv_totais.items(), key=lambda it: sum(it[1].values()), reverse=True,
+    )
+    pdv_labels = [p for p, _ in pdv_sorted]
+    pdv_datasets = [
+        {
+            'label': label,
+            'data': [pdv_totais[p].get(key, 0) for p in pdv_labels],
+            'backgroundColor': status_colors_map.get(key, '#6B7280'),
+        }
+        for key, label in VendaD1.STATUS_CHOICES
+    ]
+
     return render(request, 'validad1/relatorio.html', {
         'total': qs.count(),
         'receita_total': receita_total,
@@ -357,6 +395,8 @@ def relatorio(request):
         'status_chart_colors': status_chart_colors,
         'div_chart_labels': div_labels,
         'div_chart_data': div_data,
+        'pdv_chart_labels': pdv_labels,
+        'pdv_chart_datasets': pdv_datasets,
     })
 
 
