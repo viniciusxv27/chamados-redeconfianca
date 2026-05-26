@@ -201,3 +201,25 @@ class FibraChatMessage(models.Model):
 
     def __str__(self):
         return f"Msg {self.id} ({self.chat_id})"
+
+
+class PlanilhaOrdemInconsistente(models.Model):
+    """Número de ORDEM (planilha) que não foi encontrado em nenhuma Fibra local.
+
+    Persiste entre importações; é removido automaticamente quando o protocolo
+    correspondente passa a existir no banco e bate com algum ORDEM da próxima
+    importação da planilha.
+    """
+    ordem = models.CharField(max_length=60, unique=True, db_index=True)
+    status_raw = models.CharField(max_length=120, blank=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    occurrences = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ['-last_seen_at']
+        verbose_name = 'Ordem inconsistente (planilha)'
+        verbose_name_plural = 'Ordens inconsistentes (planilha)'
+
+    def __str__(self):
+        return f"Ordem {self.ordem} (sem match)"

@@ -49,6 +49,34 @@ def kanban(request):
             'total': col_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
         })
 
+    # Coluna "Não localizado": vendas de fibra cujo protocolo não aparece na
+    # planilha atual (last_planilha_at antes do último import OU nulo). Só
+    # considera vendas FIXA não canceladas/instaladas para não poluir a tela.
+    from django.db.models import Max, Q
+    from .models import PlanilhaOrdemInconsistente
+    latest_import = Fibra.objects.aggregate(m=Max('last_planilha_at'))['m']
+    nao_qs = qs.filter(
+        Q(pilar__iexact='fixa') | Q(pilar__icontains='fixa') | Q(pilar=''),
+    ).exclude(status__in=[Fibra.STATUS_CANCELADO, Fibra.STATUS_INSTALADO])
+    if latest_import:
+        nao_qs = nao_qs.filter(
+            Q(last_planilha_at__isnull=True) | Q(last_planilha_at__lt=latest_import)
+        )
+    else:
+        nao_qs = nao_qs.filter(last_planilha_at__isnull=True)
+    nao_qs = nao_qs.order_by('-data_da_venda', '-id')
+    colunas.append({
+        'key': 'nao_localizado',
+        'label': 'Não localizado',
+        'items': list(nao_qs),
+        'count': nao_qs.count(),
+        'total': nao_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
+    })
+
+    inconsistencias = list(
+        PlanilhaOrdemInconsistente.objects.order_by('-last_seen_at')[:200]
+    )
+
     return render(request, 'fibras/kanban.html', {
         'colunas': colunas,
         'is_ilha': _is_ilha(request.user),
@@ -56,6 +84,8 @@ def kanban(request):
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'status_choices': Fibra.STATUS_CHOICES,
+        'inconsistencias': inconsistencias,
+        'inconsistencias_count': len(inconsistencias),
     })
 
 
@@ -163,7 +193,9 @@ def importar_planilha(request):
         f"Planilha importada: {stats['matched']} fibras casadas, "
         f"{stats['updated_status']} com status atualizado, "
         f"{stats['not_found_count']} protocolos não encontrados "
-        f"(de {stats['rows']} linhas).",
+        f"(de {stats['rows']} linhas). "
+        f"Inconsistências: +{stats.get('inconsistencias_novas', 0)} novas, "
+        f"{stats.get('inconsistencias_resolvidas', 0)} resolvidas."
     )
     return redirect('fibras:kanban')
 

@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage
+from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage, VendaD1ChatAttachment
 from .services import expire_deadlines, is_ilha, sync_d1, vendas_for_user
 
 
@@ -37,14 +37,15 @@ def _apply_common_filters(qs, request):
 
 
 def _available_pilares(qs):
-    """Lista distinta de pilares para o filtro (sem vazios e sem 'Erro')."""
+    """Lista distinta de pilares para o filtro (sem vazios, 'Erro' e 'Simcard')."""
     seen: set[str] = set()
     result: list[str] = []
+    excluded = {'ERRO', 'SIMCARD'}
     for p in qs.exclude(pilar='').values_list('pilar', flat=True).distinct():
         if not p:
             continue
         norm = p.strip()
-        if not norm or norm.upper() == 'ERRO':
+        if not norm or norm.upper() in excluded:
             continue
         key = norm.upper()
         if key in seen:
@@ -239,7 +240,7 @@ def contestacao_detail(request, pk: int):
         contestacao.save(update_fields=['last_opener_view_at'])
     return render(request, 'validad1/contestacao.html', {
         'contestacao': contestacao,
-        'mensagens_chat': contestacao.mensagens.select_related('autor').all(),
+        'mensagens_chat': contestacao.mensagens.select_related('autor').prefetch_related('anexos'),
         'is_ilha': is_ilha(request.user),
     })
 
@@ -249,9 +250,19 @@ def contestacao_detail(request, pk: int):
 def contestacao_post(request, pk: int):
     contestacao = get_object_or_404(VendaD1Contestacao, pk=pk)
     texto = (request.POST.get('texto') or '').strip()
-    if texto:
-        VendaD1ChatMessage.objects.create(
-            contestacao=contestacao, autor=request.user, texto=texto,
+    arquivos = request.FILES.getlist('anexos')
+    if not texto and not arquivos:
+        return redirect('validad1:contestacao_detail', pk=pk)
+    msg = VendaD1ChatMessage.objects.create(
+        contestacao=contestacao, autor=request.user, texto=texto,
+    )
+    for f in arquivos:
+        VendaD1ChatAttachment.objects.create(
+            mensagem=msg,
+            arquivo=f,
+            nome_original=getattr(f, 'name', '')[:255],
+            content_type=getattr(f, 'content_type', '') or '',
+            tamanho=getattr(f, 'size', 0) or 0,
         )
     return redirect('validad1:contestacao_detail', pk=pk)
 

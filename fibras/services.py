@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from simulator.sql_realizado import _mysql_config
 
-from .models import Fibra, FibraStatusHistory
+from .models import Fibra, FibraStatusHistory, PlanilhaOrdemInconsistente
 
 
 User = get_user_model()
@@ -423,12 +423,16 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
     not_found: list[str] = []
     now = timezone.now()
 
+    # Mantém um mapa proto -> status_raw para registrar inconsistências.
+    unmatched_status: dict[str, str] = {}
+
     for ordem, (proto, status_raw) in enumerate(parsed, start=1):
         if not proto:
             continue
         fibra = existing_map.get(proto)
         if not fibra:
             not_found.append(proto)
+            unmatched_status[proto] = status_raw
             continue
         matched += 1
         fibra.ordem_planilha = ordem
@@ -456,6 +460,26 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
 
         fibra.save(update_fields=update_fields)
 
+    # --- Persistência de inconsistências (ORDEMs da planilha sem match local).
+    inc_created = 0
+    inc_updated = 0
+    for proto, status_raw in unmatched_status.items():
+        obj, was_created = PlanilhaOrdemInconsistente.objects.get_or_create(
+            ordem=proto,
+            defaults={'status_raw': status_raw[:120]},
+        )
+        if was_created:
+            inc_created += 1
+        else:
+            obj.status_raw = status_raw[:120]
+            obj.occurrences = (obj.occurrences or 0) + 1
+            obj.save(update_fields=['status_raw', 'occurrences', 'last_seen_at'])
+            inc_updated += 1
+
+    # --- Sweep: qualquer inconsistência cuja ordem agora bata com algum
+    # Fibra.numero_protocolo é considerada resolvida e removida.
+    inc_resolved = _sweep_inconsistencias()
+
     return {
         'rows': total_rows,
         'matched': matched,
@@ -463,7 +487,28 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
         'created_from_mysql': created_from_mysql,
         'not_found': not_found[:20],
         'not_found_count': len(not_found),
+        'inconsistencias_novas': inc_created,
+        'inconsistencias_atualizadas': inc_updated,
+        'inconsistencias_resolvidas': inc_resolved,
     }
+
+
+def _sweep_inconsistencias() -> int:
+    """Remove ordens inconsistentes que agora batem com algum protocolo no DB."""
+    pendentes = list(
+        PlanilhaOrdemInconsistente.objects.values_list('ordem', flat=True)
+    )
+    if not pendentes:
+        return 0
+    achados = set(
+        Fibra.objects.filter(numero_protocolo__in=pendentes)
+        .exclude(numero_protocolo='')
+        .values_list('numero_protocolo', flat=True)
+    )
+    if not achados:
+        return 0
+    deleted, _ = PlanilhaOrdemInconsistente.objects.filter(ordem__in=achados).delete()
+    return int(deleted)
 
 
 # ---------------------------------------------------------------------------

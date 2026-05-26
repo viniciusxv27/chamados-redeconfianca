@@ -22,18 +22,39 @@
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
       {% for msg in mensagens_chat %}
       <div class="{% if msg.autor == request.user %}text-right{% endif %}">
-        <div class="inline-block px-3 py-2 rounded-lg text-sm {% if msg.autor == request.user %}bg-primary text-white{% else %}bg-gray-100{% endif %}">
+        <div class="inline-block px-3 py-2 rounded-lg text-sm max-w-[85%] text-left {% if msg.autor == request.user %}bg-primary text-white{% else %}bg-gray-100{% endif %}">
           <div class="text-[10px] opacity-70">{{ msg.autor.get_full_name|default:msg.autor.username }} · {{ msg.criado_em|date:"d/m H:i" }}</div>
-          {{ msg.texto|linebreaksbr }}
+          {% if msg.texto %}<div>{{ msg.texto|linebreaksbr }}</div>{% endif %}
+          {% for a in msg.anexos.all %}
+            {% if a.is_image %}
+              <a href="{{ a.arquivo.url }}" target="_blank" class="block mt-1">
+                <img src="{{ a.arquivo.url }}" alt="{{ a.nome_original }}" class="max-w-[220px] max-h-[220px] rounded border">
+              </a>
+            {% elif a.is_video %}
+              <video controls class="mt-1 max-w-[260px] rounded border" src="{{ a.arquivo.url }}"></video>
+            {% else %}
+              <a href="{{ a.arquivo.url }}" target="_blank" class="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded {% if msg.autor == request.user %}bg-white/20 hover:bg-white/30{% else %}bg-white hover:bg-gray-50 border{% endif %} text-xs">
+                <i class="fas fa-paperclip"></i> {{ a.nome_original|default:"arquivo" }}
+              </a>
+            {% endif %}
+          {% endfor %}
         </div>
       </div>
       {% empty %}
       <p class="text-xs text-gray-400 italic text-center mt-4">Sem mensagens.</p>
       {% endfor %}
     </div>
-    <form method="post" action="{% url 'validad1:contestacao_post' contestacao.pk %}" class="border-t p-3 flex gap-2">{% csrf_token %}
-      <input type="text" name="texto" required class="flex-1 px-3 py-2 border rounded text-sm" placeholder="Escreva uma mensagem...">
-      <button class="px-4 py-2 bg-primary text-white rounded text-sm">Enviar</button>
+    <form method="post" action="{% url 'validad1:contestacao_post' contestacao.pk %}" enctype="multipart/form-data" class="border-t p-3 flex flex-col gap-2">{% csrf_token %}
+      <div class="flex gap-2 items-center">
+        <input type="text" name="texto" class="flex-1 px-3 py-2 border rounded text-sm" placeholder="Escreva uma mensagem...">
+        <label class="px-3 py-2 bg-gray-100 border rounded text-sm cursor-pointer hover:bg-gray-200" title="Anexar arquivos">
+          <i class="fas fa-paperclip"></i>
+          <input type="file" name="anexos" multiple class="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" onchange="this.nextElementSibling.textContent = this.files.length ? this.files.length + ' arquivo(s)' : '';">
+          <span class="ml-1 text-xs text-gray-600"></span>
+        </label>
+        <button class="px-4 py-2 bg-primary text-white rounded text-sm">Enviar</button>
+      </div>
+      <p class="text-[11px] text-gray-400">Imagens, vídeos e documentos (PDF/Office/etc.).</p>
     </form>
   </div>
 

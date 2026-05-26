@@ -201,7 +201,7 @@ class VendaD1ChatMessage(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         related_name='+',
     )
-    texto = models.TextField()
+    texto = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -209,3 +209,47 @@ class VendaD1ChatMessage(models.Model):
 
     def __str__(self):
         return f"Msg {self.id} ({self.contestacao_id})"
+
+
+def _vd1_attachment_upload_to(instance, filename):
+    return f'validad1/contestacoes/{instance.mensagem.contestacao_id}/{filename}'
+
+
+class VendaD1ChatAttachment(models.Model):
+    """Anexos (imagens, vídeos, documentos) vinculados a uma mensagem do chat."""
+
+    KIND_IMAGE = 'image'
+    KIND_VIDEO = 'video'
+    KIND_FILE = 'file'
+
+    mensagem = models.ForeignKey(
+        VendaD1ChatMessage, on_delete=models.CASCADE, related_name='anexos',
+    )
+    arquivo = models.FileField(upload_to=_vd1_attachment_upload_to)
+    nome_original = models.CharField(max_length=255, blank=True)
+    content_type = models.CharField(max_length=120, blank=True)
+    tamanho = models.PositiveIntegerField(default=0)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+    @property
+    def kind(self) -> str:
+        ct = (self.content_type or '').lower()
+        if ct.startswith('image/'):
+            return self.KIND_IMAGE
+        if ct.startswith('video/'):
+            return self.KIND_VIDEO
+        return self.KIND_FILE
+
+    @property
+    def is_image(self) -> bool:
+        return self.kind == self.KIND_IMAGE
+
+    @property
+    def is_video(self) -> bool:
+        return self.kind == self.KIND_VIDEO
+
+    def __str__(self):
+        return self.nome_original or self.arquivo.name
