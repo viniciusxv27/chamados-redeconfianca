@@ -1,6 +1,7 @@
 """Serviços do módulo Fibras: sync do MySQL e notificações."""
 from __future__ import annotations
 
+import re
 import unicodedata
 from datetime import date, timedelta
 from decimal import Decimal
@@ -24,6 +25,13 @@ def _normalize(value) -> str:
     text = unicodedata.normalize('NFKD', text)
     text = ''.join(ch for ch in text if not unicodedata.combining(ch))
     return ' '.join(text.upper().split())
+
+
+def _digits_only(value) -> str:
+    """Retorna apenas os dígitos de um identificador (remove letras, '-', espaços)."""
+    if value is None:
+        return ''
+    return re.sub(r'\D+', '', str(value))
 
 
 def fetch_fibras_from_mysql(
@@ -418,6 +426,31 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
             for f in Fibra.objects.filter(numero_protocolo__in=protocols)
         }
 
+    # --- Fallback: para protocolos da planilha que ainda não bateram,
+    # compara apenas pelos dígitos (remove letras e "-" do protocolo do banco).
+    # Isso evita marcar como "Não localizada" vendas que diferem apenas por
+    # prefixo/sufixo alfanumérico no Nº de Protocolo armazenado.
+    pending_planilha = [p for p in protocols if p not in existing_map]
+    if pending_planilha:
+        digits_to_planilha: dict[str, str] = {}
+        for p in pending_planilha:
+            d = _digits_only(p)
+            if d:
+                digits_to_planilha.setdefault(d, p)
+        if digits_to_planilha:
+            # Varre Fibras com protocolo preenchido procurando match por dígitos.
+            for f in (
+                Fibra.objects.exclude(numero_protocolo='')
+                .only('id', 'numero_protocolo')
+                .iterator()
+            ):
+                d = _digits_only(f.numero_protocolo)
+                if not d:
+                    continue
+                planilha_proto = digits_to_planilha.get(d)
+                if planilha_proto and planilha_proto not in existing_map:
+                    existing_map[planilha_proto] = f
+
     matched = 0
     updated_status = 0
     not_found: list[str] = []
@@ -494,17 +527,44 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
 
 
 def _sweep_inconsistencias() -> int:
-    """Remove ordens inconsistentes que agora batem com algum protocolo no DB."""
+    """Remove ordens inconsistentes que agora batem com algum protocolo no DB.
+
+    Faz dois passes: (1) match direto pelo ``numero_protocolo`` e
+    (2) match por dígitos apenas (remove letras e ``-``) para cobrir casos
+    em que o protocolo no banco tem prefixo/sufixo alfanumérico.
+    """
     pendentes = list(
         PlanilhaOrdemInconsistente.objects.values_list('ordem', flat=True)
     )
     if not pendentes:
         return 0
-    achados = set(
+
+    achados: set[str] = set()
+    direct = set(
         Fibra.objects.filter(numero_protocolo__in=pendentes)
         .exclude(numero_protocolo='')
         .values_list('numero_protocolo', flat=True)
     )
+    achados.update(direct)
+
+    # Passe 2: comparação por dígitos apenas.
+    pendentes_restantes = [p for p in pendentes if p not in direct]
+    if pendentes_restantes:
+        digits_to_ordem: dict[str, str] = {}
+        for p in pendentes_restantes:
+            d = _digits_only(p)
+            if d:
+                digits_to_ordem.setdefault(d, p)
+        if digits_to_ordem:
+            for proto in (
+                Fibra.objects.exclude(numero_protocolo='')
+                .values_list('numero_protocolo', flat=True)
+                .iterator()
+            ):
+                d = _digits_only(proto)
+                if d and d in digits_to_ordem:
+                    achados.add(digits_to_ordem[d])
+
     if not achados:
         return 0
     deleted, _ = PlanilhaOrdemInconsistente.objects.filter(ordem__in=achados).delete()

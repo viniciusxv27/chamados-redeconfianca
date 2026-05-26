@@ -722,7 +722,14 @@ async function reprocessTranscription(transcriptionId, btn, options = {}) {
 
         const data = await resp.json();
         if (resp.ok && data.redirect) {
-            window.location.href = data.redirect;
+            // Se o redirect aponta para a mesma página, força reload
+            // (setar location.href para a URL atual nem sempre recarrega).
+            const target = new URL(data.redirect, window.location.origin);
+            if (target.pathname === window.location.pathname) {
+                window.location.reload();
+            } else {
+                window.location.href = data.redirect;
+            }
         } else if (resp.ok) {
             window.location.reload();
         } else {

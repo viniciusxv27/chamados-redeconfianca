@@ -341,6 +341,29 @@ def relatorio(request):
             'percent': round((cnt / total) * 100, 1),
         })
 
+    # Bloco "Não localizada": vendas FIXA (não canceladas/instaladas) cujo
+    # protocolo não bateu com nenhuma ORDEM da planilha mais recente.
+    from django.db.models import Max, Q
+    latest_import = Fibra.objects.aggregate(m=Max('last_planilha_at'))['m']
+    nao_qs = qs.filter(
+        Q(pilar__iexact='fixa') | Q(pilar__icontains='fixa') | Q(pilar=''),
+    ).exclude(status__in=[Fibra.STATUS_CANCELADO, Fibra.STATUS_INSTALADO])
+    if latest_import:
+        nao_qs = nao_qs.filter(
+            Q(last_planilha_at__isnull=True) | Q(last_planilha_at__lt=latest_import)
+        )
+    else:
+        nao_qs = nao_qs.filter(last_planilha_at__isnull=True)
+    qtd_nao_loc = nao_qs.count()
+    receita_nao_loc = nao_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
+    blocos.append({
+        'key': 'nao_localizado',
+        'label': 'Não localizada',
+        'qtd': qtd_nao_loc,
+        'receita': receita_nao_loc,
+        'percent': round((qtd_nao_loc / total) * 100, 1),
+    })
+
     # principal motivo de cancelamento (texto do retorno_myrella mais frequente)
     motivos = (
         qs.filter(status=Fibra.STATUS_CANCELADO)
@@ -371,7 +394,7 @@ def relatorio(request):
     chart_labels = [b['label'] for b in blocos]
     chart_qtd = [b['qtd'] for b in blocos]
     chart_receita = [float(b['receita']) for b in blocos]
-    chart_colors = ['#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#6B7280']
+    chart_colors = ['#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#6B7280', '#A855F7']
 
     return render(request, 'fibras/relatorio.html', {
         'blocos': blocos,
@@ -384,6 +407,9 @@ def relatorio(request):
         'receita_install': receita_install,
         'percent_cancel': round((qtd_cancel / real_total) * 100, 1),
         'percent_install': round((qtd_install / real_total) * 100, 1),
+        'qtd_nao_loc': qtd_nao_loc,
+        'receita_nao_loc': receita_nao_loc,
+        'percent_nao_loc': round((qtd_nao_loc / real_total) * 100, 1),
         'top_vendedores': top_vendedores,
         'chart_labels': chart_labels,
         'chart_qtd': chart_qtd,
