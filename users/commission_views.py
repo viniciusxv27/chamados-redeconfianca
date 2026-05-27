@@ -3384,6 +3384,34 @@ def commission_coordenador_view(request):
                 'total': gerente_data.get('remuneracao_final', 0),
             })
     
+    # Usuários PADRAO dos setores do coordenador (setor principal + setores
+    # secundários). Inclui todos para que o coordenador consiga abrir o
+    # comissionamento de cada um.
+    coord_sector_ids = set()
+    if user.sector_id:
+        coord_sector_ids.add(user.sector_id)
+    try:
+        coord_sector_ids.update(user.sectors.values_list('id', flat=True))
+    except Exception:
+        pass
+
+    padrao_by_sector = []
+    if coord_sector_ids:
+        from users.models import Sector as _Sector
+        sectors_qs = _Sector.objects.filter(id__in=coord_sector_ids).order_by('name')
+        for sect in sectors_qs:
+            membros = User.objects.filter(
+                hierarchy='PADRAO',
+                is_active=True,
+            ).filter(
+                Q(sector=sect) | Q(sectors=sect)
+            ).distinct().order_by('first_name', 'last_name')
+            padrao_by_sector.append({
+                'setor': sect,
+                'usuarios': list(membros),
+                'count': membros.count(),
+            })
+
     context = {
         'user': user,
         'target_user': viewing_user if viewing_user else user,
@@ -3393,6 +3421,7 @@ def commission_coordenador_view(request):
         'lojas_resumo': lojas_resumo,
         'lojas_resumo_json': json.dumps(lojas_resumo),
         'gerentes_data': gerentes_data,
+        'padrao_by_sector': padrao_by_sector,
         'result': result,
         'meses': meses,
         'role': 'coordenador',

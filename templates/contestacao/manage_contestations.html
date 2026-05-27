@@ -7,12 +7,24 @@
 <div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
-            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-gavel mr-2 text-indigo-600"></i> Gerenciar Contestações</h1>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-gavel mr-2 text-indigo-600"></i> Gerenciar Contestações{% if showing_old_contestations %} <span class="text-sm font-normal text-amber-700">(Antigas — somente conferência)</span>{% endif %}</h1>
             {% if pending_count > 0 %}
             <p class="text-sm text-yellow-600 mt-1"><i class="fas fa-exclamation-circle mr-1"></i> {{ pending_count }} pendente{{ pending_count|pluralize:"s" }}</p>
             {% endif %}
+            {% if not showing_old_contestations and last_sync_at %}
+            <p class="text-xs text-gray-500 mt-1">Exibindo apenas o mês da última sincronização ({{ last_sync_at|date:"m/Y" }}).</p>
+            {% endif %}
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+            {% if showing_old_contestations %}
+            <a href="{% url 'contestacao:manage_contestations' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                <i class="fas fa-arrow-left mr-2"></i> Voltar ao mês atual
+            </a>
+            {% elif old_contestations_count %}
+            <a href="?antigas=1" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-amber-50 border border-amber-300 text-amber-700 rounded-md hover:bg-amber-100" title="Apenas para conferência">
+                <i class="fas fa-archive mr-2"></i> Contestações antigas ({{ old_contestations_count }})
+            </a>
+            {% endif %}
             <a href="{% url 'contestacao:exclusion_list' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
                 <i class="fas fa-file-excel mr-2"></i> Exclusões
             </a>

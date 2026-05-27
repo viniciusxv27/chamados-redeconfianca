@@ -1085,9 +1085,13 @@ def compute_consultor_simulation(
             if override is not None:
                 base_meta[key] = override
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
-        # Fixa simulado é quantidade-only: zera a receita (form não envia 'real' p/ fixa).
-        ind_values['fixa'] = 0.0
-        fixa_revenue = 0.0
+        # Receita estimada de Fixa = qtd simulada × ticket médio do realizado até o momento.
+        _real_consultor = get_realized_sales_from_mysql(vendor=user_name)
+        _real_fixa_qty = _real_consultor.get('fixa_qty', 0.0) or 0.0
+        _real_fixa_rev = _real_consultor.get('fixa', 0.0) or 0.0
+        _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
+        fixa_revenue = fixa_quantity * _ticket_medio_fixa
+        ind_values['fixa'] = fixa_revenue
     else:  # VIEW_PROJECAO
         # Projeção dinâmica: pega o realizado do MySQL e projeta pelo DU.
         # Fórmula: projeção = realizado / DU_passados_até_hoje * DU_totais_do_mês
@@ -1484,7 +1488,13 @@ def compute_gerente_simulation(
         ess_a_pdv = ess_a_in
         ess_b_pdv = ess_b_in
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
-        fixa_revenue = 0.0  # Fixa simulado é quantidade-only; sem receita estimada.
+        # Receita estimada de Fixa = qtd simulada × ticket médio do realizado da loja.
+        _real_pdv = get_realized_sales_from_mysql(pdv=pdv)
+        _real_fixa_qty = _real_pdv.get('fixa_qty', 0.0) or 0.0
+        _real_fixa_rev = _real_pdv.get('fixa', 0.0) or 0.0
+        _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
+        fixa_revenue = fixa_quantity * _ticket_medio_fixa
+        proj_map['fixa'] = fixa_revenue
         # Permite sobrescrever metas
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
@@ -1791,7 +1801,14 @@ def compute_coordenador_simulation(
         ess_a = ess_a_in
         ess_b = ess_b_in
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
-        fixa_revenue = 0.0  # Fixa simulado é quantidade-only; sem receita estimada.
+        # Receita estimada de Fixa = qtd simulada × ticket médio do realizado da coordenação.
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        _real_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
+        _real_fixa_qty = _real_coord.get('fixa_qty', 0.0) or 0.0
+        _real_fixa_rev = _real_coord.get('fixa', 0.0) or 0.0
+        _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
+        fixa_revenue = fixa_quantity * _ticket_medio_fixa
+        proj_map['fixa'] = fixa_revenue
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
             if override is not None:

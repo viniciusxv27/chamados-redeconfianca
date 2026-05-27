@@ -79,6 +79,7 @@ class VendaD1(models.Model):
         max_length=30, choices=TIPO_DIVERGENCIA_CHOICES, blank=True,
     )
     penalidade = models.CharField(max_length=10, choices=PENALIDADE_CHOICES, default=PEN_NENHUMA)
+    penalidade_detalhe = models.TextField('Detalhamento da penalidade', blank=True)
     acao_realizada_no_go = models.BooleanField('Alteração feita no Vivo GO', default=False)
     observacao = models.TextField('Observação da Ilha', blank=True)
     marcado_por = models.ForeignKey(
@@ -121,10 +122,11 @@ class VendaD1(models.Model):
     def __str__(self):
         return f"D-1 {self.numero_da_venda} ({self.data_da_venda})"
 
-    def set_divergente(self, *, tipo: str, penalidade: str, observacao: str, por_usuario):
+    def set_divergente(self, *, tipo: str, penalidade: str, observacao: str, por_usuario, penalidade_detalhe: str = ''):
         self.status = self.STATUS_DIVERGENTE
         self.tipo_divergencia = tipo
         self.penalidade = penalidade
+        self.penalidade_detalhe = penalidade_detalhe if penalidade and penalidade != self.PEN_NENHUMA else ''
         self.observacao = observacao
         self.marcado_por = por_usuario
         self.marcado_em = timezone.now()
@@ -137,6 +139,7 @@ class VendaD1(models.Model):
         self.status = self.STATUS_CONFORMIDADE
         self.tipo_divergencia = ''
         self.penalidade = self.PEN_NENHUMA
+        self.penalidade_detalhe = ''
         self.marcado_por = por_usuario
         self.marcado_em = timezone.now()
         self.acordo_status = self.ACORDO_PENDENTE

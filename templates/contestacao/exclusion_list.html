@@ -125,10 +125,19 @@
 <div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-file-excel mr-2" style="color: var(--primary)"></i> Base de Exclusão</h1>
+            <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-file-excel mr-2" style="color: var(--primary)"></i> Base de Exclusão{% if showing_old_records %} <span class="text-sm font-normal text-amber-700">(Contestações antigas — somente conferência)</span>{% endif %}</h1>
             <p class="text-sm text-gray-600 mt-1">{{ total_records }} registros &middot; R$ {{ total_receita|floatformat:2 }} total</p>
         </div>
         <div class="flex gap-2 flex-wrap">
+            {% if showing_old_records %}
+            <a href="{% url 'contestacao:exclusion_list' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg bg-gray-600 hover:bg-gray-700 transition">
+                <i class="fas fa-arrow-left mr-2"></i> Voltar ao atual
+            </a>
+            {% elif old_records_count %}
+            <a href="?antigas=1" class="inline-flex items-center px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 transition" title="Apenas para conferência">
+                <i class="fas fa-archive mr-2"></i> Contestações antigas ({{ old_records_count }})
+            </a>
+            {% endif %}
             {% if can_manage %}
             <a href="{% url 'contestacao:manage_contestations' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg bg-indigo-600 hover:bg-indigo-700 transition">
                 <i class="fas fa-tasks mr-2"></i> Gerenciar

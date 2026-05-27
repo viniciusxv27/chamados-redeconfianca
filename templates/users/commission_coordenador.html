@@ -499,7 +499,50 @@
         </div>
         {% endif %}
     </div>
-    
+
+    <!-- Consultores (PADRÃO) dos setores do coordenador -->
+    {% if padrao_by_sector %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-800">Consultores dos Meus Setores</h2>
+                <p class="text-sm text-gray-500">Todos os usuários PADRÃO dos setores sob sua coordenação</p>
+            </div>
+        </div>
+        <div class="space-y-6">
+            {% for bloco in padrao_by_sector %}
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <h3 class="font-semibold text-gray-800">{{ bloco.setor.name }}</h3>
+                    <span class="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">{{ bloco.count }} usuários</span>
+                </div>
+                {% if bloco.usuarios %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {% for u in bloco.usuarios %}
+                    <a href="?user={{ u.id }}&month={{ selected_reference_month }}&year={{ selected_reference_year }}&phase={{ selected_reference_phase }}"
+                       class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 hover:shadow-sm transition-all">
+                        <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-semibold text-xs">
+                            {{ u.first_name|slice:":1" }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-800 truncate">{{ u.get_full_name|default:u.username }}</p>
+                            <p class="text-xs text-gray-500 truncate">{{ u.email|default:"" }}</p>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">Nenhum usuário PADRÃO cadastrado neste setor.</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Tabela de Gerentes -->
     {% if gerentes_data %}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">

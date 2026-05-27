@@ -643,11 +643,20 @@ def exclusion_list(request):
     # (última "Sincronizar Planilha"). Lotes anteriores ficam preservados no
     # banco para auditoria, mas não aparecem na tela de contestação — assim,
     # todas as lojas voltam a poder contestar sobre as novas vendas.
+    # Com ?antigas=1, mostra somente os registros de lotes anteriores
+    # ("Contestações antigas" — apenas para conferência).
     latest_batch = _get_latest_sync_batch()
+    show_old = request.GET.get('antigas') == '1'
+    old_records_count = 0
     if latest_batch is not None:
-        qs = qs.filter(sync_batch=latest_batch)
+        if show_old:
+            qs = qs.exclude(sync_batch=latest_batch)
+        else:
+            qs = qs.filter(sync_batch=latest_batch)
+            old_records_count = ExclusionRecord.objects.exclude(sync_batch=latest_batch).count()
     else:
-        qs = qs.none()
+        if not show_old:
+            qs = qs.none()
 
     # Superadmin vê tudo; outros filtram por setor
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
@@ -714,6 +723,8 @@ def exclusion_list(request):
         'sync_deadline_at': sync_state['sync_deadline_at'],
         'sync_remaining_seconds': sync_state['remaining_seconds'],
         'sync_remaining_label': sync_state['remaining_label'],
+        'showing_old_records': show_old,
+        'old_records_count': old_records_count,
     }
     return render(request, 'contestacao/exclusion_list.html', context)
 
@@ -1210,6 +1221,27 @@ def manage_contestations(request):
     # Filtro de status
     status_filter = request.GET.get('status', 'pending')
 
+    # Mostrar apenas contestações do mês da última sincronização por padrão.
+    # Com ?antigas=1, mostra somente as de meses anteriores ("Contestações antigas").
+    last_sync_at = _get_last_sync_at()
+    show_old = request.GET.get('antigas') == '1'
+    old_contestations_count = 0
+    if last_sync_at is not None:
+        if show_old:
+            base_qs = base_qs.exclude(
+                created_at__year=last_sync_at.year,
+                created_at__month=last_sync_at.month,
+            )
+        else:
+            old_contestations_count = base_qs.exclude(
+                created_at__year=last_sync_at.year,
+                created_at__month=last_sync_at.month,
+            ).count()
+            base_qs = base_qs.filter(
+                created_at__year=last_sync_at.year,
+                created_at__month=last_sync_at.month,
+            )
+
     # Filtro por mês de abertura (aplicado apenas em "todas").
     # Quando "Todas" está selecionado e nenhum mês foi informado, usa o mês corrente
     # como padrão para evitar listar todo o histórico.
@@ -1374,6 +1406,9 @@ def manage_contestations(request):
         'can_assign_global_managers': can_assign_global_managers,
         'global_manager_users': global_manager_users,
         'available_manager_users': available_manager_users,
+        'showing_old_contestations': show_old,
+        'old_contestations_count': old_contestations_count,
+        'last_sync_at': last_sync_at,
     }
     return render(request, 'contestacao/manage_contestations.html', context)
 

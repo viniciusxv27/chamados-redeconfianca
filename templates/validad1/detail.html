@@ -36,6 +36,10 @@
       <div><dt class="text-gray-500">Alterado no Vivo GO</dt><dd class="font-semibold">{% if venda.acao_realizada_no_go %}Sim{% else %}Não{% endif %}</dd></div>
     </dl>
 
+    {% if venda.penalidade_detalhe and venda.penalidade != 'nenhuma' %}
+    <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm"><strong>Detalhamento da penalidade:</strong> {{ venda.penalidade_detalhe|linebreaks }}</div>
+    {% endif %}
+
     {% if venda.observacao %}
     <div class="mt-3 p-3 bg-gray-50 border rounded text-sm"><strong>Observação:</strong> {{ venda.observacao }}</div>
     {% endif %}
@@ -91,10 +95,21 @@
         </div>
         <div>
           <label class="font-semibold">Penalidade</label>
-          <select name="penalidade" class="w-full px-2 py-1.5 border rounded">
+          <select name="penalidade" id="id_penalidade_select" class="w-full px-2 py-1.5 border rounded" onchange="togglePenalidadeDetalhe(this)">
             {% for k, l in penalidade_choices %}<option value="{{ k }}" {% if k == venda.penalidade %}selected{% endif %}>{{ l }}</option>{% endfor %}
           </select>
         </div>
+        <div id="penalidade_detalhe_wrapper" style="{% if not venda.penalidade or venda.penalidade == 'nenhuma' %}display:none;{% endif %}">
+          <label class="font-semibold">Detalhamento da penalidade</label>
+          <textarea name="penalidade_detalhe" rows="2" class="w-full px-2 py-1.5 border rounded" placeholder="Descreva o motivo / detalhes da penalidade...">{{ venda.penalidade_detalhe }}</textarea>
+        </div>
+        <script>
+          function togglePenalidadeDetalhe(sel){
+            var w = document.getElementById('penalidade_detalhe_wrapper');
+            if(!w) return;
+            w.style.display = (sel.value && sel.value !== 'nenhuma') ? '' : 'none';
+          }
+        </script>
         <label class="inline-flex items-center gap-2">
           <input type="checkbox" name="acao_realizada_no_go" value="1" {% if venda.acao_realizada_no_go %}checked{% endif %}>
           <span>Já alterado no Vivo GO</span>

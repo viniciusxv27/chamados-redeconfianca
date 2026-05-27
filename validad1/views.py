@@ -178,10 +178,11 @@ def sinalizar(request, pk: int):
     elif acao == 'divergente':
         tipo = request.POST.get('tipo_divergencia') or ''
         penalidade = request.POST.get('penalidade') or VendaD1.PEN_NENHUMA
+        penalidade_detalhe = (request.POST.get('penalidade_detalhe') or '').strip()
         venda.acao_realizada_no_go = bool(request.POST.get('acao_realizada_no_go'))
         venda.set_divergente(
             tipo=tipo, penalidade=penalidade, observacao=observacao,
-            por_usuario=request.user,
+            por_usuario=request.user, penalidade_detalhe=penalidade_detalhe,
         )
         venda.save()
         messages.success(request, 'Venda sinalizada como divergente. Gerente tem 48h para responder.')

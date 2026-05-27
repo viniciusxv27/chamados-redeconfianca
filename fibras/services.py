@@ -79,6 +79,7 @@ def fetch_fibras_from_mysql(
                 WHERE YEAR(data_da_venda) = %s
                   AND MONTH(data_da_venda) = %s
                   AND UPPER(`pilar`) = 'FIXA'
+                  AND `Serviço_Técnico` = 'Alta Banda Larga'
                 """,
                 (year, month),
             )
@@ -425,23 +426,26 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
     total_rows = len(parsed)
     protocols = [p for p, _, _, _ in parsed if p]
 
-    # Cross com o banco local; o que faltar buscamos no MySQL e fazemos upsert.
+    # Antes de cruzar, sincroniza com as vendas do MySQL (pilar FIXA +
+    # Serviço Técnico = "Alta Banda Larga") do mês corrente. Isso garante
+    # que o "não localizadas" (vendas no banco e fora da planilha) e as
+    # "Ordens inconsistentes" (planilha sem venda no banco) fiquem
+    # consistentes com o que está ativo no MySQL.
+    sync_created = 0
+    try:
+        sync_stats = sync_fibras()
+        sync_created = int(sync_stats.get('created') or 0)
+    except Exception:
+        sync_stats = {}
+
+    # Cross com o banco local. Protocolos que ainda assim não existirem
+    # localmente NÃO são criados a partir do MySQL — eles ficam apenas em
+    # "Ordens inconsistentes da planilha" para conferência.
     existing_map: dict[str, Fibra] = {
         f.numero_protocolo: f
         for f in Fibra.objects.filter(numero_protocolo__in=protocols)
     }
-    missing = [p for p in protocols if p not in existing_map]
-    created_from_mysql = 0
-    if missing:
-        for r in fetch_fibras_by_protocols(missing):
-            fibra, was_created = _upsert_fibra_from_mysql_row(r)
-            if fibra and was_created:
-                created_from_mysql += 1
-        # Recarrega após upsert.
-        existing_map = {
-            f.numero_protocolo: f
-            for f in Fibra.objects.filter(numero_protocolo__in=protocols)
-        }
+    created_from_mysql = sync_created
 
     # --- Fallback: para protocolos da planilha que ainda não bateram,
     # compara apenas pelos dígitos (remove letras e "-" do protocolo do banco).
