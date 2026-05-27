@@ -26,6 +26,10 @@ ROLE_GERENTE = 'gerente'
 ROLE_COORDENADOR = 'coordenador'
 ROLE_SUPERADMIN = 'superadmin'
 
+# Grupo de comunicação SNIPER (configurado em /users/manage/groups/).
+# Coordenadores neste grupo recebem 75% da comissão padrão.
+SNIPER_GROUP_ID = 22
+
 # Modos de visualização do simulador (espelham as três áreas das planilhas
 # por loja/coordenador: PROJEÇÃO, REALIZADO e SIMULADOR).
 VIEW_PROJECAO = 'projecao'
@@ -1934,6 +1938,25 @@ def compute_coordenador_simulation(
     total_coordinator = total_commission + total_h2 + total_h3 + bonus_value
     sniper_rate = meta_config.get('sniper_rate', 0.75)
 
+    # Usuários que pertencem ao grupo SNIPER (id=22 em /users/manage/groups/)
+    # recebem 75% da comissão de coordenador.
+    is_sniper = False
+    try:
+        is_sniper = user.communication_groups.filter(id=SNIPER_GROUP_ID).exists()
+    except Exception:
+        is_sniper = False
+
+    if is_sniper:
+        for row in rows:
+            row['commission_value'] = row.get('commission_value', 0.0) * sniper_rate
+            row['hunter2_value'] = row.get('hunter2_value', 0.0) * sniper_rate
+            row['hunter3_value'] = row.get('hunter3_value', 0.0) * sniper_rate
+        total_commission *= sniper_rate
+        total_h2 *= sniper_rate
+        total_h3 *= sniper_rate
+        bonus_value *= sniper_rate
+        total_coordinator *= sniper_rate
+
     rows = _merge_grouped_rows(rows)
     return {
         'user_name': user.get_full_name() or user.first_name or user.email,
@@ -1941,13 +1964,14 @@ def compute_coordenador_simulation(
         'coordinator': coord_name,
         'view_mode': view_mode,
         'rows': rows,
+        'is_sniper': is_sniper,
         'totals': {
             'total_commission': total_commission,
             'hunter2': total_h2,
             'hunter3': total_h3,
             'bonus_6_7': bonus_value,
             'ganho_total': total_coordinator,
-            'ganho_total_sniper': total_coordinator * sniper_rate,
+            'ganho_total_sniper': total_coordinator if is_sniper else total_coordinator * sniper_rate,
         },
     }
 
