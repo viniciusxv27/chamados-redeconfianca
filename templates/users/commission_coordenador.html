@@ -1426,7 +1426,7 @@ async function abrirModalVendas(pilar, pilarNome) {
     conteudo.classList.add('hidden');
     
     try {
-        const response = await fetch(`/users/api/vendas-pilar/?pilar=${pilar}`);
+        const response = await fetch(`/users/api/vendas-pilar/?pilar=${pilar}{% if target_user and target_user.id != user.id %}&user={{ target_user.id }}{% endif %}{% if selected_reference_month %}&month={{ selected_reference_month }}{% endif %}{% if selected_reference_year %}&year={{ selected_reference_year }}{% endif %}{% if selected_reference_phase %}&phase={{ selected_reference_phase }}{% endif %}`);
         const data = await response.json();
         
         vendasPagoGlobal = data.vendas_pago || [];

@@ -3774,16 +3774,33 @@ def api_vendas_por_pilar(request):
     if not pilar:
         return JsonResponse({'error': 'Pilar não especificado'}, status=400)
     
-    # Identificar papel do usuário
-    role = get_user_role(user)
+    # Identificar papel do usuário autenticado
+    requester_role = get_user_role(user)
+
+    # Resolver usuário alvo (quando admin/gerente/coordenador visualiza outro usuário)
+    viewing_user_id = request.GET.get('user') or request.GET.get('user_id')
+    target_user = user
+    if viewing_user_id:
+        if requester_role in ['cn', 'recepcionista']:
+            return JsonResponse({'error': 'Não autorizado'}, status=403)
+        try:
+            target_user = User.objects.get(id=viewing_user_id, is_active=True)
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'Usuário não encontrado'}, status=404)
+        # Gerente só pode ver usuários do próprio setor
+        if requester_role == 'gerente' and getattr(target_user, 'sector_id', None) != getattr(user, 'sector_id', None):
+            return JsonResponse({'error': 'Não autorizado'}, status=403)
+
+    # Determinar papel do usuário alvo para filtragem correta
+    role = get_user_role(target_user)
     is_coordenador = role == 'coordenador'
     is_gerente = role == 'gerente'
-    
-    # Informações do usuário para busca
-    user_full_name = user.get_full_name() or user.first_name or ""
-    user_first_name = user.first_name.strip().upper() if user.first_name else ""
-    user_last_name = user.last_name.strip().upper() if user.last_name else ""
-    user_pdv = user.sector.name if hasattr(user, 'sector') and user.sector else ""
+
+    # Informações do usuário alvo para busca
+    user_full_name = target_user.get_full_name() or target_user.first_name or ""
+    user_first_name = target_user.first_name.strip().upper() if target_user.first_name else ""
+    user_last_name = target_user.last_name.strip().upper() if target_user.last_name else ""
+    user_pdv = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else ""
     
     print(f"[api_vendas_por_pilar] Usuário: {user_full_name}, Pilar: {pilar}, Role: {role}")
     print(f"[api_vendas_por_pilar] first_name: {user_first_name}, last_name: {user_last_name}, PDV: {user_pdv}")
@@ -3876,8 +3893,9 @@ def api_vendas_por_pilar(request):
         
         return False
     
-    # Obter URLs dinâmicas
-    urls = get_excel_urls()
+    # Obter URLs dinâmicas (respeitando referência selecionada na tela)
+    reference = resolve_commission_reference_from_request(request)
+    urls = get_excel_urls(reference['year'], reference['month'], reference.get('phase'))
     
     try:
         # Baixar planilha BASE_PAGAMENTO

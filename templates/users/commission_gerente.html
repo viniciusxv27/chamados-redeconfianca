@@ -1156,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.style.overflow = 'hidden';
         
         // Buscar dados via API
-        fetch('{% url "api_vendas_pilar" %}?pilar=' + encodeURIComponent(pilar))
+        fetch('{% url "api_vendas_pilar" %}?pilar=' + encodeURIComponent(pilar){% if target_user and target_user.id != user.id %} + '&user={{ target_user.id }}'{% endif %}{% if selected_reference_month %} + '&month={{ selected_reference_month }}'{% endif %}{% if selected_reference_year %} + '&year={{ selected_reference_year }}'{% endif %}{% if selected_reference_phase %} + '&phase={{ selected_reference_phase }}'{% endif %})
             .then(function(response) { return response.json(); })
             .then(function(data) {
                 loading.classList.add('hidden');
