@@ -29,12 +29,17 @@ def _can_import_planilha(user) -> bool:
 @login_required
 def kanban(request):
     from django.db.models import Q as _Q
+    from django.db.models.functions import Length
     qs = fibras_for_user(request.user)
     # filtros simples
     pdv = (request.GET.get('pdv') or '').strip()
     vendedor = (request.GET.get('vendedor') or '').strip()
     venda = (request.GET.get('venda') or '').strip()
     ordem = (request.GET.get('ordem') or '').strip()
+    # B2B: documento (CPF/CNPJ) com mais de 11 caracteres = empresa.
+    b2b = (request.GET.get('b2b') or '').strip() in ('1', 'true', 'on', 'sim')
+    if b2b:
+        qs = qs.annotate(_doc_len=Length('cpf')).filter(_doc_len__gt=11)
     if pdv:
         qs = qs.filter(pdv__icontains=pdv)
     if vendedor:
@@ -107,6 +112,7 @@ def kanban(request):
         'filtro_vendedor': vendedor,
         'filtro_venda': venda,
         'filtro_ordem': ordem,
+        'filtro_b2b': b2b,
         'status_choices': Fibra.STATUS_CHOICES,
         'inconsistencias': inconsistencias,
         'inconsistencias_count': len(inconsistencias),
@@ -384,6 +390,13 @@ def relatorio(request):
     receita_nao_loc = nao_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
     nao_ids = set(nao_qs.values_list('id', flat=True))
 
+    # Detalhe "Não localizado": uma linha por número da venda (numero_da_venda
+    # é único no modelo), com PDV e Vendedor para o card do relatório.
+    nao_loc_detalhes = list(
+        nao_qs.order_by('-data_da_venda', '-id')
+        .values('numero_da_venda', 'pdv', 'vendedor')
+    )
+
     blocos = []
     for key, label in Fibra.STATUS_CHOICES:
         sub = qs.filter(status=key).exclude(id__in=nao_ids)
@@ -451,6 +464,7 @@ def relatorio(request):
         'qtd_nao_loc': qtd_nao_loc,
         'receita_nao_loc': receita_nao_loc,
         'percent_nao_loc': round((qtd_nao_loc / real_total) * 100, 1),
+        'nao_loc_detalhes': nao_loc_detalhes,
         'top_vendedores': top_vendedores,
         'chart_labels': chart_labels,
         'chart_qtd': chart_qtd,
@@ -461,12 +475,23 @@ def relatorio(request):
 
 @login_required
 def export_excel(request):
-    """Exporta as fibras do mês corrente para um arquivo .xlsx."""
+    """Exporta as fibras do mês corrente para um arquivo .xlsx.
+
+    Aceita ``?status=<status>`` para exportar apenas um status específico
+    (ex.: ``cancelado`` para exportar todas as fibras canceladas).
+    """
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
     qs = fibras_for_user(request.user).order_by('-data_da_venda', '-id')
+
+    status = (request.GET.get('status') or '').strip()
+    status_valido = dict(Fibra.STATUS_CHOICES)
+    nome_arquivo = 'fibras'
+    if status in status_valido:
+        qs = qs.filter(status=status)
+        nome_arquivo = f'fibras_{status}'
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -504,7 +529,7 @@ def export_excel(request):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A2'
 
-    filename = f'fibras_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    filename = f'{nome_arquivo}_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx'
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )

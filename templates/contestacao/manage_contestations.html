@@ -475,7 +475,7 @@
             {% elif c.status == 'denied' %}
             <div class="px-4 py-3 border-t bg-gray-50">
                 <form method="post" action="{% url 'contestacao:move_denied_to_payment' c.pk %}" class="flex flex-wrap items-end gap-2"
-                      onsubmit="return confirm('Mover a contestação #{{ c.pk }} (negada) para pagamento?');">
+                      onsubmit="return confirm('Passar a contestação #{{ c.pk }} (negada) para pagamento e negar?');">
                     {% csrf_token %}
                     <div class="flex-1 min-w-[200px]">
                         <label class="block text-xs text-gray-500 mb-1">Observação (opcional)</label>
@@ -483,7 +483,7 @@
                                class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                     <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700">
-                        <i class="fas fa-dollar-sign mr-1"></i> Passar para Pagamento
+                        <i class="fas fa-dollar-sign mr-1"></i> Passar para pagamento e negar
                     </button>
                 </form>
             </div>

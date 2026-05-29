@@ -1895,9 +1895,9 @@ def move_denied_to_payment(request, pk):
     ])
     ContestationHistory.objects.create(
         contestation=c, action='approved', user=request.user,
-        notes=notes or 'Negada movida para pagamento pelo gestor.',
+        notes=notes or 'Negada passada para pagamento pelo gestor.',
     )
-    messages.success(request, f'Contestação #{c.pk} movida para pagamento.')
+    messages.success(request, f'Contestação #{c.pk} passada para pagamento e negada.')
     return redirect('/contestacao/gerenciar/?status=denied')
 
 
