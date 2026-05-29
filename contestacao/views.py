@@ -1866,6 +1866,42 @@ def deny_contestation(request, pk):
 
 
 @login_required
+def move_denied_to_payment(request, pk):
+    """Gestor reverte uma contestação negada pelo gerente e envia para pagamento."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('contestacao:manage_contestations')
+    if request.method != 'POST':
+        return redirect('contestacao:manage_contestations')
+
+    c = get_object_or_404(Contestation, pk=pk, status='denied')
+
+    # Garante que o usuário só altere contestações dentro do escopo permitido.
+    allowed_qs = _apply_sector_visibility_filter(Contestation.objects.filter(pk=c.pk), request.user)
+    if not allowed_qs.exists():
+        messages.error(request, 'Você não pode alterar esta contestação.')
+        return redirect('contestacao:manage_contestations')
+
+    notes = request.POST.get('notes', '').strip()
+
+    c.status = 'confirmed'
+    c.payment_status = 'pending_payment'
+    c.reviewed_by = request.user
+    c.reviewed_at = timezone.now()
+    if notes:
+        c.review_notes = (c.review_notes + '\n' if c.review_notes else '') + notes
+    c.save(update_fields=[
+        'status', 'payment_status', 'reviewed_by', 'reviewed_at', 'review_notes', 'updated_at',
+    ])
+    ContestationHistory.objects.create(
+        contestation=c, action='approved', user=request.user,
+        notes=notes or 'Negada movida para pagamento pelo gestor.',
+    )
+    messages.success(request, f'Contestação #{c.pk} movida para pagamento.')
+    return redirect('/contestacao/gerenciar/?status=denied')
+
+
+@login_required
 def mark_paid(request, pk):
     """Gestor marca como pago (após confirmação do gerente)."""
     if not _can_manage_contestations(request.user):

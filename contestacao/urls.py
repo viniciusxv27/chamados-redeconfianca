@@ -33,6 +33,7 @@ urlpatterns = [
     path('<int:pk>/anexo-errado/', views.toggle_attachment_wrong, name='toggle_attachment_wrong'),
     path('<int:pk>/confirmar/', views.confirm_contestation, name='confirm_contestation'),
     path('<int:pk>/negar/', views.deny_contestation, name='deny_contestation'),
+    path('<int:pk>/mover-para-pagamento/', views.move_denied_to_payment, name='move_denied_to_payment'),
     path('<int:pk>/marcar-pago/', views.mark_paid, name='mark_paid'),
     path('marcar-pago-lote/', views.bulk_mark_paid, name='bulk_mark_paid'),
 ]

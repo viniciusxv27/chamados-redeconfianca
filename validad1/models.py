@@ -67,6 +67,7 @@ class VendaD1(models.Model):
     valor = models.DecimalField('Valor', max_digits=12, decimal_places=2, default=0)
     cpf = models.CharField('CPF do cliente', max_length=20, blank=True)
     numero_acesso = models.CharField('Número de acesso', max_length=60, blank=True)
+    numero_protocolo = models.CharField('Número do protocolo', max_length=60, blank=True)
     data_da_venda = models.DateField('Data da venda', null=True, blank=True)
     pilar = models.CharField('Pilar', max_length=40, blank=True)
     vendedor = models.CharField('Vendedor', max_length=200, blank=True, db_index=True)
@@ -256,3 +257,25 @@ class VendaD1ChatAttachment(models.Model):
 
     def __str__(self):
         return self.nome_original or self.arquivo.name
+
+
+class VendaD1SyncLog(models.Model):
+    """Registra cada sincronização manual de vendas D-1 (controle de 1x/dia)."""
+
+    synced_at = models.DateTimeField(default=timezone.now, db_index=True)
+    synced_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='vendas_d1_syncs',
+    )
+    target_date = models.DateField(null=True, blank=True)
+    created = models.PositiveIntegerField(default=0)
+    total_in_source = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Sincronização D-1'
+        verbose_name_plural = 'Sincronizações D-1'
+        ordering = ['-synced_at']
+
+    def __str__(self):
+        return f"Sync D-1 {self.synced_at:%d/%m/%Y %H:%M}"
+

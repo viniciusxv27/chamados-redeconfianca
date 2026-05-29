@@ -28,10 +28,10 @@ def _norm(value) -> str:
 
 
 def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
-    """Busca as vendas do dia anterior (`target_date`, padrão = ontem).
+    """Busca as vendas de serviço do dia anterior (`target_date`, padrão = ontem).
 
-    Combina ``vendas_servicos`` (qualquer pilar) **e** ``vendas_produto`` —
-    conforme requisito do D-1: ambas as tabelas precisam ser auditadas.
+    Considera apenas a tabela ``vendas_servicos`` — conforme requisito do D-1,
+    somente as vendas de serviço devem ser auditadas.
     """
     try:
         import pymysql  # type: ignore
@@ -70,29 +70,6 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
                 FROM vendas_servicos
                 WHERE data_da_venda = %s
                   AND `Venda_ativa` = '1'
-                """,
-                (target_date,),
-            )
-            for row in cur.fetchall():
-                rows.append(dict(zip(cols, row)))
-
-            # --- vendas_produto (lowercase) ---
-            cur.execute(
-                """
-                SELECT
-                    `id_da_venda`,
-                    `plano`,
-                    COALESCE(`valor_líquido_de_venda_do_produto`, 0) AS valor,
-                    `cpf_do_cliente`,
-                    `Nº_acesso`,
-                    `data_da_venda`,
-                    `pilar`,
-                    `nome_do_vendedor`,
-                    `pdv`,
-                    `nome_do_produto`
-                FROM vendas_produto
-                WHERE data_da_venda = %s
-                  AND `venda_ativa` = '1'
                 """,
                 (target_date,),
             )
@@ -269,4 +246,25 @@ def vendas_for_user(user) -> 'models.QuerySet[VendaD1]':
 def is_ilha(user) -> bool:
     return user.is_superuser or getattr(user, 'hierarchy', '') in (
         'ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO',
+    )
+
+
+def can_sync_d1(user) -> bool:
+    """Pode sincronizar quem é da Ilha e **não** é da hierarquia PADRAO."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'hierarchy', 'PADRAO') == 'PADRAO':
+        return False
+    return is_ilha(user)
+
+
+def last_sync_today():
+    """Retorna o último registro de sync feito hoje, ou ``None``."""
+    from .models import VendaD1SyncLog
+    today = timezone.localdate()
+    return (
+        VendaD1SyncLog.objects
+        .filter(synced_at__date=today)
+        .order_by('-synced_at')
+        .first()
     )

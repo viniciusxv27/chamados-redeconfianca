@@ -31,6 +31,7 @@
       <div><dt class="text-gray-500">Vendedor</dt><dd class="font-semibold">{{ venda.vendedor|default:"—" }}</dd></div>
       <div><dt class="text-gray-500">Loja</dt><dd class="font-semibold">{{ venda.pdv|default:"—" }}</dd></div>
       <div><dt class="text-gray-500">Serviços</dt><dd class="font-semibold">{{ venda.servicos|default:"—" }}</dd></div>
+      <div><dt class="text-gray-500">Nº do protocolo</dt><dd class="font-semibold">{{ venda.numero_protocolo|default:"—" }}</dd></div>
       <div><dt class="text-gray-500">Data da venda</dt><dd class="font-semibold">{{ venda.data_da_venda|date:"d/m/Y" }}</dd></div>
       <div><dt class="text-gray-500">Penalidade</dt><dd class="font-semibold">{{ venda.get_penalidade_display }}</dd></div>
       <div><dt class="text-gray-500">Alterado no Vivo GO</dt><dd class="font-semibold">{% if venda.acao_realizada_no_go %}Sim{% else %}Não{% endif %}</dd></div>
@@ -49,25 +50,6 @@
       <strong>Acordo:</strong> {{ venda.get_acordo_status_display }}
       {% if venda.acordo_status == 'pendente' %} · Prazo até {{ venda.acordo_deadline|date:"d/m/Y H:i" }}{% endif %}
     </div>
-    {% endif %}
-
-    {% if is_ilha %}
-    <form method="post" action="{% url 'validad1:editar_venda' venda.pk %}" class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2 items-end p-3 bg-gray-50 border rounded">{% csrf_token %}
-      <div>
-        <label class="block text-xs font-semibold text-gray-600">Nº de acesso / Telefone</label>
-        <input type="text" name="numero_acesso" value="{{ venda.numero_acesso }}" class="w-full px-2 py-1.5 border rounded text-sm">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-gray-600">Valor da venda (R$)</label>
-        <input type="text" name="valor" value="{{ venda.valor }}" class="w-full px-2 py-1.5 border rounded text-sm" placeholder="0,00">
-      </div>
-      <div>
-        <button class="w-full px-3 py-1.5 bg-purple-600 text-white rounded text-sm">
-          <i class="fas fa-edit"></i> Salvar correções
-        </button>
-      </div>
-      <p class="md:col-span-3 text-[11px] text-gray-500">Use estes campos para corrigir o telefone (nº de acesso) e o valor antes de validar.</p>
-    </form>
     {% endif %}
   </div>
 
@@ -116,6 +98,29 @@
         </label>
         <textarea name="observacao" rows="3" class="w-full px-2 py-1.5 border rounded" placeholder="Observação...">{{ venda.observacao }}</textarea>
         <button class="px-3 py-1.5 bg-primary text-white rounded w-full">Salvar sinalização</button>
+      </form>
+    </div>
+
+    <!-- Alteração de dados da venda (somente no banco local) -->
+    <div class="bg-white rounded-lg border p-4">
+      <h3 class="font-bold mb-2">Alteração de dados</h3>
+      <p class="text-[11px] text-gray-500 mb-3">As correções abaixo alteram somente a venda salva no banco local (Postgres); a fonte (MySQL) nunca é modificada.</p>
+      <form method="post" action="{% url 'validad1:editar_venda' venda.pk %}" class="space-y-3 text-sm">{% csrf_token %}
+        <div>
+          <label class="block text-xs font-semibold text-gray-600">Valor da venda (R$)</label>
+          <input type="text" name="valor" value="{{ venda.valor }}" class="w-full px-2 py-1.5 border rounded" placeholder="0,00">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600">Nº de acesso / Telefone</label>
+          <input type="text" name="numero_acesso" value="{{ venda.numero_acesso }}" class="w-full px-2 py-1.5 border rounded">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600">Número do protocolo</label>
+          <input type="text" name="numero_protocolo" value="{{ venda.numero_protocolo }}" class="w-full px-2 py-1.5 border rounded">
+        </div>
+        <button class="px-3 py-1.5 bg-purple-600 text-white rounded w-full">
+          <i class="fas fa-edit"></i> Salvar alterações
+        </button>
       </form>
     </div>
     {% endif %}

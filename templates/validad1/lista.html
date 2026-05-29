@@ -41,6 +41,14 @@
     <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Loja (PDV)" class="px-3 py-1.5 border rounded text-sm">
     <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Vendedor" class="px-3 py-1.5 border rounded text-sm">
     <label class="text-sm inline-flex items-center gap-1">
+      <span class="text-gray-500">De</span>
+      <input type="date" name="data_de" value="{{ filtro_data_de }}" class="px-2 py-1.5 border rounded text-sm">
+    </label>
+    <label class="text-sm inline-flex items-center gap-1">
+      <span class="text-gray-500">Até</span>
+      <input type="date" name="data_ate" value="{{ filtro_data_ate }}" class="px-2 py-1.5 border rounded text-sm">
+    </label>
+    <label class="text-sm inline-flex items-center gap-1">
       <input type="checkbox" name="expirados" value="1" {% if show_expired %}checked{% endif %}> Mostrar expiradas
     </label>
     <button class="px-3 py-1.5 bg-gray-100 border rounded text-sm">Filtrar</button>

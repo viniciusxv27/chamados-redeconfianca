@@ -10,8 +10,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage, VendaD1ChatAttachment
-from .services import expire_deadlines, is_ilha, sync_d1, vendas_for_user
+from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage, VendaD1ChatAttachment, VendaD1SyncLog
+from .services import (
+    can_sync_d1,
+    expire_deadlines,
+    is_ilha,
+    last_sync_today,
+    sync_d1,
+    vendas_for_user,
+)
 
 
 def _apply_common_filters(qs, request):
@@ -28,11 +35,19 @@ def _apply_common_filters(qs, request):
     pilar = (request.GET.get('pilar') or '').strip()
     if pilar:
         qs = qs.filter(pilar__iexact=pilar)
+    data_de = (request.GET.get('data_de') or '').strip()
+    if data_de:
+        qs = qs.filter(data_da_venda__gte=data_de)
+    data_ate = (request.GET.get('data_ate') or '').strip()
+    if data_ate:
+        qs = qs.filter(data_da_venda__lte=data_ate)
     return qs, {
         'filtro_status': status,
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'filtro_pilar': pilar,
+        'filtro_data_de': data_de,
+        'filtro_data_ate': data_ate,
     }
 
 
@@ -129,32 +144,45 @@ def detail(request, pk: int):
 @login_required
 @require_POST
 def editar_venda(request, pk: int):
-    """Permite à Ilha (quem confere/valida) corrigir telefone (nº acesso) e valor."""
+    """Permite à Ilha corrigir telefone (nº acesso), valor e protocolo.
+
+    A alteração afeta APENAS o registro salvo no banco local (Postgres); a
+    fonte (MySQL) nunca é modificada.
+    """
     if not is_ilha(request.user):
         messages.error(request, 'Apenas a Ilha pode editar a venda.')
         return redirect('validad1:detail', pk=pk)
 
     venda = get_object_or_404(VendaD1, pk=pk)
     novo_acesso = (request.POST.get('numero_acesso') or '').strip()
+    novo_protocolo = (request.POST.get('numero_protocolo') or '').strip()
     novo_valor_raw = (request.POST.get('valor') or '').strip().replace('.', '').replace(',', '.')
 
     alterados = []
+    update_fields = ['last_synced_at']
     if novo_acesso != venda.numero_acesso:
         venda.numero_acesso = novo_acesso
+        update_fields.append('numero_acesso')
         alterados.append('número de acesso')
+
+    if novo_protocolo != venda.numero_protocolo:
+        venda.numero_protocolo = novo_protocolo
+        update_fields.append('numero_protocolo')
+        alterados.append('número do protocolo')
 
     if novo_valor_raw:
         try:
             novo_valor = Decimal(novo_valor_raw)
             if novo_valor != venda.valor:
                 venda.valor = novo_valor
+                update_fields.append('valor')
                 alterados.append('valor')
         except (InvalidOperation, ValueError):
             messages.error(request, 'Valor informado é inválido.')
             return redirect('validad1:detail', pk=pk)
 
     if alterados:
-        venda.save(update_fields=['numero_acesso', 'valor', 'last_synced_at'])
+        venda.save(update_fields=update_fields)
         messages.success(request, 'Atualizado: ' + ', '.join(alterados) + '.')
     else:
         messages.info(request, 'Nada para alterar.')
@@ -300,10 +328,28 @@ def contestacao_resolver(request, pk: int):
 @login_required
 @require_POST
 def sync_now(request):
-    if not is_ilha(request.user):
-        messages.error(request, 'Sem permissão.')
+    if not can_sync_d1(request.user):
+        messages.error(request, 'Apenas usuários acima da hierarquia Padrão podem sincronizar.')
         return redirect('validad1:lista')
+
+    ja_sincronizado = last_sync_today()
+    if ja_sincronizado is not None:
+        quem = ja_sincronizado.synced_by.get_full_name() if ja_sincronizado.synced_by else 'outro usuário'
+        messages.warning(
+            request,
+            f'A sincronização já foi feita hoje às '
+            f'{timezone.localtime(ja_sincronizado.synced_at):%H:%M} por {quem}. '
+            f'Só é permitido sincronizar 1 vez ao dia.',
+        )
+        return redirect('validad1:lista')
+
     stats = sync_d1()
+    VendaD1SyncLog.objects.create(
+        synced_by=request.user,
+        target_date=timezone.localdate() - timezone.timedelta(days=1),
+        created=stats['created'],
+        total_in_source=stats['total_in_source'],
+    )
     messages.success(
         request,
         f"Sync D-1 ({stats['target_date']}): {stats['created']} importadas, "
