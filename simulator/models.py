@@ -58,3 +58,39 @@ class CoordinatorStoreAccess(models.Model):
 
     def __str__(self):
         return f"Lojas do coordenador: {self.coordinator.get_full_name() or self.coordinator.email}"
+
+
+class SniperAssignment(models.Model):
+    """Vincula um SNIPER (membro do grupo SNIPER) a um coordenador específico
+    (membro do grupo COORDENADORES). O sniper recebe 75% da comissão desse
+    coordenador no simulador."""
+    sniper = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sniper_assignment',
+        verbose_name='Sniper',
+    )
+    coordinator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sniper_coordinator_assignments',
+        verbose_name='Coordenador',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sniper_assignment_updates',
+        verbose_name='Atualizado por',
+    )
+
+    class Meta:
+        verbose_name = 'Atribuição de Sniper'
+        verbose_name_plural = 'Atribuições de Snipers'
+
+    def __str__(self):
+        sniper_name = self.sniper.get_full_name() or self.sniper.email
+        coord_name = self.coordinator.get_full_name() or self.coordinator.email
+        return f"Sniper {sniper_name} → Coordenador {coord_name}"

@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 
 from users.models import Sector, User
-from .models import CoordinatorStoreAccess
+from .models import CoordinatorStoreAccess, SniperAssignment
 from .services import (
     FACTOR_RANGE_SPECS,
     DEFAULT_META_BY_ROLE,
@@ -22,11 +22,14 @@ from .services import (
     get_all_coordinators,
     get_all_consultors,
     get_all_gerentes,
+    get_all_snipers,
     get_coordinator_sectors,
     get_factor_set,
     get_hunter_levels_from_request,
     get_simulator_excluded_user_ids,
+    get_sniper_coordinator,
     get_user_role,
+    is_sniper_user,
     compute_consultor_simulation,
     compute_gerente_simulation,
     compute_coordenador_simulation,
@@ -87,9 +90,17 @@ def simulator_dashboard(request):
         coordinators = get_all_coordinators()
         gerentes = get_all_gerentes()
         consultors = get_all_consultors()
+        snipers = get_all_snipers()
+
+        coordinator_ids = {u.id for u in coordinators}
+        sniper_targets = [
+            {'id': user.id, 'label': f"{user.get_full_name()} (Sniper)", 'role': ROLE_COORDENADOR}
+            for user in snipers if user.id not in coordinator_ids
+        ]
 
         available_targets = (
             [{'id': user.id, 'label': f"{user.get_full_name()} (Coordenador)", 'role': ROLE_COORDENADOR} for user in coordinators]
+            + sniper_targets
             + [{'id': user.id, 'label': f"{user.get_full_name()} (Gerente)", 'role': ROLE_GERENTE} for user in gerentes]
             + [{'id': user.id, 'label': f"{user.get_full_name()} (Consultor)", 'role': ROLE_CONSULTOR} for user in consultors]
         )
@@ -98,6 +109,9 @@ def simulator_dashboard(request):
         if target_user_id:
             target_user = get_object_or_404(User, id=target_user_id, is_active=True)
             target_role = get_user_role(target_user)
+            # Snipers usam o cálculo de coordenador (75% do coordenador atribuído).
+            if is_sniper_user(target_user):
+                target_role = ROLE_COORDENADOR
         else:
             show_summary_only = True
     elif role == ROLE_COORDENADOR:
@@ -272,3 +286,45 @@ def simulator_admin_stores(request):
         'selected_sectors': selected_sectors,
     }
     return render(request, 'simulator/admin_stores.html', context)
+
+
+@login_required
+def simulator_admin_snipers(request):
+    if not is_superadmin(request.user):
+        messages.error(request, 'Acesso negado.')
+        return redirect('simulator:dashboard')
+
+    if request.method == 'POST':
+        sniper_id = request.POST.get('sniper_id')
+        coordinator_id = request.POST.get('coordinator_id')
+        sniper = get_object_or_404(User, id=sniper_id, is_active=True)
+
+        if coordinator_id:
+            coordinator = get_object_or_404(User, id=coordinator_id, is_active=True)
+            SniperAssignment.objects.update_or_create(
+                sniper=sniper,
+                defaults={'coordinator': coordinator, 'updated_by': request.user},
+            )
+            messages.success(request, 'Coordenador atribuído ao sniper com sucesso.')
+        else:
+            SniperAssignment.objects.filter(sniper=sniper).delete()
+            messages.success(request, 'Atribuição removida com sucesso.')
+        return redirect('simulator:admin_snipers')
+
+    snipers = get_all_snipers()
+    coordinators = get_all_coordinators()
+    assignments = {
+        a.sniper_id: a.coordinator_id
+        for a in SniperAssignment.objects.all()
+    }
+
+    sniper_rows = [
+        {'user': sniper, 'coordinator_id': assignments.get(sniper.id)}
+        for sniper in snipers
+    ]
+
+    context = {
+        'sniper_rows': sniper_rows,
+        'coordinators': coordinators,
+    }
+    return render(request, 'simulator/admin_snipers.html', context)

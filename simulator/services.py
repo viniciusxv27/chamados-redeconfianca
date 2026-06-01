@@ -562,6 +562,11 @@ def get_user_role(user: User) -> str:
     if user.is_superuser or getattr(user, 'hierarchy', None) == 'SUPERADMIN':
         return ROLE_SUPERADMIN
 
+    # Grupo SNIPER (id=22) tem prioridade sobre COORDENADORES: snipers usam o
+    # cálculo de coordenador (75% do coordenador atribuído).
+    if is_sniper_user(user):
+        return ROLE_COORDENADOR
+
     # Grupo COORDENADORES tem prioridade (membros podem ter qualquer hierarquia).
     coord_group = CommunicationGroup.objects.filter(name__icontains='COORDENADORES').first()
     if coord_group and coord_group.members.filter(id=user.id).exists():
@@ -664,6 +669,37 @@ def get_all_coordinators() -> List[User]:
         .exclude(id__in=excluded)
         .order_by('first_name', 'last_name')
     )
+
+
+def get_all_snipers() -> List[User]:
+    """Snipers = membros do grupo SNIPER (id=22)."""
+    sniper_group = CommunicationGroup.objects.filter(id=SNIPER_GROUP_ID).first()
+    if not sniper_group:
+        return []
+    return list(
+        sniper_group.members.filter(is_active=True)
+        .order_by('first_name', 'last_name')
+    )
+
+
+def is_sniper_user(user: User) -> bool:
+    """Indica se o usuário pertence ao grupo SNIPER (id=22)."""
+    try:
+        return user.communication_groups.filter(id=SNIPER_GROUP_ID).exists()
+    except Exception:
+        return False
+
+
+def get_sniper_coordinator(user: User) -> Optional[User]:
+    """Retorna o coordenador atribuído ao sniper (ou None)."""
+    from .models import SniperAssignment
+    assignment = (
+        SniperAssignment.objects
+        .filter(sniper=user)
+        .select_related('coordinator')
+        .first()
+    )
+    return assignment.coordinator if assignment else None
 
 
 def get_hunter_levels_from_request(request) -> Dict[str, int]:
@@ -1734,7 +1770,13 @@ def compute_coordenador_simulation(
     realized = load_dataframe(ROLE_COORDENADOR, 'REALIZADO')
     projection = load_dataframe(ROLE_COORDENADOR, 'PROJEÇÃO')
 
-    coord_name = user.first_name or user.get_full_name() or user.email
+    # Snipers recebem 75% da comissão de um coordenador específico, atribuído
+    # pelo super admin. Nesse caso, a base de cálculo é o coordenador atribuído.
+    is_sniper = is_sniper_user(user)
+    sniper_coordinator = get_sniper_coordinator(user) if is_sniper else None
+    commission_source = sniper_coordinator or user
+
+    coord_name = commission_source.first_name or commission_source.get_full_name() or commission_source.email
 
     meta_map = {
         'movel': sumifs(realized, 'META_MOVEL', 'COORDENAÇÃO', coord_name),
@@ -1938,14 +1980,8 @@ def compute_coordenador_simulation(
     total_coordinator = total_commission + total_h2 + total_h3 + bonus_value
     sniper_rate = meta_config.get('sniper_rate', 0.75)
 
-    # Usuários que pertencem ao grupo SNIPER (id=22 em /users/manage/groups/)
-    # recebem 75% da comissão de coordenador.
-    is_sniper = False
-    try:
-        is_sniper = user.communication_groups.filter(id=SNIPER_GROUP_ID).exists()
-    except Exception:
-        is_sniper = False
-
+    # Snipers recebem 75% da comissão do coordenador atribuído (is_sniper e
+    # sniper_coordinator foram resolvidos no início da função).
     if is_sniper:
         for row in rows:
             row['commission_value'] = row.get('commission_value', 0.0) * sniper_rate
@@ -1965,6 +2001,7 @@ def compute_coordenador_simulation(
         'view_mode': view_mode,
         'rows': rows,
         'is_sniper': is_sniper,
+        'sniper_coordinator': (sniper_coordinator.get_full_name() or sniper_coordinator.email) if sniper_coordinator else None,
         'totals': {
             'total_commission': total_commission,
             'hunter2': total_h2,

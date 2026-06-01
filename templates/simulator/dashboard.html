@@ -28,6 +28,11 @@
           <span class="hidden sm:inline">Lojas</span>
           <span class="sm:hidden text-xs">Loj.</span>
         </a>
+        <a href="{% url 'simulator:admin_snipers' %}" class="px-3 sm:px-4 py-2 text-sm sm:text-base bg-danger hover:bg-red-700 text-white rounded-lg transition-colors duration-200 flex items-center gap-1 sm:gap-2">
+          <i class="fas fa-crosshairs"></i>
+          <span class="hidden sm:inline">Snipers</span>
+          <span class="sm:hidden text-xs">Snip.</span>
+        </a>
       </div>
       {% endif %}
     </div>
@@ -381,7 +386,9 @@
         <div class="bg-gradient-to-br from-primary to-orange-600 rounded-lg p-4 text-white">
           <p class="text-xs uppercase font-semibold opacity-90">Ganho Total{% if simulation.is_sniper %} (Sniper 75%){% endif %}</p>
           <p class="text-xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
-          {% if simulation.totals.ganho_total_sniper and not simulation.is_sniper %}
+          {% if simulation.is_sniper and simulation.sniper_coordinator %}
+          <p class="text-xs opacity-90 mt-1">Base: {{ simulation.sniper_coordinator }}</p>
+          {% elif simulation.totals.ganho_total_sniper and not simulation.is_sniper %}
           <p class="text-xs opacity-90 mt-1">Sniper: {{ simulation.totals.ganho_total_sniper|brl }}</p>
           {% endif %}
         </div>

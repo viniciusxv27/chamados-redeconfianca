@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Admin - Snipers{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-2 sm:p-4 md:p-8">
+  <!-- Header -->
+  <div class="mb-4 sm:mb-6 md:mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+      <div>
+        <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 flex items-center gap-2 sm:gap-3">
+          <i class="fas fa-crosshairs text-danger"></i>
+          Gerenciamento de Snipers
+        </h1>
+        <p class="text-gray-600 mt-2">Atribua um coordenador a cada sniper. O sniper recebe 75% da comissão do coordenador atribuído.</p>
+      </div>
+      <a href="{% url 'simulator:dashboard' %}" class="px-3 sm:px-4 py-2 text-sm sm:text-base bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors duration-200 flex items-center gap-2">
+        <i class="fas fa-arrow-left"></i>
+        <span class="hidden sm:inline">Voltar</span>
+        <span class="sm:hidden">←</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div class="bg-gradient-to-r from-red-500 to-red-600 px-4 sm:px-6 py-3 sm:py-4">
+      <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+        <i class="fas fa-users"></i>
+        Snipers
+      </h2>
+    </div>
+
+    <div class="divide-y divide-gray-200">
+      {% for row in sniper_rows %}
+      <form method="post" class="px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="sniper_id" value="{{ row.user.id }}">
+        <div class="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+          <i class="fas fa-user-circle text-danger text-lg sm:text-xl"></i>
+          <div class="flex-1 min-w-0">
+            <p class="font-semibold text-gray-900 text-sm sm:text-base truncate">{{ row.user.get_full_name|default:row.user.email }}</p>
+            <p class="text-xs text-gray-500 truncate">{{ row.user.email }}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-3">
+          <select name="coordinator_id" class="flex-1 sm:w-64 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+            <option value="">— Sem coordenador —</option>
+            {% for coordinator in coordinators %}
+            <option value="{{ coordinator.id }}" {% if row.coordinator_id == coordinator.id %}selected{% endif %}>
+              {{ coordinator.get_full_name|default:coordinator.email }}
+            </option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="px-4 py-2 text-sm bg-success hover:bg-green-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2">
+            <i class="fas fa-save"></i>
+            <span class="hidden sm:inline">Salvar</span>
+          </button>
+        </div>
+      </form>
+      {% empty %}
+      <div class="px-4 sm:px-6 py-8 text-center text-gray-500">
+        <i class="fas fa-inbox text-2xl opacity-30 mb-2"></i>
+        <p class="text-sm">Nenhum sniper encontrado no grupo SNIPER.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
