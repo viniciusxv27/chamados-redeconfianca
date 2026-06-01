@@ -132,7 +132,7 @@
         <div class="min-w-0 flex-1">
           <p class="text-xs sm:text-sm text-gray-600">Papel</p>
           <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">
-            {% if target_role == "consultor" %}Consultor{% elif target_role == "gerente" %}Gerente{% elif target_role == "coordenador" %}Coordenador{% endif %}
+            {% if simulation.is_sniper %}Sniper{% elif target_role == "consultor" %}Consultor{% elif target_role == "gerente" %}Gerente{% elif target_role == "coordenador" %}Coordenador{% endif %}
           </p>
         </div>
         <i class="fas fa-id-badge text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
