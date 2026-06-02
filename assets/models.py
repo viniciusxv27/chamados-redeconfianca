@@ -784,3 +784,148 @@ class Asset(models.Model):
 
     def __str__(self):
         return f"{self.patrimonio_numero} - {self.nome}"
+
+
+def upload_order_product_image(instance, filename):
+    """Upload path para imagens dos produtos de pedidos."""
+    import os
+    import uuid
+    ext = os.path.splitext(filename)[1].lower()
+    return f"orders/products/order_product_{uuid.uuid4()}{ext}"
+
+
+class OrderProductCategory(models.Model):
+    """Categorias dos produtos disponíveis para pedido."""
+    name = models.CharField(max_length=100, verbose_name='Nome da Categoria')
+    description = models.TextField(blank=True, verbose_name='Descrição')
+    icon = models.CharField(max_length=50, default='fas fa-box-open', verbose_name='Ícone Font Awesome')
+    color = models.CharField(max_length=20, default='blue', verbose_name='Cor')
+    is_active = models.BooleanField(default=True, verbose_name='Ativa')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Categoria de Produto (Pedidos)'
+        verbose_name_plural = 'Categorias de Produtos (Pedidos)'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class OrderProduct(models.Model):
+    """Produto que pode ser solicitado em um pedido (catálogo de pedidos)."""
+    name = models.CharField(max_length=200, verbose_name='Nome')
+    description = models.TextField(blank=True, verbose_name='Descrição')
+    category = models.ForeignKey(
+        OrderProductCategory, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='products', verbose_name='Categoria',
+    )
+    image = models.ImageField(
+        upload_to=upload_order_product_image, storage=get_media_storage(),
+        blank=True, null=True, verbose_name='Imagem',
+    )
+    unit = models.CharField(max_length=30, default='Unidade', blank=True, verbose_name='Unidade de Medida')
+    is_active = models.BooleanField(default=True, verbose_name='Ativo')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='order_products_created', verbose_name='Criado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Produto de Pedido'
+        verbose_name_plural = 'Produtos de Pedido'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Order(models.Model):
+    """Pedido (requisição) feito por um gerente, aprovado pela supervisão."""
+
+    STATUS_PENDENTE = 'PENDENTE'
+    STATUS_APROVADO = 'APROVADO'
+    STATUS_REPROVADO = 'REPROVADO'
+    STATUS_ENTREGUE = 'ENTREGUE'
+    STATUS_CANCELADO = 'CANCELADO'
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, 'Pendente'),
+        (STATUS_APROVADO, 'Aprovado'),
+        (STATUS_REPROVADO, 'Reprovado'),
+        (STATUS_ENTREGUE, 'Entregue'),
+        (STATUS_CANCELADO, 'Cancelado'),
+    ]
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='orders_requested', verbose_name='Solicitante',
+    )
+    status = models.CharField(
+        max_length=15, choices=STATUS_CHOICES, default=STATUS_PENDENTE, db_index=True,
+        verbose_name='Status',
+    )
+    notes = models.TextField(blank=True, verbose_name='Justificativa / Observações')
+
+    # Aprovação / reprovação
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='orders_reviewed', verbose_name='Avaliado por',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='Avaliado em')
+    review_notes = models.TextField(blank=True, verbose_name='Observação da avaliação')
+
+    # Entrega
+    delivered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='orders_delivered', verbose_name='Entregue por',
+    )
+    delivered_at = models.DateTimeField(null=True, blank=True, verbose_name='Entregue em')
+    delivery_notes = models.TextField(blank=True, verbose_name='Observação da entrega')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Pedido'
+        verbose_name_plural = 'Pedidos'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Pedido #{self.pk} - {self.requested_by} ({self.get_status_display()})"
+
+    @property
+    def total_items(self):
+        return self.items.count()
+
+    @property
+    def total_quantity(self):
+        return sum(item.quantity for item in self.items.all())
+
+    @property
+    def can_review(self):
+        return self.status == self.STATUS_PENDENTE
+
+    @property
+    def can_deliver(self):
+        return self.status == self.STATUS_APROVADO
+
+    @property
+    def can_cancel(self):
+        return self.status in (self.STATUS_PENDENTE, self.STATUS_APROVADO)
+
+
+class OrderItem(models.Model):
+    """Item individual dentro de um pedido."""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items', verbose_name='Pedido')
+    product = models.ForeignKey(OrderProduct, on_delete=models.PROTECT, related_name='order_items', verbose_name='Produto')
+    quantity = models.PositiveIntegerField(default=1, verbose_name='Quantidade')
+
+    class Meta:
+        verbose_name = 'Item do Pedido'
+        verbose_name_plural = 'Itens do Pedido'
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.quantity}x {self.product.name}"

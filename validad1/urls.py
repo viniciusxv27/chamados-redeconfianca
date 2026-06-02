@@ -10,6 +10,7 @@ urlpatterns = [
     path('sync/', views.sync_now, name='sync_now'),
     path('relatorio/', views.relatorio, name='relatorio'),
     path('export/excel/', views.export_excel, name='export_excel'),
+    path('export/vendas-csv/', views.export_vendas_csv, name='export_vendas_csv'),
     path('<int:pk>/', views.detail, name='detail'),
     path('<int:pk>/editar/', views.editar_venda, name='editar_venda'),
     path('<int:pk>/sinalizar/', views.sinalizar, name='sinalizar'),

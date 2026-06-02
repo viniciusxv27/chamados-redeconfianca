@@ -382,6 +382,22 @@
                                             </a>
                                         </li>
                                         <li>
+                                            <a href="{% url 'assets:order_catalog' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Pedidos">
+                                                <i class="fas fa-cart-plus text-emerald-400 flex-shrink-0"></i>
+                                                <span>Pedidos</span>
+                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                            </a>
+                                        </li>
+                                        {% if user.hierarchy in 'SUPERVISOR,ADMIN,SUPERADMIN' or user.is_superuser %}
+                                        <li>
+                                            <a href="{% url 'assets:manage_orders' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Pedidos">
+                                                <i class="fas fa-tasks text-amber-400 flex-shrink-0"></i>
+                                                <span>Gerenciar Pedidos</span>
+                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                        <li>
                                             <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
                                                 <i class="fas fa-folder text-primary flex-shrink-0"></i>
                                                 <span>Arquivos</span>

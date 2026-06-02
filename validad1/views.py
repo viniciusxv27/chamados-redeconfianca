@@ -515,3 +515,124 @@ def export_excel(request):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     wb.save(response)
     return response
+
+
+# Cabeçalho da planilha oficial (gestão documental) — mantém ordem/nomes exatos.
+GESTAO_DOCUMENTAL_HEADER = [
+    'Filial', 'Data Venda(*)', 'Data Ativação(**)', 'Status BKO(*)(**)', 'Serviço(*)',
+    'ID Venda', 'Modelo', 'IMEI', 'Plano', 'Valor plano(**)', 'Plano Antigo',
+    'Valor plano antigo(**)', 'Vencimento Fatura(**)', 'Vendedor', 'Cliente', 'CPF/CNPJ',
+    'Nº Acesso(*)', 'Nº Portado', 'Servico Instalado', 'Data Agendada de Instalação',
+    'Armário', 'Data Instalação', 'Situação do serviço(**)', 'Receita', 'Status GED',
+    'Sim Card', 'COD', 'Fidelização', 'Zerar Remuneração', 'Gerar Price',
+    'Nº Solicitação NEXT / RPON', 'Nº Protocolo GED(**)', 'Nº Protocolo GED Portabilidade (**)',
+    'Motivo Reprovação(**)', 'Data Digitalização', 'Usuário Inserção', 'Usuário Alteração',
+    'Observação', 'Motivo Cancelamento(**)', 'Comissão de Serviço do Vendedor',
+    'Comissão de Aparelho do Vendedor(**)', 'Data Última Ativação(**)', 'Data de alteração',
+    'Usuário Cancelamento', 'Data Cancelamento', 'Líder de Equipe', 'Status Primeira Fatura',
+    'Data Primeira Fatura', 'Status Segunda Fatura', 'Data Segunda Fatura',
+    'Status Terceira Fatura', 'Data Terceira Fatura', 'Valor Receita',
+    'Valor Considerado TFP', 'Valor Penalizado TFP',
+]
+
+
+@login_required
+def export_vendas_csv(request):
+    """Exporta as vendas *alteradas* (sinalizadas/editadas pela Ilha) em CSV,
+    usando o cabeçalho da planilha oficial de gestão documental."""
+    import csv
+
+    qs = vendas_for_user(request.user)
+    # Aplica os mesmos filtros visíveis na lista.
+    qs, _ = _apply_common_filters(qs, request)
+
+    # "Vendas alteradas" = vendas que a Ilha tocou (sinalizou/editou) ou que
+    # já saíram do estado pendente.
+    from django.db.models import Q
+    qs = qs.filter(
+        Q(marcado_por__isnull=False)
+        | Q(marcado_em__isnull=False)
+        | Q(acao_realizada_no_go=True)
+        | ~Q(status=VendaD1.STATUS_PENDENTE)
+    ).select_related('marcado_por').order_by('-data_da_venda', '-id')
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    filename = f'vendas_alteradas_{timezone.now().strftime("%Y%m%d_%H%M")}.csv'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.write('\ufeff')  # BOM para abrir corretamente no Excel
+
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow(GESTAO_DOCUMENTAL_HEADER)
+
+    def _dt(value, fmt='%d/%m/%Y'):
+        if not value:
+            return ''
+        try:
+            return timezone.localtime(value).strftime('%d/%m/%Y %H:%M')
+        except (ValueError, TypeError):
+            return value.strftime(fmt)
+
+    for v in qs:
+        valor = f'{float(v.valor or 0):.2f}'
+        usuario_alteracao = v.marcado_por.get_full_name() if v.marcado_por else ''
+        motivo_reprovacao = v.get_tipo_divergencia_display() if v.tipo_divergencia else ''
+        row = [
+            v.pdv,                                              # Filial
+            v.data_da_venda.strftime('%d/%m/%Y') if v.data_da_venda else '',  # Data Venda
+            '',                                                 # Data Ativação
+            '',                                                 # Status BKO
+            v.servicos,                                         # Serviço
+            v.numero_da_venda,                                  # ID Venda
+            '',                                                 # Modelo
+            '',                                                 # IMEI
+            v.produto,                                          # Plano
+            valor,                                              # Valor plano
+            '',                                                 # Plano Antigo
+            '',                                                 # Valor plano antigo
+            '',                                                 # Vencimento Fatura
+            v.vendedor,                                         # Vendedor
+            '',                                                 # Cliente
+            v.cpf,                                              # CPF/CNPJ
+            v.numero_acesso,                                    # Nº Acesso
+            '',                                                 # Nº Portado
+            '',                                                 # Servico Instalado
+            '',                                                 # Data Agendada de Instalação
+            '',                                                 # Armário
+            '',                                                 # Data Instalação
+            v.get_status_display(),                             # Situação do serviço
+            valor,                                              # Receita
+            '',                                                 # Status GED
+            '',                                                 # Sim Card
+            '',                                                 # COD
+            '',                                                 # Fidelização
+            '',                                                 # Zerar Remuneração
+            '',                                                 # Gerar Price
+            '',                                                 # Nº Solicitação NEXT / RPON
+            v.numero_protocolo,                                 # Nº Protocolo GED
+            '',                                                 # Nº Protocolo GED Portabilidade
+            motivo_reprovacao,                                  # Motivo Reprovação
+            '',                                                 # Data Digitalização
+            '',                                                 # Usuário Inserção
+            usuario_alteracao,                                  # Usuário Alteração
+            (v.observacao or '').replace('\n', ' ').strip(),    # Observação
+            '',                                                 # Motivo Cancelamento
+            '',                                                 # Comissão de Serviço do Vendedor
+            '',                                                 # Comissão de Aparelho do Vendedor
+            '',                                                 # Data Última Ativação
+            _dt(v.marcado_em),                                  # Data de alteração
+            '',                                                 # Usuário Cancelamento
+            '',                                                 # Data Cancelamento
+            '',                                                 # Líder de Equipe
+            '',                                                 # Status Primeira Fatura
+            '',                                                 # Data Primeira Fatura
+            '',                                                 # Status Segunda Fatura
+            '',                                                 # Data Segunda Fatura
+            '',                                                 # Status Terceira Fatura
+            '',                                                 # Data Terceira Fatura
+            valor,                                              # Valor Receita
+            '',                                                 # Valor Considerado TFP
+            '',                                                 # Valor Penalizado TFP
+        ]
+        writer.writerow(row)
+
+    return response

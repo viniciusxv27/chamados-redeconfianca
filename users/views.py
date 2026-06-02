@@ -2015,6 +2015,11 @@ def system_config_view(request):
                     defaults={
                         **commission_urls,
                         'updated_by': request.user,
+                        # Toda alteração volta para rascunho: só vai ao ar quando
+                        # liberada explicitamente em "Liberar Comissionamento".
+                        'status': CommissionSpreadsheetVersion.STATUS_DRAFT,
+                        'released_by': None,
+                        'released_at': None,
                     }
                 )
 
@@ -2049,9 +2054,10 @@ def system_config_view(request):
         messages.success(
             request,
             (
-                f'Versão {selected_month_int:02d}/{selected_year_int} {operation} com sucesso. '
+                f'Versão {selected_month_int:02d}/{selected_year_int} {operation} como RASCUNHO. '
                 f'Padrão de exibição definido para {display_month_int:02d}/{display_year_int}. '
-                f'Histórico salvo para {snapshot_count} usuários. O cache foi limpo.'
+                f'Histórico salvo para {snapshot_count} usuários. O cache foi limpo. '
+                f'A versão só ficará visível para os usuários após clicar em "Liberar Comissionamento".'
             )
         )
         return redirect('system_config')
@@ -2114,8 +2120,57 @@ def system_config_view(request):
         'display_month_choices': display_month_choices,
         'display_year_choices': available_year_choices,
         'user': request.user,
+        'draft_versions': commission_versions.filter(status=CommissionSpreadsheetVersion.STATUS_DRAFT),
     }
     return render(request, 'admin/system_config.html', context)
+
+
+@login_required
+@require_POST
+def release_commission_view(request):
+    """Libera (publica) uma versão de comissionamento que está em rascunho.
+
+    Apenas superadmins têm acesso. Enquanto a versão estiver em rascunho ela
+    fica visível somente nesta tela; ao ser liberada passa a valer para todos
+    os usuários."""
+    from users.models import CommissionSpreadsheetVersion
+
+    if request.user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Apenas Superadmin pode liberar o comissionamento.')
+        return redirect('dashboard')
+
+    version_id = request.POST.get('version_id')
+    version = CommissionSpreadsheetVersion.objects.filter(pk=version_id).first()
+    if not version:
+        messages.error(request, 'Versão de comissionamento não encontrada.')
+        return redirect('system_config')
+
+    if version.status == CommissionSpreadsheetVersion.STATUS_RELEASED:
+        messages.info(request, f'A versão {version.month:02d}/{version.year} já está liberada.')
+        return redirect('system_config')
+
+    version.status = CommissionSpreadsheetVersion.STATUS_RELEASED
+    version.released_by = request.user
+    version.released_at = timezone.now()
+    version.save(update_fields=['status', 'released_by', 'released_at'])
+
+    # Limpa o cache para que a versão liberada passe a valer imediatamente.
+    from django.core.cache import cache
+    cache.delete_many([
+        'comissao_REMUNERAÇÃO CN_file_content',
+        'comissao_REMUNERAÇÃO GERENTE_file_content',
+        'base_pagamento_file_content',
+        'base_exclusao_file_content',
+        'contestacao_base_exclusao_content',
+        'vendas_file_content',
+    ])
+
+    messages.success(
+        request,
+        f'Comissionamento {version.month:02d}/{version.year} liberado com sucesso. '
+        f'Agora está visível para todos os usuários.'
+    )
+    return redirect('system_config')
 
 
 @login_required

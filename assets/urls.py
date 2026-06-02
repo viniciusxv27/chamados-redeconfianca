@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import order_views
 
 app_name = 'assets'
 
@@ -67,6 +68,29 @@ urlpatterns = [
     path('solicitacoes/<int:pk>/contraproposta/', views.item_request_counterproposal, name='item_request_counterproposal'),
     path('solicitacoes/<int:pk>/aceitar-contraproposta/', views.item_request_accept_counterproposal, name='item_request_accept_counterproposal'),
     path('solicitacoes/<int:pk>/recusar-contraproposta/', views.item_request_reject_counterproposal, name='item_request_reject_counterproposal'),
+    
+    # =========================================================================
+    # PEDIDOS (Criação de pedidos - estilo prêmios)
+    # =========================================================================
+    # Solicitante (GERENTES+)
+    path('pedidos/', order_views.order_catalog, name='order_catalog'),
+    path('pedidos/criar/', order_views.order_create, name='order_create'),
+    path('pedidos/meus/', order_views.my_orders, name='my_orders'),
+    path('pedidos/<int:pk>/', order_views.order_detail, name='order_detail'),
+    path('pedidos/<int:pk>/cancelar/', order_views.order_cancel, name='order_cancel'),
+
+    # Gestão (SUPERVISOR+)
+    path('pedidos/gerenciar/', order_views.manage_orders, name='manage_orders'),
+    path('pedidos/<int:pk>/aprovar/', order_views.order_approve, name='order_approve'),
+    path('pedidos/<int:pk>/reprovar/', order_views.order_reject, name='order_reject'),
+    path('pedidos/<int:pk>/entregar/', order_views.order_deliver, name='order_deliver'),
+
+    # Cadastro de produtos de pedido (SUPERVISOR+)
+    path('pedidos/produtos/', order_views.order_product_list, name='order_product_list'),
+    path('pedidos/produtos/novo/', order_views.order_product_create, name='order_product_create'),
+    path('pedidos/produtos/<int:pk>/editar/', order_views.order_product_edit, name='order_product_edit'),
+    path('pedidos/produtos/<int:pk>/excluir/', order_views.order_product_delete, name='order_product_delete'),
+    path('pedidos/categorias/nova/', order_views.order_category_create, name='order_category_create'),
     
     # =========================================================================
     # ATIVOS LEGADOS (DEPRECATED - manter por compatibilidade)

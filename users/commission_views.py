@@ -59,11 +59,18 @@ def get_excel_urls(selected_year=None, selected_month=None, selected_phase=None)
         else:
             ref_year, ref_month = config.get_display_reference_month_year(base_date=timezone.now())
 
-        version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
+        # Apenas versões liberadas vão ao ar para os usuários. Rascunhos ficam
+        # restritos à visão de configuração do sistema (superadmin).
+        version = CommissionSpreadsheetVersion.objects.filter(
+            year=ref_year, month=ref_month, status=CommissionSpreadsheetVersion.STATUS_RELEASED
+        ).first()
 
         # Prefer version matching the selected phase when provided
         if selected_phase:
-            version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month, contestacao_phase=selected_phase).first() or version
+            version = CommissionSpreadsheetVersion.objects.filter(
+                year=ref_year, month=ref_month, contestacao_phase=selected_phase,
+                status=CommissionSpreadsheetVersion.STATUS_RELEASED,
+            ).first() or version
 
         if version:
             return {
@@ -105,7 +112,9 @@ def resolve_commission_reference_from_request(request):
     default_year, default_month = config.get_display_reference_month_year(base_date=timezone.now())
 
     version_refs = list(
-        CommissionSpreadsheetVersion.objects.values('year', 'month').order_by('-year', '-month')
+        CommissionSpreadsheetVersion.objects.filter(
+            status=CommissionSpreadsheetVersion.STATUS_RELEASED
+        ).values('year', 'month').order_by('-year', '-month')
     )
 
     by_year = {}

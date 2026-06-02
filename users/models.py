@@ -150,6 +150,30 @@ class CommissionSpreadsheetVersion(models.Model):
         help_text='Indica se a versão é antes ou pós contestação',
     )
 
+    STATUS_DRAFT = 'draft'
+    STATUS_RELEASED = 'released'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Rascunho'),
+        (STATUS_RELEASED, 'Liberada'),
+    ]
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        db_index=True,
+        verbose_name='Situação',
+        help_text='Rascunho fica visível apenas para superadmins; só vai ao ar quando liberada.',
+    )
+    released_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='commission_version_releases',
+        verbose_name='Liberada por',
+    )
+    released_at = models.DateTimeField(null=True, blank=True, verbose_name='Liberada em')
+
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
     updated_by = models.ForeignKey(
         'User',
@@ -171,6 +195,10 @@ class CommissionSpreadsheetVersion(models.Model):
     def __str__(self):
         return f"{self.month:02d}/{self.year}"
 
+    @property
+    def is_released(self):
+        return self.status == self.STATUS_RELEASED
+
     @staticmethod
     def get_reference_month_year(base_date=None):
         """Regra de referência: sempre 2 meses atrás."""
@@ -185,7 +213,9 @@ class CommissionSpreadsheetVersion(models.Model):
     @classmethod
     def get_reference_version(cls, base_date=None):
         year, month = cls.get_reference_month_year(base_date=base_date)
-        return cls.objects.filter(year=year, month=month).first()
+        return cls.objects.filter(
+            year=year, month=month, status=cls.STATUS_RELEASED
+        ).first()
 
 
 class CommissionUserReferenceHistory(models.Model):

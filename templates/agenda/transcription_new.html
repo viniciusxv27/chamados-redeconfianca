@@ -190,7 +190,7 @@
                             </label>
                         </div>
                         <p id="system-audio-hint" class="hidden mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 text-left">
-                            <i class="fas fa-info-circle mr-1"></i> O navegador pedirá para você compartilhar uma aba, janela ou a tela inteira. <b>Marque a opção "Compartilhar áudio"</b> na janela do navegador. Para capturar o som de toda a reunião, prefira compartilhar a <b>aba</b> onde a reunião está acontecendo (Chrome/Edge oferecem melhor suporte). No macOS o compartilhamento de áudio da tela inteira pode não funcionar — use o modo "aba".
+                            <i class="fas fa-info-circle mr-1"></i> O navegador pedirá para você compartilhar uma aba, janela ou a tela inteira. <b>Marque a opção "Compartilhar áudio"</b> na janela do navegador. Para capturar o som de toda a reunião, prefira compartilhar a <b>aba</b> onde a reunião está acontecendo (Chrome/Edge oferecem melhor suporte). No macOS o compartilhamento de áudio da tela inteira pode não funcionar — use o modo "aba". <b>Já está apresentando no Meet/Zoom?</b> Sem problema: este compartilhamento é só para o áudio e roda em paralelo, sem interromper a sua apresentação. A transcrição continua funcionando normalmente enquanto você compartilha a tela.
                         </p>
                     </div>
 
@@ -527,7 +527,14 @@ async function buildRecordingStream(source) {
                 noiseSuppression: false,
                 autoGainControl: false,
                 sampleRate: 48000,
-            }
+            },
+            // Garante captura do áudio do sistema e permite que o usuário escolha
+            // a aba/janela da reunião (Meet/Zoom) sem que o sistema atrapalhe o
+            // compartilhamento de tela que ele já estiver fazendo.
+            systemAudio: 'include',
+            selfBrowserSurface: 'include',
+            surfaceSwitching: 'include',
+            preferCurrentTab: false,
         });
     } catch (err) {
         if (err && err.name === 'NotAllowedError') {
@@ -545,8 +552,12 @@ async function buildRecordingStream(source) {
         return null;
     }
 
-    // Descarta o vídeo: só precisamos do áudio.
-    displayStream.getVideoTracks().forEach(t => t.stop());
+    // IMPORTANTE: não paramos a faixa de vídeo — apenas a desabilitamos.
+    // Encerrar a única faixa de vídeo do getDisplayMedia derruba a sessão de
+    // captura em alguns navegadores e pode interferir no compartilhamento de
+    // tela da reunião. Mantendo a faixa viva (porém desabilitada) o áudio
+    // continua fluindo de forma estável e sem consumir banda de vídeo.
+    displayStream.getVideoTracks().forEach(t => { t.enabled = false; });
 
     // Se a aba/janela parar de ser compartilhada, encerra a gravação.
     sysAudioTracks[0].addEventListener('ended', () => {

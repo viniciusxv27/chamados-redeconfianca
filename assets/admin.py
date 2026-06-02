@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     Asset, InventoryCategory, Product, ProductMedia, 
-    InventoryItem, StockMovement, InventoryManager, ItemRequest, ItemRequestItem
+    InventoryItem, StockMovement, InventoryManager, ItemRequest, ItemRequestItem,
+    OrderProduct, OrderProductCategory, Order, OrderItem,
 )
 
 
@@ -266,3 +267,43 @@ class ItemRequestAdmin(admin.ModelAdmin):
             return ', '.join([f'{i.product.name} x{i.quantity}' for i in items])
         return '-'
     get_items_summary.short_description = 'Itens'
+
+
+# ============================================
+# PEDIDOS (Criação de pedidos)
+# ============================================
+
+@admin.register(OrderProductCategory)
+class OrderProductCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name']
+    list_editable = ['is_active']
+    ordering = ['name']
+
+
+@admin.register(OrderProduct)
+class OrderProductAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'unit', 'is_active', 'created_by', 'created_at']
+    list_filter = ['is_active', 'category']
+    search_fields = ['name', 'description']
+    list_editable = ['is_active']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['name']
+
+
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 1
+    raw_id_fields = ['product']
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ['id', 'requested_by', 'status', 'total_quantity', 'created_at', 'reviewed_by', 'delivered_by']
+    list_filter = ['status', 'created_at']
+    search_fields = ['requested_by__first_name', 'requested_by__last_name', 'requested_by__email']
+    readonly_fields = ['created_at', 'updated_at', 'reviewed_at', 'delivered_at']
+    raw_id_fields = ['requested_by', 'reviewed_by', 'delivered_by']
+    date_hierarchy = 'created_at'
+    inlines = [OrderItemInline]

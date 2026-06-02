@@ -250,6 +250,56 @@
             </div>
         </form>
 
+        <!-- Liberação de Comissionamento (rascunhos visíveis só para superadmin) -->
+        <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-unlock-alt text-purple-600 mr-2"></i>
+                    Liberar Comissionamento
+                </h2>
+                <span class="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                    {{ draft_versions|length }} rascunho(s)
+                </span>
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-600 mb-4">
+                    <i class="fas fa-info-circle text-purple-500 mr-1"></i>
+                    Ao salvar, a versão fica em <b>rascunho</b> e visível apenas aqui (superadmin).
+                    Ela só passa a valer para todos os usuários quando for <b>liberada</b> abaixo.
+                </p>
+
+                {% if draft_versions %}
+                <div class="space-y-3">
+                    {% for v in draft_versions %}
+                    <div class="flex items-center justify-between gap-3 border border-yellow-200 bg-yellow-50 rounded-lg px-4 py-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-gray-800">
+                                Referência {{ v.month|stringformat:"02d" }}/{{ v.year }}
+                                <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-yellow-200 text-yellow-800">Rascunho</span>
+                            </p>
+                            <p class="text-xs text-gray-500">
+                                Fase: {{ v.get_contestacao_phase_display }} ·
+                                Atualizado em {{ v.updated_at|date:"d/m/Y H:i" }}
+                                {% if v.updated_by %} por {{ v.updated_by.get_full_name }}{% endif %}
+                            </p>
+                        </div>
+                        <form method="post" action="{% url 'release_commission' %}" onsubmit="return confirm('Liberar o comissionamento {{ v.month|stringformat:"02d" }}/{{ v.year }} para todos os usuários?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="version_id" value="{{ v.id }}">
+                            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm whitespace-nowrap">
+                                <i class="fas fa-check-circle mr-1"></i>
+                                Liberar Comissionamento
+                            </button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-500 italic">Nenhum rascunho pendente de liberação.</p>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Card de Links Atuais -->
         <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">

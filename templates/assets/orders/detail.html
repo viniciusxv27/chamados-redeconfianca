@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}Pedido #{{ order.pk }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="mb-4">
+        <a href="{% if can_manage %}{% url 'assets:manage_orders' %}{% else %}{% url 'assets:my_orders' %}{% endif %}" class="text-sm text-gray-500 hover:text-indigo-600"><i class="fas fa-arrow-left mr-1"></i> Voltar</a>
+    </div>
+
+    {% if messages %}
+    <div class="mb-4 space-y-2">
+        {% for m in messages %}
+        <div class="px-4 py-2 rounded-lg text-sm {% if m.tags == 'error' %}bg-red-50 text-red-700{% elif m.tags == 'warning' %}bg-yellow-50 text-yellow-700{% else %}bg-green-50 text-green-700{% endif %}">{{ m }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="bg-white border rounded-xl overflow-hidden">
+        <div class="px-6 py-4 border-b flex items-center justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900">Pedido #{{ order.pk }}</h2>
+                <p class="text-sm text-gray-500">Solicitado por {{ order.requested_by.get_full_name }} em {{ order.created_at|date:'d/m/Y H:i' }}</p>
+            </div>
+            {% include 'assets/orders/_status_badge.html' with status=order.status label=order.get_status_display %}
+        </div>
+
+        <div class="p-6">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Itens</h3>
+            <table class="min-w-full text-sm mb-4">
+                <thead class="bg-gray-50 text-gray-600">
+                    <tr><th class="px-3 py-2 text-left">Produto</th><th class="px-3 py-2 text-left">Unidade</th><th class="px-3 py-2 text-right">Qtd</th></tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for item in order.items.all %}
+                    <tr><td class="px-3 py-2">{{ item.product.name }}</td><td class="px-3 py-2 text-gray-500">{{ item.product.unit }}</td><td class="px-3 py-2 text-right">{{ item.quantity }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if order.notes %}
+            <div class="mb-4">
+                <h3 class="text-sm font-semibold text-gray-700">Justificativa</h3>
+                <p class="text-sm text-gray-600 whitespace-pre-line">{{ order.notes }}</p>
+            </div>
+            {% endif %}
+
+            {% if order.reviewed_by %}
+            <div class="mb-4 p-3 rounded-lg bg-gray-50 text-sm">
+                <p class="font-medium text-gray-700">{% if order.status == 'REPROVADO' %}Reprovado{% else %}Aprovado{% endif %} por {{ order.reviewed_by.get_full_name }} em {{ order.reviewed_at|date:'d/m/Y H:i' }}</p>
+                {% if order.review_notes %}<p class="text-gray-600 mt-1">{{ order.review_notes }}</p>{% endif %}
+            </div>
+            {% endif %}
+
+            {% if order.delivered_by %}
+            <div class="mb-4 p-3 rounded-lg bg-blue-50 text-sm">
+                <p class="font-medium text-blue-800">Entregue por {{ order.delivered_by.get_full_name }} em {{ order.delivered_at|date:'d/m/Y H:i' }}</p>
+                {% if order.delivery_notes %}<p class="text-blue-700 mt-1">{{ order.delivery_notes }}</p>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Ações -->
+        <div class="px-6 py-4 border-t bg-gray-50 flex flex-wrap gap-2 justify-end">
+            {% if can_manage and order.can_review %}
+            <form method="post" action="{% url 'assets:order_approve' order.pk %}" class="flex items-center gap-2">
+                {% csrf_token %}
+                <input type="text" name="review_notes" placeholder="Observação (opcional)" class="border rounded-lg px-3 py-2 text-sm">
+                <button class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"><i class="fas fa-check mr-1"></i> Aprovar</button>
+            </form>
+            <form method="post" action="{% url 'assets:order_reject' order.pk %}" onsubmit="return confirm('Reprovar este pedido?');" class="flex items-center gap-2">
+                {% csrf_token %}
+                <input type="text" name="review_notes" placeholder="Motivo da reprovação" class="border rounded-lg px-3 py-2 text-sm">
+                <button class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"><i class="fas fa-times mr-1"></i> Reprovar</button>
+            </form>
+            {% endif %}
+
+            {% if can_manage and order.can_deliver %}
+            <form method="post" action="{% url 'assets:order_deliver' order.pk %}" class="flex items-center gap-2">
+                {% csrf_token %}
+                <input type="text" name="delivery_notes" placeholder="Observação da entrega (opcional)" class="border rounded-lg px-3 py-2 text-sm">
+                <button class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"><i class="fas fa-truck mr-1"></i> Marcar como Entregue</button>
+            </form>
+            {% endif %}
+
+            {% if order.can_cancel and order.requested_by_id == request.user.id %}
+            <form method="post" action="{% url 'assets:order_cancel' order.pk %}" onsubmit="return confirm('Cancelar este pedido?');">
+                {% csrf_token %}
+                <button class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"><i class="fas fa-ban mr-1"></i> Cancelar Pedido</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
