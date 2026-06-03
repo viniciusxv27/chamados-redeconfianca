@@ -1256,10 +1256,12 @@ def view_user_calendar(request, user_id):
 
 @login_required
 def transcription_list(request):
-    """Lista de transcrições do usuário"""
+    """Lista de transcrições do usuário (próprias + compartilhadas)"""
+    from django.db.models import Q
+
     transcriptions = MeetingTranscription.objects.filter(
-        owner=request.user
-    ).select_related('event').order_by('-created_at')
+        Q(owner=request.user) | Q(shared_with=request.user)
+    ).select_related('event', 'owner').distinct().order_by('-created_at')
 
     context = {
         'transcriptions': transcriptions,
@@ -2122,17 +2124,75 @@ def _create_tasks_from_transcription(transcription, user):
 
 @login_required
 def transcription_detail(request, pk):
-    """Visualizar uma transcrição"""
-    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    """Visualizar uma transcrição (proprietário ou usuário com compartilhamento)"""
+    from django.db.models import Q
+
+    transcription = get_object_or_404(
+        MeetingTranscription.objects.filter(
+            Q(owner=request.user) | Q(shared_with=request.user)
+        ).distinct(),
+        pk=pk,
+    )
+    is_owner = transcription.owner_id == request.user.id
     tasks = transcription.tasks_created.select_related('assigned_to').all()
     users = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    shared_ids = list(transcription.shared_with.values_list('id', flat=True))
 
     context = {
         'transcription': transcription,
         'tasks': tasks,
         'users': users,
+        'is_owner': is_owner,
+        'shared_ids': shared_ids,
     }
     return render(request, 'agenda/transcription_detail.html', context)
+
+
+@login_required
+@require_POST
+def api_transcription_share(request, pk):
+    """Atualiza a lista de usuários com quem a transcrição é compartilhada (somente proprietário)."""
+    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    user_ids = data.get('user_ids', [])
+    if not isinstance(user_ids, list):
+        return JsonResponse({'error': 'user_ids deve ser uma lista.'}, status=400)
+
+    try:
+        user_ids = [int(uid) for uid in user_ids]
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'IDs de usuário inválidos.'}, status=400)
+
+    # Não permitir compartilhar com o próprio dono
+    user_ids = [uid for uid in user_ids if uid != request.user.id]
+
+    target_users = list(User.objects.filter(is_active=True, pk__in=user_ids))
+    previous_ids = set(transcription.shared_with.values_list('id', flat=True))
+    transcription.shared_with.set(target_users)
+    new_ids = {u.id for u in target_users}
+
+    # Notificar novos usuários adicionados
+    added = new_ids - previous_ids
+    for user in target_users:
+        if user.id in added:
+            _notify_agenda_user(
+                user,
+                'Transcrição compartilhada com você',
+                f'{request.user.get_full_name() or request.user.username} compartilhou a transcrição "{transcription.title}" com você.',
+                action_url=f'/agenda/transcricoes/{transcription.pk}/',
+            )
+
+    return JsonResponse({
+        'ok': True,
+        'shared_count': len(target_users),
+        'shared_ids': sorted(new_ids),
+        'message': 'Compartilhamento atualizado com sucesso!',
+    })
 
 
 @login_required

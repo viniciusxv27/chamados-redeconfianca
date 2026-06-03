@@ -131,6 +131,7 @@
             </div>
 
             <div class="mt-5">
+                {% if is_owner %}
                 <div class="flex flex-wrap gap-2">
                     <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-main"
                             class="inline-flex items-center px-4 py-2 bg-white/15 text-white text-sm font-medium rounded-lg hover:bg-white/25 active:scale-[.98] transition border border-white/25 backdrop-blur-sm">
@@ -140,8 +141,19 @@
                             class="inline-flex items-center px-4 py-2 bg-white/10 text-white text-sm font-medium rounded-lg hover:bg-white/20 active:scale-[.98] transition border border-white/20 backdrop-blur-sm">
                         <i class="fas fa-file-alt mr-2"></i> <span class="hidden sm:inline">Retranscrever com</span> Texto Bruto
                     </button>
+                    <button type="button" onclick="openShareModal()" id="btn-share-main"
+                            class="inline-flex items-center px-4 py-2 bg-white text-orange-700 text-sm font-semibold rounded-lg hover:bg-orange-50 active:scale-[.98] transition shadow-sm">
+                        <i class="fas fa-share-alt mr-2"></i> Compartilhar
+                        {% if shared_ids %}<span class="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-orange-600 text-white text-xs font-bold" id="share-count-badge">{{ shared_ids|length }}</span>{% endif %}
+                    </button>
                 </div>
                 <p class="text-xs text-orange-100/90 mt-2 flex items-center gap-1.5"><i class="fas fa-info-circle"></i> Prioriza a transcrição bruta/completa salva; se não existir, tenta o áudio.</p>
+                {% else %}
+                <div class="inline-flex items-center gap-2 px-3 py-2 bg-white/15 text-white text-sm rounded-lg border border-white/25 backdrop-blur-sm">
+                    <i class="fas fa-eye"></i>
+                    <span>Compartilhada por <strong>{{ transcription.owner.get_full_name|default:transcription.owner.username }}</strong> · somente leitura</span>
+                </div>
+                {% endif %}
             </div>
 
             {% if transcription.participants_identified %}
@@ -181,10 +193,12 @@
                 <p class="text-sm font-medium text-red-700"><i class="fas fa-exclamation-circle mr-1"></i> Erro no processamento</p>
                 <p class="text-xs text-red-500 mt-1">{{ transcription.error_message }}</p>
             </div>
+            {% if is_owner %}
             <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-error"
                     class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition flex-shrink-0 shadow-sm">
                 <i class="fas fa-redo mr-2"></i> Reprocessar
             </button>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -405,6 +419,7 @@
                                     {% endif %}
                                 </div>
                                 <!-- Atribuição de usuário -->
+                                {% if is_owner %}
                                 <div class="mt-2 flex items-center gap-2">
                                     <select id="assign-user-{{ task.pk }}" onchange="assignTask({{ transcription.pk }}, {{ task.pk }}, this.value)"
                                             class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-emerald-500 focus:border-emerald-500 w-full">
@@ -419,6 +434,11 @@
                                 <p class="text-xs text-green-600 mt-1 hidden" id="task-success-{{ task.pk }}">
                                     <i class="fas fa-check-circle mr-1"></i>Atribuído!
                                 </p>
+                                {% elif task.assigned_to %}
+                                <p class="text-xs text-gray-500 mt-2">
+                                    <i class="fas fa-user mr-1 text-emerald-500"></i>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
+                                </p>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -488,6 +508,7 @@
                         {% if evt.description %}
                         <p class="text-xs text-gray-500 mt-1 ml-6">{{ evt.description }}</p>
                         {% endif %}
+                        {% if is_owner %}
                         <div class="mt-3 flex flex-col sm:flex-row gap-2">
                             <input type="datetime-local" id="evt-datetime-{{ forloop.counter0 }}"
                                    class="border border-gray-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-orange-300 focus:border-orange-400 flex-1 min-w-0">
@@ -497,6 +518,7 @@
                             </button>
                         </div>
                         <p class="text-xs text-green-600 mt-2 hidden" id="evt-success-{{ forloop.counter0 }}"><i class="fas fa-check-circle mr-1"></i>Evento criado na sua agenda!</p>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -548,14 +570,101 @@
         <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA em segundo plano...</p>
         <p class="text-sm text-gray-500 mt-2">Você pode manter a aba aberta, navegar no portal ou voltar mais tarde.</p>
         <p class="text-xs text-gray-400 mt-1 mb-5">Criado em {{ transcription.created_at|date:"d/m/Y H:i" }}</p>
+        {% if is_owner %}
         <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-processing"
                 class="inline-flex items-center px-5 py-2.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition shadow-sm">
             <i class="fas fa-redo mr-2"></i> Reiniciar Processamento
         </button>
+        {% endif %}
         <p class="text-xs text-gray-400 mt-3" id="processing-subtitle">A tela atualiza automaticamente quando a conclusão for detectada.</p>
     </div>
     {% endif %}
 </div>
+
+{% if is_owner %}
+<!-- ===== Modal de Compartilhamento ===== -->
+<div id="share-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" onclick="closeShareModal()"></div>
+    <div class="relative min-h-full flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transform transition-all"
+             onclick="event.stopPropagation()">
+            <!-- Header -->
+            <div class="px-5 sm:px-6 py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-start justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-share-alt"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="font-bold text-base leading-tight">Compartilhar transcrição</h3>
+                        <p class="text-xs text-orange-100 mt-0.5 truncate">Selecione quem poderá visualizar (somente leitura)</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeShareModal()" class="text-white/80 hover:text-white transition flex-shrink-0">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="px-5 sm:px-6 py-4">
+                <!-- Search -->
+                <div class="relative mb-3">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="text" id="share-search" placeholder="Buscar usuário..."
+                           oninput="filterShareUsers(this.value)"
+                           class="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none">
+                </div>
+
+                <!-- Selected chips -->
+                <div id="share-chips" class="flex flex-wrap gap-1.5 mb-3 empty:hidden"></div>
+
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Usuários</span>
+                    <button type="button" onclick="clearShareSelection()" class="text-xs text-orange-600 hover:text-orange-700 font-medium">
+                        Limpar seleção
+                    </button>
+                </div>
+
+                <!-- User list -->
+                <div id="share-user-list" class="nice-scroll max-h-72 overflow-y-auto -mx-1 px-1 space-y-1">
+                    {% for u in users %}
+                    {% if u.pk != transcription.owner_id %}
+                    <label class="share-user-row flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer hover:bg-orange-50 transition select-none"
+                           data-name="{{ u.get_full_name|default:u.username|lower }} {{ u.username|lower }}">
+                        <input type="checkbox" class="share-user-cb w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-400"
+                               value="{{ u.pk }}" data-label="{{ u.get_full_name|default:u.username }}"
+                               onchange="onShareCheckboxChange()" {% if u.pk in shared_ids %}checked{% endif %}>
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-200 to-amber-200 flex items-center justify-center text-orange-800 text-xs font-bold flex-shrink-0">
+                            {{ u.get_full_name|default:u.username|slice:":1"|upper }}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm text-gray-800 truncate">{{ u.get_full_name|default:u.username }}</p>
+                            <p class="text-xs text-gray-400 truncate">@{{ u.username }}</p>
+                        </div>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                <p id="share-empty" class="hidden text-center text-sm text-gray-400 py-6">Nenhum usuário encontrado.</p>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-5 sm:px-6 py-4 bg-gray-50 border-t flex items-center justify-between gap-3">
+                <span class="text-xs text-gray-500"><span id="share-selected-count">0</span> selecionado(s)</span>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeShareModal()"
+                            class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition">
+                        Cancelar
+                    </button>
+                    <button type="button" onclick="saveShare(this)" id="btn-save-share"
+                            class="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 active:scale-[.98] transition shadow-sm">
+                        <i class="fas fa-check mr-2"></i> Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -834,5 +943,125 @@ async function scheduleEvent(transcriptionId, eventIndex, btn) {
         btn.innerHTML = '<i class="fas fa-plus mr-1"></i> Agendar';
     }
 }
+
+// ---- Compartilhamento ----
+function openShareModal() {
+    const modal = document.getElementById('share-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    updateShareUI();
+    const search = document.getElementById('share-search');
+    if (search) { search.value = ''; filterShareUsers(''); setTimeout(() => search.focus(), 50); }
+}
+
+function closeShareModal() {
+    const modal = document.getElementById('share-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function getShareCheckboxes() {
+    return Array.from(document.querySelectorAll('.share-user-cb'));
+}
+
+function onShareCheckboxChange() {
+    updateShareUI();
+}
+
+function clearShareSelection() {
+    getShareCheckboxes().forEach(cb => { cb.checked = false; });
+    updateShareUI();
+}
+
+function removeShareUser(id) {
+    const cb = getShareCheckboxes().find(c => c.value === String(id));
+    if (cb) { cb.checked = false; updateShareUI(); }
+}
+
+function updateShareUI() {
+    const selected = getShareCheckboxes().filter(cb => cb.checked);
+    const countEl = document.getElementById('share-selected-count');
+    if (countEl) countEl.textContent = selected.length;
+
+    // Chips
+    const chips = document.getElementById('share-chips');
+    if (chips) {
+        chips.innerHTML = '';
+        selected.forEach(cb => {
+            const chip = document.createElement('span');
+            chip.className = 'inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-medium';
+            chip.innerHTML = `<span>${cb.dataset.label}</span>` +
+                `<button type="button" class="w-4 h-4 inline-flex items-center justify-center rounded-full hover:bg-orange-200 transition" title="Remover">` +
+                `<i class="fas fa-times text-[10px]"></i></button>`;
+            chip.querySelector('button').addEventListener('click', () => removeShareUser(cb.value));
+            chips.appendChild(chip);
+        });
+    }
+}
+
+function filterShareUsers(term) {
+    term = (term || '').trim().toLowerCase();
+    const rows = Array.from(document.querySelectorAll('.share-user-row'));
+    let visible = 0;
+    rows.forEach(row => {
+        const match = !term || (row.dataset.name || '').includes(term);
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+    const empty = document.getElementById('share-empty');
+    if (empty) empty.classList.toggle('hidden', visible !== 0);
+}
+
+async function saveShare(btn) {
+    const ids = getShareCheckboxes().filter(cb => cb.checked).map(cb => parseInt(cb.value));
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Salvando...';
+    try {
+        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/compartilhar/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+            body: JSON.stringify({ user_ids: ids }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            // Atualiza o badge no botão principal
+            const mainBtn = document.getElementById('btn-share-main');
+            let badge = document.getElementById('share-count-badge');
+            if (data.shared_count > 0) {
+                if (!badge && mainBtn) {
+                    badge = document.createElement('span');
+                    badge.id = 'share-count-badge';
+                    badge.className = 'ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-orange-600 text-white text-xs font-bold';
+                    mainBtn.appendChild(badge);
+                }
+                if (badge) badge.textContent = data.shared_count;
+            } else if (badge) {
+                badge.remove();
+            }
+            closeShareModal();
+        } else {
+            alert(data.error || 'Erro ao compartilhar.');
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    } catch (err) {
+        alert('Erro: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = original;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeShareModal();
+});
 </script>
 {% endblock %}

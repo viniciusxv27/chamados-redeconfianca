@@ -323,6 +323,13 @@ class MeetingTranscription(models.Model):
         related_name='transcriptions',
         verbose_name='Proprietário',
     )
+    shared_with = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='shared_transcriptions',
+        verbose_name='Compartilhada com',
+        help_text='Usuários que podem visualizar esta transcrição (somente leitura).',
+    )
     title = models.CharField(max_length=255, verbose_name='Título da Reunião')
     audio_file = models.FileField(
         upload_to='transcriptions/audio/%Y/%m/',
