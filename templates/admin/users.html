@@ -117,6 +117,11 @@
                 <option value="ADMIN">Administração</option>
                 <option value="SUPERADMIN">Superadmin</option>
             </select>
+            <select id="filterStatus" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">Todos os Status</option>
+                <option value="active">Ativos</option>
+                <option value="inactive">Inativos</option>
+            </select>
         </div>
     </div>
 
@@ -140,6 +145,7 @@
                     <tr class="hover:bg-gray-50 transition-colors user-row" 
                         data-sector="{{ user_item.sector.id|default:'' }}" 
                         data-hierarchy="{{ user_item.hierarchy }}"
+                        data-status="{% if user_item.is_active %}active{% else %}inactive{% endif %}"
                         data-search="{{ user_item.full_name|lower }} {{ user_item.email|lower }} {{ user_item.sector.name|default:''|lower }}">
                         <td class="py-4 px-6">
                             <div class="flex items-center">
@@ -467,23 +473,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchUsers');
     const sectorFilter = document.getElementById('filterSector');
     const hierarchyFilter = document.getElementById('filterHierarchy');
+    const statusFilter = document.getElementById('filterStatus');
     const userRows = document.querySelectorAll('.user-row');
 
     function filterUsers() {
         const searchTerm = searchInput.value.toLowerCase();
         const selectedSector = sectorFilter.value;
         const selectedHierarchy = hierarchyFilter.value;
+        const selectedStatus = statusFilter.value;
 
         userRows.forEach(row => {
             const searchData = row.getAttribute('data-search');
             const sectorData = row.getAttribute('data-sector');
             const hierarchyData = row.getAttribute('data-hierarchy');
+            const statusData = row.getAttribute('data-status');
 
             const matchesSearch = searchData.includes(searchTerm);
             const matchesSector = !selectedSector || sectorData === selectedSector;
             const matchesHierarchy = !selectedHierarchy || hierarchyData === selectedHierarchy;
+            const matchesStatus = !selectedStatus || statusData === selectedStatus;
 
-            if (matchesSearch && matchesSector && matchesHierarchy) {
+            if (matchesSearch && matchesSector && matchesHierarchy && matchesStatus) {
                 row.style.display = '';
             } else {
                 row.style.display = 'none';
@@ -494,6 +504,7 @@ document.addEventListener('DOMContentLoaded', function() {
     searchInput.addEventListener('input', filterUsers);
     sectorFilter.addEventListener('change', filterUsers);
     hierarchyFilter.addEventListener('change', filterUsers);
+    statusFilter.addEventListener('change', filterUsers);
 });
 </script>
 {% endblock %}

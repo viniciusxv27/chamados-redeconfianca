@@ -193,6 +193,9 @@
                                         <div>
                                             <div class="font-medium text-gray-900">
                                                 {{ user.get_full_name|default:user.username }}
+                                                {% if user.id == request.user.id %}
+                                                <span class="ml-1 bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium">Você</span>
+                                                {% endif %}
                                             </div>
                                             {% if user.email %}
                                             <div class="text-sm text-gray-600">{{ user.email }}</div>

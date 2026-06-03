@@ -5176,7 +5176,7 @@ def create_task_view(request):
     # Apenas SUPERADMINs podem atribuir tarefas para qualquer pessoa
     if request.user.hierarchy == 'SUPERADMIN':
         # SUPERADMIN pode criar para todos (exceto ele mesmo)
-        users = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
+        users_qs = User.objects.filter(is_staff=False).exclude(id=request.user.id).order_by('first_name', 'username')
     else:
         # Outros usuários só podem criar para pessoas do seu setor
         # Pegar setores do usuário atual (tanto ManyToMany quanto ForeignKey)
@@ -5187,7 +5187,7 @@ def create_task_view(request):
         if user_sectors:
             # Filtrar usuários que pertencem aos mesmos setores (considerando ambos os campos)
             from django.db.models import Q
-            users = User.objects.filter(
+            users_qs = User.objects.filter(
                 is_staff=False
             ).filter(
                 Q(sectors__in=user_sectors) | Q(sector__in=user_sectors)
@@ -5196,7 +5196,10 @@ def create_task_view(request):
             ).distinct().order_by('first_name', 'username')
         else:
             # Se não tem setor definido, não pode criar para ninguém
-            users = User.objects.none()
+            users_qs = User.objects.none()
+    
+    # Permitir que o usuário atribua a tarefa para si mesmo (sempre no topo da lista)
+    users = [request.user] + list(users_qs)
     
     context = {
         'users': users,
