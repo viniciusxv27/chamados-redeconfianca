@@ -189,11 +189,14 @@ class CommissionSpreadsheetVersion(models.Model):
         verbose_name_plural = "Versões de Planilhas de Comissionamento"
         ordering = ['-year', '-month']
         constraints = [
-            models.UniqueConstraint(fields=['year', 'month'], name='unique_commission_version_by_month_year')
+            models.UniqueConstraint(
+                fields=['year', 'month', 'contestacao_phase'],
+                name='unique_commission_version_by_month_year_phase',
+            )
         ]
 
     def __str__(self):
-        return f"{self.month:02d}/{self.year}"
+        return f"{self.month:02d}/{self.year} ({self.get_contestacao_phase_display()})"
 
     @property
     def is_released(self):

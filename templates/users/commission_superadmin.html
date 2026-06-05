@@ -31,6 +31,51 @@
         </form>
     </div>
 
+    <!-- Card: Versões de Comissionamento Disponíveis -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div class="flex items-center gap-2 mb-4">
+            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+            <h2 class="text-lg font-semibold text-gray-800">Versões de Comissionamento Disponíveis</h2>
+        </div>
+        {% if available_versions %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 border-b border-gray-100">
+                        <th class="py-2 pr-4 font-medium">Mês</th>
+                        <th class="py-2 pr-4 font-medium">Ano</th>
+                        <th class="py-2 pr-4 font-medium">Contestação</th>
+                        <th class="py-2 pr-4 font-medium text-right">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in available_versions %}
+                    <tr class="border-b border-gray-50 hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-700">{{ v.month_label }}</td>
+                        <td class="py-2 pr-4 text-gray-600">{{ v.year }}</td>
+                        <td class="py-2 pr-4">
+                            {% if v.phase == 'antes' %}
+                            <span class="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Antes da Contestação</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Pós Contestação</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-2 pr-4 text-right">
+                            <a href="{% url 'commission' %}?month={{ v.month }}&year={{ v.year }}&phase={{ v.phase }}"
+                               class="text-xs font-medium text-primary hover:underline">Selecionar</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500">Nenhuma versão liberada disponível.</p>
+        {% endif %}
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">Coordenadores</h2>

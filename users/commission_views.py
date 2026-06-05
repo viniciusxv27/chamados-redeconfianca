@@ -2923,8 +2923,10 @@ def commission_superadmin_view(request):
             'role': 'superadmin',
             'reference_year_options': reference['year_options'],
             'reference_month_options': reference['month_options'],
+            'reference_phase_options': reference['phase_options'],
             'selected_reference_year': reference['year'],
             'selected_reference_month': reference['month'],
+            'selected_reference_phase': reference['phase'],
         }
 
         if result.get('success'):
@@ -2968,16 +2970,34 @@ def commission_superadmin_view(request):
         is_active=True,
     ).exclude(id__in=excluded_ids).order_by('first_name', 'last_name')
 
+    phase_labels = {'antes': 'Antes da Contestação', 'pos': 'Pós Contestação'}
+    available_versions = []
+    for version in CommissionSpreadsheetVersion.objects.filter(
+        status=CommissionSpreadsheetVersion.STATUS_RELEASED
+    ).order_by('-year', '-month', 'contestacao_phase'):
+        phase_value = getattr(version, 'contestacao_phase', 'pos')
+        available_versions.append({
+            'year': version.year,
+            'month': version.month,
+            'month_label': MONTH_NAMES_PT.get(version.month, str(version.month)),
+            'phase': phase_value,
+            'phase_label': phase_labels.get(phase_value, phase_value),
+            'released_at': version.released_at,
+        })
+
     context = {
         'user': user,
         'gerentes': gerentes,
         'coordenadores': coordenadores,
         'recepcionistas': recepcionistas,
         'cns': cns,
+        'available_versions': available_versions,
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],
+        'reference_phase_options': reference['phase_options'],
         'selected_reference_year': reference['year'],
         'selected_reference_month': reference['month'],
+        'selected_reference_phase': reference['phase'],
     }
 
     return render(request, 'users/commission_superadmin.html', context)
@@ -3023,8 +3043,10 @@ def commission_recepcionista_view(request):
         'role': 'recepcionista',
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],
+        'reference_phase_options': reference['phase_options'],
         'selected_reference_year': reference['year'],
         'selected_reference_month': reference['month'],
+        'selected_reference_phase': reference['phase'],
     }
 
     if result.get('success'):
@@ -3113,8 +3135,10 @@ def commission_cn_view(request):
         'role': 'cn',
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],
+        'reference_phase_options': reference['phase_options'],
         'selected_reference_year': reference['year'],
         'selected_reference_month': reference['month'],
+        'selected_reference_phase': reference['phase'],
     }
     
     if result.get('success'):
@@ -3214,8 +3238,10 @@ def commission_gerente_view(request):
         'role': 'gerente',
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],
+        'reference_phase_options': reference['phase_options'],
         'selected_reference_year': reference['year'],
         'selected_reference_month': reference['month'],
+        'selected_reference_phase': reference['phase'],
     }
     
     if result.get('success'):
@@ -3436,8 +3462,10 @@ def commission_coordenador_view(request):
         'role': 'coordenador',
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],
+        'reference_phase_options': reference['phase_options'],
         'selected_reference_year': reference['year'],
         'selected_reference_month': reference['month'],
+        'selected_reference_phase': reference['phase'],
     }
     
     if viewing_user and result.get('success'):
