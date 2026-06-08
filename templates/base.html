@@ -223,34 +223,12 @@
                             </a>
                         </li>
                         <li>
-                            <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer" 
-                                 onclick="toggleSubmenu('dashboard-menu')" title="Dashboard">
-                                <i class="fas fa-chart-line text-primary flex-shrink-0 w-6 text-center"></i>
-                                <span class="text-sm flex-1 sidebar-text">Dashboard</span>
-                                <i class="fas fa-chevron-down text-gray-400 submenu-toggle transition-transform duration-300" id="dashboard-menu-icon"></i>
-                                <div class="tooltip-collapsed">Dashboard</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </div>
-                        </li>
-                        
-                        <!-- Sub Menu Dashboard -->
-                        <li class="ml-4 submenu-content hidden" id="dashboard-menu">
-                            <ul class="space-y-1">
-                                <li>
-                                    <a href="{% url 'dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Visão Geral">
-                                        <i class="fas fa-tachometer-alt text-blue-400 flex-shrink-0"></i>
-                                        <span>Ver Dashboard</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="{% url 'power_bi:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Trilhas de Conhecimento">
-                                        <i class="fas fa-chart-bar text-cyan-400 flex-shrink-0"></i>
-                                        <span>Power BI</span>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                            </ul>
+                            <a href="{% url 'power_bi:list' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Power BI">
+                                <i class="fas fa-chart-bar text-cyan-400 flex-shrink-0 w-6 text-center"></i>
+                                <span class="text-sm sidebar-text">Power BI</span>
+                                <div class="tooltip-collapsed">Power BI</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
                         </li>
 
                         <!-- Menu Gestão -->
@@ -558,6 +536,13 @@
                         <!-- Sub Menu Chamados -->
                         <li class="ml-4 submenu-content hidden" id="tickets-menu">
                             <ul class="space-y-1">
+                                <li>
+                                    <a href="{% url 'dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Tickets">
+                                        <i class="fas fa-tachometer-alt text-blue-400 flex-shrink-0"></i>
+                                        <span>Ver Dashboard</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
                                 <li>
                                     <a href="{% url 'ticket_create' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo Chamado">
                                         <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
