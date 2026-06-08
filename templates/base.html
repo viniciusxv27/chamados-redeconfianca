@@ -251,180 +251,33 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
-
-                                <li class="pt-2">
-                                    <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
-                                         onclick="toggleSubmenu('gestao-checklists-menu')" title="Checklists">
-                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold flex-1">Checklists</span>
-                                        <i class="fas fa-chevron-down text-gray-500 submenu-toggle transition-transform duration-300 text-[10px]" id="gestao-checklists-menu-icon"></i>
-                                    </div>
+                                <li>
+                                    <a href="{% url 'feedback:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Feedbacks">
+                                        <i class="fas fa-comments text-indigo-400 flex-shrink-0"></i>
+                                        <span>Feedbacks</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
                                 </li>
-                                <li class="ml-3 submenu-content hidden" id="gestao-checklists-menu">
-                                    <ul class="space-y-1">
-                                        <li>
-                                            <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
-                                                <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
-                                                <span>Checklists ADM</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a href="{% url 'checklist_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meus Checklists">
-                                                <i class="fas fa-list-check text-blue-400 flex-shrink-0"></i>
-                                                <span>Meus Checklists</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        {% if user.hierarchy != 'PADRAO' %}
-                                            <li>
-                                                <a href="{% url 'manage_checklists' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Checklists">
-                                                    <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
-                                                    <span>Gerenciar Checklists</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a href="{% url 'create_daily_checklist' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Criar Checklist">
-                                                    <i class="fas fa-plus text-green-400 flex-shrink-0"></i>
-                                                    <span>Criar Checklist</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a href="{% url 'checklists:admin_executions' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Controle de Execuções">
-                                                    <i class="fas fa-chart-bar text-purple-400 flex-shrink-0"></i>
-                                                    <span>Controle Checklists</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                        {% endif %}
-                                    </ul>
+                                <li>
+                                    <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
+                                        <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
+                                        <span>Checklists ADM</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
                                 </li>
-
-                                <li class="pt-2">
-                                    <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
-                                         onclick="toggleSubmenu('gestao-tarefas-menu')" title="Tarefas">
-                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold flex-1">Tarefas</span>
-                                        <i class="fas fa-chevron-down text-gray-500 submenu-toggle transition-transform duration-300 text-[10px]" id="gestao-tarefas-menu-icon"></i>
-                                    </div>
+                                <li>
+                                    <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
+                                        <i class="fas fa-tasks text-yellow-400 flex-shrink-0"></i>
+                                        <span>Minhas Tarefas</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
                                 </li>
-                                <li class="ml-3 submenu-content hidden" id="gestao-tarefas-menu">
-                                    <ul class="space-y-1">
-                                        <li>
-                                            <a href="{% url 'tasks_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Minhas Tarefas">
-                                                <i class="fas fa-tasks text-blue-400 flex-shrink-0"></i>
-                                                <span>Minhas Tarefas</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        {% if user.hierarchy in 'SUPERVISOR,ADMINISTRATIVO,ADMIN,SUPERADMIN' %}
-                                            <li>
-                                                <a href="{% url 'manage_tasks' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Tarefas">
-                                                    <i class="fas fa-tools text-yellow-400 flex-shrink-0"></i>
-                                                    <span>Gerenciar Tarefas</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a href="{% url 'create_task' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Nova Tarefa">
-                                                    <i class="fas fa-plus-circle text-green-400 flex-shrink-0"></i>
-                                                    <span>Nova Tarefa</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                        {% endif %}
-                                    </ul>
-                                </li>
-
-                                <li class="pt-2">
-                                    <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
-                                         onclick="toggleSubmenu('gestao-suprimentos-menu')" title="Suprimentos">
-                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold flex-1">Suprimentos</span>
-                                        <i class="fas fa-chevron-down text-gray-500 submenu-toggle transition-transform duration-300 text-[10px]" id="gestao-suprimentos-menu-icon"></i>
-                                    </div>
-                                </li>
-                                <li class="ml-3 submenu-content hidden" id="gestao-suprimentos-menu">
-                                    <ul class="space-y-1">
-                                        <li>
-                                            <a href="{% url 'assets:inventory_dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Almoxarifado">
-                                                <i class="fas fa-warehouse text-orange-400 flex-shrink-0"></i>
-                                                <span>Almoxarifado</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a href="{% url 'assets:list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Inventário">
-                                                <i class="fas fa-clipboard-list text-teal-400 flex-shrink-0"></i>
-                                                <span>Inventário</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a href="{% url 'assets:order_catalog' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Pedidos">
-                                                <i class="fas fa-cart-plus text-emerald-400 flex-shrink-0"></i>
-                                                <span>Pedidos</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        {% if user.hierarchy in 'SUPERVISOR,ADMIN,SUPERADMIN' or user.is_superuser %}
-                                        <li>
-                                            <a href="{% url 'assets:manage_orders' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Pedidos">
-                                                <i class="fas fa-tasks text-amber-400 flex-shrink-0"></i>
-                                                <span>Gerenciar Pedidos</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        {% endif %}
-                                        <li>
-                                            <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
-                                                <i class="fas fa-folder text-primary flex-shrink-0"></i>
-                                                <span>Arquivos</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </li>
-
-                                <li class="pt-2">
-                                    <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
-                                         onclick="toggleSubmenu('gestao-feedback-menu')" title="Feedback">
-                                        <span class="text-[10px] tracking-wide uppercase text-gray-500 font-semibold flex-1">Feedback</span>
-                                        <i class="fas fa-chevron-down text-gray-500 submenu-toggle transition-transform duration-300 text-[10px]" id="gestao-feedback-menu-icon"></i>
-                                    </div>
-                                </li>
-                                <li class="ml-3 submenu-content hidden" id="gestao-feedback-menu">
-                                    <ul class="space-y-1">
-                                        <li>
-                                            <a href="{% url 'feedback:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Painel de Feedback">
-                                                <i class="fas fa-comments text-indigo-400 flex-shrink-0"></i>
-                                                <span>Painel</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a href="{% url 'feedback:pending' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Pessoas que posso avaliar">
-                                                <i class="fas fa-user-check text-blue-400 flex-shrink-0"></i>
-                                                <span>Avaliar Pessoas</span>
-                                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                            </a>
-                                        </li>
-                                        {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
-                                            <li>
-                                                <a href="{% url 'feedback:manage' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar Feedbacks">
-                                                    <i class="fas fa-cogs text-yellow-400 flex-shrink-0"></i>
-                                                    <span>Gerenciar</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a href="{% url 'feedback:assign' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Atribuir Avaliadores">
-                                                    <i class="fas fa-user-plus text-green-400 flex-shrink-0"></i>
-                                                    <span>Atribuir</span>
-                                                    <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                                </a>
-                                            </li>
-                                        {% endif %}
-                                    </ul>
+                                <li>
+                                    <a href="{% url 'files:files_list' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Arquivos">
+                                        <i class="fas fa-folder text-primary flex-shrink-0"></i>
+                                        <span>Arquivos</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
                                 </li>
                             </ul>
                         </li>
