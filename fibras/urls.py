@@ -11,6 +11,7 @@ urlpatterns = [
     path('importar/', views.importar_planilha, name='importar_planilha'),
     path('relatorio/', views.relatorio, name='relatorio'),
     path('export/excel/', views.export_excel, name='export_excel'),
+    path('export/canceladas-csv/', views.export_canceladas_csv, name='export_canceladas_csv'),
     path('<int:pk>/', views.detail, name='detail'),
     path('<int:pk>/status/', views.change_status_view, name='change_status'),
     path('<int:pk>/status/ajax/', views.change_status_ajax, name='change_status_ajax'),
