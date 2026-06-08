@@ -27,8 +27,16 @@ def _norm(value) -> str:
     return ' '.join(t.upper().split())
 
 
-def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
-    """Busca as vendas de serviço do dia anterior (`target_date`, padrão = ontem).
+def fetch_d1_from_mysql(
+    *,
+    target_date: Optional[date] = None,
+    target_dates: Optional[list[date]] = None,
+) -> list[dict]:
+    """Busca as vendas de serviço de uma ou mais datas.
+
+    - ``target_dates``: lista explícita de datas a buscar.
+    - ``target_date``: data única (padrão = ontem) quando ``target_dates`` não
+      for informado.
 
     Considera apenas a tabela ``vendas_servicos`` — conforme requisito do D-1,
     somente as vendas de serviço devem ser auditadas.
@@ -38,8 +46,13 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
     except ImportError:
         return []
 
-    if target_date is None:
-        target_date = timezone.localdate() - timedelta(days=1)
+    if target_dates is None:
+        if target_date is None:
+            target_date = timezone.localdate() - timedelta(days=1)
+        target_dates = [target_date]
+
+    if not target_dates:
+        return []
 
     try:
         conn = pymysql.connect(**_mysql_config())
@@ -51,11 +64,12 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
         'numero_da_venda', 'produto', 'valor', 'cpf', 'numero_acesso',
         'data_da_venda', 'pilar', 'vendedor', 'pdv', 'servicos',
     ]
+    placeholders = ', '.join(['%s'] * len(target_dates))
     try:
         with conn.cursor() as cur:
             # --- vendas_servicos (PascalCase + acentos) ---
             cur.execute(
-                """
+                f"""
                 SELECT
                     `ID_da_venda`,
                     `Plano_novo`,
@@ -68,10 +82,10 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
                     `PDV`,
                     `Serviço_Técnico`
                 FROM vendas_servicos
-                WHERE data_da_venda = %s
+                WHERE data_da_venda IN ({placeholders})
                   AND `Venda_ativa` = '1'
                 """,
-                (target_date,),
+                tuple(target_dates),
             )
             for row in cur.fetchall():
                 rows.append(dict(zip(cols, row)))
@@ -85,8 +99,10 @@ def fetch_d1_from_mysql(*, target_date: Optional[date] = None) -> list[dict]:
 
 
 def sync_d1(*, target_date: Optional[date] = None) -> dict:
-    """Insere as vendas de D-1 no banco local de forma idempotente.
+    """Insere as vendas de D-1 (e de hoje, até o momento) no banco local.
 
+    - Por padrão, sincroniza **ontem** (D-1) e **hoje** — assim as vendas do
+      dia corrente já entram na conferência conforme vão sendo lançadas.
     - Se já existe uma linha local idêntica (mesmo número da venda, CPF,
       produto, data, número de acesso e serviços), o registro é pulado —
       evita inflar duplicatas a cada sync.
@@ -94,7 +110,14 @@ def sync_d1(*, target_date: Optional[date] = None) -> dict:
       a partir da segunda é marcada como `is_duplicate=True`.
     - Expira automaticamente vendas com `acordo_deadline < now`.
     """
-    raw = fetch_d1_from_mysql(target_date=target_date)
+    if target_date is not None:
+        target_dates = [target_date]
+    else:
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        target_dates = [ontem, hoje]
+
+    raw = fetch_d1_from_mysql(target_dates=target_dates)
     created = 0
     skipped = 0
     seen: dict[tuple, VendaD1] = {}
@@ -155,7 +178,7 @@ def sync_d1(*, target_date: Optional[date] = None) -> dict:
         'skipped': skipped,
         'total_in_source': len(raw),
         'expired': expired,
-        'target_date': str(target_date or (timezone.localdate() - timedelta(days=1))),
+        'target_date': ', '.join(str(d) for d in target_dates),
     }
 
 

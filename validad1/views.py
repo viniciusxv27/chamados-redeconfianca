@@ -15,7 +15,6 @@ from .services import (
     can_sync_d1,
     expire_deadlines,
     is_ilha,
-    last_sync_today,
     sync_d1,
     vendas_for_user,
 )
@@ -332,17 +331,6 @@ def sync_now(request):
         messages.error(request, 'Apenas usuários acima da hierarquia Padrão podem sincronizar.')
         return redirect('validad1:lista')
 
-    ja_sincronizado = last_sync_today()
-    if ja_sincronizado is not None:
-        quem = ja_sincronizado.synced_by.get_full_name() if ja_sincronizado.synced_by else 'outro usuário'
-        messages.warning(
-            request,
-            f'A sincronização já foi feita hoje às '
-            f'{timezone.localtime(ja_sincronizado.synced_at):%H:%M} por {quem}. '
-            f'Só é permitido sincronizar 1 vez ao dia.',
-        )
-        return redirect('validad1:lista')
-
     stats = sync_d1()
     VendaD1SyncLog.objects.create(
         synced_by=request.user,
@@ -352,7 +340,7 @@ def sync_now(request):
     )
     messages.success(
         request,
-        f"Sync D-1 ({stats['target_date']}): {stats['created']} importadas, "
+        f"Sync D-1 + hoje ({stats['target_date']}): {stats['created']} importadas, "
         f"{stats['expired']} expiradas (de {stats['total_in_source']} na fonte).",
     )
     return redirect('validad1:lista')
