@@ -1,11 +1,27 @@
 """Modelos do módulo Validação D-1."""
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+
+def format_numero_acesso(value: str) -> str:
+    """Formata o nº de acesso/telefone no padrão da planilha modelo: '00 00000-0000'.
+
+    Aceita 11 dígitos (celular: DD + 9 dígitos) ou 10 dígitos (fixo: DD + 8
+    dígitos). Se o valor não tiver a quantidade esperada de dígitos, retorna o
+    texto original (apenas com espaços das pontas removidos).
+    """
+    digits = re.sub(r'\D', '', value or '')
+    if len(digits) == 11:
+        return f'{digits[:2]} {digits[2:7]}-{digits[7:]}'
+    if len(digits) == 10:
+        return f'{digits[:2]} {digits[2:6]}-{digits[6:]}'
+    return (value or '').strip()
 
 
 class VendaD1(models.Model):
@@ -122,6 +138,16 @@ class VendaD1(models.Model):
 
     def __str__(self):
         return f"D-1 {self.numero_da_venda} ({self.data_da_venda})"
+
+    @property
+    def numero_acesso_fmt(self) -> str:
+        """Nº de acesso formatado no padrão '00 00000-0000' (planilha modelo)."""
+        return format_numero_acesso(self.numero_acesso)
+
+    @property
+    def cpf_digits(self) -> str:
+        """CPF apenas com dígitos (tudo junto, facilita copiar/colar)."""
+        return re.sub(r'\D', '', self.cpf or '')
 
     def set_divergente(self, *, tipo: str, penalidade: str, observacao: str, por_usuario, penalidade_detalhe: str = ''):
         self.status = self.STATUS_DIVERGENTE

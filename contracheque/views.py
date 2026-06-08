@@ -253,7 +253,11 @@ def api_import_payslip(request):
         # Cria mesmo assim, mas sem dados extraídos
         pdf_data_clean = {}
     else:
-        pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in ('error',)}
+        # Importação individual: o funcionário já foi escolhido manualmente,
+        # então ignoramos o NOME reconhecido no PDF e importamos apenas os
+        # valores (proventos/descontos/líquido etc.) do contracheque.
+        _ignored_fields = ('error', 'employee_name')
+        pdf_data_clean = {k: v for k, v in pdf_data.items() if k not in _ignored_fields}
 
     # Corte automático: sempre salva página individual quando houver múltiplas páginas.
     page_number = 0

@@ -9,7 +9,7 @@
     <div class="flex items-start justify-between">
       <div>
         <h1 class="text-xl font-bold">Venda {{ venda.numero_da_venda }}</h1>
-        <p class="text-sm text-gray-500">CPF {{ venda.cpf|default:"—" }} · Acesso {{ venda.numero_acesso|default:"—" }}</p>
+        <p class="text-sm text-gray-500">CPF <span class="select-all font-mono">{{ venda.cpf_digits|default:"—" }}</span> · Acesso {{ venda.numero_acesso_fmt|default:"—" }}</p>
       </div>
       <span class="px-3 py-1 rounded-full text-xs font-semibold
         {% if venda.status == 'conformidade' %}bg-green-100 text-green-800
@@ -112,7 +112,15 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600">Nº de acesso / Telefone</label>
-          <input type="text" name="numero_acesso" value="{{ venda.numero_acesso }}" class="w-full px-2 py-1.5 border rounded">
+          <input type="text" name="numero_acesso" id="id_numero_acesso" value="{{ venda.numero_acesso_fmt }}" placeholder="00 00000-0000" maxlength="13" class="w-full px-2 py-1.5 border rounded" oninput="maskAcesso(this)">
+          <script>
+            function maskAcesso(el){
+              var d = (el.value || '').replace(/\D/g, '').slice(0, 11);
+              if(d.length > 7){ el.value = d.slice(0,2) + ' ' + d.slice(2,7) + '-' + d.slice(7); }
+              else if(d.length > 2){ el.value = d.slice(0,2) + ' ' + d.slice(2); }
+              else { el.value = d; }
+            }
+          </script>
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600">Número do protocolo</label>

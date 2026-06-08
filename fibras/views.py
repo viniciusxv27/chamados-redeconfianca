@@ -545,6 +545,7 @@ def export_canceladas_csv(request):
     Receita zerada (cancelamento não gera receita)."""
     import csv
     from validad1.views import GESTAO_DOCUMENTAL_HEADER
+    from validad1.models import format_numero_acesso
 
     qs = (
         fibras_for_user(request.user)
@@ -560,68 +561,35 @@ def export_canceladas_csv(request):
     writer = csv.writer(response, delimiter=';')
     writer.writerow(GESTAO_DOCUMENTAL_HEADER)
 
+    def _money(value):
+        # Mantém o formato da planilha modelo: decimais com vírgula (ex.: 59,90).
+        return f'{float(value or 0):.2f}'.replace('.', ',')
+
     for f in qs:
-        valor_plano = f'{float(f.valor or 0):.2f}'
-        situacao = f.get_status_display()                       # "Cancelado"
+        status_label = f.get_status_display()                  # "Cancelado"
         motivo_cancelamento = (f.motivo_planilha or '').replace('\n', ' ').strip()
-        observacao = (f.retorno_myrella or '').replace('\n', ' ').strip()
         data_venda = f.data_da_venda.strftime('%d/%m/%Y') if f.data_da_venda else ''
         row = [
-            f.pdv,                  # Filial
-            data_venda,             # Data Venda
-            '',                     # Data Ativação
-            '',                     # Status BKO
-            f.servico_tecnico,      # Serviço
-            f.numero_da_venda,      # ID Venda
-            '',                     # Modelo
-            '',                     # IMEI
-            f.plano,                # Plano
-            valor_plano,            # Valor plano
-            '',                     # Plano Antigo
-            '',                     # Valor plano antigo
-            '',                     # Vencimento Fatura
-            f.vendedor,             # Vendedor
-            f.cliente,              # Cliente
-            f.cpf,                  # CPF/CNPJ
-            f.numero_acesso,        # Nº Acesso
-            '',                     # Nº Portado
-            '',                     # Servico Instalado
-            '',                     # Data Agendada de Instalação
-            '',                     # Armário
-            '',                     # Data Instalação
-            situacao,               # Situação do serviço (status atualizado)
-            '0.00',                 # Receita (zerada — cancelamento)
-            '',                     # Status GED
-            '',                     # Sim Card
-            '',                     # COD
-            '',                     # Fidelização
-            '',                     # Zerar Remuneração
-            '',                     # Gerar Price
-            '',                     # Nº Solicitação NEXT / RPON
-            f.numero_protocolo,     # Nº Protocolo GED
-            '',                     # Nº Protocolo GED Portabilidade
-            '',                     # Motivo Reprovação
-            '',                     # Data Digitalização
-            '',                     # Usuário Inserção
-            '',                     # Usuário Alteração
-            observacao,             # Observação
-            motivo_cancelamento,    # Motivo Cancelamento
-            '',                     # Comissão de Serviço do Vendedor
-            '',                     # Comissão de Aparelho do Vendedor
-            '',                     # Data Última Ativação
-            '',                     # Data de alteração
-            '',                     # Usuário Cancelamento
-            '',                     # Data Cancelamento
-            '',                     # Líder de Equipe
-            '',                     # Status Primeira Fatura
-            '',                     # Data Primeira Fatura
-            '',                     # Status Segunda Fatura
-            '',                     # Data Segunda Fatura
-            '',                     # Status Terceira Fatura
-            '',                     # Data Terceira Fatura
-            '0.00',                 # Valor Receita (zerada — cancelamento)
-            '',                     # Valor Considerado TFP
-            '',                     # Valor Penalizado TFP
+            data_venda,                          # Data Venda
+            '',                                  # Data Ativação
+            status_label,                        # Status BKO
+            f.servico_tecnico,                   # Serviço
+            _money(f.valor),                     # Valor Plano
+            '',                                  # Valor Plano Antigo
+            '',                                  # Vencimento Fatura
+            format_numero_acesso(f.numero_acesso),  # Nº Acesso
+            status_label,                        # Situação do serviço
+            f.numero_protocolo,                  # Nº Protocolo GED
+            '',                                  # Motivo Reprovação
+            motivo_cancelamento,                 # Motivo Cancelamento
+            '',                                  # Comissão de Aparelho do Vendedor
+            '',                                  # Data Última Ativação
+            '',                                  # Status Primeira Fatura
+            '',                                  # Data Primeira Fatura
+            '',                                  # Status Segunda Fatura
+            '',                                  # Data Segunda Fatura
+            '',                                  # Status Terceira Fatura
+            '',                                  # Data Terceira Fatura
         ]
         writer.writerow(row)
 

@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import VendaD1, VendaD1Contestacao, VendaD1ChatMessage, VendaD1ChatAttachment, VendaD1SyncLog
+from .models import format_numero_acesso
 from .services import (
     can_sync_d1,
     expire_deadlines,
@@ -160,7 +161,7 @@ def editar_venda(request, pk: int):
     alterados = []
     update_fields = ['last_synced_at']
     if novo_acesso != venda.numero_acesso:
-        venda.numero_acesso = novo_acesso
+        venda.numero_acesso = format_numero_acesso(novo_acesso)
         update_fields.append('numero_acesso')
         alterados.append('número de acesso')
 
@@ -505,22 +506,16 @@ def export_excel(request):
     return response
 
 
-# Cabeçalho da planilha oficial (gestão documental) — mantém ordem/nomes exatos.
+# Cabeçalho da planilha oficial (gestão documental) — modelo de importação.
+# Mantém apenas as colunas obrigatórias (*) e/ou alteráveis (**), com os
+# marcadores removidos. As demais colunas foram retiradas do modelo.
 GESTAO_DOCUMENTAL_HEADER = [
-    'Filial', 'Data Venda(*)', 'Data Ativação(**)', 'Status BKO(*)(**)', 'Serviço(*)',
-    'ID Venda', 'Modelo', 'IMEI', 'Plano', 'Valor plano(**)', 'Plano Antigo',
-    'Valor plano antigo(**)', 'Vencimento Fatura(**)', 'Vendedor', 'Cliente', 'CPF/CNPJ',
-    'Nº Acesso(*)', 'Nº Portado', 'Servico Instalado', 'Data Agendada de Instalação',
-    'Armário', 'Data Instalação', 'Situação do serviço(**)', 'Receita', 'Status GED',
-    'Sim Card', 'COD', 'Fidelização', 'Zerar Remuneração', 'Gerar Price',
-    'Nº Solicitação NEXT / RPON', 'Nº Protocolo GED(**)', 'Nº Protocolo GED Portabilidade (**)',
-    'Motivo Reprovação(**)', 'Data Digitalização', 'Usuário Inserção', 'Usuário Alteração',
-    'Observação', 'Motivo Cancelamento(**)', 'Comissão de Serviço do Vendedor',
-    'Comissão de Aparelho do Vendedor(**)', 'Data Última Ativação(**)', 'Data de alteração',
-    'Usuário Cancelamento', 'Data Cancelamento', 'Líder de Equipe', 'Status Primeira Fatura',
-    'Data Primeira Fatura', 'Status Segunda Fatura', 'Data Segunda Fatura',
-    'Status Terceira Fatura', 'Data Terceira Fatura', 'Valor Receita',
-    'Valor Considerado TFP', 'Valor Penalizado TFP',
+    'Data Venda', 'Data Ativação', 'Status BKO', 'Serviço', 'Valor Plano',
+    'Valor Plano Antigo', 'Vencimento Fatura', 'Nº Acesso', 'Situação do serviço',
+    'Nº Protocolo GED', 'Motivo Reprovação', 'Motivo Cancelamento',
+    'Comissão de Aparelho do Vendedor', 'Data Última Ativação',
+    'Status Primeira Fatura', 'Data Primeira Fatura', 'Status Segunda Fatura',
+    'Data Segunda Fatura', 'Status Terceira Fatura', 'Data Terceira Fatura',
 ]
 
 
@@ -552,74 +547,34 @@ def export_vendas_csv(request):
     writer = csv.writer(response, delimiter=';')
     writer.writerow(GESTAO_DOCUMENTAL_HEADER)
 
-    def _dt(value, fmt='%d/%m/%Y'):
-        if not value:
-            return ''
-        try:
-            return timezone.localtime(value).strftime('%d/%m/%Y %H:%M')
-        except (ValueError, TypeError):
-            return value.strftime(fmt)
+    def _money(value):
+        # Mantém o formato da planilha modelo: decimais com vírgula (ex.: 59,90).
+        return f'{float(value or 0):.2f}'.replace('.', ',')
 
     for v in qs:
-        valor = f'{float(v.valor or 0):.2f}'
-        usuario_alteracao = v.marcado_por.get_full_name() if v.marcado_por else ''
         motivo_reprovacao = v.get_tipo_divergencia_display() if v.tipo_divergencia else ''
+        status_label = v.get_status_display()
         row = [
-            v.pdv,                                              # Filial
             v.data_da_venda.strftime('%d/%m/%Y') if v.data_da_venda else '',  # Data Venda
             '',                                                 # Data Ativação
-            '',                                                 # Status BKO
+            status_label,                                       # Status BKO
             v.servicos,                                         # Serviço
-            v.numero_da_venda,                                  # ID Venda
-            '',                                                 # Modelo
-            '',                                                 # IMEI
-            v.produto,                                          # Plano
-            valor,                                              # Valor plano
-            '',                                                 # Plano Antigo
-            '',                                                 # Valor plano antigo
+            _money(v.valor),                                    # Valor Plano
+            '',                                                 # Valor Plano Antigo
             '',                                                 # Vencimento Fatura
-            v.vendedor,                                         # Vendedor
-            '',                                                 # Cliente
-            v.cpf,                                              # CPF/CNPJ
-            v.numero_acesso,                                    # Nº Acesso
-            '',                                                 # Nº Portado
-            '',                                                 # Servico Instalado
-            '',                                                 # Data Agendada de Instalação
-            '',                                                 # Armário
-            '',                                                 # Data Instalação
-            v.get_status_display(),                             # Situação do serviço
-            valor,                                              # Receita
-            '',                                                 # Status GED
-            '',                                                 # Sim Card
-            '',                                                 # COD
-            '',                                                 # Fidelização
-            '',                                                 # Zerar Remuneração
-            '',                                                 # Gerar Price
-            '',                                                 # Nº Solicitação NEXT / RPON
+            format_numero_acesso(v.numero_acesso),              # Nº Acesso
+            status_label,                                       # Situação do serviço
             v.numero_protocolo,                                 # Nº Protocolo GED
-            '',                                                 # Nº Protocolo GED Portabilidade
             motivo_reprovacao,                                  # Motivo Reprovação
-            '',                                                 # Data Digitalização
-            '',                                                 # Usuário Inserção
-            usuario_alteracao,                                  # Usuário Alteração
-            (v.observacao or '').replace('\n', ' ').strip(),    # Observação
             '',                                                 # Motivo Cancelamento
-            '',                                                 # Comissão de Serviço do Vendedor
             '',                                                 # Comissão de Aparelho do Vendedor
             '',                                                 # Data Última Ativação
-            _dt(v.marcado_em),                                  # Data de alteração
-            '',                                                 # Usuário Cancelamento
-            '',                                                 # Data Cancelamento
-            '',                                                 # Líder de Equipe
             '',                                                 # Status Primeira Fatura
             '',                                                 # Data Primeira Fatura
             '',                                                 # Status Segunda Fatura
             '',                                                 # Data Segunda Fatura
             '',                                                 # Status Terceira Fatura
             '',                                                 # Data Terceira Fatura
-            valor,                                              # Valor Receita
-            '',                                                 # Valor Considerado TFP
-            '',                                                 # Valor Penalizado TFP
         ]
         writer.writerow(row)
 
