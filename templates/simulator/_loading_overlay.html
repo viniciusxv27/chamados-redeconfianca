@@ -1,0 +1,125 @@
+{# Overlay de carregamento exibido durante transições de tela do Simulador #}
+<div id="simulator-loading-overlay" aria-hidden="true">
+  <div class="sim-loading-box">
+    <div class="sim-spinner" role="status" aria-label="Carregando"></div>
+    <p class="sim-loading-text">Carregando...</p>
+  </div>
+</div>
+
+<style>
+  #simulator-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  #simulator-loading-overlay.is-visible {
+    display: flex;
+    opacity: 1;
+  }
+  .sim-loading-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 28px 36px;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  }
+  .sim-spinner {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 4px solid #f1f1f1;
+    border-top-color: #ff6a00; /* primary */
+    animation: sim-spin 0.7s linear infinite;
+  }
+  .sim-loading-text {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #374151;
+  }
+  @keyframes sim-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sim-spinner { animation-duration: 1.4s; }
+    #simulator-loading-overlay { transition: none; }
+  }
+</style>
+
+<script>
+(function () {
+  var overlay = document.getElementById('simulator-loading-overlay');
+  if (!overlay) return;
+
+  var shown = false;
+
+  function showLoading() {
+    if (shown) return;
+    shown = true;
+    overlay.classList.add('is-visible');
+    overlay.setAttribute('aria-hidden', 'false');
+  }
+
+  function hideLoading() {
+    shown = false;
+    overlay.classList.remove('is-visible');
+    overlay.setAttribute('aria-hidden', 'true');
+  }
+
+  // Mostra o overlay ao clicar em links de navegação interna (transição de tela).
+  document.addEventListener('click', function (event) {
+    var anchor = event.target.closest('a');
+    if (!anchor) return;
+
+    var href = anchor.getAttribute('href');
+    if (!href) return;
+
+    // Ignora âncoras, javascript:, novas abas, downloads e links externos.
+    if (
+      href.startsWith('#') ||
+      href.startsWith('javascript:') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('tel:') ||
+      anchor.target === '_blank' ||
+      anchor.hasAttribute('download') ||
+      event.ctrlKey || event.metaKey || event.shiftKey || event.altKey
+    ) {
+      return;
+    }
+
+    // Apenas para navegação dentro do mesmo site.
+    try {
+      var url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+    } catch (e) {
+      return;
+    }
+
+    showLoading();
+  }, true);
+
+  // Mostra o overlay ao enviar qualquer formulário (filtro/seleção de usuário, salvar, etc.).
+  document.addEventListener('submit', function () {
+    showLoading();
+  }, true);
+
+  // Catch-all: qualquer navegação que descarregue a página (inclui submits
+  // programáticos como o <select onchange="form.submit()"> do dashboard).
+  window.addEventListener('beforeunload', showLoading);
+
+  // Garante que o overlay seja escondido ao voltar (cache do navegador / bfcache).
+  window.addEventListener('pageshow', hideLoading);
+  window.addEventListener('pagehide', hideLoading);
+})();
+</script>

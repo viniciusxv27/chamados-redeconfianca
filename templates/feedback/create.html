@@ -33,7 +33,7 @@
           <h2 class="text-xl font-semibold">Avaliando: {{ evaluatee.get_full_name|default:evaluatee.username }}</h2>
           <p class="text-indigo-100 text-sm">{{ evaluatee.email }}</p>
         </div>
-        <form method="post" class="p-6 space-y-8">
+        <form method="post" class="p-6 space-y-8" enctype="multipart/form-data" id="feedback-form">
           {% csrf_token %}
           <input type="hidden" name="evaluatee" value="{{ evaluatee.id }}">
 
@@ -80,12 +80,165 @@
             {{ form.evolution_notes }}
           </section>
 
+          <section>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3"><i class="fas fa-microphone mr-2 text-indigo-500"></i>Áudio do Feedback (opcional)</h3>
+            <p class="text-sm text-gray-500 mb-4">Grave a conversa do feedback. A IA vai transcrever e analisar o áudio, incluindo-o no resumo.</p>
+
+            <div class="mb-4">
+              <label class="block text-sm text-gray-600 mb-1">O áudio contém</label>
+              {{ form.audio_context }}
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <button type="button" id="rec-start" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2">
+                  <i class="fas fa-circle"></i> Gravar
+                </button>
+                <button type="button" id="rec-stop" class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 hidden items-center gap-2">
+                  <i class="fas fa-stop"></i> Parar
+                </button>
+                <button type="button" id="rec-discard" class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 hidden items-center gap-2">
+                  <i class="fas fa-trash"></i> Descartar
+                </button>
+                <span id="rec-timer" class="text-sm font-mono text-gray-600 hidden">00:00</span>
+                <span id="rec-status" class="text-sm text-gray-500"></span>
+              </div>
+
+              <audio id="rec-playback" controls class="mt-4 w-full hidden"></audio>
+
+              <div class="mt-3">
+                <label class="block text-xs text-gray-500 mb-1">Ou envie um arquivo de áudio</label>
+                <input type="file" id="audio-file-input" name="audio" accept="audio/*" class="text-sm" />
+              </div>
+            </div>
+          </section>
+
           <div class="flex justify-end gap-2">
             <a href="{% url 'feedback:dashboard' %}" class="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">Cancelar</a>
-            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Salvar Feedback</button>
+            <button type="submit" id="feedback-submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+              <span id="submit-label">Salvar Feedback</span>
+              <i id="submit-spinner" class="fas fa-spinner fa-spin hidden"></i>
+            </button>
           </div>
         </form>
       </div>
+
+      <script>
+      (function () {
+        const startBtn = document.getElementById('rec-start');
+        const stopBtn = document.getElementById('rec-stop');
+        const discardBtn = document.getElementById('rec-discard');
+        const timerEl = document.getElementById('rec-timer');
+        const statusEl = document.getElementById('rec-status');
+        const playback = document.getElementById('rec-playback');
+        const fileInput = document.getElementById('audio-file-input');
+        const form = document.getElementById('feedback-form');
+        const submitBtn = document.getElementById('feedback-submit');
+        const submitLabel = document.getElementById('submit-label');
+        const submitSpinner = document.getElementById('submit-spinner');
+
+        let mediaRecorder = null;
+        let chunks = [];
+        let stream = null;
+        let timerInt = null;
+        let seconds = 0;
+        let recordedFile = null;
+
+        function show(el) { el.classList.remove('hidden'); el.classList.add('inline-flex'); }
+        function hide(el) { el.classList.add('hidden'); el.classList.remove('inline-flex'); }
+
+        function fmt(s) {
+          const m = Math.floor(s / 60).toString().padStart(2, '0');
+          const sec = (s % 60).toString().padStart(2, '0');
+          return m + ':' + sec;
+        }
+
+        function startTimer() {
+          seconds = 0;
+          timerEl.textContent = '00:00';
+          timerEl.classList.remove('hidden');
+          timerInt = setInterval(() => { seconds++; timerEl.textContent = fmt(seconds); }, 1000);
+        }
+        function stopTimer() { clearInterval(timerInt); }
+
+        function pickMimeType() {
+          const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+          if (window.MediaRecorder) {
+            for (const t of types) {
+              if (MediaRecorder.isTypeSupported(t)) return t;
+            }
+          }
+          return '';
+        }
+
+        startBtn.addEventListener('click', async () => {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusEl.textContent = 'Gravação não suportada neste navegador.';
+            return;
+          }
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (e) {
+            statusEl.textContent = 'Permissão de microfone negada.';
+            return;
+          }
+          chunks = [];
+          const mimeType = pickMimeType();
+          mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+          mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+          mediaRecorder.onstop = () => {
+            const type = (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm';
+            const blob = new Blob(chunks, { type });
+            const ext = type.indexOf('mp4') >= 0 ? 'm4a' : (type.indexOf('ogg') >= 0 ? 'ogg' : 'webm');
+            recordedFile = new File([blob], 'feedback_audio.' + ext, { type });
+
+            // Anexa o áudio gravado ao input de arquivo do formulário.
+            const dt = new DataTransfer();
+            dt.items.add(recordedFile);
+            fileInput.files = dt.files;
+
+            playback.src = URL.createObjectURL(blob);
+            playback.classList.remove('hidden');
+            statusEl.textContent = 'Áudio gravado e anexado.';
+            show(discardBtn);
+            if (stream) stream.getTracks().forEach(t => t.stop());
+          };
+          mediaRecorder.start();
+          startTimer();
+          hide(startBtn);
+          show(stopBtn);
+          hide(discardBtn);
+          playback.classList.add('hidden');
+          statusEl.textContent = 'Gravando...';
+        });
+
+        stopBtn.addEventListener('click', () => {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+          stopTimer();
+          hide(stopBtn);
+          show(startBtn);
+        });
+
+        discardBtn.addEventListener('click', () => {
+          recordedFile = null;
+          fileInput.value = '';
+          playback.classList.add('hidden');
+          playback.removeAttribute('src');
+          timerEl.classList.add('hidden');
+          statusEl.textContent = '';
+          hide(discardBtn);
+        });
+
+        // Mostra estado de processamento ao salvar (transcrição + IA podem demorar).
+        form.addEventListener('submit', () => {
+          submitBtn.disabled = true;
+          submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
+          const hasAudio = fileInput.files && fileInput.files.length > 0;
+          submitLabel.textContent = hasAudio ? 'Processando áudio e IA...' : 'Salvando...';
+          submitSpinner.classList.remove('hidden');
+        });
+      })();
+      </script>
     {% endif %}
   </div>
 </div>

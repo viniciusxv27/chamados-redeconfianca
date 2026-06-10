@@ -11,7 +11,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from users.models import Sector, User
 
-from .ai import generate_ai_summary
+from .ai import generate_ai_summary, transcribe_feedback_audio
 from .forms import AssignmentForm, FeedbackForm
 from .models import Feedback, FeedbackAssignment, FeedbackReminderDismissal
 from .reminders import get_pending_reminders
@@ -105,7 +105,18 @@ def create_feedback(request, assignment_id=None):
             fb.assignment = assignment
             if not fb.nome_colaborador:
                 fb.nome_colaborador = evaluatee.get_full_name() or evaluatee.username
+
+            audio_upload = request.FILES.get('audio')
+            if audio_upload:
+                fb.audio_file = audio_upload
             fb.save()
+
+            # Transcreve o áudio (se enviado) antes de gerar o resumo IA.
+            if fb.audio_file:
+                try:
+                    transcribe_feedback_audio(fb)
+                except Exception:
+                    pass
 
             # Tenta gerar resumo IA imediatamente (silencioso em caso de falha).
             try:

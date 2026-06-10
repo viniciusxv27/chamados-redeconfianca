@@ -27,6 +27,25 @@
           <p class="text-gray-600 text-sm">Resumo IA indisponível.{% if fb.ai_summary_error %} <span class="text-red-600">({{ fb.ai_summary_error }})</span>{% endif %}</p>
         {% endif %}
       </div>
+
+      {% if fb.audio_file %}
+      <div class="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-microphone mr-2 text-indigo-500"></i>Áudio do Feedback</h2>
+          {% if fb.audio_context %}<span class="text-xs font-medium bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">{{ fb.get_audio_context_display }}</span>{% endif %}
+        </div>
+        <audio controls class="w-full mb-4" src="{{ fb.audio_file.url }}"></audio>
+        <div>
+          <h3 class="text-sm font-semibold text-gray-600 mb-1">Transcrição do áudio</h3>
+          {% if fb.audio_transcription %}
+            <p class="text-sm text-gray-800 whitespace-pre-line bg-gray-50 border rounded-lg p-3 max-h-72 overflow-y-auto">{{ fb.audio_transcription }}</p>
+            {% if fb.audio_transcribed_at %}<p class="text-xs text-gray-500 mt-2">Transcrito em {{ fb.audio_transcribed_at }}</p>{% endif %}
+          {% else %}
+            <p class="text-gray-600 text-sm">Transcrição indisponível.{% if fb.audio_transcription_error %} <span class="text-red-600">({{ fb.audio_transcription_error }})</span>{% endif %}</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
     {% endif %}
 
     {% if not is_evaluatee_only %}

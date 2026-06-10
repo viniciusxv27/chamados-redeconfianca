@@ -26,6 +26,7 @@ class FeedbackForm(forms.ModelForm):
             'nota_mudancas', 'nota_conflitos',
             'cumpriu_metas_texto', 'suporte_orientacao_texto',
             'evolution_notes',
+            'audio_context',
         ]
         widgets = {
             'data': forms.DateInput(attrs={'type': 'date', 'class': 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary'}),
@@ -44,6 +45,11 @@ class FeedbackForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['audio_context'].required = False
+        self.fields['audio_context'].widget = forms.Select(
+            choices=[('', '— Selecione (se houver áudio) —')] + list(Feedback.AUDIO_CONTEXT_CHOICES),
+            attrs={'class': 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary'},
+        )
         for f in SCALE_FIELDS:
             self.fields[f].widget = forms.NumberInput(attrs={
                 'min': 0, 'max': 10, 'step': 1,

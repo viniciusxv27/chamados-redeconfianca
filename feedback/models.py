@@ -145,6 +145,32 @@ class Feedback(models.Model):
         help_text='Considerações sobre a evolução do colaborador desde o último feedback.',
     )
 
+    # Áudio do feedback (gravado pelo avaliador) e transcrição por IA
+    AUDIO_CONTEXT_CHOICES = [
+        ('CONVERSA', 'Conversa entre avaliador e avaliado'),
+        ('AVALIADOR', 'Somente o avaliador'),
+        ('AVALIADO', 'Somente o avaliado'),
+    ]
+    audio_file = models.FileField(
+        upload_to='feedback/audio/%Y/%m/',
+        null=True,
+        blank=True,
+        verbose_name='Áudio do feedback',
+    )
+    audio_context = models.CharField(
+        max_length=20,
+        choices=AUDIO_CONTEXT_CHOICES,
+        blank=True,
+        verbose_name='Contexto do áudio',
+        help_text='Quem aparece no áudio gravado.',
+    )
+    audio_transcription = models.TextField(
+        blank=True,
+        verbose_name='Transcrição do áudio',
+    )
+    audio_transcribed_at = models.DateTimeField(null=True, blank=True)
+    audio_transcription_error = models.TextField(blank=True)
+
     # Resumo gerado por IA (visível para superadmin)
     ai_summary = models.TextField(
         blank=True,
