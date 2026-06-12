@@ -86,7 +86,7 @@
         let monitorIntervalId = null;
         const listUrl = "{% url 'power_bi:list' %}";
         const canOpenInNewTab = {{ report.allow_open_in_new_tab|yesno:'true,false' }};
-        const INITIAL_TIMEOUT_MS = 7000;
+        const INITIAL_TIMEOUT_MS = 37000;
         const MONITOR_INTERVAL_MS = 1500;
 
         function showEmbed() {
