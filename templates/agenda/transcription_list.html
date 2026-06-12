@@ -81,6 +81,10 @@
                             <p class="text-xs text-gray-500"><i class="fas fa-calendar-alt mr-1"></i> {{ t.event.title }} - {{ t.event.start|date:"d/m/Y H:i" }}</p>
                             {% endif %}
 
+                            {% if is_superadmin %}
+                            <p class="text-xs text-gray-500 mt-1"><i class="fas fa-user-shield mr-1 text-orange-500"></i> Criada por {{ t.owner.get_full_name|default:t.owner.username }}</p>
+                            {% endif %}
+
                             {% if t.summary %}
                             <p class="text-sm text-gray-600 mt-1.5 line-clamp-2">{{ t.summary|truncatewords:38 }}</p>
                             {% endif %}

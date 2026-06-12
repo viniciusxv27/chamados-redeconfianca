@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files import File
 from django.db import close_old_connections
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -109,6 +110,17 @@ def _can_view_full_calendar(viewer, target):
         if viewer_sectors & target_sectors:
             return True
     return False
+
+
+def _is_superadmin(user):
+    return getattr(user, 'hierarchy', None) == 'SUPERADMIN' or getattr(user, 'is_superuser', False)
+
+
+def _visible_transcriptions_for_user(user):
+    queryset = MeetingTranscription.objects.all()
+    if _is_superadmin(user):
+        return queryset
+    return queryset.filter(Q(owner=user) | Q(shared_with=user)).distinct()
 
 
 def _get_busy_slots(user, start_date, end_date):
@@ -1256,15 +1268,17 @@ def view_user_calendar(request, user_id):
 
 @login_required
 def transcription_list(request):
-    """Lista de transcrições do usuário (próprias + compartilhadas)"""
-    from django.db.models import Q
-
-    transcriptions = MeetingTranscription.objects.filter(
-        Q(owner=request.user) | Q(shared_with=request.user)
-    ).select_related('event', 'owner').distinct().order_by('-created_at')
+    """Lista transcrições visíveis para o usuário."""
+    transcriptions = (
+        _visible_transcriptions_for_user(request.user)
+        .select_related('event', 'owner')
+        .distinct()
+        .order_by('-created_at')
+    )
 
     context = {
         'transcriptions': transcriptions,
+        'is_superadmin': _is_superadmin(request.user),
     }
     return render(request, 'agenda/transcription_list.html', context)
 
@@ -2124,13 +2138,9 @@ def _create_tasks_from_transcription(transcription, user):
 
 @login_required
 def transcription_detail(request, pk):
-    """Visualizar uma transcrição (proprietário ou usuário com compartilhamento)"""
-    from django.db.models import Q
-
+    """Visualizar uma transcrição visível para o usuário."""
     transcription = get_object_or_404(
-        MeetingTranscription.objects.filter(
-            Q(owner=request.user) | Q(shared_with=request.user)
-        ).distinct(),
+        _visible_transcriptions_for_user(request.user).distinct(),
         pk=pk,
     )
     is_owner = transcription.owner_id == request.user.id
@@ -2198,7 +2208,7 @@ def api_transcription_share(request, pk):
 @login_required
 def api_transcription_status(request, pk):
     """Retorna status resumido da transcrição para polling da interface."""
-    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    transcription = get_object_or_404(_visible_transcriptions_for_user(request.user), pk=pk)
 
     # Detecta "Processando" travado: sem updates há mais de 3 minutos.
     is_stale = False
