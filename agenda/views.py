@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files import File
 from django.db import close_old_connections
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -29,6 +29,10 @@ try:
     from notifications.push_utils import send_push_notification_to_user
 except ImportError:
     send_push_notification_to_user = None
+
+
+_ACTIVE_TRANSCRIPTION_JOBS = set()
+_TRANSCRIPTION_JOB_LOCK = threading.Lock()
 
 
 # =========================================================================
@@ -121,6 +125,16 @@ def _visible_transcriptions_for_user(user):
     if _is_superadmin(user):
         return queryset
     return queryset.filter(Q(owner=user) | Q(shared_with=user)).distinct()
+
+
+def _can_reprocess_transcription(user, transcription):
+    return transcription.owner_id == user.id or _is_superadmin(user)
+
+
+def _manageable_transcriptions_for_user(user):
+    if _is_superadmin(user):
+        return MeetingTranscription.objects.all()
+    return MeetingTranscription.objects.filter(owner=user)
 
 
 def _get_busy_slots(user, start_date, end_date):
@@ -1272,8 +1286,15 @@ def transcription_list(request):
     transcriptions = (
         _visible_transcriptions_for_user(request.user)
         .select_related('event', 'owner')
+        .annotate(
+            status_priority=Case(
+                When(status='processing', then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        )
         .distinct()
-        .order_by('-created_at')
+        .order_by('status_priority', '-created_at')
     )
 
     context = {
@@ -2078,10 +2099,23 @@ def _run_transcription_background_job(transcription_id, api_key, mode, options=N
         close_old_connections()
 
 
+def _run_tracked_transcription_background_job(transcription_id, api_key, mode, options=None):
+    try:
+        _run_transcription_background_job(transcription_id, api_key, mode, options=options)
+    finally:
+        with _TRANSCRIPTION_JOB_LOCK:
+            _ACTIVE_TRANSCRIPTION_JOBS.discard(transcription_id)
+
+
 def _start_transcription_background_job(transcription_id, api_key, mode='upload', options=None):
     """Dispara uma thread para processamento de transcrição em segundo plano."""
+    with _TRANSCRIPTION_JOB_LOCK:
+        if transcription_id in _ACTIVE_TRANSCRIPTION_JOBS:
+            return False
+        _ACTIVE_TRANSCRIPTION_JOBS.add(transcription_id)
+
     worker = threading.Thread(
-        target=_run_transcription_background_job,
+        target=_run_tracked_transcription_background_job,
         kwargs={
             'transcription_id': transcription_id,
             'api_key': api_key,
@@ -2092,6 +2126,35 @@ def _start_transcription_background_job(transcription_id, api_key, mode='upload'
         name=f'transcription-{mode}-{transcription_id}',
     )
     worker.start()
+    return True
+
+
+def _prioritize_processing_transcriptions(api_key, exclude_id=None, limit=2):
+    """
+    Retoma primeiro transcrições em processamento que parecem paradas.
+    Evita duplicar trabalhos ativos neste processo e limita o volume por request.
+    """
+    if not api_key:
+        return 0
+
+    stale_before = timezone.now() - timedelta(minutes=3)
+    candidates = (
+        MeetingTranscription.objects
+        .filter(status='processing', updated_at__lte=stale_before)
+        .exclude(pk=exclude_id)
+        .order_by('updated_at', 'created_at')[:limit]
+    )
+
+    started = 0
+    for transcription in candidates:
+        if _start_transcription_background_job(
+            transcription.pk,
+            api_key,
+            mode='reprocess',
+            options={'resume_processing': True},
+        ):
+            started += 1
+    return started
 
 
 def _create_tasks_from_transcription(transcription, user):
@@ -2153,6 +2216,7 @@ def transcription_detail(request, pk):
         'tasks': tasks,
         'users': users,
         'is_owner': is_owner,
+        'can_reprocess_transcription': _can_reprocess_transcription(request.user, transcription),
         'shared_ids': shared_ids,
     }
     return render(request, 'agenda/transcription_detail.html', context)
@@ -2321,7 +2385,7 @@ def api_transcription_reprocess(request, pk):
     """Reinicia processamento da transcrição em segundo plano."""
     from django.conf import settings as django_settings
 
-    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    transcription = get_object_or_404(_manageable_transcriptions_for_user(request.user), pk=pk)
 
     try:
         payload = json.loads(request.body.decode('utf-8') or '{}') if request.body else {}
@@ -2341,7 +2405,11 @@ def api_transcription_reprocess(request, pk):
     transcription.save(update_fields=update_fields)
 
     api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
-    _start_transcription_background_job(
+    prioritized_count = _prioritize_processing_transcriptions(
+        api_key,
+        exclude_id=transcription.pk,
+    )
+    started = _start_transcription_background_job(
         transcription_id=transcription.pk,
         api_key=api_key,
         mode='reprocess',
@@ -2351,6 +2419,8 @@ def api_transcription_reprocess(request, pk):
     return JsonResponse({
         'ok': True,
         'status': 'processing',
+        'started': started,
+        'prioritized_processing_count': prioritized_count,
         'redirect': f'/agenda/transcricoes/{transcription.pk}/',
         'message': 'Reprocessamento iniciado em segundo plano.',
     }, status=202)

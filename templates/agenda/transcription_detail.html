@@ -131,7 +131,7 @@
             </div>
 
             <div class="mt-5">
-                {% if is_owner %}
+                {% if can_reprocess_transcription %}
                 <div class="flex flex-wrap gap-2">
                     <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-main"
                             class="inline-flex items-center px-4 py-2 bg-white/15 text-white text-sm font-medium rounded-lg hover:bg-white/25 active:scale-[.98] transition border border-white/25 backdrop-blur-sm">
@@ -141,13 +141,18 @@
                             class="inline-flex items-center px-4 py-2 bg-white/10 text-white text-sm font-medium rounded-lg hover:bg-white/20 active:scale-[.98] transition border border-white/20 backdrop-blur-sm">
                         <i class="fas fa-file-alt mr-2"></i> <span class="hidden sm:inline">Retranscrever com</span> Texto Bruto
                     </button>
+                    {% if is_owner %}
                     <button type="button" onclick="openShareModal()" id="btn-share-main"
                             class="inline-flex items-center px-4 py-2 bg-white text-orange-700 text-sm font-semibold rounded-lg hover:bg-orange-50 active:scale-[.98] transition shadow-sm">
                         <i class="fas fa-share-alt mr-2"></i> Compartilhar
                         {% if shared_ids %}<span class="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-orange-600 text-white text-xs font-bold" id="share-count-badge">{{ shared_ids|length }}</span>{% endif %}
                     </button>
+                    {% endif %}
                 </div>
                 <p class="text-xs text-orange-100/90 mt-2 flex items-center gap-1.5"><i class="fas fa-info-circle"></i> Prioriza a transcrição bruta/completa salva; se não existir, tenta o áudio.</p>
+                {% if not is_owner %}
+                <p class="text-xs text-orange-100/90 mt-1 flex items-center gap-1.5"><i class="fas fa-user-shield"></i> Acesso SUPERADMIN para reprocessamento da transcrição de {{ transcription.owner.get_full_name|default:transcription.owner.username }}.</p>
+                {% endif %}
                 {% else %}
                 <div class="inline-flex items-center gap-2 px-3 py-2 bg-white/15 text-white text-sm rounded-lg border border-white/25 backdrop-blur-sm">
                     <i class="fas fa-eye"></i>
@@ -193,7 +198,7 @@
                 <p class="text-sm font-medium text-red-700"><i class="fas fa-exclamation-circle mr-1"></i> Erro no processamento</p>
                 <p class="text-xs text-red-500 mt-1">{{ transcription.error_message }}</p>
             </div>
-            {% if is_owner %}
+            {% if can_reprocess_transcription %}
             <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-error"
                     class="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition flex-shrink-0 shadow-sm">
                 <i class="fas fa-redo mr-2"></i> Reprocessar
@@ -570,7 +575,7 @@
         <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA em segundo plano...</p>
         <p class="text-sm text-gray-500 mt-2">Você pode manter a aba aberta, navegar no portal ou voltar mais tarde.</p>
         <p class="text-xs text-gray-400 mt-1 mb-5">Criado em {{ transcription.created_at|date:"d/m/Y H:i" }}</p>
-        {% if is_owner %}
+        {% if can_reprocess_transcription %}
         <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-processing"
                 class="inline-flex items-center px-5 py-2.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition shadow-sm">
             <i class="fas fa-redo mr-2"></i> Reiniciar Processamento
