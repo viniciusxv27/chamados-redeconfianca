@@ -332,6 +332,7 @@ class User(AbstractUser):
     disc_profile = models.CharField(max_length=5, blank=True, verbose_name="Perfil DISC", help_text="Perfil comportamental DISC (até 5 letras)")
     uniform_size_shirt = models.CharField(max_length=3, blank=True, verbose_name="Tamanho uniforme (Blusa)", help_text="Ex: P, M, G, GG")
     uniform_size_pants = models.CharField(max_length=3, blank=True, verbose_name="Tamanho uniforme (Calça)", help_text="Ex: P, M, G, GG, 38, 40")
+    pcn = models.CharField(max_length=20, blank=True, verbose_name="PCN", help_text="Percentual CN importado das metas (sheet METAS CN REAL)")
     
     # Campos de dados pessoais/RH
     cpf = models.CharField(max_length=14, blank=True, verbose_name="CPF")

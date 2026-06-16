@@ -307,6 +307,76 @@ def _extract_entries_pdv_real(headers, rows):
     return entries
 
 
+def _extract_pcn_by_consultor(headers, rows):
+    """Mapeia o nome do consultor para o valor da coluna '% CN' na sheet METAS CN REAL."""
+    consultor_idx = _find_index_by_aliases(headers, ['CONSULTOR', 'NOME'])
+
+    normalized_headers = [_normalize_text(h) for h in headers]
+    pcn_idx = None
+    for header_idx, header in enumerate(normalized_headers):
+        if header == '% CN' or header == '%CN':
+            pcn_idx = header_idx
+            break
+    if pcn_idx is None:
+        pcn_idx = _find_index_by_aliases(headers, ['% CN', '%CN'])
+
+    pcn_by_consultor = {}
+    if consultor_idx is None or pcn_idx is None:
+        return pcn_by_consultor
+
+    for row in rows:
+        if all(cell in (None, '') for cell in row):
+            continue
+        if consultor_idx >= len(row):
+            continue
+        consultor = '' if row[consultor_idx] is None else str(row[consultor_idx]).strip()
+        if not consultor:
+            continue
+        pcn_value = ''
+        if pcn_idx < len(row) and row[pcn_idx] is not None:
+            pcn_value = str(row[pcn_idx]).strip()
+        # primeira ocorrencia prevalece
+        pcn_by_consultor.setdefault(consultor, pcn_value)
+
+    return pcn_by_consultor
+
+
+def _update_users_pcn(pcn_by_consultor):
+    """Atualiza o campo PCN dos usuarios casando pelo nome do consultor.
+
+    Retorna a quantidade de usuarios efetivamente atualizados.
+    """
+    from users.models import User
+
+    if not pcn_by_consultor:
+        return 0
+
+    normalized_pcn = {}
+    for consultor, pcn_value in pcn_by_consultor.items():
+        key = _normalize_text(consultor)
+        if key:
+            normalized_pcn.setdefault(key, pcn_value)
+
+    if not normalized_pcn:
+        return 0
+
+    users_to_update = []
+    for user in User.objects.all():
+        full_name_key = _normalize_text(f'{user.first_name} {user.last_name}')
+        if not full_name_key:
+            continue
+        if full_name_key in normalized_pcn:
+            new_pcn = normalized_pcn[full_name_key] or ''
+            if user.pcn != new_pcn:
+                user.pcn = new_pcn
+                users_to_update.append(user)
+
+    if users_to_update:
+        User.objects.bulk_update(users_to_update, ['pcn'])
+
+    return len(users_to_update)
+
+
 def _load_goal_entries_from_workbook(uploaded_file):
     workbook = openpyxl.load_workbook(uploaded_file, data_only=True)
 
@@ -324,12 +394,14 @@ def _load_goal_entries_from_workbook(uploaded_file):
         raise ValueError('As sheets obrigatorias METAS  CN REAL e META PDV REAL nao foram encontradas.')
 
     all_entries = []
+    pcn_by_consultor = {}
 
     cn_sheet = workbook[normalized_to_real['METASCNREAL']]
     cn_rows = list(cn_sheet.iter_rows(values_only=True))
     if cn_rows:
         cn_headers = [str(cell).strip() if cell is not None else '' for cell in cn_rows[0]]
         all_entries.extend(_extract_entries_cn_real(cn_headers, cn_rows[1:]))
+        pcn_by_consultor = _extract_pcn_by_consultor(cn_headers, cn_rows[1:])
 
     pdv_sheet = workbook[normalized_to_real['METAPDVREAL']]
     pdv_rows = list(pdv_sheet.iter_rows(values_only=True))
@@ -337,7 +409,7 @@ def _load_goal_entries_from_workbook(uploaded_file):
         pdv_headers = [str(cell).strip() if cell is not None else '' for cell in pdv_rows[0]]
         all_entries.extend(_extract_entries_pdv_real(pdv_headers, pdv_rows[1:]))
 
-    return all_entries
+    return all_entries, pcn_by_consultor
 
 
 def _visible_reports_for(user):
@@ -975,7 +1047,7 @@ def upload_goals_view(request):
 
     try:
         uploaded_file.seek(0)
-        parsed_entries = _load_goal_entries_from_workbook(uploaded_file)
+        parsed_entries, pcn_by_consultor = _load_goal_entries_from_workbook(uploaded_file)
     except Exception as exc:
         messages.error(request, f'Erro ao processar planilha de metas: {exc}')
         uploads = GoalUpload.objects.order_by('-year', '-month', '-updated_at')
@@ -1000,7 +1072,13 @@ def upload_goals_view(request):
             GoalEntry(upload=upload, **entry) for entry in parsed_entries
         ])
 
-    messages.success(request, f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas).')
+        updated_pcn = _update_users_pcn(pcn_by_consultor)
+
+    messages.success(
+        request,
+        f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas). '
+        f'PCN atualizado em {updated_pcn} usuario(s).'
+    )
     return redirect('power_bi:manage_goals')
 
 
