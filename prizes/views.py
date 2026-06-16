@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -323,6 +323,94 @@ def manage_redemptions(request):
         'stats': stats,
     }
     return render(request, 'prizes/manage_redemptions.html', context)
+
+
+@login_required
+def export_redemptions_excel(request):
+    """Exportar resgates para Excel (respeita os filtros aplicados)"""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Acesso negado.')
+        return redirect('marketplace')
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from django.db.models import Q
+
+    # Mesmos filtros da listagem
+    search = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+
+    redemptions = Redemption.objects.select_related('user', 'prize', 'prize__category', 'approved_by').all()
+
+    if search:
+        redemptions = redemptions.filter(
+            Q(user__first_name__icontains=search) |
+            Q(user__last_name__icontains=search) |
+            Q(user__email__icontains=search) |
+            Q(prize__name__icontains=search)
+        )
+
+    if status_filter:
+        redemptions = redemptions.filter(status=status_filter)
+
+    redemptions = redemptions.order_by('-redeemed_at')
+
+    # Criar workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Resgates"
+
+    headers = [
+        'ID', 'Usuário', 'E-mail', 'Prêmio', 'Categoria', 'Custo (C$)',
+        'Status', 'Data do Resgate', 'Data da Aprovação', 'Data da Entrega',
+        'Aprovado/Atualizado por', 'Observações'
+    ]
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+
+    status_map = dict(Redemption.STATUS_CHOICES)
+
+    for row, redemption in enumerate(redemptions, 2):
+        ws.cell(row=row, column=1, value=redemption.id)
+        ws.cell(row=row, column=2, value=redemption.user.full_name)
+        ws.cell(row=row, column=3, value=redemption.user.email or "")
+        ws.cell(row=row, column=4, value=redemption.prize.name)
+        ws.cell(row=row, column=5, value=redemption.prize.category.name if redemption.prize.category else "")
+        ws.cell(row=row, column=6, value=float(redemption.prize.value_cs))
+        ws.cell(row=row, column=7, value=status_map.get(redemption.status, redemption.status))
+        ws.cell(row=row, column=8, value=redemption.redeemed_at.strftime("%d/%m/%Y %H:%M") if redemption.redeemed_at else "")
+        ws.cell(row=row, column=9, value=redemption.approved_at.strftime("%d/%m/%Y %H:%M") if redemption.approved_at else "")
+        ws.cell(row=row, column=10, value=redemption.delivered_at.strftime("%d/%m/%Y %H:%M") if redemption.delivered_at else "")
+        ws.cell(row=row, column=11, value=redemption.approved_by.full_name if redemption.approved_by else "")
+        ws.cell(row=row, column=12, value=redemption.notes or redemption.delivery_notes or "")
+
+    # Ajustar largura das colunas
+    for col in range(1, len(headers) + 1):
+        column_letter = get_column_letter(col)
+        max_length = 0
+        for cell in ws[column_letter]:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except Exception:
+                pass
+        ws.column_dimensions[column_letter].width = min(max_length + 2, 50)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="resgates_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    wb.save(response)
+    return response
 
 
 @login_required

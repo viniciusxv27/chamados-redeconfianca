@@ -35,7 +35,8 @@ class KnowledgeTrailAdmin(admin.ModelAdmin):
     list_filter = ['sector', 'difficulty', 'is_active', 'created_at']
     search_fields = ['title', 'description']
     inlines = [TrailModuleInline]
-    
+    filter_horizontal = ['mandatory_users']
+
     fieldsets = (
         ('Informações Básicas', {
             'fields': ('title', 'description', 'sector', 'is_active', 'order')
@@ -45,6 +46,9 @@ class KnowledgeTrailAdmin(admin.ModelAdmin):
         }),
         ('Certificado', {
             'fields': ('enable_certificate', 'certificate_logo')
+        }),
+        ('Obrigatoriedade', {
+            'fields': ('mandatory_users', 'mandatory_start_date', 'mandatory_end_date')
         }),
         ('Metadados', {
             'fields': ('created_by',),

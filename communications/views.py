@@ -150,10 +150,20 @@ def home_feed(request):
         'alerts_count': 0,
     }
     
+    # Trilhas obrigatórias pendentes (popup na Home)
+    mandatory_trails_pending = []
+    try:
+        from knowledge_trails.models import KnowledgeTrail
+        mandatory_trails_pending = KnowledgeTrail.get_pending_mandatory_for_user(request.user)
+    except Exception:
+        mandatory_trails_pending = []
+
     context = {
         'pinned_communications': pinned_communications,
         'communications': communications,
         'recent_compliments': recent_compliments,
+        'mandatory_trails_pending': mandatory_trails_pending,
+        'show_mandatory_trails_popup': bool(mandatory_trails_pending),
         'show_experience_window_popup': show_experience_window_popup and (
             bool(experience_window_data['first_window_active'])
             or bool(experience_window_data['second_window_active'])

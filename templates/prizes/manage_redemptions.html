@@ -16,11 +16,18 @@
                             <p class="text-sm text-gray-600">Visualize e gerencie todos os resgates de prêmios</p>
                         </div>
                     </div>
-                    <a href="{% url 'admin_panel' %}" 
-                       class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
-                        <i class="fas fa-arrow-left mr-2"></i>
-                        Voltar ao Painel
-                    </a>
+                    <div class="flex items-center space-x-3">
+                        <a href="{% url 'export_redemptions_excel' %}{% if request.GET.search or request.GET.status %}?{% if request.GET.search %}search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.status %}{% if request.GET.search %}&{% endif %}status={{ request.GET.status|urlencode }}{% endif %}{% endif %}"
+                           class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                            <i class="fas fa-file-excel mr-2"></i>
+                            Exportar Excel
+                        </a>
+                        <a href="{% url 'admin_panel' %}"
+                           class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar ao Painel
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

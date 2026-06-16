@@ -10,7 +10,7 @@ from .models import (
     KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption, QuizAnswer,
     TrailProgress, LessonProgress, Certificate
 )
-from users.models import Sector
+from users.models import Sector, User
 import json
 
 
@@ -596,19 +596,22 @@ def create_trail(request):
         difficulty = request.POST.get('difficulty', 'beginner')
         estimated_hours = request.POST.get('estimated_hours', 1)
         enable_certificate = request.POST.get('enable_certificate') == 'on'
-        
+        mandatory_user_ids = request.POST.getlist('mandatory_users')
+        mandatory_start_date = request.POST.get('mandatory_start_date') or None
+        mandatory_end_date = request.POST.get('mandatory_end_date') or None
+
         # Validar campos obrigatórios
         if not title or not sector_id:
             messages.error(request, 'Título e Setor são obrigatórios.')
         else:
             sector = get_object_or_404(Sector, id=sector_id)
-            
+
             # Verificar se supervisor pode criar trilha neste setor
             if user.hierarchy == 'SUPERVISOR':
                 if sector not in user_sectors:
                     messages.error(request, 'Você não tem permissão para criar trilhas neste setor.')
                     return redirect('knowledge_trails:create_trail')
-            
+
             trail = KnowledgeTrail.objects.create(
                 title=title,
                 description=description,
@@ -619,17 +622,22 @@ def create_trail(request):
                 difficulty=difficulty,
                 estimated_hours=estimated_hours,
                 enable_certificate=enable_certificate,
+                mandatory_start_date=mandatory_start_date,
+                mandatory_end_date=mandatory_end_date,
                 created_by=user
             )
-            
+            if mandatory_user_ids:
+                trail.mandatory_users.set(mandatory_user_ids)
+
             messages.success(request, f'✅ Trilha "{trail.title}" criada com sucesso!')
             return redirect('knowledge_trails:edit_trail', trail_id=trail.id)
-    
+
     context = {
         'sectors': user_sectors,
         'difficulty_choices': KnowledgeTrail.DIFFICULTY_CHOICES,
+        'available_users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
     }
-    
+
     return render(request, 'knowledge_trails/create_trail.html', context)
 
 
@@ -680,19 +688,25 @@ def edit_trail(request, trail_id):
         trail.estimated_hours = request.POST.get('estimated_hours', trail.estimated_hours)
         trail.enable_certificate = request.POST.get('enable_certificate') == 'on'
         trail.is_active = request.POST.get('is_active') == 'on'
-        
+        trail.mandatory_start_date = request.POST.get('mandatory_start_date') or None
+        trail.mandatory_end_date = request.POST.get('mandatory_end_date') or None
+
         trail.save()
-        
+
+        trail.mandatory_users.set(request.POST.getlist('mandatory_users'))
+
         messages.success(request, f'✅ Trilha "{trail.title}" atualizada com sucesso!')
         return redirect('knowledge_trails:manage_trail', trail_id=trail.id)
-    
+
     context = {
         'trail': trail,
         'sectors': user_sectors,
         'difficulty_choices': KnowledgeTrail.DIFFICULTY_CHOICES,
         'modules': trail.modules.filter(is_active=True).prefetch_related('lessons'),
+        'available_users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
+        'selected_user_ids': list(trail.mandatory_users.values_list('id', flat=True)),
     }
-    
+
     return render(request, 'knowledge_trails/edit_trail.html', context)
 
 

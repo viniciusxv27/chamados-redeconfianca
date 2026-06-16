@@ -47,6 +47,26 @@
         opacity: 1;
         transform: translateY(0) scale(1);
     }
+
+    #mandatory-trails-modal {
+        opacity: 0;
+        transition: opacity 220ms ease;
+    }
+
+    #mandatory-trails-modal.is-visible {
+        opacity: 1;
+    }
+
+    #mandatory-trails-modal .mandatory-trails-card {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
+    }
+
+    #mandatory-trails-modal.is-visible .mandatory-trails-card {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 </style>
 {% endblock %}
 
@@ -149,7 +169,56 @@
     </div>
     {{ experience_window_alerts|json_script:"experience-window-alerts-data" }}
     {% endif %}
-    
+
+    {% if show_mandatory_trails_popup %}
+    <div id="mandatory-trails-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-50" id="mandatory-trails-backdrop"></div>
+        <div class="relative flex min-h-full items-center justify-center p-4">
+            <div class="mandatory-trails-card w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-purple-50">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-graduation-cap text-purple-600 mr-2"></i>
+                        Trilhas obrigatórias pendentes
+                    </h3>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Você tem {{ mandatory_trails_pending|length }} trilha{{ mandatory_trails_pending|length|pluralize }}
+                        obrigatória{{ mandatory_trails_pending|length|pluralize }} para concluir. Conclua antes do prazo.
+                    </p>
+                </div>
+                <div class="max-h-[60vh] overflow-y-auto px-6 py-4 space-y-3">
+                    {% for trail in mandatory_trails_pending %}
+                    <a href="{% url 'knowledge_trails:trail_detail' trail.id %}"
+                       class="flex items-center gap-3 p-4 border border-gray-100 rounded-lg hover:bg-purple-50 transition-colors">
+                        {% if trail.icon %}
+                        <img src="{{ trail.icon.url }}" alt="{{ trail.title }}" class="w-12 h-12 rounded-xl object-cover">
+                        {% else %}
+                        <span class="text-3xl">{{ trail.icon_emoji }}</span>
+                        {% endif %}
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-gray-900 truncate">{{ trail.title }}</p>
+                            <p class="text-xs text-gray-500">
+                                {% if trail.mandatory_end_date %}Prazo: {{ trail.mandatory_end_date|date:"d/m/Y" }}{% else %}{{ trail.sector.name }}{% endif %}
+                            </p>
+                        </div>
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white whitespace-nowrap">
+                            Concluir <i class="fas fa-arrow-right ml-1"></i>
+                        </span>
+                    </a>
+                    {% endfor %}
+                </div>
+                <div class="px-6 py-3 bg-gray-50 flex items-center justify-between gap-3">
+                    <button type="button" id="mandatory-trails-later" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-sm">
+                        Lembrar depois
+                    </button>
+                    <a href="{% url 'knowledge_trails:dashboard' %}" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors text-sm">
+                        Ver minhas trilhas
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- User Info Card -->
     <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -664,6 +733,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (experienceOk) experienceOk.addEventListener('click', closeExperienceModal);
         if (experienceBackdrop) experienceBackdrop.addEventListener('click', closeExperienceModal);
         if (experienceExport) experienceExport.addEventListener('click', exportExperienceWindowCsv);
+    }
+
+    // Popup de trilhas obrigatórias pendentes
+    const mandatoryTrailsModal = document.getElementById('mandatory-trails-modal');
+    if (mandatoryTrailsModal) {
+        const mandatoryBackdrop = document.getElementById('mandatory-trails-backdrop');
+        const mandatoryLater = document.getElementById('mandatory-trails-later');
+        let isMandatoryClosing = false;
+
+        function closeMandatoryModal() {
+            if (isMandatoryClosing) return;
+            isMandatoryClosing = true;
+            mandatoryTrailsModal.classList.remove('is-visible');
+            setTimeout(() => {
+                mandatoryTrailsModal.classList.add('hidden');
+                isMandatoryClosing = false;
+            }, 260);
+        }
+
+        mandatoryTrailsModal.classList.remove('hidden');
+        requestAnimationFrame(() => mandatoryTrailsModal.classList.add('is-visible'));
+
+        if (mandatoryBackdrop) mandatoryBackdrop.addEventListener('click', closeMandatoryModal);
+        if (mandatoryLater) mandatoryLater.addEventListener('click', closeMandatoryModal);
     }
 
     // Status buttons functionality

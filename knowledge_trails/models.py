@@ -140,6 +140,25 @@ class KnowledgeTrail(models.Model):
         help_text='Logo que aparecerá no certificado'
     )
     
+    # Obrigatoriedade
+    mandatory_users = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='mandatory_trails',
+        verbose_name='Usuários Obrigatórios',
+        help_text='Usuários que devem concluir esta trilha'
+    )
+    mandatory_start_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Início do Período Obrigatório'
+    )
+    mandatory_end_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Fim do Período Obrigatório'
+    )
+
     # Metadados
     created_by = models.ForeignKey(
         User,
@@ -204,6 +223,45 @@ class KnowledgeTrail(models.Model):
         ).annotate(
             total_points=Sum('lesson_progresses__lesson__points')
         ).order_by('-total_points', 'completed_at')[:10]
+
+    def is_mandatory_period_active(self, reference_date=None):
+        """Verifica se a trilha está dentro do período obrigatório"""
+        if reference_date is None:
+            reference_date = timezone.localdate()
+        if self.mandatory_start_date and reference_date < self.mandatory_start_date:
+            return False
+        if self.mandatory_end_date and reference_date > self.mandatory_end_date:
+            return False
+        # Só é considerada obrigatória se houver ao menos uma data definida
+        return bool(self.mandatory_start_date or self.mandatory_end_date)
+
+    @classmethod
+    def get_pending_mandatory_for_user(cls, user, reference_date=None):
+        """Retorna as trilhas obrigatórias ainda não concluídas pelo usuário,
+        dentro do período definido."""
+        if reference_date is None:
+            reference_date = timezone.localdate()
+
+        trails = cls.objects.filter(
+            is_active=True,
+            mandatory_users=user
+        ).prefetch_related('user_progresses')
+
+        # Trilhas concluídas pelo usuário
+        completed_trail_ids = set(
+            TrailProgress.objects.filter(
+                user=user,
+                status='completed'
+            ).values_list('trail_id', flat=True)
+        )
+
+        pending = []
+        for trail in trails:
+            if trail.id in completed_trail_ids:
+                continue
+            if trail.is_mandatory_period_active(reference_date):
+                pending.append(trail)
+        return pending
 
 
 class TrailModule(models.Model):
