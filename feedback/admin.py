@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Feedback, FeedbackAssignment, FeedbackReminderDismissal
+from .models import (
+    ClimateSurveyParticipation,
+    ClimateSurveyResponse,
+    Feedback,
+    FeedbackAssignment,
+    FeedbackReminderDismissal,
+)
 
 
 @admin.register(FeedbackAssignment)
@@ -30,3 +36,21 @@ class FeedbackAdmin(admin.ModelAdmin):
 class FeedbackReminderDismissalAdmin(admin.ModelAdmin):
     list_display = ('user', 'key', 'dismissed_at')
     search_fields = ('user__first_name', 'user__last_name', 'user__email', 'key')
+
+
+@admin.register(ClimateSurveyParticipation)
+class ClimateSurveyParticipationAdmin(admin.ModelAdmin):
+    list_display = ('user', 'sector', 'status', 'last_step', 'started_at', 'completed_at')
+    list_filter = ('survey_key', 'status', 'sector')
+    search_fields = ('user__first_name', 'user__last_name', 'user__email', 'sector__name', 'last_step')
+    autocomplete_fields = ('user', 'sector')
+    readonly_fields = ('started_at', 'updated_at', 'completed_at')
+
+
+@admin.register(ClimateSurveyResponse)
+class ClimateSurveyResponseAdmin(admin.ModelAdmin):
+    list_display = ('sector', 'survey_key', 'submitted_at')
+    list_filter = ('survey_key', 'sector', 'submitted_at')
+    search_fields = ('sector__name',)
+    autocomplete_fields = ('sector',)
+    readonly_fields = ('answers', 'submitted_at')

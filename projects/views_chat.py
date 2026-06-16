@@ -8,8 +8,87 @@ from django.contrib import messages
 from django.db import models
 
 from .models import Activity
-from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent, SupportCategory, SupportChatRating, SupportChatFile, SupportChatFile
+from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent, SupportCategory, SupportChatRating, SupportChatFile, SupportTransferRequest
 from users.models import User
+
+
+def _user_is_supervisor_or_higher(user):
+    return user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or user.is_superuser
+
+
+def _user_sector_ids(user):
+    sector_ids = set(user.sectors.values_list('id', flat=True))
+    if getattr(user, 'sector_id', None):
+        sector_ids.add(user.sector_id)
+    return sector_ids
+
+
+def _can_view_transfer(user, transfer):
+    if _user_is_supervisor_or_higher(user):
+        return True
+    if transfer.created_by_id == user.id:
+        return True
+    if transfer.sending_manager_id == user.id or transfer.receiving_manager_id == user.id:
+        return True
+    sector_ids = _user_sector_ids(user)
+    return transfer.sending_sector_id in sector_ids or transfer.receiving_sector_id in sector_ids
+
+
+def _serialize_transfer(transfer, user):
+    return {
+        'id': transfer.id,
+        'sending_sector': {
+            'id': transfer.sending_sector_id,
+            'name': transfer.sending_sector.name,
+        },
+        'sending_manager': {
+            'id': transfer.sending_manager_id,
+            'name': transfer.sending_manager.get_full_name() or transfer.sending_manager.username,
+        },
+        'receiving_sector': {
+            'id': transfer.receiving_sector_id,
+            'name': transfer.receiving_sector.name,
+        },
+        'receiving_manager': {
+            'id': transfer.receiving_manager_id,
+            'name': transfer.receiving_manager.get_full_name() or transfer.receiving_manager.username,
+        },
+        'imei': transfer.imei,
+        'product_name': transfer.product_name,
+        'status': transfer.status,
+        'status_display': transfer.get_status_display(),
+        'response_notes': transfer.response_notes,
+        'created_by': transfer.created_by.get_full_name() or transfer.created_by.username,
+        'created_at': timezone.localtime(transfer.created_at).strftime('%d/%m/%Y %H:%M'),
+        'responded_at': timezone.localtime(transfer.responded_at).strftime('%d/%m/%Y %H:%M') if transfer.responded_at else '',
+        'responded_by': transfer.responded_by.get_full_name() if transfer.responded_by else '',
+        'can_respond': transfer.receiving_manager_id == user.id or _user_is_supervisor_or_higher(user),
+        'can_cancel': transfer.created_by_id == user.id and transfer.status == 'AGUARDANDO_RECEBIMENTO',
+    }
+
+
+def _notify_transfer_request(transfer):
+    try:
+        from notifications.models import PushNotification, UserNotification
+
+        notification = PushNotification.objects.create(
+            title='Transferência aguardando resposta',
+            message=f'{transfer.sending_sector.name} solicitou transferência de {transfer.product_name} para {transfer.receiving_sector.name}.',
+            notification_type='CUSTOM',
+            priority='HIGH',
+            action_url='/',
+            action_text='Ver Transferência',
+            created_by=transfer.created_by,
+            is_sent=True,
+        )
+        notification.target_users.add(transfer.receiving_manager)
+        UserNotification.objects.create(
+            notification=notification,
+            user=transfer.receiving_manager,
+            is_read=False,
+        )
+    except Exception:
+        pass
 
 
 @login_required
@@ -584,6 +663,171 @@ def get_user_sectors(request):
     sectors_data = [{'id': s.id, 'name': s.name} for s in sectors]
     
     return JsonResponse({'success': True, 'sectors': sectors_data})
+
+
+@login_required
+def transfer_sectors(request):
+    """Lista todos os setores disponíveis para solicitações de transferência."""
+    from users.models import Sector
+
+    sectors = Sector.objects.all().order_by('name')
+    return JsonResponse({
+        'success': True,
+        'sectors': [{'id': sector.id, 'name': sector.name} for sector in sectors]
+    })
+
+
+@login_required
+def transfer_users_by_sector(request, sector_id):
+    """Lista usuários ativos vinculados ao setor selecionado."""
+    from users.models import Sector
+
+    get_object_or_404(Sector, id=sector_id)
+    users = (
+        User.objects
+        .filter(Q(sector_id=sector_id) | Q(sectors__id=sector_id), is_active=True)
+        .distinct()
+        .order_by('first_name', 'last_name', 'username')
+    )
+
+    return JsonResponse({
+        'success': True,
+        'users': [
+            {
+                'id': user.id,
+                'name': user.get_full_name() or user.username,
+                'email': user.email,
+                'hierarchy': user.get_hierarchy_display(),
+            }
+            for user in users
+        ]
+    })
+
+
+@login_required
+def support_transfer_list(request):
+    """Lista transferências relacionadas ao usuário logado."""
+    sector_ids = _user_sector_ids(request.user)
+    filters = (
+        Q(created_by=request.user)
+        | Q(sending_manager=request.user)
+        | Q(receiving_manager=request.user)
+        | Q(sending_sector_id__in=sector_ids)
+        | Q(receiving_sector_id__in=sector_ids)
+    )
+
+    if _user_is_supervisor_or_higher(request.user):
+        transfers = SupportTransferRequest.objects.all()
+    else:
+        transfers = SupportTransferRequest.objects.filter(filters)
+
+    transfers = transfers.select_related(
+        'created_by',
+        'sending_sector',
+        'sending_manager',
+        'receiving_sector',
+        'receiving_manager',
+        'responded_by',
+    ).order_by('-created_at')[:50]
+
+    return JsonResponse({
+        'success': True,
+        'transfers': [_serialize_transfer(transfer, request.user) for transfer in transfers]
+    })
+
+
+@login_required
+@require_POST
+def create_support_transfer(request):
+    """Cria uma solicitação de transferência aguardando resposta da loja recebedora."""
+    from users.models import Sector
+
+    required_fields = [
+        'sending_sector_id',
+        'sending_manager_id',
+        'receiving_sector_id',
+        'receiving_manager_id',
+        'imei',
+        'product_name',
+    ]
+    missing = [field for field in required_fields if not (request.POST.get(field) or '').strip()]
+    if missing:
+        return JsonResponse({'success': False, 'error': 'Preencha todos os campos da transferência.'}, status=400)
+
+    sending_sector = get_object_or_404(Sector, id=request.POST.get('sending_sector_id'))
+    receiving_sector = get_object_or_404(Sector, id=request.POST.get('receiving_sector_id'))
+    sending_manager = get_object_or_404(User, id=request.POST.get('sending_manager_id'), is_active=True)
+    receiving_manager = get_object_or_404(User, id=request.POST.get('receiving_manager_id'), is_active=True)
+
+    if sending_sector.id == receiving_sector.id:
+        return JsonResponse({'success': False, 'error': 'A loja que envia e a loja que recebe devem ser diferentes.'}, status=400)
+
+    transfer = SupportTransferRequest.objects.create(
+        created_by=request.user,
+        sending_sector=sending_sector,
+        sending_manager=sending_manager,
+        receiving_sector=receiving_sector,
+        receiving_manager=receiving_manager,
+        imei=request.POST.get('imei', '').strip(),
+        product_name=request.POST.get('product_name', '').strip(),
+    )
+
+    _notify_transfer_request(transfer)
+
+    return JsonResponse({
+        'success': True,
+        'transfer': _serialize_transfer(transfer, request.user),
+        'message': 'Transferência criada e enviada para resposta da loja recebedora.',
+    })
+
+
+@login_required
+@require_POST
+def respond_support_transfer(request, transfer_id):
+    """Aceita, recusa ou cancela uma solicitação de transferência."""
+    transfer = get_object_or_404(
+        SupportTransferRequest.objects.select_related(
+            'created_by',
+            'sending_sector',
+            'sending_manager',
+            'receiving_sector',
+            'receiving_manager',
+            'responded_by',
+        ),
+        id=transfer_id,
+    )
+
+    if not _can_view_transfer(request.user, transfer):
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+
+    action = (request.POST.get('action') or '').strip().upper()
+    notes = (request.POST.get('notes') or '').strip()
+
+    if action == 'CANCELAR':
+        if transfer.created_by_id != request.user.id and not _user_is_supervisor_or_higher(request.user):
+            return JsonResponse({'success': False, 'error': 'Apenas quem criou a solicitação pode cancelar.'}, status=403)
+        if transfer.status != 'AGUARDANDO_RECEBIMENTO':
+            return JsonResponse({'success': False, 'error': 'Apenas transferências aguardando resposta podem ser canceladas.'}, status=400)
+        transfer.status = 'CANCELADA'
+    elif action in ['ACEITAR', 'RECUSAR']:
+        if transfer.receiving_manager_id != request.user.id and not _user_is_supervisor_or_higher(request.user):
+            return JsonResponse({'success': False, 'error': 'Apenas o responsável/ADM da loja recebedora pode responder.'}, status=403)
+        if transfer.status != 'AGUARDANDO_RECEBIMENTO':
+            return JsonResponse({'success': False, 'error': 'Esta transferência já foi respondida.'}, status=400)
+        transfer.status = 'ACEITA' if action == 'ACEITAR' else 'RECUSADA'
+    else:
+        return JsonResponse({'success': False, 'error': 'Ação inválida.'}, status=400)
+
+    transfer.response_notes = notes
+    transfer.responded_by = request.user
+    transfer.responded_at = timezone.now()
+    transfer.save(update_fields=['status', 'response_notes', 'responded_by', 'responded_at', 'updated_at'])
+
+    return JsonResponse({
+        'success': True,
+        'transfer': _serialize_transfer(transfer, request.user),
+        'message': 'Transferência atualizada.',
+    })
 
 
 @login_required

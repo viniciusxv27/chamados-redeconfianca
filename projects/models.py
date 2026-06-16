@@ -470,4 +470,4 @@ class ActivityComment(models.Model):
 
 
 # Modelos de Chat importados
-from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent
+from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent, SupportTransferRequest

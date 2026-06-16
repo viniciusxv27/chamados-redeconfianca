@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Relatório - Pesquisa de Clima{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-7xl mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-chart-bar mr-2 text-sky-600"></i>Relatório da Pesquisa de Clima</h1>
+        <p class="text-sm text-gray-500 mt-1">Participação nominal separada das respostas anônimas por setor.</p>
+      </div>
+      <a href="{% url 'feedback:climate_survey' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Colaboradores</p>
+        <p class="text-3xl font-bold text-gray-900">{{ totals.total }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Concluíram</p>
+        <p class="text-3xl font-bold text-green-600">{{ totals.completed }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Em andamento</p>
+        <p class="text-3xl font-bold text-yellow-600">{{ totals.in_progress }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">Não iniciaram</p>
+        <p class="text-3xl font-bold text-red-600">{{ totals.not_started }}</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow">
+        <p class="text-sm text-gray-500">% Conclusão</p>
+        <p class="text-3xl font-bold text-sky-600">{{ totals.completed_pct }}%</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow mb-6">
+      <div class="p-5 border-b">
+        <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-store mr-2 text-blue-500"></i>Participação por setor</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-3 text-left">Setor</th>
+              <th class="p-3 text-right">Total</th>
+              <th class="p-3 text-right">Concluíram</th>
+              <th class="p-3 text-right">Em andamento</th>
+              <th class="p-3 text-right">Não iniciaram</th>
+              <th class="p-3 text-right">% Conclusão</th>
+              <th class="p-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for row in overview %}
+              <tr class="hover:bg-gray-50">
+                <td class="p-3 font-medium text-gray-900">{{ row.sector_name }}</td>
+                <td class="p-3 text-right">{{ row.total }}</td>
+                <td class="p-3 text-right text-green-600 font-semibold">{{ row.completed }}</td>
+                <td class="p-3 text-right text-yellow-600 font-semibold">{{ row.in_progress }}</td>
+                <td class="p-3 text-right text-red-600 font-semibold">{{ row.not_started }}</td>
+                <td class="p-3 text-right">
+                  <span class="font-semibold {% if row.completed_pct >= 80 %}text-green-600{% elif row.completed_pct >= 50 %}text-yellow-600{% else %}text-red-600{% endif %}">{{ row.completed_pct }}%</span>
+                </td>
+                <td class="p-3 text-right">
+                  {% if row.sector %}
+                    <a href="?sector={{ row.sector.id }}" class="text-sky-600 hover:underline text-xs">Detalhar</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="p-6 text-center text-gray-500">Nenhum colaborador encontrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div class="lg:col-span-2 bg-white rounded-xl shadow">
+        <div class="p-5 border-b">
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-star-half-alt mr-2 text-amber-500"></i>Médias por pergunta</h2>
+          <p class="text-xs text-gray-500 mt-1">Escala de 1 a 5, calculada somente sobre respostas anônimas.</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="p-3 text-left">Bloco</th>
+                <th class="p-3 text-left">Pergunta</th>
+                <th class="p-3 text-right">Respostas</th>
+                <th class="p-3 text-right">Média</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              {% for item in question_stats %}
+                <tr class="hover:bg-gray-50">
+                  <td class="p-3 text-gray-600">{{ item.section }}</td>
+                  <td class="p-3 text-gray-900">{{ item.question }}</td>
+                  <td class="p-3 text-right">{{ item.count }}</td>
+                  <td class="p-3 text-right font-semibold {% if item.avg and item.avg >= 4 %}text-green-600{% elif item.avg and item.avg >= 3 %}text-yellow-600{% elif item.avg %}text-red-600{% else %}text-gray-500{% endif %}">
+                    {{ item.avg|default:"-" }}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow">
+        <div class="p-5 border-b">
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-route mr-2 text-purple-500"></i>Paradas por etapa</h2>
+        </div>
+        <div class="p-5 space-y-3">
+          {% for item in dropout %}
+            <div class="flex items-center justify-between border rounded-lg px-3 py-2">
+              <span class="text-sm text-gray-700">{{ item.last_step|default:"Sem etapa" }}</span>
+              <span class="text-sm font-semibold text-purple-600">{{ item.total }}</span>
+            </div>
+          {% empty %}
+            <p class="text-sm text-gray-500">Nenhum formulário em andamento.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow">
+      <div class="p-5 border-b flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-users mr-2 text-teal-500"></i>Participação{% if selected_sector %} - {{ selected_sector.name }}{% endif %}</h2>
+          <p class="text-xs text-gray-500">Esta lista mostra quem concluiu ou não, mas não aponta as respostas dadas.</p>
+        </div>
+        <form method="get" class="flex flex-wrap gap-2 items-end">
+          <div>
+            <label class="block text-xs text-gray-500">Setor</label>
+            <select name="sector" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="">Todos</option>
+              {% for sector in all_sectors %}
+                <option value="{{ sector.id }}" {% if selected_sector and selected_sector.id == sector.id %}selected{% endif %}>{{ sector.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500">Status</label>
+            <select name="status" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="" {% if not status_filter %}selected{% endif %}>Todos</option>
+              <option value="completed" {% if status_filter == "completed" %}selected{% endif %}>Concluída</option>
+              <option value="in_progress" {% if status_filter == "in_progress" %}selected{% endif %}>Em andamento</option>
+              <option value="not_started" {% if status_filter == "not_started" %}selected{% endif %}>Não iniciou</option>
+            </select>
+          </div>
+          <button type="submit" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-sm hover:bg-sky-700">Filtrar</button>
+          {% if selected_sector or status_filter %}
+            <a href="{% url 'feedback:climate_survey_report' %}" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Limpar</a>
+          {% endif %}
+        </form>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-3 text-left">Colaborador</th>
+              <th class="p-3 text-left">Setor</th>
+              <th class="p-3 text-left">Status</th>
+              <th class="p-3 text-left">Última etapa</th>
+              <th class="p-3 text-left">Concluído em</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for row in detailed %}
+              <tr class="hover:bg-gray-50">
+                <td class="p-3">
+                  <p class="font-medium text-gray-900">{{ row.user.get_full_name|default:row.user.username }}</p>
+                  <p class="text-xs text-gray-500">{{ row.user.email }}</p>
+                </td>
+                <td class="p-3">{{ row.sector.name|default:"Sem setor" }}</td>
+                <td class="p-3">
+                  {% if row.status == "COMPLETED" %}
+                    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700"><i class="fas fa-check"></i>{{ row.status_label }}</span>
+                  {% elif row.status == "IN_PROGRESS" %}
+                    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700"><i class="fas fa-hourglass-half"></i>{{ row.status_label }}</span>
+                  {% else %}
+                    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-100 text-red-700"><i class="fas fa-times"></i>{{ row.status_label }}</span>
+                  {% endif %}
+                </td>
+                <td class="p-3 text-gray-600">{{ row.participation.last_step|default:"-" }}</td>
+                <td class="p-3 text-gray-600">{{ row.participation.completed_at|date:"d/m/Y H:i"|default:"-" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="p-6 text-center text-gray-500">Nenhum colaborador encontrado com os filtros atuais.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -13,7 +13,13 @@ from users.models import Sector, User
 
 from .ai import generate_ai_summary, transcribe_feedback_audio
 from .forms import AssignmentForm, FeedbackForm
-from .models import Feedback, FeedbackAssignment, FeedbackReminderDismissal
+from .models import (
+    ClimateSurveyParticipation,
+    ClimateSurveyResponse,
+    Feedback,
+    FeedbackAssignment,
+    FeedbackReminderDismissal,
+)
 from .reminders import get_pending_reminders
 
 
@@ -23,6 +29,90 @@ def _is_superadmin(user) -> bool:
     if user.is_superuser:
         return True
     return getattr(user, 'hierarchy', '') == 'SUPERADMIN'
+
+
+CLIMATE_SURVEY_KEY = 'clima_organizacional_2026'
+
+CLIMATE_LIKERT_OPTIONS = [
+    (1, 'Discordo totalmente'),
+    (2, 'Discordo'),
+    (3, 'Neutro'),
+    (4, 'Concordo'),
+    (5, 'Concordo totalmente'),
+]
+
+CLIMATE_SURVEY_SECTIONS = [
+    {
+        'key': 'ambiente',
+        'title': 'Ambiente de trabalho',
+        'questions': [
+            {'key': 'ambiente_recursos', 'label': 'Tenho os recursos e ferramentas necessários para realizar meu trabalho.'},
+            {'key': 'ambiente_condicoes', 'label': 'As condições físicas do meu ambiente de trabalho são adequadas.'},
+            {'key': 'ambiente_carga', 'label': 'Minha carga de trabalho é equilibrada.'},
+            {'key': 'ambiente_seguranca', 'label': 'Sinto-me seguro(a) para realizar minhas atividades diárias.'},
+        ],
+    },
+    {
+        'key': 'lideranca',
+        'title': 'Liderança',
+        'questions': [
+            {'key': 'lideranca_orientacao', 'label': 'Recebo orientações claras da minha liderança.'},
+            {'key': 'lideranca_feedback', 'label': 'Recebo feedbacks que ajudam no meu desenvolvimento.'},
+            {'key': 'lideranca_respeito', 'label': 'Minha liderança me trata com respeito.'},
+            {'key': 'lideranca_abertura', 'label': 'Tenho abertura para falar com minha liderança quando necessário.'},
+        ],
+    },
+    {
+        'key': 'comunicacao',
+        'title': 'Comunicação e relacionamento',
+        'questions': [
+            {'key': 'comunicacao_clareza', 'label': 'A comunicação interna é clara e chega no momento certo.'},
+            {'key': 'comunicacao_equipe', 'label': 'Minha equipe coopera para atingir os resultados.'},
+            {'key': 'comunicacao_respeito', 'label': 'Os conflitos são tratados com respeito.'},
+            {'key': 'comunicacao_integracao', 'label': 'Sinto que existe integração entre os setores/lojas.'},
+        ],
+    },
+    {
+        'key': 'reconhecimento',
+        'title': 'Reconhecimento e desenvolvimento',
+        'questions': [
+            {'key': 'reconhecimento_trabalho', 'label': 'Meu trabalho é reconhecido pela empresa.'},
+            {'key': 'reconhecimento_crescimento', 'label': 'Vejo oportunidades de crescimento profissional.'},
+            {'key': 'reconhecimento_treinamento', 'label': 'Os treinamentos recebidos me preparam para a função.'},
+            {'key': 'reconhecimento_justica', 'label': 'Percebo justiça nas decisões que impactam minha rotina.'},
+        ],
+    },
+    {
+        'key': 'engajamento',
+        'title': 'Cultura e engajamento',
+        'questions': [
+            {'key': 'engajamento_orgulho', 'label': 'Tenho orgulho de trabalhar na empresa.'},
+            {'key': 'engajamento_metas', 'label': 'Conheço as metas e objetivos esperados para meu trabalho.'},
+            {'key': 'engajamento_recomendacao', 'label': 'Eu recomendaria a empresa como um bom lugar para trabalhar.'},
+            {'key': 'engajamento_permanencia', 'label': 'Tenho vontade de continuar trabalhando aqui.'},
+        ],
+    },
+]
+
+CLIMATE_OPEN_QUESTIONS = [
+    {'key': 'aberta_pontos_positivos', 'label': 'O que você mais gosta no seu ambiente de trabalho?'},
+    {'key': 'aberta_melhorias', 'label': 'O que precisa melhorar para o clima ficar melhor?'},
+    {'key': 'aberta_sugestoes', 'label': 'Deixe sugestões, comentários ou observações.'},
+]
+
+
+def _climate_question_keys():
+    keys = []
+    for section in CLIMATE_SURVEY_SECTIONS:
+        keys.extend(question['key'] for question in section['questions'])
+    return keys
+
+
+def _primary_sector_for_user(user):
+    primary_sector = getattr(user, 'primary_sector', None)
+    if callable(primary_sector):
+        primary_sector = primary_sector()
+    return primary_sector
 
 
 def superadmin_required(view_func):
@@ -67,6 +157,250 @@ def my_pending(request):
         evaluator=request.user, status='ACTIVE'
     ).select_related('evaluatee').order_by('-created_at')
     return render(request, 'feedback/pending.html', {'my_targets': my_targets})
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def climate_survey(request):
+    user = request.user
+    user_sector_ids = list(user.sectors.values_list('id', flat=True))
+    if user.sector_id and user.sector_id not in user_sector_ids:
+        user_sector_ids.append(user.sector_id)
+
+    available_sectors = Sector.objects.filter(id__in=user_sector_ids).order_by('name')
+    if not available_sectors.exists():
+        available_sectors = Sector.objects.all().order_by('name')
+
+    selected_sector = _primary_sector_for_user(user) or available_sectors.first()
+    participation, _ = ClimateSurveyParticipation.objects.get_or_create(
+        survey_key=CLIMATE_SURVEY_KEY,
+        user=user,
+        defaults={
+            'sector': selected_sector,
+            'last_step': 'Identificação',
+        },
+    )
+
+    if request.method == 'POST':
+        sector_id = request.POST.get('sector')
+        sector = Sector.objects.filter(id=sector_id).first()
+        if not sector:
+            messages.error(request, 'Selecione o setor para responder a pesquisa.')
+            return redirect('feedback:climate_survey')
+
+        answers = {'likert': {}, 'open': {}}
+        missing = []
+        for key in _climate_question_keys():
+            value = request.POST.get(key)
+            try:
+                value_int = int(value)
+            except (TypeError, ValueError):
+                missing.append(key)
+                continue
+            if value_int not in [1, 2, 3, 4, 5]:
+                missing.append(key)
+                continue
+            answers['likert'][key] = value_int
+
+        if missing:
+            messages.error(request, 'Responda todas as perguntas de escala antes de enviar.')
+            return redirect('feedback:climate_survey')
+
+        for question in CLIMATE_OPEN_QUESTIONS:
+            answers['open'][question['key']] = (request.POST.get(question['key']) or '').strip()
+
+        ClimateSurveyResponse.objects.create(
+            survey_key=CLIMATE_SURVEY_KEY,
+            sector=sector,
+            answers=answers,
+        )
+
+        participation.sector = sector
+        participation.status = 'COMPLETED'
+        participation.last_step = 'Concluída'
+        participation.completed_at = timezone.now()
+        participation.save(update_fields=['sector', 'status', 'last_step', 'completed_at', 'updated_at'])
+
+        messages.success(request, 'Pesquisa de Clima enviada com sucesso. Obrigado por participar.')
+        return redirect('feedback:climate_survey')
+
+    if participation.status != 'COMPLETED':
+        if selected_sector and participation.sector_id != selected_sector.id:
+            participation.sector = selected_sector
+        if not participation.last_step:
+            participation.last_step = 'Identificação'
+        participation.save(update_fields=['sector', 'last_step', 'updated_at'])
+
+    return render(request, 'feedback/climate_survey.html', {
+        'survey_key': CLIMATE_SURVEY_KEY,
+        'sections': CLIMATE_SURVEY_SECTIONS,
+        'open_questions': CLIMATE_OPEN_QUESTIONS,
+        'likert_options': CLIMATE_LIKERT_OPTIONS,
+        'available_sectors': available_sectors,
+        'selected_sector': selected_sector,
+        'participation': participation,
+        'already_completed': participation.status == 'COMPLETED',
+        'is_superadmin': _is_superadmin(user),
+    })
+
+
+@login_required
+@require_POST
+def climate_survey_progress(request):
+    import json
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        payload = {}
+
+    step = (payload.get('step') or request.POST.get('step') or '').strip()[:120]
+    sector_id = payload.get('sector') or request.POST.get('sector')
+    sector = Sector.objects.filter(id=sector_id).first() if sector_id else _primary_sector_for_user(request.user)
+
+    participation, _ = ClimateSurveyParticipation.objects.get_or_create(
+        survey_key=CLIMATE_SURVEY_KEY,
+        user=request.user,
+        defaults={
+            'sector': sector,
+            'last_step': step or 'Identificação',
+        },
+    )
+
+    if participation.status != 'COMPLETED':
+        if step:
+            participation.last_step = step
+        if sector:
+            participation.sector = sector
+        participation.save(update_fields=['sector', 'last_step', 'updated_at'])
+
+    return JsonResponse({'success': True})
+
+
+@superadmin_required
+def climate_survey_report(request):
+    sector_filter_id = request.GET.get('sector')
+    status_filter = (request.GET.get('status') or '').strip().lower()
+
+    users_qs = User.objects.filter(is_active=True).select_related('sector').prefetch_related('sectors').order_by('first_name', 'last_name')
+    participations = {
+        item.user_id: item
+        for item in ClimateSurveyParticipation.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('user', 'sector')
+    }
+
+    rows = []
+    for user in users_qs:
+        sector = _primary_sector_for_user(user)
+        participation = participations.get(user.id)
+        if participation and participation.sector:
+            sector = participation.sector
+        status = participation.status if participation else 'NOT_STARTED'
+        rows.append({
+            'user': user,
+            'sector': sector,
+            'participation': participation,
+            'status': status,
+            'status_label': {
+                'COMPLETED': 'Concluída',
+                'IN_PROGRESS': 'Em andamento',
+                'NOT_STARTED': 'Não iniciou',
+            }.get(status, status),
+        })
+
+    selected_sector = None
+    if sector_filter_id:
+        try:
+            selected_sector = Sector.objects.filter(id=int(sector_filter_id)).first()
+            rows = [row for row in rows if row['sector'] and selected_sector and row['sector'].id == selected_sector.id]
+        except (TypeError, ValueError):
+            selected_sector = None
+
+    if status_filter in ['completed', 'in_progress', 'not_started']:
+        status_map = {
+            'completed': 'COMPLETED',
+            'in_progress': 'IN_PROGRESS',
+            'not_started': 'NOT_STARTED',
+        }
+        rows = [row for row in rows if row['status'] == status_map[status_filter]]
+
+    overview_map = {}
+    all_users_rows = []
+    for user in users_qs:
+        sector = _primary_sector_for_user(user)
+        participation = participations.get(user.id)
+        if participation and participation.sector:
+            sector = participation.sector
+        status = participation.status if participation else 'NOT_STARTED'
+        key = sector.id if sector else 0
+        bucket = overview_map.setdefault(key, {
+            'sector': sector,
+            'sector_name': sector.name if sector else 'Sem setor',
+            'total': 0,
+            'completed': 0,
+            'in_progress': 0,
+            'not_started': 0,
+        })
+        bucket['total'] += 1
+        if status == 'COMPLETED':
+            bucket['completed'] += 1
+        elif status == 'IN_PROGRESS':
+            bucket['in_progress'] += 1
+        else:
+            bucket['not_started'] += 1
+        all_users_rows.append({'sector': sector, 'status': status})
+
+    overview = sorted(overview_map.values(), key=lambda item: item['sector_name'].lower())
+    for bucket in overview:
+        bucket['completed_pct'] = round((bucket['completed'] / bucket['total']) * 100, 1) if bucket['total'] else 0.0
+
+    responses = ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('sector')
+    if selected_sector:
+        responses = responses.filter(sector=selected_sector)
+
+    question_stats = []
+    for section in CLIMATE_SURVEY_SECTIONS:
+        for question in section['questions']:
+            values = []
+            for response in responses:
+                value = (response.answers or {}).get('likert', {}).get(question['key'])
+                if isinstance(value, int):
+                    values.append(value)
+            avg = round(sum(values) / len(values), 2) if values else None
+            question_stats.append({
+                'section': section['title'],
+                'question': question['label'],
+                'avg': avg,
+                'count': len(values),
+            })
+
+    dropout = (
+        ClimateSurveyParticipation.objects
+        .filter(survey_key=CLIMATE_SURVEY_KEY, status='IN_PROGRESS')
+        .values('last_step')
+        .annotate(total=Count('id'))
+        .order_by('-total', 'last_step')
+    )
+
+    totals = {
+        'total': len(all_users_rows),
+        'completed': sum(1 for row in all_users_rows if row['status'] == 'COMPLETED'),
+        'in_progress': sum(1 for row in all_users_rows if row['status'] == 'IN_PROGRESS'),
+        'not_started': sum(1 for row in all_users_rows if row['status'] == 'NOT_STARTED'),
+        'responses': ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count(),
+    }
+    totals['completed_pct'] = round((totals['completed'] / totals['total']) * 100, 1) if totals['total'] else 0.0
+
+    return render(request, 'feedback/climate_report.html', {
+        'totals': totals,
+        'overview': overview,
+        'detailed': rows,
+        'question_stats': question_stats,
+        'dropout': dropout,
+        'selected_sector': selected_sector,
+        'status_filter': status_filter,
+        'all_sectors': Sector.objects.all().order_by('name'),
+        'survey_key': CLIMATE_SURVEY_KEY,
+    })
 
 
 @login_required

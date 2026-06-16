@@ -259,6 +259,13 @@
                                     </a>
                                 </li>
                                 <li>
+                                    <a href="{% url 'feedback:climate_survey' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Pesquisa de Clima">
+                                        <i class="fas fa-cloud-sun text-sky-400 flex-shrink-0"></i>
+                                        <span>Pesquisa de Clima</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
                                     <a href="{% url 'checklists:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Checklists ADM">
                                         <i class="fas fa-clipboard-check text-green-400 flex-shrink-0"></i>
                                         <span>Checklists ADM</span>
@@ -1857,11 +1864,14 @@
             <!-- Chat Tabs -->
             <div class="bg-gray-50 border-b border-gray-200 flex-shrink-0">
                 <div class="flex">
-                    <button id="newChatTab" class="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-white">
+                    <button id="newChatTab" class="flex-1 px-2 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-white">
                         Novo Chat
                     </button>
-                    <button id="myChatTab" class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+                    <button id="myChatTab" class="flex-1 px-2 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
                         Meus Chats
+                    </button>
+                    <button id="transferChatTab" class="flex-1 px-2 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+                        Transferência
                     </button>
                 </div>
             </div>
@@ -1923,6 +1933,71 @@
             <div id="myChatsList" class="hidden flex-1 overflow-y-auto min-h-0">
                 <div id="supportChatList" class="p-2">
                     <!-- Chats will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Transfer Requests -->
+            <div id="transferRequestsView" class="hidden flex-1 overflow-y-auto min-h-0">
+                <div class="p-4 space-y-4">
+                    <form id="createTransferForm" class="space-y-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        {% csrf_token %}
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Loja que irá enviar</label>
+                            <select id="transferSendingSector" required
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione o setor</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Gerente responsável/ADM a enviar</label>
+                            <select id="transferSendingManager" required disabled
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100">
+                                <option value="">Selecione o usuário</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Loja que irá receber</label>
+                            <select id="transferReceivingSector" required
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione o setor</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Gerente responsável/ADM a receber</label>
+                            <select id="transferReceivingManager" required disabled
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100">
+                                <option value="">Selecione o usuário</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">IMEI</label>
+                            <input type="text" id="transferImei" required maxlength="40"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Informe o IMEI">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nome Produto</label>
+                            <input type="text" id="transferProductName" required maxlength="200"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Informe o produto">
+                        </div>
+                        <button type="submit"
+                                class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium transition-colors">
+                            <i class="fas fa-exchange-alt mr-2"></i>Criar Transferência
+                        </button>
+                    </form>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-sm font-semibold text-gray-800">Cards de Transferência</h4>
+                            <button type="button" onclick="window.loadTransferRequests()" class="text-xs text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-sync-alt mr-1"></i>Atualizar
+                            </button>
+                        </div>
+                        <div id="transferRequestsList" class="space-y-2">
+                            <div class="text-center text-gray-500 text-sm py-4">Carregando transferências...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -2009,32 +2084,42 @@
     window.switchTab = function(tab) {
         const newChatTab = document.getElementById('newChatTab');
         const myChatTab = document.getElementById('myChatTab');
+        const transferChatTab = document.getElementById('transferChatTab');
         const newChatForm = document.getElementById('newChatForm');
         const myChatsList = document.getElementById('myChatsList');
+        const transferRequestsView = document.getElementById('transferRequestsView');
         const activeChatView = document.getElementById('activeChatView');
         
-        if (!newChatTab || !myChatTab || !newChatForm || !myChatsList || !activeChatView) {
+        if (!newChatTab || !myChatTab || !transferChatTab || !newChatForm || !myChatsList || !transferRequestsView || !activeChatView) {
             console.error('switchTab: elementos não encontrados');
             return;
         }
+
+        [newChatTab, myChatTab, transferChatTab].forEach(button => {
+            button.classList.remove('text-blue-600', 'border-blue-600', 'bg-white');
+            button.classList.add('text-gray-600');
+        });
+
+        newChatForm.classList.add('hidden');
+        myChatsList.classList.add('hidden');
+        transferRequestsView.classList.add('hidden');
+        activeChatView.classList.add('hidden');
         
         if (tab === 'new') {
             newChatTab.classList.add('text-blue-600', 'border-blue-600', 'bg-white');
             newChatTab.classList.remove('text-gray-600');
-            myChatTab.classList.remove('text-blue-600', 'border-blue-600', 'bg-white');
-            myChatTab.classList.add('text-gray-600');
             newChatForm.classList.remove('hidden');
-            myChatsList.classList.add('hidden');
-            activeChatView.classList.add('hidden');
             if (window.loadSectors) window.loadSectors();
+        } else if (tab === 'transfer') {
+            transferChatTab.classList.add('text-blue-600', 'border-blue-600', 'bg-white');
+            transferChatTab.classList.remove('text-gray-600');
+            transferRequestsView.classList.remove('hidden');
+            if (window.loadTransferSectors) window.loadTransferSectors();
+            if (window.loadTransferRequests) window.loadTransferRequests();
         } else {
             myChatTab.classList.add('text-blue-600', 'border-blue-600', 'bg-white');
             myChatTab.classList.remove('text-gray-600');
-            newChatTab.classList.remove('text-blue-600', 'border-blue-600', 'bg-white');
-            newChatTab.classList.add('text-gray-600');
-            newChatForm.classList.add('hidden');
             myChatsList.classList.remove('hidden');
-            activeChatView.classList.add('hidden');
         }
     };
     
@@ -2664,6 +2749,201 @@
             });
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        window.transferSectorsLoaded = false;
+
+        window.loadTransferSectors = function() {
+            if (window.transferSectorsLoaded) return;
+
+            const sendingSelect = document.getElementById('transferSendingSector');
+            const receivingSelect = document.getElementById('transferReceivingSector');
+            if (!sendingSelect || !receivingSelect) return;
+
+            fetch('/projects/support/transfer/sectors/')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Erro ao carregar setores');
+
+                    const options = ['<option value="">Selecione o setor</option>']
+                        .concat(data.sectors.map(sector => `<option value="${sector.id}">${escapeHtml(sector.name)}</option>`))
+                        .join('');
+                    sendingSelect.innerHTML = options;
+                    receivingSelect.innerHTML = options;
+                    window.transferSectorsLoaded = true;
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar setores de transferência:', error);
+                    if (typeof showToast === 'function') showToast('Erro ao carregar setores de transferência', 'error');
+                });
+        };
+
+        window.loadTransferUsersBySector = function(sectorId, selectId) {
+            const userSelect = document.getElementById(selectId);
+            if (!userSelect) return;
+
+            userSelect.innerHTML = '<option value="">Selecione o usuário</option>';
+            userSelect.disabled = true;
+
+            if (!sectorId) return;
+
+            fetch(`/projects/support/transfer/sectors/${sectorId}/users/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Erro ao carregar usuários');
+
+                    if (!data.users.length) {
+                        userSelect.innerHTML = '<option value="">Nenhum usuário ativo neste setor</option>';
+                        return;
+                    }
+
+                    userSelect.innerHTML = '<option value="">Selecione o usuário</option>' + data.users.map(user => {
+                        const label = `${user.name}${user.hierarchy ? ' - ' + user.hierarchy : ''}`;
+                        return `<option value="${user.id}">${escapeHtml(label)}</option>`;
+                    }).join('');
+                    userSelect.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar usuários de transferência:', error);
+                    userSelect.innerHTML = '<option value="">Erro ao carregar usuários</option>';
+                });
+        };
+
+        function transferStatusClass(status) {
+            switch (status) {
+                case 'AGUARDANDO_RECEBIMENTO': return 'bg-yellow-100 text-yellow-800';
+                case 'ACEITA': return 'bg-green-100 text-green-800';
+                case 'RECUSADA': return 'bg-red-100 text-red-800';
+                case 'CANCELADA': return 'bg-gray-100 text-gray-700';
+                default: return 'bg-gray-100 text-gray-700';
+            }
+        }
+
+        function updateSupportTransferBadge(transfers) {
+            const badge = document.getElementById('supportChatBadge');
+            if (!badge || !Array.isArray(transfers)) return;
+
+            const pendingForMe = transfers.filter(item => item.can_respond && item.status === 'AGUARDANDO_RECEBIMENTO').length;
+            if (pendingForMe > 0) {
+                badge.textContent = pendingForMe > 9 ? '9+' : pendingForMe;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        window.renderTransferRequests = function(transfers) {
+            const list = document.getElementById('transferRequestsList');
+            if (!list) return;
+
+            if (!transfers.length) {
+                list.innerHTML = '<div class="text-center text-gray-500 text-sm py-4">Nenhuma transferência encontrada</div>';
+                updateSupportTransferBadge([]);
+                return;
+            }
+
+            list.innerHTML = transfers.map(transfer => {
+                const canRespond = transfer.can_respond && transfer.status === 'AGUARDANDO_RECEBIMENTO';
+                const canCancel = transfer.can_cancel;
+                const notes = transfer.response_notes
+                    ? `<p class="text-xs text-gray-600 mt-2"><strong>Observação:</strong> ${escapeHtml(transfer.response_notes)}</p>`
+                    : '';
+                const responseInfo = transfer.responded_at
+                    ? `<p class="text-xs text-gray-500 mt-1">Respondido por ${escapeHtml(transfer.responded_by || '-')} em ${escapeHtml(transfer.responded_at)}</p>`
+                    : '<p class="text-xs text-yellow-700 mt-1"><i class="fas fa-clock mr-1"></i>Aguardando resposta da loja que irá receber</p>';
+
+                const actions = canRespond
+                    ? `
+                        <div class="mt-3 space-y-2">
+                            <textarea id="transferNotes-${transfer.id}" rows="2" class="w-full px-2 py-1 border border-gray-300 rounded-md text-xs" placeholder="Observação opcional"></textarea>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="window.respondTransfer(${transfer.id}, 'ACEITAR')" class="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs py-1.5 rounded-md">
+                                    <i class="fas fa-check mr-1"></i>Aceitar
+                                </button>
+                                <button type="button" onclick="window.respondTransfer(${transfer.id}, 'RECUSAR')" class="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-1.5 rounded-md">
+                                    <i class="fas fa-times mr-1"></i>Recusar
+                                </button>
+                            </div>
+                        </div>
+                    `
+                    : (canCancel ? `
+                        <button type="button" onclick="window.respondTransfer(${transfer.id}, 'CANCELAR')" class="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs py-1.5 rounded-md">
+                            <i class="fas fa-ban mr-1"></i>Cancelar solicitação
+                        </button>
+                    ` : '');
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <h5 class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(transfer.product_name)}</h5>
+                                <p class="text-xs text-gray-500 font-mono">IMEI: ${escapeHtml(transfer.imei)}</p>
+                            </div>
+                            <span class="text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${transferStatusClass(transfer.status)}">${escapeHtml(transfer.status_display)}</span>
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-gray-700">
+                            <p><strong>Envia:</strong> ${escapeHtml(transfer.sending_sector.name)} · ${escapeHtml(transfer.sending_manager.name)}</p>
+                            <p><strong>Recebe:</strong> ${escapeHtml(transfer.receiving_sector.name)} · ${escapeHtml(transfer.receiving_manager.name)}</p>
+                            <p class="text-gray-500">Criado por ${escapeHtml(transfer.created_by)} em ${escapeHtml(transfer.created_at)}</p>
+                        </div>
+                        ${responseInfo}
+                        ${notes}
+                        ${actions}
+                    </div>
+                `;
+            }).join('');
+
+            updateSupportTransferBadge(transfers);
+        };
+
+        window.loadTransferRequests = function() {
+            const list = document.getElementById('transferRequestsList');
+            if (list) {
+                list.innerHTML = '<div class="text-center text-gray-500 text-sm py-4"><i class="fas fa-spinner fa-spin mr-1"></i>Carregando transferências...</div>';
+            }
+
+            fetch('/projects/support/transfer/list/')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Erro ao carregar transferências');
+                    window.renderTransferRequests(data.transfers || []);
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar transferências:', error);
+                    if (list) list.innerHTML = '<div class="text-center text-red-500 text-sm py-4">Erro ao carregar transferências</div>';
+                });
+        };
+
+        window.respondTransfer = function(transferId, action) {
+            const notesInput = document.getElementById(`transferNotes-${transferId}`);
+            const formData = new FormData();
+            formData.append('action', action);
+            formData.append('notes', notesInput ? notesInput.value : '');
+            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]')?.value || '');
+
+            fetch(`/projects/support/transfer/${transferId}/respond/`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.error || 'Erro ao atualizar transferência');
+                if (typeof showToast === 'function') showToast(data.message || 'Transferência atualizada', 'success');
+                window.loadTransferRequests();
+            })
+            .catch(error => {
+                console.error('Erro ao responder transferência:', error);
+                alert(error.message);
+            });
+        };
+
         // Debug function to test chat functionality
         window.testSupportChat = function() {
             console.log('Testing support chat functions...');
@@ -2708,8 +2988,10 @@
             const chatMinimize = document.getElementById('supportChatMinimize');
             const newChatTab = document.getElementById('newChatTab');
             const myChatTab = document.getElementById('myChatTab');
+            const transferChatTab = document.getElementById('transferChatTab');
             const newChatForm = document.getElementById('newChatForm');
             const myChatsList = document.getElementById('myChatsList');
+            const transferRequestsView = document.getElementById('transferRequestsView');
             const activeChatView = document.getElementById('activeChatView');
             const backToChatList = document.getElementById('backToChatList');
 
@@ -2718,8 +3000,10 @@
                 chatWindow: !!chatWindow,
                 newChatTab: !!newChatTab,
                 myChatTab: !!myChatTab,
+                transferChatTab: !!transferChatTab,
                 newChatForm: !!newChatForm,
-                myChatsList: !!myChatsList
+                myChatsList: !!myChatsList,
+                transferRequestsView: !!transferRequestsView
             });
 
             // currentChatId já declarado no escopo global
@@ -2774,6 +3058,70 @@
                 });
             } else {
                 console.error('myChatTab button not found!');
+            }
+
+            if (transferChatTab) {
+                transferChatTab.addEventListener('click', function() {
+                    console.log('Transfer tab clicked');
+                    window.switchTab('transfer');
+                });
+            }
+
+            const transferSendingSector = document.getElementById('transferSendingSector');
+            const transferReceivingSector = document.getElementById('transferReceivingSector');
+            if (transferSendingSector) {
+                transferSendingSector.addEventListener('change', function() {
+                    window.loadTransferUsersBySector(this.value, 'transferSendingManager');
+                });
+            }
+            if (transferReceivingSector) {
+                transferReceivingSector.addEventListener('change', function() {
+                    window.loadTransferUsersBySector(this.value, 'transferReceivingManager');
+                });
+            }
+
+            const createTransferForm = document.getElementById('createTransferForm');
+            if (createTransferForm) {
+                createTransferForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    const formData = new FormData();
+                    formData.append('sending_sector_id', document.getElementById('transferSendingSector').value);
+                    formData.append('sending_manager_id', document.getElementById('transferSendingManager').value);
+                    formData.append('receiving_sector_id', document.getElementById('transferReceivingSector').value);
+                    formData.append('receiving_manager_id', document.getElementById('transferReceivingManager').value);
+                    formData.append('imei', document.getElementById('transferImei').value.trim());
+                    formData.append('product_name', document.getElementById('transferProductName').value.trim());
+                    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]')?.value || '');
+
+                    fetch('/projects/support/transfer/create/', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) throw new Error(data.error || 'Erro ao criar transferência');
+                        this.reset();
+                        const sendingManager = document.getElementById('transferSendingManager');
+                        const receivingManager = document.getElementById('transferReceivingManager');
+                        sendingManager.innerHTML = '<option value="">Selecione o usuário</option>';
+                        receivingManager.innerHTML = '<option value="">Selecione o usuário</option>';
+                        sendingManager.disabled = true;
+                        receivingManager.disabled = true;
+                        if (typeof showToast === 'function') {
+                            showToast(data.message || 'Transferência criada', 'success');
+                        }
+                        window.loadTransferRequests();
+                    })
+                    .catch(error => {
+                        console.error('Erro ao criar transferência:', error);
+                        alert(error.message);
+                    });
+                });
+            }
+
+            if (typeof window.loadTransferRequests === 'function') {
+                window.loadTransferRequests();
             }
 
             // Create new support chat

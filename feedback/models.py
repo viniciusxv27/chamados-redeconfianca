@@ -226,6 +226,70 @@ class Feedback(models.Model):
         return round(cur_avg - prev_avg, 2)
 
 
+class ClimateSurveyParticipation(models.Model):
+    """Controle separado de participação sem vínculo com as respostas anônimas."""
+
+    STATUS_CHOICES = [
+        ('IN_PROGRESS', 'Em andamento'),
+        ('COMPLETED', 'Concluída'),
+    ]
+
+    survey_key = models.CharField(max_length=80, default='clima_organizacional_2026', db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='climate_survey_participations',
+        verbose_name='Usuário',
+    )
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='climate_survey_participations',
+        verbose_name='Setor',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='IN_PROGRESS')
+    last_step = models.CharField(max_length=120, blank=True, verbose_name='Última etapa')
+    started_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('survey_key', 'user')
+        verbose_name = 'Participação na Pesquisa de Clima'
+        verbose_name_plural = 'Participações na Pesquisa de Clima'
+        ordering = ['status', 'user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'{self.user} - {self.get_status_display()}'
+
+
+class ClimateSurveyResponse(models.Model):
+    """Resposta anônima da pesquisa; não armazena usuário nem nome."""
+
+    survey_key = models.CharField(max_length=80, default='clima_organizacional_2026', db_index=True)
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='climate_survey_responses',
+        verbose_name='Setor',
+    )
+    answers = models.JSONField(default=dict, verbose_name='Respostas')
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Resposta Anônima da Pesquisa de Clima'
+        verbose_name_plural = 'Respostas Anônimas da Pesquisa de Clima'
+        ordering = ['-submitted_at']
+
+    def __str__(self):
+        sector = self.sector.name if self.sector else 'Sem setor'
+        return f'Pesquisa de Clima - {sector} em {self.submitted_at:%d/%m/%Y %H:%M}'
+
+
 class FeedbackReminderDismissal(models.Model):
     """Registra que um lembrete específico foi dispensado pelo usuário (para não exibir o popup novamente)."""
 

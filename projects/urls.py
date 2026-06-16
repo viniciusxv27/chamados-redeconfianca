@@ -49,6 +49,11 @@ urlpatterns = [
     path('support/sectors/', views_chat.get_sectors, name='get_sectors'),
     path('support/user-sectors/', views_chat.get_user_sectors, name='get_user_sectors'),
     path('support/sectors/<int:sector_id>/categories/', views_chat.get_sector_categories, name='get_sector_categories'),
+    path('support/transfer/sectors/', views_chat.transfer_sectors, name='transfer_sectors'),
+    path('support/transfer/sectors/<int:sector_id>/users/', views_chat.transfer_users_by_sector, name='transfer_users_by_sector'),
+    path('support/transfer/list/', views_chat.support_transfer_list, name='support_transfer_list'),
+    path('support/transfer/create/', views_chat.create_support_transfer, name='create_support_transfer'),
+    path('support/transfer/<int:transfer_id>/respond/', views_chat.respond_support_transfer, name='respond_support_transfer'),
     path('support/chat/<int:chat_id>/files/upload/', views_chat.upload_chat_file, name='upload_chat_file'),
     path('support/chat/<int:chat_id>/rate/', views_chat.rate_support_chat, name='rate_support_chat'),
     

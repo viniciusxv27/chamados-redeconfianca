@@ -307,6 +307,80 @@ class SupportChatRating(models.Model):
         return f"Avaliação {self.rating}/5 - {self.chat.title}"
 
 
+class SupportTransferRequest(models.Model):
+    """Solicitação de transferência de produto entre lojas/setores."""
+
+    STATUS_CHOICES = [
+        ('AGUARDANDO_RECEBIMENTO', 'Aguardando resposta da loja que irá receber'),
+        ('ACEITA', 'Aceita'),
+        ('RECUSADA', 'Recusada'),
+        ('CANCELADA', 'Cancelada'),
+    ]
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='support_transfer_requests_created',
+        verbose_name="Criado por",
+    )
+    sending_sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.PROTECT,
+        related_name='outgoing_transfer_requests',
+        verbose_name="Loja que irá enviar",
+    )
+    sending_manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='outgoing_transfer_requests',
+        verbose_name="Gerente/ADM responsável por enviar",
+    )
+    receiving_sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.PROTECT,
+        related_name='incoming_transfer_requests',
+        verbose_name="Loja que irá receber",
+    )
+    receiving_manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='incoming_transfer_requests',
+        verbose_name="Gerente/ADM responsável por receber",
+    )
+    imei = models.CharField(max_length=40, verbose_name="IMEI")
+    product_name = models.CharField(max_length=200, verbose_name="Nome do Produto")
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='AGUARDANDO_RECEBIMENTO',
+        verbose_name="Status",
+    )
+    response_notes = models.TextField(blank=True, verbose_name="Observação da resposta")
+    responded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='support_transfer_responses',
+        verbose_name="Respondido por",
+    )
+    responded_at = models.DateTimeField(null=True, blank=True, verbose_name="Respondido em")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Transferência de Suporte"
+        verbose_name_plural = "Transferências de Suporte"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.product_name} ({self.imei}) - {self.get_status_display()}"
+
+    @property
+    def is_waiting_response(self):
+        return self.status == 'AGUARDANDO_RECEBIMENTO'
+
+
 # Atualizar o modelo SupportChat para incluir setor e categoria
 SupportChat.add_to_class('sector', models.ForeignKey(
     'users.Sector',

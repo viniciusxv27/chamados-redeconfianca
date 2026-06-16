@@ -7,6 +7,7 @@ from .models import (
     Activity, 
     ActivityComment
 )
+from .models_chat import SupportTransferRequest
 
 
 @admin.register(ProjectSectorAccess)
@@ -143,3 +144,37 @@ class ActivityCommentAdmin(admin.ModelAdmin):
     def content_preview(self, obj):
         return obj.content[:50] + '...' if len(obj.content) > 50 else obj.content
     content_preview.short_description = 'Conteúdo'
+
+
+@admin.register(SupportTransferRequest)
+class SupportTransferRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        'product_name',
+        'imei',
+        'sending_sector',
+        'receiving_sector',
+        'receiving_manager',
+        'status',
+        'created_at',
+        'responded_at',
+    )
+    list_filter = ('status', 'sending_sector', 'receiving_sector', 'created_at')
+    search_fields = (
+        'product_name',
+        'imei',
+        'sending_sector__name',
+        'receiving_sector__name',
+        'sending_manager__first_name',
+        'sending_manager__last_name',
+        'receiving_manager__first_name',
+        'receiving_manager__last_name',
+    )
+    autocomplete_fields = (
+        'created_by',
+        'sending_sector',
+        'sending_manager',
+        'receiving_sector',
+        'receiving_manager',
+        'responded_by',
+    )
+    readonly_fields = ('created_at', 'updated_at', 'responded_at')

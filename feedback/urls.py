@@ -5,6 +5,9 @@ app_name = 'feedback'
 
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
+    path('pesquisa-clima/', views.climate_survey, name='climate_survey'),
+    path('pesquisa-clima/progresso/', views.climate_survey_progress, name='climate_survey_progress'),
+    path('pesquisa-clima/relatorio/', views.climate_survey_report, name='climate_survey_report'),
     path('pendentes/', views.my_pending, name='pending'),
     path('historico/<int:user_id>/', views.user_history, name='user_history'),
     path('novo/', views.create_feedback, name='create'),
