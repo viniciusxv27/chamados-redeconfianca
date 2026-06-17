@@ -341,6 +341,101 @@ def _extract_pcn_by_consultor(headers, rows):
     return pcn_by_consultor
 
 
+# Mapeia o nome do campo no User para o label do pilar em PILAR_COLUMNS.
+META_FIELD_BY_PILAR = {
+    'FIXA': 'meta_fixa',
+    'MOVEL': 'meta_movel',
+    'SVA': 'meta_sva',
+    'SEGURO': 'meta_seguro',
+    'SMARTPHONE': 'meta_smartphone',
+    'ELETRONICOS': 'meta_eletronicos',
+    'ESSENCIAIS': 'meta_essenciais',
+}
+
+
+def _extract_metas_by_consultor(headers, rows):
+    """Mapeia o nome do consultor para as metas de cada pilar na sheet METAS CN REAL.
+
+    Retorna {consultor: {pilar_label: Decimal|None}} usando a primeira ocorrencia
+    de cada consultor.
+    """
+    consultor_idx = _find_index_by_aliases(headers, ['CONSULTOR', 'NOME'])
+    if consultor_idx is None:
+        return {}
+
+    normalized_headers = [_normalize_text(h) for h in headers]
+    pilar_indexes = {}
+    for key, label in PILAR_COLUMNS:
+        idx = None
+        for header_idx, header in enumerate(normalized_headers):
+            if key in header:
+                idx = header_idx
+                break
+        pilar_indexes[label] = idx
+
+    metas_by_consultor = {}
+    for row in rows:
+        if all(cell in (None, '') for cell in row):
+            continue
+        if consultor_idx >= len(row):
+            continue
+        consultor = '' if row[consultor_idx] is None else str(row[consultor_idx]).strip()
+        if not consultor or consultor in metas_by_consultor:
+            continue
+
+        pilar_values = {}
+        for label, idx in pilar_indexes.items():
+            if idx is None or idx >= len(row):
+                pilar_values[label] = None
+            else:
+                pilar_values[label] = _parse_decimal(row[idx])
+        metas_by_consultor[consultor] = pilar_values
+
+    return metas_by_consultor
+
+
+def _update_users_metas(metas_by_consultor):
+    """Atualiza as metas por pilar dos usuarios casando pelo nome do consultor.
+
+    Retorna a quantidade de usuarios efetivamente atualizados.
+    """
+    from users.models import User
+
+    if not metas_by_consultor:
+        return 0
+
+    normalized_metas = {}
+    for consultor, pilar_values in metas_by_consultor.items():
+        key = _normalize_text(consultor)
+        if key:
+            normalized_metas.setdefault(key, pilar_values)
+
+    if not normalized_metas:
+        return 0
+
+    meta_field_names = list(META_FIELD_BY_PILAR.values())
+    users_to_update = []
+    for user in User.objects.all():
+        full_name_key = _normalize_text(f'{user.first_name} {user.last_name}')
+        if not full_name_key or full_name_key not in normalized_metas:
+            continue
+
+        pilar_values = normalized_metas[full_name_key]
+        changed = False
+        for pilar_label, field_name in META_FIELD_BY_PILAR.items():
+            new_value = pilar_values.get(pilar_label)
+            if getattr(user, field_name) != new_value:
+                setattr(user, field_name, new_value)
+                changed = True
+        if changed:
+            users_to_update.append(user)
+
+    if users_to_update:
+        User.objects.bulk_update(users_to_update, meta_field_names)
+
+    return len(users_to_update)
+
+
 def _update_users_pcn(pcn_by_consultor):
     """Atualiza o campo PCN dos usuarios casando pelo nome do consultor.
 
@@ -395,6 +490,7 @@ def _load_goal_entries_from_workbook(uploaded_file):
 
     all_entries = []
     pcn_by_consultor = {}
+    metas_by_consultor = {}
 
     cn_sheet = workbook[normalized_to_real['METASCNREAL']]
     cn_rows = list(cn_sheet.iter_rows(values_only=True))
@@ -402,6 +498,7 @@ def _load_goal_entries_from_workbook(uploaded_file):
         cn_headers = [str(cell).strip() if cell is not None else '' for cell in cn_rows[0]]
         all_entries.extend(_extract_entries_cn_real(cn_headers, cn_rows[1:]))
         pcn_by_consultor = _extract_pcn_by_consultor(cn_headers, cn_rows[1:])
+        metas_by_consultor = _extract_metas_by_consultor(cn_headers, cn_rows[1:])
 
     pdv_sheet = workbook[normalized_to_real['METAPDVREAL']]
     pdv_rows = list(pdv_sheet.iter_rows(values_only=True))
@@ -409,7 +506,7 @@ def _load_goal_entries_from_workbook(uploaded_file):
         pdv_headers = [str(cell).strip() if cell is not None else '' for cell in pdv_rows[0]]
         all_entries.extend(_extract_entries_pdv_real(pdv_headers, pdv_rows[1:]))
 
-    return all_entries, pcn_by_consultor
+    return all_entries, pcn_by_consultor, metas_by_consultor
 
 
 def _visible_reports_for(user):
@@ -1047,7 +1144,7 @@ def upload_goals_view(request):
 
     try:
         uploaded_file.seek(0)
-        parsed_entries, pcn_by_consultor = _load_goal_entries_from_workbook(uploaded_file)
+        parsed_entries, pcn_by_consultor, metas_by_consultor = _load_goal_entries_from_workbook(uploaded_file)
     except Exception as exc:
         messages.error(request, f'Erro ao processar planilha de metas: {exc}')
         uploads = GoalUpload.objects.order_by('-year', '-month', '-updated_at')
@@ -1073,11 +1170,13 @@ def upload_goals_view(request):
         ])
 
         updated_pcn = _update_users_pcn(pcn_by_consultor)
+        updated_metas = _update_users_metas(metas_by_consultor)
 
     messages.success(
         request,
         f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas). '
-        f'PCN atualizado em {updated_pcn} usuario(s).'
+        f'PCN atualizado em {updated_pcn} usuario(s). '
+        f'Metas por pilar atualizadas em {updated_metas} usuario(s).'
     )
     return redirect('power_bi:manage_goals')
 
