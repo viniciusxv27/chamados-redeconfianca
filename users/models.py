@@ -334,16 +334,6 @@ class User(AbstractUser):
     uniform_size_pants = models.CharField(max_length=3, blank=True, verbose_name="Tamanho uniforme (Calça)", help_text="Ex: P, M, G, GG, 38, 40")
     pcn = models.CharField(max_length=20, blank=True, verbose_name="PCN", help_text="Percentual CN importado das metas (sheet METAS CN REAL)")
 
-    # Metas por pilar importadas da sheet METAS CN REAL (coluna CONSULTOR).
-    # Preenchidas automaticamente pela importacao de metas; nao editaveis manualmente.
-    meta_fixa = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta FIXA", help_text="Meta do pilar FIXA importada das metas (sheet METAS CN REAL)")
-    meta_movel = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta MOVEL", help_text="Meta do pilar MOVEL importada das metas (sheet METAS CN REAL)")
-    meta_sva = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta SVA", help_text="Meta do pilar SVA importada das metas (sheet METAS CN REAL)")
-    meta_seguro = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta SEGURO", help_text="Meta do pilar SEGURO importada das metas (sheet METAS CN REAL)")
-    meta_smartphone = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta SMARTPHONE", help_text="Meta do pilar SMARTPHONE importada das metas (sheet METAS CN REAL)")
-    meta_eletronicos = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta ELETRONICOS", help_text="Meta do pilar ELETRONICOS importada das metas (sheet METAS CN REAL)")
-    meta_essenciais = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="Meta ESSENCIAIS", help_text="Meta do pilar ESSENCIAIS importada das metas (sheet METAS CN REAL)")
-
     # Campos de dados pessoais/RH
     cpf = models.CharField(max_length=14, blank=True, verbose_name="CPF")
     pis = models.CharField(max_length=20, blank=True, verbose_name="PIS")

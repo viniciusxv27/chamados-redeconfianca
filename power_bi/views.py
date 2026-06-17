@@ -341,99 +341,12 @@ def _extract_pcn_by_consultor(headers, rows):
     return pcn_by_consultor
 
 
-# Mapeia o nome do campo no User para o label do pilar em PILAR_COLUMNS.
-META_FIELD_BY_PILAR = {
-    'FIXA': 'meta_fixa',
-    'MOVEL': 'meta_movel',
-    'SVA': 'meta_sva',
-    'SEGURO': 'meta_seguro',
-    'SMARTPHONE': 'meta_smartphone',
-    'ELETRONICOS': 'meta_eletronicos',
-    'ESSENCIAIS': 'meta_essenciais',
-}
-
-
-def _extract_metas_by_consultor(headers, rows):
-    """Mapeia o nome do consultor para as metas de cada pilar na sheet METAS CN REAL.
-
-    Retorna {consultor: {pilar_label: Decimal|None}} usando a primeira ocorrencia
-    de cada consultor.
-    """
-    consultor_idx = _find_index_by_aliases(headers, ['CONSULTOR', 'NOME'])
-    if consultor_idx is None:
-        return {}
-
-    normalized_headers = [_normalize_text(h) for h in headers]
-    pilar_indexes = {}
-    for key, label in PILAR_COLUMNS:
-        idx = None
-        for header_idx, header in enumerate(normalized_headers):
-            if key in header:
-                idx = header_idx
-                break
-        pilar_indexes[label] = idx
-
-    metas_by_consultor = {}
-    for row in rows:
-        if all(cell in (None, '') for cell in row):
-            continue
-        if consultor_idx >= len(row):
-            continue
-        consultor = '' if row[consultor_idx] is None else str(row[consultor_idx]).strip()
-        if not consultor or consultor in metas_by_consultor:
-            continue
-
-        pilar_values = {}
-        for label, idx in pilar_indexes.items():
-            if idx is None or idx >= len(row):
-                pilar_values[label] = None
-            else:
-                pilar_values[label] = _parse_decimal(row[idx])
-        metas_by_consultor[consultor] = pilar_values
-
-    return metas_by_consultor
-
-
-def _update_users_metas(metas_by_consultor):
-    """Atualiza as metas por pilar dos usuarios casando pelo nome do consultor.
-
-    Retorna a quantidade de usuarios efetivamente atualizados.
-    """
-    from users.models import User
-
-    if not metas_by_consultor:
-        return 0
-
-    normalized_metas = {}
-    for consultor, pilar_values in metas_by_consultor.items():
-        key = _normalize_text(consultor)
-        if key:
-            normalized_metas.setdefault(key, pilar_values)
-
-    if not normalized_metas:
-        return 0
-
-    meta_field_names = list(META_FIELD_BY_PILAR.values())
-    users_to_update = []
-    for user in User.objects.all():
-        full_name_key = _normalize_text(f'{user.first_name} {user.last_name}')
-        if not full_name_key or full_name_key not in normalized_metas:
-            continue
-
-        pilar_values = normalized_metas[full_name_key]
-        changed = False
-        for pilar_label, field_name in META_FIELD_BY_PILAR.items():
-            new_value = pilar_values.get(pilar_label)
-            if getattr(user, field_name) != new_value:
-                setattr(user, field_name, new_value)
-                changed = True
-        if changed:
-            users_to_update.append(user)
-
-    if users_to_update:
-        User.objects.bulk_update(users_to_update, meta_field_names)
-
-    return len(users_to_update)
+def _pcn_from_row_data(row_data):
+    """Recupera o valor da coluna '% CN' a partir do row_data salvo na GoalEntry."""
+    for key, value in (row_data or {}).items():
+        if _normalize_text(key).replace(' ', '') == '%CN':
+            return '' if value is None else str(value).strip()
+    return ''
 
 
 def _update_users_pcn(pcn_by_consultor):
@@ -490,7 +403,6 @@ def _load_goal_entries_from_workbook(uploaded_file):
 
     all_entries = []
     pcn_by_consultor = {}
-    metas_by_consultor = {}
 
     cn_sheet = workbook[normalized_to_real['METASCNREAL']]
     cn_rows = list(cn_sheet.iter_rows(values_only=True))
@@ -498,7 +410,6 @@ def _load_goal_entries_from_workbook(uploaded_file):
         cn_headers = [str(cell).strip() if cell is not None else '' for cell in cn_rows[0]]
         all_entries.extend(_extract_entries_cn_real(cn_headers, cn_rows[1:]))
         pcn_by_consultor = _extract_pcn_by_consultor(cn_headers, cn_rows[1:])
-        metas_by_consultor = _extract_metas_by_consultor(cn_headers, cn_rows[1:])
 
     pdv_sheet = workbook[normalized_to_real['METAPDVREAL']]
     pdv_rows = list(pdv_sheet.iter_rows(values_only=True))
@@ -506,7 +417,7 @@ def _load_goal_entries_from_workbook(uploaded_file):
         pdv_headers = [str(cell).strip() if cell is not None else '' for cell in pdv_rows[0]]
         all_entries.extend(_extract_entries_pdv_real(pdv_headers, pdv_rows[1:]))
 
-    return all_entries, pcn_by_consultor, metas_by_consultor
+    return all_entries, pcn_by_consultor
 
 
 def _visible_reports_for(user):
@@ -1144,7 +1055,7 @@ def upload_goals_view(request):
 
     try:
         uploaded_file.seek(0)
-        parsed_entries, pcn_by_consultor, metas_by_consultor = _load_goal_entries_from_workbook(uploaded_file)
+        parsed_entries, pcn_by_consultor = _load_goal_entries_from_workbook(uploaded_file)
     except Exception as exc:
         messages.error(request, f'Erro ao processar planilha de metas: {exc}')
         uploads = GoalUpload.objects.order_by('-year', '-month', '-updated_at')
@@ -1170,13 +1081,11 @@ def upload_goals_view(request):
         ])
 
         updated_pcn = _update_users_pcn(pcn_by_consultor)
-        updated_metas = _update_users_metas(metas_by_consultor)
 
     messages.success(
         request,
         f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas). '
-        f'PCN atualizado em {updated_pcn} usuario(s). '
-        f'Metas por pilar atualizadas em {updated_metas} usuario(s).'
+        f'PCN atualizado em {updated_pcn} usuario(s).'
     )
     return redirect('power_bi:manage_goals')
 
@@ -1267,6 +1176,50 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
         messages.warning(request, 'Nenhum item valido encontrado para sincronizar.')
         return redirect('power_bi:manage_goals')
 
+    # Metas por consultor (sheet METAS CN REAL): uma linha por CN/pilar, com a % CN.
+    cn_meta_entries = GoalEntry.objects.filter(
+        upload=upload,
+        sheet_type=GoalEntry.SHEET_CN_REAL,
+    ).order_by('id')
+
+    cn_grouped_rows = {}
+    for entry in cn_meta_entries:
+        if entry.goal_value is None:
+            continue
+
+        cn_name = (entry.user_name or '').strip()
+        pdv_raw = (entry.store_name or '').strip()
+        pilar = (entry.pilar or '').strip()
+        if not cn_name:
+            continue
+
+        unidade = 'Unidade' if (upload.fixa_as_percentage and _is_fixa_pilar(pilar)) else 'Valor'
+        pcn = _pcn_from_row_data(entry.row_data)
+        key = (_normalize_text(cn_name), _normalize_text(pdv_raw), _normalize_text(pilar), unidade)
+
+        cn_grouped_rows[key] = {
+            'valor': entry.goal_value,
+            'pdv': pdv_raw,
+            'cn': cn_name,
+            'pilar': pilar,
+            'unidade': unidade,
+            'pcn': pcn,
+        }
+
+    cn_rows = [
+        (
+            row['valor'],
+            row['pdv'],
+            row['cn'],
+            upload.month,
+            upload.year,
+            row['unidade'],
+            row['pilar'],
+            row['pcn'],
+        )
+        for row in cn_grouped_rows.values()
+    ]
+
     try:
         import pymysql
     except Exception:
@@ -1286,6 +1239,30 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
                     'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade, pilar, hc) VALUES (%s, %s, %s, %s, %s, %s, %s)',
                     rows,
                 )
+
+                cursor.execute(
+                    'CREATE TABLE IF NOT EXISTS metas_cn ('
+                    '  id INT AUTO_INCREMENT PRIMARY KEY,'
+                    '  valor DECIMAL(14,2),'
+                    '  pdv VARCHAR(255),'
+                    '  cn VARCHAR(255),'
+                    '  mes_ref INT,'
+                    '  ano_ref INT,'
+                    '  unidade VARCHAR(20),'
+                    '  pilar VARCHAR(100),'
+                    '  pcn VARCHAR(20)'
+                    ') DEFAULT CHARSET=utf8mb4'
+                )
+                cursor.execute(
+                    'DELETE FROM metas_cn WHERE mes_ref = %s AND ano_ref = %s',
+                    (upload.month, upload.year),
+                )
+                if cn_rows:
+                    cursor.executemany(
+                        'INSERT INTO metas_cn (valor, pdv, cn, mes_ref, ano_ref, unidade, pilar, pcn) '
+                        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+                        cn_rows,
+                    )
             connection.commit()
         finally:
             connection.close()
@@ -1295,6 +1272,7 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
 
     messages.success(
         request,
-        f'Metas de {upload.month:02d}/{upload.year} sincronizadas com sucesso no banco MySQL ({len(rows)} linhas).',
+        f'Metas de {upload.month:02d}/{upload.year} sincronizadas com sucesso no banco MySQL '
+        f'({len(rows)} linhas de loja, {len(cn_rows)} linhas de CN).',
     )
     return redirect('power_bi:manage_goals')
