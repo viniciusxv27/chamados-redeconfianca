@@ -44,7 +44,7 @@
           <h2 class="text-lg font-semibold text-gray-800"><i class="fas fa-users mr-2 text-indigo-500"></i>Pessoas que você pode avaliar</h2>
           <a href="{% url 'feedback:pending' %}" class="text-sm text-indigo-600 hover:underline">Ver todos</a>
         </div>
-        {% if my_targets %}
+        {% if my_targets or sector_targets %}
           <ul class="divide-y">
             {% for a in my_targets|slice:":5" %}
               <li class="py-3 flex items-center justify-between">
@@ -53,6 +53,15 @@
                   <p class="text-sm text-gray-500">Você pode aplicar feedbacks a qualquer momento</p>
                 </div>
                 <a href="{% url 'feedback:create_from_assignment' a.id %}" class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Aplicar</a>
+              </li>
+            {% endfor %}
+            {% for u in sector_targets|slice:":5" %}
+              <li class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-800">{{ u.get_full_name|default:u.username }}</p>
+                  <p class="text-sm text-gray-500">Colaborador do seu setor</p>
+                </div>
+                <a href="{% url 'feedback:create' %}?evaluatee={{ u.id }}" class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Aplicar</a>
               </li>
             {% endfor %}
           </ul>

@@ -31,6 +31,58 @@ def _is_superadmin(user) -> bool:
     return getattr(user, 'hierarchy', '') == 'SUPERADMIN'
 
 
+def _is_padrao(user) -> bool:
+    return getattr(user, 'hierarchy', '') in ('PADRAO', 'PADRÃO')
+
+
+def _is_gerentes_group_user(user) -> bool:
+    """Verifica se o usuario pertence ao grupo GERENTES (CommunicationGroup)."""
+    try:
+        from communications.models import CommunicationGroup
+
+        return CommunicationGroup.objects.filter(
+            name__iexact='GERENTES', members=user
+        ).exists()
+    except Exception:
+        return False
+
+
+def _user_sector_ids(user):
+    """IDs de todos os setores do usuario (setores M2M + setor principal)."""
+    ids = set(user.sectors.values_list('id', flat=True))
+    if getattr(user, 'sector_id', None):
+        ids.add(user.sector_id)
+    return ids
+
+
+def _sector_feedback_targets(user):
+    """Colaboradores PADRAO que um gerente PADRAO pode avaliar pelo setor.
+
+    Regra: usuario PADRAO pertencente ao grupo GERENTES pode dar feedback em
+    todos os usuarios PADRAO que compartilham pelo menos um setor com ele.
+    """
+    if not (_is_padrao(user) and _is_gerentes_group_user(user)):
+        return User.objects.none()
+
+    sector_ids = _user_sector_ids(user)
+    if not sector_ids:
+        return User.objects.none()
+
+    return (
+        User.objects.filter(is_active=True, hierarchy__in=['PADRAO', 'PADRÃO'])
+        .filter(Q(sectors__in=sector_ids) | Q(sector_id__in=sector_ids))
+        .exclude(id=user.id)
+        .distinct()
+        .order_by('first_name', 'last_name')
+    )
+
+
+def _can_give_sector_feedback(user, evaluatee) -> bool:
+    if evaluatee is None:
+        return False
+    return _sector_feedback_targets(user).filter(id=evaluatee.id).exists()
+
+
 CLIMATE_SURVEY_KEY = 'clima_organizacional_2026'
 
 CLIMATE_LIKERT_OPTIONS = [
@@ -132,17 +184,24 @@ def dashboard(request):
         evaluator=user, status='ACTIVE'
     ).select_related('evaluatee').order_by('-created_at')
 
+    # Gerentes PADRAO podem avaliar todos os PADRAO do seu setor (sem atribuicao).
+    assigned_ids = set(my_targets.values_list('evaluatee_id', flat=True))
+    sector_targets = [
+        u for u in _sector_feedback_targets(user) if u.id not in assigned_ids
+    ]
+
     given = Feedback.objects.filter(evaluator=user).select_related('evaluatee').order_by('-created_at')[:10]
     received = Feedback.objects.filter(evaluatee=user).select_related('evaluator').order_by('-created_at')[:10]
 
     stats = {
-        'targets_count': my_targets.count(),
+        'targets_count': my_targets.count() + len(sector_targets),
         'given_count': Feedback.objects.filter(evaluator=user).count(),
         'received_count': Feedback.objects.filter(evaluatee=user).count(),
     }
 
     context = {
         'my_targets': my_targets,
+        'sector_targets': sector_targets,
         'given': given,
         'received': received,
         'stats': stats,
@@ -156,7 +215,14 @@ def my_pending(request):
     my_targets = FeedbackAssignment.objects.filter(
         evaluator=request.user, status='ACTIVE'
     ).select_related('evaluatee').order_by('-created_at')
-    return render(request, 'feedback/pending.html', {'my_targets': my_targets})
+    assigned_ids = set(my_targets.values_list('evaluatee_id', flat=True))
+    sector_targets = [
+        u for u in _sector_feedback_targets(request.user) if u.id not in assigned_ids
+    ]
+    return render(request, 'feedback/pending.html', {
+        'my_targets': my_targets,
+        'sector_targets': sector_targets,
+    })
 
 
 @login_required
@@ -423,7 +489,7 @@ def create_feedback(request, assignment_id=None):
                 has_assignment = FeedbackAssignment.objects.filter(
                     evaluator=request.user, evaluatee=evaluatee, status='ACTIVE'
                 ).exists()
-                if not has_assignment:
+                if not has_assignment and not _can_give_sector_feedback(request.user, evaluatee):
                     return HttpResponseForbidden('Você não tem atribuição para avaliar este colaborador.')
 
     if request.method == 'POST':

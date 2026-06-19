@@ -9,7 +9,7 @@
     </div>
 
     <div class="bg-white rounded-xl shadow overflow-hidden">
-      {% if my_targets %}
+      {% if my_targets or sector_targets %}
         <table class="w-full text-sm">
           <thead class="bg-gray-100 text-gray-600 text-left">
             <tr><th class="p-3">Avaliado</th><th class="p-3">Atribuído por</th><th class="p-3">Histórico</th><th class="p-3">Ações</th></tr>
@@ -21,6 +21,14 @@
                 <td class="p-3">{{ a.created_by.get_full_name|default:"—" }}</td>
                 <td class="p-3"><a href="{% url 'feedback:user_history' a.evaluatee.id %}" class="text-indigo-600 hover:underline">Ver histórico</a></td>
                 <td class="p-3"><a href="{% url 'feedback:create_from_assignment' a.id %}" class="px-3 py-1.5 bg-indigo-600 text-white rounded">Aplicar feedback</a></td>
+              </tr>
+            {% endfor %}
+            {% for u in sector_targets %}
+              <tr>
+                <td class="p-3 font-medium">{{ u.get_full_name|default:u.username }}</td>
+                <td class="p-3">Setor</td>
+                <td class="p-3"><a href="{% url 'feedback:user_history' u.id %}" class="text-indigo-600 hover:underline">Ver histórico</a></td>
+                <td class="p-3"><a href="{% url 'feedback:create' %}?evaluatee={{ u.id }}" class="px-3 py-1.5 bg-indigo-600 text-white rounded">Aplicar feedback</a></td>
               </tr>
             {% endfor %}
           </tbody>

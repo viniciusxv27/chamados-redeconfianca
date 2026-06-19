@@ -385,6 +385,89 @@ def _update_users_pcn(pcn_by_consultor):
     return len(users_to_update)
 
 
+def _find_sector_for_store(sectors, store_name):
+    """Encontra o Setor correspondente a uma loja (PDV) das metas.
+
+    Prioriza correspondencia exata (apos normalizar e remover prefixo LOJA/PDV/FILIAL)
+    e, em ultimo caso, usa a correspondencia aproximada de _stores_match.
+    """
+    target = _normalize_store_key(store_name)
+    if not target:
+        return None
+    for sector in sectors:
+        if _normalize_store_key(sector.name) == target:
+            return sector
+    for sector in sectors:
+        if _stores_match(sector.name, store_name):
+            return sector
+    return None
+
+
+def _update_users_sectors(store_by_consultor):
+    """Atualiza o setor principal e os setores dos usuarios.
+
+    Casa o usuario pelo nome do consultor (sheet METAS CN REAL) e o setor pela
+    loja (coluna PDV) informada na mesma linha. Mantem os demais setores ja
+    vinculados ao usuario, apenas adicionando o setor da loja e definindo-o como
+    setor principal.
+
+    Retorna a quantidade de usuarios efetivamente atualizados.
+    """
+    from users.models import Sector, User
+
+    if not store_by_consultor:
+        return 0
+
+    normalized_store = {}
+    for consultor, store in store_by_consultor.items():
+        key = _normalize_text(consultor)
+        if key and store:
+            normalized_store.setdefault(key, store)
+
+    if not normalized_store:
+        return 0
+
+    sectors = list(Sector.objects.all())
+    if not sectors:
+        return 0
+
+    updated = 0
+    for user in User.objects.all():
+        full_name_key = _normalize_text(f'{user.first_name} {user.last_name}')
+        if not full_name_key or full_name_key not in normalized_store:
+            continue
+
+        sector = _find_sector_for_store(sectors, normalized_store[full_name_key])
+        if sector is None:
+            continue
+
+        changed = False
+        if user.sector_id != sector.id:
+            user.sector = sector
+            user.save(update_fields=['sector'])
+            changed = True
+        if not user.sectors.filter(id=sector.id).exists():
+            user.sectors.add(sector)
+            changed = True
+        if changed:
+            updated += 1
+
+    return updated
+
+
+def _build_store_by_consultor(entries):
+    """Monta o mapa nome do consultor -> loja a partir das linhas da sheet CN REAL."""
+    store_by_consultor = {}
+    for entry in entries:
+        if entry.get('sheet_type') != GoalEntry.SHEET_CN_REAL:
+            continue
+        name = (entry.get('user_name') or '').strip()
+        store = (entry.get('store_name') or '').strip()
+        if name and store:
+            store_by_consultor.setdefault(name, store)
+    return store_by_consultor
+
+
 def _load_goal_entries_from_workbook(uploaded_file):
     workbook = openpyxl.load_workbook(uploaded_file, data_only=True)
 
@@ -1081,11 +1164,13 @@ def upload_goals_view(request):
         ])
 
         updated_pcn = _update_users_pcn(pcn_by_consultor)
+        updated_sectors = _update_users_sectors(_build_store_by_consultor(parsed_entries))
 
     messages.success(
         request,
         f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas). '
-        f'PCN atualizado em {updated_pcn} usuario(s).'
+        f'PCN atualizado em {updated_pcn} usuario(s). '
+        f'Setor atualizado em {updated_sectors} usuario(s).'
     )
     return redirect('power_bi:manage_goals')
 
