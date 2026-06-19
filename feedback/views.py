@@ -119,7 +119,7 @@ def superadmin_required(view_func):
     @wraps(view_func)
     @login_required
     def _wrapped(request, *args, **kwargs):
-        if not _is_superadmin(request.user):
+        if not _is_superadmin(request.user) or request.user.hierarchy != 'ADMIN':
             return HttpResponseForbidden('Acesso restrito a superadministradores.')
         return view_func(request, *args, **kwargs)
     return _wrapped
