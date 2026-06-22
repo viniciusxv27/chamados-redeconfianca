@@ -22,6 +22,7 @@ from .models import (
     FeedbackAssignment,
     FeedbackReminderDismissal,
     SurveyManagerPermission,
+    SurveySettings,
 )
 from .reminders import get_pending_reminders
 
@@ -923,6 +924,24 @@ def exit_interview_report(request):
     })
 
 
+@survey_manager_required
+@require_POST
+def exit_interview_reset(request, user_id):
+    """Zera a entrevista de desligamento de um colaborador, permitindo refazê-la.
+
+    Remove apenas o controle de participação (as respostas são anônimas e não
+    ficam vinculadas ao usuário)."""
+    target = get_object_or_404(User, pk=user_id)
+    deleted, _ = ExitInterviewParticipation.objects.filter(
+        survey_key=EXIT_INTERVIEW_KEY, user=target
+    ).delete()
+    if deleted:
+        messages.success(request, f'Entrevista de {target.get_full_name() or target.username} zerada. Ele(a) poderá responder novamente.')
+    else:
+        messages.info(request, f'{target.get_full_name() or target.username} ainda não iniciou a entrevista.')
+    return redirect('feedback:exit_interview_report')
+
+
 # ---------------------------------------------------------------------------
 # Gestão de acessos às pesquisas (somente superadmin)
 # ---------------------------------------------------------------------------
@@ -932,6 +951,29 @@ def exit_interview_report(request):
 def survey_access(request):
     if request.method == 'POST':
         action = request.POST.get('action')
+
+        # Ações que não dependem de um usuário-alvo.
+        if action == 'clear_climate':
+            resp_count = ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count()
+            part_count = ClimateSurveyParticipation.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count()
+            ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).delete()
+            ClimateSurveyParticipation.objects.filter(survey_key=CLIMATE_SURVEY_KEY).delete()
+            messages.success(
+                request,
+                f'Pesquisa de Clima zerada: {resp_count} resposta(s) e {part_count} participação(ões) removidas.',
+            )
+            return redirect('feedback:survey_access')
+
+        if action == 'toggle_climate_menu':
+            config = SurveySettings.load()
+            config.climate_menu_visible = not config.climate_menu_visible
+            config.save(update_fields=['climate_menu_visible', 'updated_at'])
+            if config.climate_menu_visible:
+                messages.success(request, 'A "Pesquisa de Clima" voltou a aparecer no menu para todos os usuários.')
+            else:
+                messages.success(request, 'A "Pesquisa de Clima" foi ocultada no menu (visível apenas para superadmins e gestores).')
+            return redirect('feedback:survey_access')
+
         user_id = request.POST.get('user_id')
         target = User.objects.filter(pk=user_id).first()
         if not target:
@@ -958,6 +1000,9 @@ def survey_access(request):
     )
     return render(request, 'feedback/survey_access.html', {
         'permissions': permissions,
+        'climate_menu_visible': SurveySettings.load().climate_menu_visible,
+        'climate_response_count': ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count(),
+        'climate_participation_count': ClimateSurveyParticipation.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count(),
     })
 
 

@@ -323,6 +323,29 @@ class SurveyManagerPermission(models.Model):
         return f'Gestão de pesquisas: {self.user}'
 
 
+class SurveySettings(models.Model):
+    """Configurações gerais das pesquisas (singleton, sempre pk=1)."""
+
+    climate_menu_visible = models.BooleanField(
+        default=True,
+        verbose_name='Mostrar "Pesquisa de Clima" no menu para usuários comuns',
+        help_text='Quando desligado, apenas superadmins e gestores das pesquisas veem o item no menu.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Configuração das Pesquisas'
+        verbose_name_plural = 'Configurações das Pesquisas'
+
+    def __str__(self):
+        return 'Configurações das Pesquisas'
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class ExitInterviewParticipation(models.Model):
     """Controle nominal de participação na Entrevista de Desligamento.
 

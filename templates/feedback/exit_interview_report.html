@@ -146,6 +146,7 @@
               <th class="p-3 text-left">Status</th>
               <th class="p-3 text-left">Última etapa</th>
               <th class="p-3 text-left">Concluído em</th>
+              <th class="p-3 text-right">Ações</th>
             </tr>
           </thead>
           <tbody class="divide-y">
@@ -167,9 +168,19 @@
                 </td>
                 <td class="p-3 text-gray-600">{{ row.participation.last_step|default:"-" }}</td>
                 <td class="p-3 text-gray-600">{{ row.participation.completed_at|date:"d/m/Y H:i"|default:"-" }}</td>
+                <td class="p-3 text-right">
+                  {% if row.status != "NOT_STARTED" %}
+                    <form method="post" action="{% url 'feedback:exit_interview_reset' row.user.id %}" onsubmit="return confirm('Zerar a entrevista de {{ row.user.get_full_name|default:row.user.username|escapejs }}? Ele(a) poderá responder novamente.');">
+                      {% csrf_token %}
+                      <button type="submit" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100"><i class="fas fa-rotate-left mr-1"></i>Zerar</button>
+                    </form>
+                  {% else %}
+                    <span class="text-xs text-gray-300">—</span>
+                  {% endif %}
+                </td>
               </tr>
             {% empty %}
-              <tr><td colspan="5" class="p-6 text-center text-gray-500">Nenhum colaborador encontrado com os filtros atuais.</td></tr>
+              <tr><td colspan="6" class="p-6 text-center text-gray-500">Nenhum colaborador encontrado com os filtros atuais.</td></tr>
             {% endfor %}
           </tbody>
         </table>

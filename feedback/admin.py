@@ -8,6 +8,7 @@ from .models import (
     FeedbackAssignment,
     FeedbackReminderDismissal,
     SurveyManagerPermission,
+    SurveySettings,
 )
 
 
@@ -65,6 +66,12 @@ class SurveyManagerPermissionAdmin(admin.ModelAdmin):
     search_fields = ('user__first_name', 'user__last_name', 'user__email')
     autocomplete_fields = ('user', 'granted_by')
     readonly_fields = ('created_at',)
+
+
+@admin.register(SurveySettings)
+class SurveySettingsAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'climate_menu_visible', 'updated_at')
+    readonly_fields = ('updated_at',)
 
 
 @admin.register(ExitInterviewParticipation)

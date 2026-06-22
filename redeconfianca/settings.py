@@ -100,6 +100,7 @@ TEMPLATES = [
                 'notifications.context_processors.user_support_sectors',
                 'assets.context_processors.inventory_context',
                 'contestacao.context_processors.contestacao_menu_context',
+                'feedback.context_processors.survey_menu',
             ],
         },
     },

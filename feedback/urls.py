@@ -14,6 +14,7 @@ urlpatterns = [
     path('entrevista-desligamento/', views.exit_interview, name='exit_interview'),
     path('entrevista-desligamento/progresso/', views.exit_interview_progress, name='exit_interview_progress'),
     path('entrevista-desligamento/relatorio/', views.exit_interview_report, name='exit_interview_report'),
+    path('entrevista-desligamento/<int:user_id>/zerar/', views.exit_interview_reset, name='exit_interview_reset'),
 
     path('pendentes/', views.my_pending, name='pending'),
     path('historico/<int:user_id>/', views.user_history, name='user_history'),
