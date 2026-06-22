@@ -16,9 +16,12 @@ from .forms import AssignmentForm, FeedbackForm
 from .models import (
     ClimateSurveyParticipation,
     ClimateSurveyResponse,
+    ExitInterviewParticipation,
+    ExitInterviewResponse,
     Feedback,
     FeedbackAssignment,
     FeedbackReminderDismissal,
+    SurveyManagerPermission,
 )
 from .reminders import get_pending_reminders
 
@@ -167,12 +170,33 @@ def _primary_sector_for_user(user):
     return primary_sector
 
 
+def _can_manage_surveys(user) -> bool:
+    """Pode gerenciar a Pesquisa de Clima e a Entrevista de Desligamento
+    (e ver os relatórios): superadmins ou usuários liberados manualmente."""
+    if not user.is_authenticated:
+        return False
+    if _is_superadmin(user):
+        return True
+    return SurveyManagerPermission.objects.filter(user=user).exists()
+
+
 def superadmin_required(view_func):
     @wraps(view_func)
     @login_required
     def _wrapped(request, *args, **kwargs):
-        if not _is_superadmin(request.user) or request.user.hierarchy != 'ADMIN':
+        if not _is_superadmin(request.user):
             return HttpResponseForbidden('Acesso restrito a superadministradores.')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+def survey_manager_required(view_func):
+    """Acesso liberado a superadmins e a usuários autorizados a gerenciar as pesquisas."""
+    @wraps(view_func)
+    @login_required
+    def _wrapped(request, *args, **kwargs):
+        if not _can_manage_surveys(request.user):
+            return HttpResponseForbidden('Acesso restrito aos gestores das pesquisas.')
         return view_func(request, *args, **kwargs)
     return _wrapped
 
@@ -307,6 +331,7 @@ def climate_survey(request):
         'participation': participation,
         'already_completed': participation.status == 'COMPLETED',
         'is_superadmin': _is_superadmin(user),
+        'can_manage_surveys': _can_manage_surveys(user),
     })
 
 
@@ -343,7 +368,7 @@ def climate_survey_progress(request):
     return JsonResponse({'success': True})
 
 
-@superadmin_required
+@survey_manager_required
 def climate_survey_report(request):
     sector_filter_id = request.GET.get('sector')
     status_filter = (request.GET.get('status') or '').strip().lower()
@@ -466,6 +491,358 @@ def climate_survey_report(request):
         'status_filter': status_filter,
         'all_sectors': Sector.objects.all().order_by('name'),
         'survey_key': CLIMATE_SURVEY_KEY,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Entrevista de Desligamento (formulário nativo + relatório)
+# ---------------------------------------------------------------------------
+
+EXIT_INTERVIEW_KEY = 'desligamento_2026'
+
+EXIT_INTERVIEW_INTRO = (
+    'A Entrevista de Desligamento é um momento estratégico para a Rede Confiança. '
+    'Por meio dela, buscamos compreender melhor a experiência de cada colaborador '
+    'durante sua jornada conosco, identificando pontos fortes e oportunidades de '
+    'melhoria. Suas respostas serão tratadas com total confidencialidade.'
+)
+
+EXIT_STORE_OPTIONS = [
+    'MASTERPLACE', 'JARDIM CAMBURI', 'CENTRO DE VILA VELHA', 'CENTRO DE VITÓRIA',
+    'GLÓRIA', 'NORTE SUL', 'MONTSERRAT', 'SHOPPING LARANJEIRAS',
+    'MARCILIO DE NORONHA', 'PORTO CANOA', 'JACARAÍPE', 'ITACIBÁ', 'SERRA SEDE',
+    'ANCHIETA', 'PIUMA', 'ICONHA', 'BOM JESUS DE ITABAPOANA',
+    'SANTO ANTONIO DE PÁDUA', 'MIRACEMA', 'SÃO FIDÉLIS', 'QUISSAMÃ',
+]
+
+# Estrutura do formulário. Tipos suportados: 'text', 'paragraph', 'choice', 'scale'.
+EXIT_INTERVIEW_SECTIONS = [
+    {
+        'key': 'dados_gerais',
+        'title': 'Bloco 1 – Dados Gerais',
+        'questions': [
+            {'key': 'nome', 'type': 'text', 'required': False,
+             'label': 'Qual seu nome? (deixe em branco caso não queira se identificar)'},
+            {'key': 'loja', 'type': 'choice', 'required': False,
+             'label': 'Qual sua loja atual?', 'options': EXIT_STORE_OPTIONS},
+            {'key': 'cargo', 'type': 'text', 'required': True,
+             'label': 'Qual seu cargo?'},
+            {'key': 'tempo_empresa', 'type': 'choice', 'required': True,
+             'label': 'Qual seu tempo de empresa?',
+             'options': ['Menos de 6 meses', '6 meses a 1 ano', '1 a 2 anos', '2 a 5 anos', 'Mais de 5 anos']},
+        ],
+    },
+    {
+        'key': 'motivo',
+        'title': 'Bloco 2 – Motivo do Desligamento',
+        'questions': [
+            {'key': 'motivo_desligamento', 'type': 'choice', 'required': True,
+             'label': 'Qual o motivo do desligamento?',
+             'options': ['Nova oportunidade de trabalho', 'Salário/benefícios',
+                         'Falta de reconhecimento', 'Falta de perspectiva de crescimento',
+                         'Problemas com liderança', 'Clima de equipe', 'Questões pessoais',
+                         'Fui desligado pela empresa']},
+            {'key': 'nota_treinamentos', 'type': 'scale', 'required': True,
+             'label': 'Em uma escala de 1 a 5, qual nota você dá para os treinamentos aplicados pela empresa?'},
+            {'key': 'nota_lideranca', 'type': 'scale', 'required': True,
+             'label': 'Em uma escala de 1 a 5, qual a avaliação que você dá para sua liderança direta?'},
+            {'key': 'nota_comunicacao', 'type': 'scale', 'required': True,
+             'label': 'Em uma escala de 1 a 5, qual avaliação você dá para a comunicação interna da empresa?'},
+            {'key': 'nota_reconhecimento', 'type': 'scale', 'required': True,
+             'label': 'Em uma escala de 1 a 5, qual avaliação você dá para o reconhecimento e valorização da empresa?'},
+            {'key': 'nota_beneficios', 'type': 'scale', 'required': True,
+             'label': 'Em uma escala de 1 a 5, qual avaliação você dá para os benefícios e remuneração que a empresa oferece?'},
+            {'key': 'nota_clima', 'type': 'scale', 'required': True,
+             'label': 'Em uma escala de 1 a 5, qual avaliação você dá para o clima da sua equipe de trabalho?'},
+            {'key': 'experiencia_geral', 'type': 'text', 'required': True,
+             'label': 'Agora, compartilhe conosco como foi sua experiência geral na Rede Confiança.'},
+            {'key': 'valores_presentes', 'type': 'choice', 'required': True,
+             'label': 'Você sentiu que os valores da Rede Confiança estavam presentes no dia a dia?',
+             'options': ['Sim, totalmente', 'Parcialmente', 'Não']},
+            {'key': 'recomendaria', 'type': 'choice', 'required': True,
+             'label': 'Você recomendaria a Rede Confiança como lugar para trabalhar?',
+             'options': ['Sim, totalmente', 'Talvez', 'Não']},
+            {'key': 'lideranca_melhorar', 'type': 'paragraph', 'required': True,
+             'label': 'O que a liderança poderia melhorar?'},
+            {'key': 'mudaria', 'type': 'paragraph', 'required': True,
+             'label': 'O que você mudaria no dia a dia da empresa?'},
+        ],
+    },
+]
+
+EXIT_SCALE_OPTIONS = [1, 2, 3, 4, 5]
+
+
+def _exit_questions():
+    """Lista achatada de todas as perguntas do formulário."""
+    out = []
+    for section in EXIT_INTERVIEW_SECTIONS:
+        out.extend(section['questions'])
+    return out
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def exit_interview(request):
+    user = request.user
+    selected_sector = _primary_sector_for_user(user)
+
+    participation, _ = ExitInterviewParticipation.objects.get_or_create(
+        survey_key=EXIT_INTERVIEW_KEY,
+        user=user,
+        defaults={'sector': selected_sector, 'last_step': EXIT_INTERVIEW_SECTIONS[0]['title']},
+    )
+
+    if request.method == 'POST':
+        answers = {'scale': {}, 'choice': {}, 'text': {}}
+        missing = []
+        for question in _exit_questions():
+            raw = (request.POST.get(question['key']) or '').strip()
+            qtype = question['type']
+            if qtype == 'scale':
+                try:
+                    value = int(raw)
+                except (TypeError, ValueError):
+                    value = None
+                if value not in EXIT_SCALE_OPTIONS:
+                    if question['required']:
+                        missing.append(question['key'])
+                    continue
+                answers['scale'][question['key']] = value
+            elif qtype == 'choice':
+                if not raw:
+                    if question['required']:
+                        missing.append(question['key'])
+                    continue
+                if question.get('options') and raw not in question['options']:
+                    missing.append(question['key'])
+                    continue
+                answers['choice'][question['key']] = raw
+            else:  # text / paragraph
+                if not raw and question['required']:
+                    missing.append(question['key'])
+                    continue
+                answers['text'][question['key']] = raw
+
+        if missing:
+            messages.error(request, 'Responda todas as perguntas obrigatórias antes de enviar.')
+            return redirect('feedback:exit_interview')
+
+        ExitInterviewResponse.objects.create(
+            survey_key=EXIT_INTERVIEW_KEY,
+            answers=answers,
+        )
+
+        participation.status = 'COMPLETED'
+        participation.last_step = 'Concluída'
+        participation.completed_at = timezone.now()
+        participation.save(update_fields=['status', 'last_step', 'completed_at', 'updated_at'])
+
+        messages.success(request, 'Entrevista de Desligamento enviada com sucesso. Obrigado pela sua sinceridade.')
+        return redirect('feedback:exit_interview')
+
+    return render(request, 'feedback/exit_interview.html', {
+        'survey_key': EXIT_INTERVIEW_KEY,
+        'intro': EXIT_INTERVIEW_INTRO,
+        'sections': EXIT_INTERVIEW_SECTIONS,
+        'scale_options': EXIT_SCALE_OPTIONS,
+        'participation': participation,
+        'already_completed': participation.status == 'COMPLETED',
+        'is_superadmin': _is_superadmin(user),
+        'can_manage_surveys': _can_manage_surveys(user),
+    })
+
+
+@login_required
+@require_POST
+def exit_interview_progress(request):
+    import json
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        payload = {}
+
+    step = (payload.get('step') or request.POST.get('step') or '').strip()[:120]
+
+    participation, _ = ExitInterviewParticipation.objects.get_or_create(
+        survey_key=EXIT_INTERVIEW_KEY,
+        user=request.user,
+        defaults={'sector': _primary_sector_for_user(request.user), 'last_step': step or EXIT_INTERVIEW_SECTIONS[0]['title']},
+    )
+
+    if participation.status != 'COMPLETED' and step:
+        participation.last_step = step
+        participation.save(update_fields=['last_step', 'updated_at'])
+
+    return JsonResponse({'success': True})
+
+
+@survey_manager_required
+def exit_interview_report(request):
+    status_filter = (request.GET.get('status') or '').strip().lower()
+
+    users_qs = (
+        User.objects.filter(is_active=True)
+        .select_related('sector')
+        .order_by('first_name', 'last_name')
+    )
+    participations = {
+        item.user_id: item
+        for item in ExitInterviewParticipation.objects
+        .filter(survey_key=EXIT_INTERVIEW_KEY)
+        .select_related('user', 'sector')
+    }
+
+    rows = []
+    for user in users_qs:
+        participation = participations.get(user.id)
+        status = participation.status if participation else 'NOT_STARTED'
+        rows.append({
+            'user': user,
+            'sector': participation.sector if participation and participation.sector else _primary_sector_for_user(user),
+            'participation': participation,
+            'status': status,
+            'status_label': {
+                'COMPLETED': 'Concluída',
+                'IN_PROGRESS': 'Em andamento',
+                'NOT_STARTED': 'Não iniciou',
+            }.get(status, status),
+        })
+
+    detailed = rows
+    if status_filter in ['completed', 'in_progress', 'not_started']:
+        status_map = {'completed': 'COMPLETED', 'in_progress': 'IN_PROGRESS', 'not_started': 'NOT_STARTED'}
+        detailed = [row for row in rows if row['status'] == status_map[status_filter]]
+
+    responses = list(ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY))
+
+    # Estatísticas das notas (escala 1-5).
+    scale_stats = []
+    for question in _exit_questions():
+        if question['type'] != 'scale':
+            continue
+        values = []
+        for response in responses:
+            value = (response.answers or {}).get('scale', {}).get(question['key'])
+            if isinstance(value, int):
+                values.append(value)
+        avg = round(sum(values) / len(values), 2) if values else None
+        scale_stats.append({
+            'key': question['key'],
+            'label': question['label'],
+            'short': question['label'].split('?')[0][:60],
+            'avg': avg,
+            'count': len(values),
+        })
+
+    # Distribuição das perguntas de múltipla escolha.
+    choice_stats = []
+    for question in _exit_questions():
+        if question['type'] != 'choice':
+            continue
+        counter = {opt: 0 for opt in (question.get('options') or [])}
+        total = 0
+        for response in responses:
+            value = (response.answers or {}).get('choice', {}).get(question['key'])
+            if value:
+                counter[value] = counter.get(value, 0) + 1
+                total += 1
+        choice_stats.append({
+            'key': question['key'],
+            'label': question['label'],
+            'total': total,
+            'items': [
+                {'option': opt, 'count': cnt,
+                 'pct': round((cnt / total) * 100, 1) if total else 0.0}
+                for opt, cnt in counter.items()
+            ],
+        })
+
+    # Comentários abertos (texto/paragraph).
+    open_blocks = []
+    for question in _exit_questions():
+        if question['type'] not in ('text', 'paragraph'):
+            continue
+        texts = []
+        for response in responses:
+            value = (response.answers or {}).get('text', {}).get(question['key'])
+            if value and value.strip():
+                texts.append(value.strip())
+        open_blocks.append({'label': question['label'], 'answers': texts})
+
+    dropout = (
+        ExitInterviewParticipation.objects
+        .filter(survey_key=EXIT_INTERVIEW_KEY, status='IN_PROGRESS')
+        .values('last_step')
+        .annotate(total=Count('id'))
+        .order_by('-total', 'last_step')
+    )
+
+    totals = {
+        'total': len(rows),
+        'completed': sum(1 for r in rows if r['status'] == 'COMPLETED'),
+        'in_progress': sum(1 for r in rows if r['status'] == 'IN_PROGRESS'),
+        'not_started': sum(1 for r in rows if r['status'] == 'NOT_STARTED'),
+        'responses': len(responses),
+    }
+    totals['completed_pct'] = round((totals['completed'] / totals['total']) * 100, 1) if totals['total'] else 0.0
+
+    import json
+    return render(request, 'feedback/exit_interview_report.html', {
+        'totals': totals,
+        'detailed': detailed,
+        'scale_stats': scale_stats,
+        'choice_stats': choice_stats,
+        'open_blocks': open_blocks,
+        'dropout': dropout,
+        'status_filter': status_filter,
+        'survey_key': EXIT_INTERVIEW_KEY,
+        'scale_labels_json': json.dumps([s['short'] for s in scale_stats]),
+        'scale_values_json': json.dumps([s['avg'] or 0 for s in scale_stats]),
+        'choice_stats_json': json.dumps([
+            {'label': c['label'], 'labels': [i['option'] for i in c['items']],
+             'data': [i['count'] for i in c['items']]}
+            for c in choice_stats
+        ]),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Gestão de acessos às pesquisas (somente superadmin)
+# ---------------------------------------------------------------------------
+
+@superadmin_required
+@require_http_methods(['GET', 'POST'])
+def survey_access(request):
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        user_id = request.POST.get('user_id')
+        target = User.objects.filter(pk=user_id).first()
+        if not target:
+            messages.error(request, 'Usuário não encontrado.')
+            return redirect('feedback:survey_access')
+
+        if action == 'grant':
+            if _is_superadmin(target):
+                messages.info(request, f'{target.get_full_name() or target.username} já é superadmin e tem acesso.')
+            else:
+                SurveyManagerPermission.objects.get_or_create(
+                    user=target, defaults={'granted_by': request.user}
+                )
+                messages.success(request, f'Acesso liberado para {target.get_full_name() or target.username}.')
+        elif action == 'revoke':
+            SurveyManagerPermission.objects.filter(user=target).delete()
+            messages.success(request, f'Acesso removido de {target.get_full_name() or target.username}.')
+        return redirect('feedback:survey_access')
+
+    permissions = (
+        SurveyManagerPermission.objects
+        .select_related('user', 'user__sector', 'granted_by')
+        .order_by('user__first_name', 'user__last_name')
+    )
+    return render(request, 'feedback/survey_access.html', {
+        'permissions': permissions,
     })
 
 

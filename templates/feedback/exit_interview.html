@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Entrevista de Desligamento{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-5xl mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-door-open mr-2 text-rose-500"></i>Entrevista de Desligamento</h1>
+        <p class="text-sm text-gray-500 mt-1">Feedback confidencial sobre sua experiência na Rede Confiança.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {% if can_manage_surveys %}
+          <a href="{% url 'feedback:exit_interview_report' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+            <i class="fas fa-chart-bar mr-1"></i>Relatório
+          </a>
+        {% endif %}
+        <a href="{% url 'feedback:climate_survey' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Pesquisa de Clima</a>
+        <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+      </div>
+    </div>
+
+    {% if messages %}
+      <div class="space-y-2 mb-4">
+        {% for message in messages %}
+          <div class="p-3 rounded-lg text-sm {% if message.tags == 'success' %}bg-green-50 text-green-700 border border-green-200{% elif message.tags == 'info' %}bg-blue-50 text-blue-700 border border-blue-200{% else %}bg-red-50 text-red-700 border border-red-200{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if already_completed %}
+      <div class="bg-white rounded-xl shadow p-8 text-center">
+        <div class="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
+          <i class="fas fa-check text-2xl"></i>
+        </div>
+        <h2 class="text-xl font-semibold text-gray-900">Sua entrevista já foi registrada</h2>
+        <p class="text-gray-500 mt-2">Obrigado por compartilhar sua experiência conosco.</p>
+      </div>
+    {% else %}
+      <div class="bg-rose-50 border border-rose-100 rounded-xl p-4 mb-4 text-sm text-rose-800">
+        <i class="fas fa-shield-heart mr-1"></i>{{ intro }}
+      </div>
+
+      <div class="bg-white rounded-xl shadow overflow-hidden">
+        <div class="border-b bg-gray-50 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span id="exitStepLabel" class="text-sm font-semibold text-rose-700">Etapa 1</span>
+            <span id="exitStepCount" class="text-xs text-gray-500"></span>
+          </div>
+          <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div id="exitProgressBar" class="h-2 bg-rose-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <form method="post" id="exitForm" class="p-5 sm:p-6">
+          {% csrf_token %}
+
+          {% for section in sections %}
+            <section class="exit-step {% if not forloop.first %}hidden{% endif %}" data-step-title="{{ section.title }}">
+              <h2 class="text-lg font-semibold text-gray-900 mb-5">{{ section.title }}</h2>
+              <div class="space-y-5">
+                {% for question in section.questions %}
+                  <fieldset class="border border-gray-200 rounded-lg p-4">
+                    <legend class="px-1 text-sm font-medium text-gray-800">
+                      {{ question.label }}{% if question.required %} <span class="text-rose-500">*</span>{% endif %}
+                    </legend>
+
+                    {% if question.type == 'scale' %}
+                      <div class="grid grid-cols-5 gap-2 mt-3">
+                        {% for value in scale_options %}
+                          <label class="flex flex-col items-center gap-1 rounded-lg border border-gray-200 px-2 py-3 text-sm cursor-pointer hover:bg-rose-50">
+                            <input type="radio" name="{{ question.key }}" value="{{ value }}" {% if question.required %}required{% endif %} class="text-rose-600 focus:ring-rose-500">
+                            <span class="font-semibold">{{ value }}</span>
+                          </label>
+                        {% endfor %}
+                      </div>
+                      <p class="text-xs text-gray-400 mt-2">1 = muito ruim · 5 = excelente</p>
+                    {% elif question.type == 'choice' %}
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                        {% for opt in question.options %}
+                          <label class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm cursor-pointer hover:bg-rose-50">
+                            <input type="radio" name="{{ question.key }}" value="{{ opt }}" {% if question.required %}required{% endif %} class="text-rose-600 focus:ring-rose-500">
+                            <span>{{ opt }}</span>
+                          </label>
+                        {% endfor %}
+                      </div>
+                    {% elif question.type == 'paragraph' %}
+                      <textarea name="{{ question.key }}" rows="4" {% if question.required %}required{% endif %} class="mt-3 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500"></textarea>
+                    {% else %}
+                      <input type="text" name="{{ question.key }}" {% if question.required %}required{% endif %} class="mt-3 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
+                    {% endif %}
+                  </fieldset>
+                {% endfor %}
+              </div>
+            </section>
+          {% endfor %}
+
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-8 pt-5 border-t">
+            <button type="button" id="exitPrev" class="px-4 py-2 bg-white border rounded-lg text-gray-700 hover:bg-gray-50 hidden">
+              <i class="fas fa-arrow-left mr-1"></i>Voltar
+            </button>
+            <div class="sm:ml-auto flex gap-2">
+              <button type="button" id="exitNext" class="px-5 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700">
+                Avançar<i class="fas fa-arrow-right ml-1"></i>
+              </button>
+              <button type="submit" id="exitSubmit" class="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
+                <i class="fas fa-paper-plane mr-1"></i>Enviar Entrevista
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if not already_completed %}
+<script>
+(function () {
+  const steps = Array.from(document.querySelectorAll('.exit-step'));
+  const prevBtn = document.getElementById('exitPrev');
+  const nextBtn = document.getElementById('exitNext');
+  const submitBtn = document.getElementById('exitSubmit');
+  const label = document.getElementById('exitStepLabel');
+  const count = document.getElementById('exitStepCount');
+  const bar = document.getElementById('exitProgressBar');
+  const form = document.getElementById('exitForm');
+  let current = 0;
+
+  function saveProgress(stepTitle) {
+    fetch('{% url "feedback:exit_interview_progress" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      },
+      body: JSON.stringify({ step: stepTitle })
+    }).catch(() => {});
+  }
+
+  function showStep(index) {
+    current = Math.max(0, Math.min(index, steps.length - 1));
+    steps.forEach((step, i) => step.classList.toggle('hidden', i !== current));
+    const title = steps[current].dataset.stepTitle || 'Entrevista';
+    label.textContent = title;
+    count.textContent = `${current + 1} de ${steps.length}`;
+    bar.style.width = `${((current + 1) / steps.length) * 100}%`;
+    prevBtn.classList.toggle('hidden', current === 0);
+    nextBtn.classList.toggle('hidden', current === steps.length - 1);
+    submitBtn.classList.toggle('hidden', current !== steps.length - 1);
+    saveProgress(title);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function validateCurrentStep() {
+    const fields = Array.from(steps[current].querySelectorAll('[required]'));
+    for (const field of fields) {
+      if (field.type === 'radio') {
+        const checked = steps[current].querySelector(`input[name="${field.name}"]:checked`);
+        if (!checked) {
+          field.closest('fieldset')?.classList.add('border-red-300');
+          field.closest('fieldset')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return false;
+        }
+      } else if (!field.value.trim()) {
+        field.closest('fieldset')?.classList.add('border-red-300');
+        field.focus();
+        return false;
+      }
+    }
+    steps[current].querySelectorAll('fieldset').forEach(fieldset => fieldset.classList.remove('border-red-300'));
+    return true;
+  }
+
+  nextBtn.addEventListener('click', () => {
+    if (!validateCurrentStep()) return;
+    showStep(current + 1);
+  });
+  prevBtn.addEventListener('click', () => showStep(current - 1));
+
+  form.addEventListener('submit', (event) => {
+    if (!validateCurrentStep()) {
+      event.preventDefault();
+      return;
+    }
+    submitBtn.disabled = true;
+    submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Enviando...';
+  });
+
+  showStep(0);
+})();
+</script>
+{% endif %}
+{% endblock %}

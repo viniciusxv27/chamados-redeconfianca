@@ -2,9 +2,12 @@ from django.contrib import admin
 from .models import (
     ClimateSurveyParticipation,
     ClimateSurveyResponse,
+    ExitInterviewParticipation,
+    ExitInterviewResponse,
     Feedback,
     FeedbackAssignment,
     FeedbackReminderDismissal,
+    SurveyManagerPermission,
 )
 
 
@@ -53,4 +56,28 @@ class ClimateSurveyResponseAdmin(admin.ModelAdmin):
     list_filter = ('survey_key', 'sector', 'submitted_at')
     search_fields = ('sector__name',)
     autocomplete_fields = ('sector',)
+    readonly_fields = ('answers', 'submitted_at')
+
+
+@admin.register(SurveyManagerPermission)
+class SurveyManagerPermissionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'granted_by', 'created_at')
+    search_fields = ('user__first_name', 'user__last_name', 'user__email')
+    autocomplete_fields = ('user', 'granted_by')
+    readonly_fields = ('created_at',)
+
+
+@admin.register(ExitInterviewParticipation)
+class ExitInterviewParticipationAdmin(admin.ModelAdmin):
+    list_display = ('user', 'sector', 'status', 'last_step', 'started_at', 'completed_at')
+    list_filter = ('survey_key', 'status', 'sector')
+    search_fields = ('user__first_name', 'user__last_name', 'user__email', 'sector__name', 'last_step')
+    autocomplete_fields = ('user', 'sector')
+    readonly_fields = ('started_at', 'updated_at', 'completed_at')
+
+
+@admin.register(ExitInterviewResponse)
+class ExitInterviewResponseAdmin(admin.ModelAdmin):
+    list_display = ('survey_key', 'submitted_at')
+    list_filter = ('survey_key', 'submitted_at')
     readonly_fields = ('answers', 'submitted_at')

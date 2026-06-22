@@ -290,6 +290,99 @@ class ClimateSurveyResponse(models.Model):
         return f'Pesquisa de Clima - {sector} em {self.submitted_at:%d/%m/%Y %H:%M}'
 
 
+class SurveyManagerPermission(models.Model):
+    """Usuários liberados para gerenciar a Pesquisa de Clima e a Entrevista de
+    Desligamento (incluindo a visualização dos relatórios).
+
+    Superadministradores têm acesso independente desta tabela; este registro
+    serve para liberar usuários que não são superadmin.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='survey_manager_permission',
+        verbose_name='Usuário liberado',
+    )
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='survey_permissions_granted',
+        verbose_name='Liberado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Acesso à gestão de pesquisas'
+        verbose_name_plural = 'Acessos à gestão de pesquisas'
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'Gestão de pesquisas: {self.user}'
+
+
+class ExitInterviewParticipation(models.Model):
+    """Controle nominal de participação na Entrevista de Desligamento.
+
+    Permite saber quem concluiu, quem parou (e em qual etapa) e quem não fez,
+    sem vincular o usuário às respostas anônimas.
+    """
+
+    STATUS_CHOICES = [
+        ('IN_PROGRESS', 'Em andamento'),
+        ('COMPLETED', 'Concluída'),
+    ]
+
+    survey_key = models.CharField(max_length=80, default='desligamento_2026', db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='exit_interview_participations',
+        verbose_name='Usuário',
+    )
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exit_interview_participations',
+        verbose_name='Setor',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='IN_PROGRESS')
+    last_step = models.CharField(max_length=120, blank=True, verbose_name='Última etapa')
+    started_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('survey_key', 'user')
+        verbose_name = 'Participação na Entrevista de Desligamento'
+        verbose_name_plural = 'Participações na Entrevista de Desligamento'
+        ordering = ['status', 'user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'{self.user} - {self.get_status_display()}'
+
+
+class ExitInterviewResponse(models.Model):
+    """Resposta da Entrevista de Desligamento. A identificação (nome) é
+    opcional, conforme o próprio formulário."""
+
+    survey_key = models.CharField(max_length=80, default='desligamento_2026', db_index=True)
+    answers = models.JSONField(default=dict, verbose_name='Respostas')
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Resposta da Entrevista de Desligamento'
+        verbose_name_plural = 'Respostas da Entrevista de Desligamento'
+        ordering = ['-submitted_at']
+
+    def __str__(self):
+        return f'Entrevista de Desligamento em {self.submitted_at:%d/%m/%Y %H:%M}'
+
+
 class FeedbackReminderDismissal(models.Model):
     """Registra que um lembrete específico foi dispensado pelo usuário (para não exibir o popup novamente)."""
 
