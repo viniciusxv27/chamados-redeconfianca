@@ -6,6 +6,20 @@ from django.utils import timezone
 SCALE_CHOICES = [(i, str(i)) for i in range(0, 11)]
 
 
+def _format_duration(seconds):
+    """Formata uma duração em segundos de forma legível (ex.: '3min 20s')."""
+    if not seconds:
+        return '-'
+    seconds = int(seconds)
+    if seconds < 60:
+        return f'{seconds}s'
+    minutes, sec = divmod(seconds, 60)
+    if minutes < 60:
+        return f'{minutes}min {sec}s' if sec else f'{minutes}min'
+    hours, minutes = divmod(minutes, 60)
+    return f'{hours}h {minutes}min' if minutes else f'{hours}h'
+
+
 class FeedbackAssignment(models.Model):
     """Define quem deve dar feedback em quem.
 
@@ -266,9 +280,17 @@ class ClimateSurveyParticipation(models.Model):
 
 
 class ClimateSurveyResponse(models.Model):
-    """Resposta anônima da pesquisa; não armazena usuário nem nome."""
+    """Resposta da Pesquisa de Clima, vinculada ao usuário que respondeu."""
 
     survey_key = models.CharField(max_length=80, default='clima_organizacional_2026', db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='climate_survey_responses_made',
+        verbose_name='Respondente',
+    )
     sector = models.ForeignKey(
         'users.Sector',
         on_delete=models.SET_NULL,
@@ -278,16 +300,22 @@ class ClimateSurveyResponse(models.Model):
         verbose_name='Setor',
     )
     answers = models.JSONField(default=dict, verbose_name='Respostas')
+    duration_seconds = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name='Tempo de resposta (s)',
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Resposta Anônima da Pesquisa de Clima'
-        verbose_name_plural = 'Respostas Anônimas da Pesquisa de Clima'
+        verbose_name = 'Resposta da Pesquisa de Clima'
+        verbose_name_plural = 'Respostas da Pesquisa de Clima'
         ordering = ['-submitted_at']
 
     def __str__(self):
-        sector = self.sector.name if self.sector else 'Sem setor'
-        return f'Pesquisa de Clima - {sector} em {self.submitted_at:%d/%m/%Y %H:%M}'
+        who = self.user.get_full_name() if self.user else 'Sem identificação'
+        return f'Pesquisa de Clima - {who} em {self.submitted_at:%d/%m/%Y %H:%M}'
+
+    def duration_display(self):
+        return _format_duration(self.duration_seconds)
 
 
 class SurveyManagerPermission(models.Model):
@@ -390,11 +418,29 @@ class ExitInterviewParticipation(models.Model):
 
 
 class ExitInterviewResponse(models.Model):
-    """Resposta da Entrevista de Desligamento. A identificação (nome) é
-    opcional, conforme o próprio formulário."""
+    """Resposta da Entrevista de Desligamento, vinculada ao usuário que respondeu."""
 
     survey_key = models.CharField(max_length=80, default='desligamento_2026', db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exit_interview_responses_made',
+        verbose_name='Respondente',
+    )
+    sector = models.ForeignKey(
+        'users.Sector',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exit_interview_responses',
+        verbose_name='Setor',
+    )
     answers = models.JSONField(default=dict, verbose_name='Respostas')
+    duration_seconds = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name='Tempo de resposta (s)',
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -403,7 +449,11 @@ class ExitInterviewResponse(models.Model):
         ordering = ['-submitted_at']
 
     def __str__(self):
-        return f'Entrevista de Desligamento em {self.submitted_at:%d/%m/%Y %H:%M}'
+        who = self.user.get_full_name() if self.user else 'Sem identificação'
+        return f'Entrevista de Desligamento - {who} em {self.submitted_at:%d/%m/%Y %H:%M}'
+
+    def duration_display(self):
+        return _format_duration(self.duration_seconds)
 
 
 class FeedbackReminderDismissal(models.Model):

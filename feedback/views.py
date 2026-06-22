@@ -205,6 +205,14 @@ def _climate_question_keys():
     return keys
 
 
+def _climate_question_label_map():
+    labels = {}
+    for section in CLIMATE_SURVEY_SECTIONS:
+        for question in section['questions']:
+            labels[question['key']] = question['label']
+    return labels
+
+
 def _primary_sector_for_user(user):
     primary_sector = getattr(user, 'primary_sector', None)
     if callable(primary_sector):
@@ -342,16 +350,23 @@ def climate_survey(request):
         for question in CLIMATE_OPEN_QUESTIONS:
             answers['open'][question['key']] = (request.POST.get(question['key']) or '').strip()
 
+        now = timezone.now()
+        duration = None
+        if participation.started_at:
+            duration = max(int((now - participation.started_at).total_seconds()), 0)
+
         ClimateSurveyResponse.objects.create(
             survey_key=CLIMATE_SURVEY_KEY,
+            user=user,
             sector=sector,
             answers=answers,
+            duration_seconds=duration,
         )
 
         participation.sector = sector
         participation.status = 'COMPLETED'
         participation.last_step = 'Concluída'
-        participation.completed_at = timezone.now()
+        participation.completed_at = now
         participation.save(update_fields=['sector', 'status', 'last_step', 'completed_at', 'updated_at'])
 
         messages.success(request, 'Pesquisa de Clima enviada com sucesso. Obrigado por participar.')
@@ -491,8 +506,10 @@ def climate_survey_report(request):
 
     funcao_filter = (request.GET.get('funcao') or '').strip()
     tempo_filter = (request.GET.get('tempo') or '').strip()
+    answer_key = (request.GET.get('q_key') or '').strip()
+    answer_val = (request.GET.get('q_val') or '').strip()
 
-    responses = ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('sector')
+    responses = ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('sector', 'user')
     if selected_sector:
         responses = responses.filter(sector=selected_sector)
     responses = list(responses)
@@ -500,6 +517,9 @@ def climate_survey_report(request):
         responses = [r for r in responses if (r.answers or {}).get('profile', {}).get('funcao') == funcao_filter]
     if tempo_filter in CLIMATE_TENURE_OPTIONS:
         responses = [r for r in responses if (r.answers or {}).get('profile', {}).get('tempo_empresa') == tempo_filter]
+    label_map = _climate_question_label_map()
+    if answer_key in label_map and answer_val.isdigit():
+        responses = [r for r in responses if (r.answers or {}).get('likert', {}).get(answer_key) == int(answer_val)]
 
     question_stats = []
     for section in CLIMATE_SURVEY_SECTIONS:
@@ -535,6 +555,46 @@ def climate_survey_report(request):
         'funcao': _profile_distribution('funcao', CLIMATE_FUNCTION_OPTIONS),
         'tempo_empresa': _profile_distribution('tempo_empresa', CLIMATE_TENURE_OPTIONS),
     }
+
+    # Respostas individuais (não anônimas) para análise por colaborador.
+    open_label_map = {q['key']: q['label'] for q in CLIMATE_OPEN_QUESTIONS}
+    response_rows = []
+    duration_values = []
+    for response in sorted(responses, key=lambda r: r.submitted_at, reverse=True):
+        likert = (response.answers or {}).get('likert', {})
+        profile = (response.answers or {}).get('profile', {})
+        open_answers = (response.answers or {}).get('open', {})
+        scores = [v for v in likert.values() if isinstance(v, int)]
+        avg = round(sum(scores) / len(scores), 2) if scores else None
+        if response.duration_seconds:
+            duration_values.append(response.duration_seconds)
+        likert_items = [
+            {'label': label_map.get(k, k), 'value': likert.get(k)}
+            for k in label_map if k in likert
+        ]
+        open_items = [
+            {'label': open_label_map.get(k, k), 'text': v}
+            for k, v in open_answers.items() if v
+        ]
+        response_rows.append({
+            'response': response,
+            'user': response.user,
+            'sector': response.sector,
+            'funcao': profile.get('funcao', ''),
+            'tempo_empresa': profile.get('tempo_empresa', ''),
+            'avg': avg,
+            'duration_display': response.duration_display(),
+            'likert_items': likert_items,
+            'open_items': open_items,
+        })
+
+    avg_duration_seconds = round(sum(duration_values) / len(duration_values)) if duration_values else None
+    from .models import _format_duration
+    avg_duration_display = _format_duration(avg_duration_seconds)
+
+    answer_filter_options = [
+        {'key': k, 'label': label_map[k]} for k in _climate_question_keys()
+    ]
 
     dropout = (
         ClimateSurveyParticipation.objects
@@ -607,6 +667,12 @@ def climate_survey_report(request):
         'survey_key': CLIMATE_SURVEY_KEY,
         'analysis_count': len(responses),
         'charts_json': json.dumps(charts),
+        'response_rows': response_rows,
+        'avg_duration_display': avg_duration_display,
+        'answer_filter_options': answer_filter_options,
+        'answer_key': answer_key,
+        'answer_val': answer_val,
+        'likert_scale_values': [1, 2, 3, 4, 5],
     })
 
 
@@ -620,7 +686,7 @@ EXIT_INTERVIEW_INTRO = (
     'A Entrevista de Desligamento é um momento estratégico para a Rede Confiança. '
     'Por meio dela, buscamos compreender melhor a experiência de cada colaborador '
     'durante sua jornada conosco, identificando pontos fortes e oportunidades de '
-    'melhoria. Suas respostas serão tratadas com total confidencialidade.'
+    'melhoria. Suas respostas serão analisadas pela equipe de gestão/RH.'
 )
 
 EXIT_STORE_OPTIONS = [
@@ -744,14 +810,22 @@ def exit_interview(request):
             messages.error(request, 'Responda todas as perguntas obrigatórias antes de enviar.')
             return redirect('feedback:exit_interview')
 
+        now = timezone.now()
+        duration = None
+        if participation.started_at:
+            duration = max(int((now - participation.started_at).total_seconds()), 0)
+
         ExitInterviewResponse.objects.create(
             survey_key=EXIT_INTERVIEW_KEY,
+            user=user,
+            sector=selected_sector,
             answers=answers,
+            duration_seconds=duration,
         )
 
         participation.status = 'COMPLETED'
         participation.last_step = 'Concluída'
-        participation.completed_at = timezone.now()
+        participation.completed_at = now
         participation.save(update_fields=['status', 'last_step', 'completed_at', 'updated_at'])
 
         messages.success(request, 'Entrevista de Desligamento enviada com sucesso. Obrigado pela sua sinceridade.')
@@ -797,6 +871,16 @@ def exit_interview_progress(request):
 @survey_manager_required
 def exit_interview_report(request):
     status_filter = (request.GET.get('status') or '').strip().lower()
+    sector_filter_id = request.GET.get('sector')
+    answer_key = (request.GET.get('q_key') or '').strip()
+    answer_val = (request.GET.get('q_val') or '').strip()
+
+    selected_sector = None
+    if sector_filter_id:
+        try:
+            selected_sector = Sector.objects.filter(id=int(sector_filter_id)).first()
+        except (TypeError, ValueError):
+            selected_sector = None
 
     users_qs = (
         User.objects.filter(is_active=True)
@@ -827,11 +911,24 @@ def exit_interview_report(request):
         })
 
     detailed = rows
+    if selected_sector:
+        detailed = [r for r in detailed if r['sector'] and r['sector'].id == selected_sector.id]
     if status_filter in ['completed', 'in_progress', 'not_started']:
         status_map = {'completed': 'COMPLETED', 'in_progress': 'IN_PROGRESS', 'not_started': 'NOT_STARTED'}
-        detailed = [row for row in rows if row['status'] == status_map[status_filter]]
+        detailed = [row for row in detailed if row['status'] == status_map[status_filter]]
 
-    responses = list(ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY))
+    responses = ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY).select_related('sector', 'user')
+    if selected_sector:
+        responses = responses.filter(sector=selected_sector)
+    responses = list(responses)
+    exit_label_map = {q['key']: q['label'] for q in _exit_questions()}
+    exit_type_map = {q['key']: q['type'] for q in _exit_questions()}
+    if answer_key in exit_type_map:
+        qtype = exit_type_map[answer_key]
+        if qtype == 'scale' and answer_val.isdigit():
+            responses = [r for r in responses if (r.answers or {}).get('scale', {}).get(answer_key) == int(answer_val)]
+        elif qtype == 'choice' and answer_val:
+            responses = [r for r in responses if (r.answers or {}).get('choice', {}).get(answer_key) == answer_val]
 
     # Estatísticas das notas (escala 1-5).
     scale_stats = []
@@ -895,6 +992,45 @@ def exit_interview_report(request):
         .order_by('-total', 'last_step')
     )
 
+    # Respostas individuais (não anônimas) por colaborador.
+    from .models import _format_duration
+    response_rows = []
+    duration_values = []
+    for response in sorted(responses, key=lambda r: r.submitted_at, reverse=True):
+        ans = response.answers or {}
+        scale = ans.get('scale', {})
+        choice = ans.get('choice', {})
+        text = ans.get('text', {})
+        scores = [v for v in scale.values() if isinstance(v, int)]
+        avg = round(sum(scores) / len(scores), 2) if scores else None
+        if response.duration_seconds:
+            duration_values.append(response.duration_seconds)
+        items = []
+        for q in _exit_questions():
+            k = q['key']
+            if q['type'] == 'scale' and k in scale:
+                items.append({'label': q['label'], 'value': scale[k], 'kind': 'scale'})
+            elif q['type'] == 'choice' and k in choice:
+                items.append({'label': q['label'], 'value': choice[k], 'kind': 'choice'})
+            elif q['type'] in ('text', 'paragraph') and text.get(k):
+                items.append({'label': q['label'], 'value': text[k], 'kind': 'text'})
+        response_rows.append({
+            'response': response,
+            'user': response.user,
+            'sector': response.sector,
+            'avg': avg,
+            'duration_display': response.duration_display(),
+            'items': items,
+        })
+
+    avg_duration_seconds = round(sum(duration_values) / len(duration_values)) if duration_values else None
+    avg_duration_display = _format_duration(avg_duration_seconds)
+
+    answer_filter_options = [
+        {'key': q['key'], 'label': q['label'], 'type': q['type'], 'options': q.get('options') or []}
+        for q in _exit_questions() if q['type'] in ('scale', 'choice')
+    ]
+
     totals = {
         'total': len(rows),
         'completed': sum(1 for r in rows if r['status'] == 'COMPLETED'),
@@ -913,7 +1049,14 @@ def exit_interview_report(request):
         'open_blocks': open_blocks,
         'dropout': dropout,
         'status_filter': status_filter,
+        'selected_sector': selected_sector,
+        'all_sectors': Sector.objects.all().order_by('name'),
         'survey_key': EXIT_INTERVIEW_KEY,
+        'response_rows': response_rows,
+        'avg_duration_display': avg_duration_display,
+        'answer_filter_options': answer_filter_options,
+        'answer_key': answer_key,
+        'answer_val': answer_val,
         'scale_labels_json': json.dumps([s['short'] for s in scale_stats]),
         'scale_values_json': json.dumps([s['avg'] or 0 for s in scale_stats]),
         'choice_stats_json': json.dumps([

@@ -6,31 +6,35 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-chart-bar mr-2 text-sky-600"></i>Relatório da Pesquisa de Clima</h1>
-        <p class="text-sm text-gray-500 mt-1">Participação nominal separada das respostas anônimas por setor.</p>
+        <p class="text-sm text-gray-500 mt-1">Respostas identificadas por colaborador, com filtros por setor e por resposta.</p>
       </div>
       <a href="{% url 'feedback:climate_survey' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-      <div class="bg-white rounded-xl p-5 shadow">
-        <p class="text-sm text-gray-500">Colaboradores</p>
-        <p class="text-3xl font-bold text-gray-900">{{ totals.total }}</p>
+    <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Colaboradores</p>
+        <p class="text-3xl font-bold text-gray-900 mt-1">{{ totals.total }}</p>
       </div>
-      <div class="bg-white rounded-xl p-5 shadow">
-        <p class="text-sm text-gray-500">Concluíram</p>
-        <p class="text-3xl font-bold text-green-600">{{ totals.completed }}</p>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Concluíram</p>
+        <p class="text-3xl font-bold text-green-600 mt-1">{{ totals.completed }}</p>
       </div>
-      <div class="bg-white rounded-xl p-5 shadow">
-        <p class="text-sm text-gray-500">Em andamento</p>
-        <p class="text-3xl font-bold text-yellow-600">{{ totals.in_progress }}</p>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Em andamento</p>
+        <p class="text-3xl font-bold text-yellow-600 mt-1">{{ totals.in_progress }}</p>
       </div>
-      <div class="bg-white rounded-xl p-5 shadow">
-        <p class="text-sm text-gray-500">Não iniciaram</p>
-        <p class="text-3xl font-bold text-red-600">{{ totals.not_started }}</p>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Não iniciaram</p>
+        <p class="text-3xl font-bold text-red-600 mt-1">{{ totals.not_started }}</p>
       </div>
-      <div class="bg-white rounded-xl p-5 shadow">
-        <p class="text-sm text-gray-500">% Conclusão</p>
-        <p class="text-3xl font-bold text-sky-600">{{ totals.completed_pct }}%</p>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">% Conclusão</p>
+        <p class="text-3xl font-bold text-sky-600 mt-1">{{ totals.completed_pct }}%</p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Tempo médio</p>
+        <p class="text-2xl font-bold text-indigo-600 mt-1">{{ avg_duration_display }}</p>
       </div>
     </div>
 
@@ -124,8 +128,26 @@
               {% endfor %}
             </select>
           </div>
+          <div>
+            <label class="block text-xs text-gray-500">Resposta — pergunta</label>
+            <select name="q_key" class="border rounded-lg px-2 py-1 text-sm max-w-[220px]">
+              <option value="">Qualquer</option>
+              {% for opt in answer_filter_options %}
+                <option value="{{ opt.key }}" {% if answer_key == opt.key %}selected{% endif %}>{{ opt.label|truncatechars:50 }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500">Nota</label>
+            <select name="q_val" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="">Qualquer</option>
+              {% for v in likert_scale_values %}
+                <option value="{{ v }}" {% if answer_val == v|stringformat:"s" %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+          </div>
           <button type="submit" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-sm hover:bg-sky-700">Filtrar</button>
-          {% if selected_sector or funcao_filter or tempo_filter %}
+          {% if selected_sector or funcao_filter or tempo_filter or answer_key or answer_val %}
             <a href="{% url 'feedback:climate_survey_report' %}{% if status_filter %}?status={{ status_filter }}{% endif %}" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Limpar</a>
           {% endif %}
         </form>
@@ -193,7 +215,7 @@
       <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100">
         <div class="p-5 border-b">
           <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-table mr-2 text-amber-500"></i>Detalhamento por pergunta</h2>
-          <p class="text-xs text-gray-500 mt-1">Escala de 1 a 5, calculada somente sobre respostas anônimas.</p>
+          <p class="text-xs text-gray-500 mt-1">Escala de 1 a 5, calculada sobre as respostas enviadas.</p>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -238,15 +260,75 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+      <div class="p-5 border-b">
+        <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-comment-dots mr-2 text-indigo-500"></i>Respostas por colaborador <span class="text-sm font-normal text-gray-400">({{ response_rows|length }})</span></h2>
+        <p class="text-xs text-gray-500 mt-1">Clique em um colaborador para ver todas as respostas. Respeita os filtros acima.</p>
+      </div>
+      <div class="divide-y">
+        {% for r in response_rows %}
+          <details class="group">
+            <summary class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 list-none">
+              <span class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold shrink-0">
+                {{ r.user.first_name|first|upper }}{{ r.user.last_name|first|upper }}
+              </span>
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-gray-900 truncate">{{ r.user.get_full_name|default:r.user.username|default:"Sem identificação" }}</p>
+                <p class="text-xs text-gray-500 truncate">
+                  {{ r.sector.name|default:"Sem setor" }}{% if r.funcao %} · {{ r.funcao }}{% endif %}{% if r.tempo_empresa %} · {{ r.tempo_empresa }}{% endif %}
+                </p>
+              </div>
+              <div class="hidden sm:flex items-center gap-2 shrink-0">
+                <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600" title="Tempo de resposta"><i class="far fa-clock mr-1"></i>{{ r.duration_display }}</span>
+                {% if r.avg %}
+                  <span class="text-xs px-2 py-1 rounded-full font-semibold {% if r.avg >= 4 %}bg-green-100 text-green-700{% elif r.avg >= 3 %}bg-yellow-100 text-yellow-700{% else %}bg-red-100 text-red-700{% endif %}">Média {{ r.avg }}</span>
+                {% endif %}
+              </div>
+              <i class="fas fa-chevron-down text-gray-400 transition-transform group-open:rotate-180 shrink-0"></i>
+            </summary>
+            <div class="px-4 pb-4 sm:pl-16">
+              <div class="flex flex-wrap gap-2 text-xs text-gray-500 mb-3 sm:hidden">
+                <span class="px-2 py-1 rounded-full bg-gray-100"><i class="far fa-clock mr-1"></i>{{ r.duration_display }}</span>
+                {% if r.avg %}<span class="px-2 py-1 rounded-full bg-gray-100">Média {{ r.avg }}</span>{% endif %}
+                <span class="px-2 py-1 rounded-full bg-gray-100">{{ r.response.submitted_at|date:"d/m/Y H:i" }}</span>
+              </div>
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-1.5">
+                {% for item in r.likert_items %}
+                  <div class="flex items-center justify-between gap-3 text-sm border-b border-gray-50 py-1">
+                    <span class="text-gray-600">{{ item.label }}</span>
+                    <span class="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold {% if item.value >= 4 %}bg-green-100 text-green-700{% elif item.value >= 3 %}bg-yellow-100 text-yellow-700{% else %}bg-red-100 text-red-700{% endif %}">{{ item.value }}</span>
+                  </div>
+                {% endfor %}
+              </div>
+              {% if r.open_items %}
+                <div class="mt-4 space-y-2">
+                  {% for item in r.open_items %}
+                    <div>
+                      <p class="text-xs font-medium text-gray-500">{{ item.label }}</p>
+                      <p class="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mt-1">{{ item.text }}</p>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </details>
+        {% empty %}
+          <p class="p-6 text-center text-gray-500 text-sm">Nenhuma resposta encontrada com os filtros atuais.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
       <div class="p-5 border-b flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
         <div>
           <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-users mr-2 text-teal-500"></i>Participação{% if selected_sector %} - {{ selected_sector.name }}{% endif %}</h2>
-          <p class="text-xs text-gray-500">Esta lista mostra quem concluiu ou não, mas não aponta as respostas dadas.</p>
+          <p class="text-xs text-gray-500">Quem concluiu, está em andamento ou ainda não iniciou.</p>
         </div>
         <form method="get" class="flex flex-wrap gap-2 items-end">
           <input type="hidden" name="funcao" value="{{ funcao_filter }}">
           <input type="hidden" name="tempo" value="{{ tempo_filter }}">
+          <input type="hidden" name="q_key" value="{{ answer_key }}">
+          <input type="hidden" name="q_val" value="{{ answer_val }}">
           <div>
             <label class="block text-xs text-gray-500">Setor</label>
             <select name="sector" class="border rounded-lg px-2 py-1 text-sm">

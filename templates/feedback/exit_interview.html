@@ -6,7 +6,6 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-door-open mr-2 text-rose-500"></i>Entrevista de Desligamento</h1>
-        <p class="text-sm text-gray-500 mt-1">Feedback confidencial sobre sua experiência na Rede Confiança.</p>
       </div>
       <div class="flex flex-wrap gap-2">
         {% if can_manage_surveys %}
@@ -38,10 +37,6 @@
         <p class="text-gray-500 mt-2">Obrigado por compartilhar sua experiência conosco.</p>
       </div>
     {% else %}
-      <div class="bg-rose-50 border border-rose-100 rounded-xl p-4 mb-4 text-sm text-rose-800">
-        <i class="fas fa-shield-heart mr-1"></i>{{ intro }}
-      </div>
-
       <div class="bg-white rounded-xl shadow overflow-hidden">
         <div class="border-b bg-gray-50 p-4">
           <div class="flex items-center justify-between mb-2">

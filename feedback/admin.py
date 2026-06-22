@@ -53,10 +53,10 @@ class ClimateSurveyParticipationAdmin(admin.ModelAdmin):
 
 @admin.register(ClimateSurveyResponse)
 class ClimateSurveyResponseAdmin(admin.ModelAdmin):
-    list_display = ('sector', 'survey_key', 'submitted_at')
+    list_display = ('user', 'sector', 'survey_key', 'duration_seconds', 'submitted_at')
     list_filter = ('survey_key', 'sector', 'submitted_at')
-    search_fields = ('sector__name',)
-    autocomplete_fields = ('sector',)
+    search_fields = ('sector__name', 'user__first_name', 'user__last_name', 'user__email')
+    autocomplete_fields = ('sector', 'user')
     readonly_fields = ('answers', 'submitted_at')
 
 
@@ -85,6 +85,8 @@ class ExitInterviewParticipationAdmin(admin.ModelAdmin):
 
 @admin.register(ExitInterviewResponse)
 class ExitInterviewResponseAdmin(admin.ModelAdmin):
-    list_display = ('survey_key', 'submitted_at')
-    list_filter = ('survey_key', 'submitted_at')
+    list_display = ('user', 'sector', 'survey_key', 'duration_seconds', 'submitted_at')
+    list_filter = ('survey_key', 'sector', 'submitted_at')
+    search_fields = ('user__first_name', 'user__last_name', 'user__email', 'sector__name')
+    autocomplete_fields = ('user', 'sector')
     readonly_fields = ('answers', 'submitted_at')
