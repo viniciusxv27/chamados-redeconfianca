@@ -34,7 +34,20 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow mb-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-base font-semibold text-gray-900 mb-1"><i class="fas fa-chart-pie mr-2 text-sky-500"></i>Status de participação</h2>
+        <p class="text-xs text-gray-400 mb-3">Distribuição geral dos colaboradores.</p>
+        <div style="position:relative;height:250px"><canvas id="climateStatusChart"></canvas></div>
+      </div>
+      <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-base font-semibold text-gray-900 mb-1"><i class="fas fa-store mr-2 text-blue-500"></i>Participação por setor</h2>
+        <p class="text-xs text-gray-400 mb-3">Concluíram, em andamento e não iniciaram, por loja/setor.</p>
+        <div style="position:relative" id="climateSectorWrap"><canvas id="climateSectorChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
       <div class="p-5 border-b">
         <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-store mr-2 text-blue-500"></i>Participação por setor</h2>
       </div>
@@ -76,10 +89,110 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-      <div class="lg:col-span-2 bg-white rounded-xl shadow">
+    <div class="bg-white rounded-xl shadow mb-6">
+      <div class="p-5 border-b flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-filter mr-2 text-sky-600"></i>Filtrar análise das respostas</h2>
+          <p class="text-xs text-gray-500 mt-1">Aplica-se aos gráficos de perfil e às médias por pergunta · {{ analysis_count }} resposta(s) na seleção atual.</p>
+        </div>
+        <form method="get" class="flex flex-wrap gap-2 items-end">
+          <input type="hidden" name="status" value="{{ status_filter }}">
+          <div>
+            <label class="block text-xs text-gray-500">Setor</label>
+            <select name="sector" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="">Todos</option>
+              {% for sector in all_sectors %}
+                <option value="{{ sector.id }}" {% if selected_sector and selected_sector.id == sector.id %}selected{% endif %}>{{ sector.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500">Função</label>
+            <select name="funcao" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="">Todas</option>
+              {% for option in function_options %}
+                <option value="{{ option }}" {% if funcao_filter == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500">Tempo de empresa</label>
+            <select name="tempo" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="">Todos</option>
+              {% for option in tenure_options %}
+                <option value="{{ option }}" {% if tempo_filter == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-sm hover:bg-sky-700">Filtrar</button>
+          {% if selected_sector or funcao_filter or tempo_filter %}
+            <a href="{% url 'feedback:climate_survey_report' %}{% if status_filter %}?status={{ status_filter }}{% endif %}" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Limpar</a>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div class="bg-white rounded-xl shadow">
         <div class="p-5 border-b">
-          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-star-half-alt mr-2 text-amber-500"></i>Médias por pergunta</h2>
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-id-badge mr-2 text-indigo-500"></i>Respondentes por função</h2>
+        </div>
+        <div class="px-5 pt-5"><div style="position:relative;height:230px"><canvas id="climateFuncaoChart"></canvas></div></div>
+        <div class="p-5 space-y-3">
+          {% for item in profile_stats.funcao %}
+            <div>
+              <div class="flex items-center justify-between text-sm mb-1">
+                <span class="text-gray-700">{{ item.label }}</span>
+                <span class="font-semibold text-gray-900">{{ item.count }} · {{ item.pct }}%</span>
+              </div>
+              <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div class="h-2 bg-indigo-500 rounded-full" style="width: {{ item.pct }}%"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow">
+        <div class="p-5 border-b">
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-hourglass-half mr-2 text-teal-500"></i>Respondentes por tempo de empresa</h2>
+        </div>
+        <div class="px-5 pt-5"><div style="position:relative;height:230px"><canvas id="climateTempoChart"></canvas></div></div>
+        <div class="p-5 space-y-3">
+          {% for item in profile_stats.tempo_empresa %}
+            <div>
+              <div class="flex items-center justify-between text-sm mb-1">
+                <span class="text-gray-700">{{ item.label }}</span>
+                <span class="font-semibold text-gray-900">{{ item.count }} · {{ item.pct }}%</span>
+              </div>
+              <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div class="h-2 bg-teal-500 rounded-full" style="width: {{ item.pct }}%"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h2 class="text-base font-semibold text-gray-900 mb-1"><i class="fas fa-bullseye mr-2 text-indigo-500"></i>Médias por categoria</h2>
+        <p class="text-xs text-gray-400 mb-3">Panorama das 7 dimensões (escala 1 a 5).</p>
+        <div style="position:relative;height:320px"><canvas id="climateRadarChart"></canvas></div>
+      </div>
+      <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-base font-semibold text-gray-900"><i class="fas fa-star-half-alt mr-2 text-amber-500"></i>Médias por pergunta</h2>
+          <span class="text-xs text-gray-400">{{ analysis_count }} resposta(s)</span>
+        </div>
+        <p class="text-xs text-gray-400 mb-3">Verde ≥ 4 · amarelo 3–4 · vermelho &lt; 3.</p>
+        <div style="overflow-y:auto;max-height:540px"><div style="position:relative" id="climateQuestionsWrap"><canvas id="climateQuestionsChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100">
+        <div class="p-5 border-b">
+          <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-table mr-2 text-amber-500"></i>Detalhamento por pergunta</h2>
           <p class="text-xs text-gray-500 mt-1">Escala de 1 a 5, calculada somente sobre respostas anônimas.</p>
         </div>
         <div class="overflow-x-auto">
@@ -132,6 +245,8 @@
           <p class="text-xs text-gray-500">Esta lista mostra quem concluiu ou não, mas não aponta as respostas dadas.</p>
         </div>
         <form method="get" class="flex flex-wrap gap-2 items-end">
+          <input type="hidden" name="funcao" value="{{ funcao_filter }}">
+          <input type="hidden" name="tempo" value="{{ tempo_filter }}">
           <div>
             <label class="block text-xs text-gray-500">Setor</label>
             <select name="sector" class="border rounded-lg px-2 py-1 text-sm">
@@ -196,4 +311,50 @@
     </div>
   </div>
 </div>
+
+{% include 'feedback/_charts_setup.html' %}
+<script id="climate-charts-data" type="application/json">{{ charts_json|safe }}</script>
+<script>
+(function () {
+  let C;
+  try { C = JSON.parse(document.getElementById('climate-charts-data').textContent); }
+  catch (e) { return; }
+
+  RC.ready(function () {
+    RC.applyDefaults();
+    const totalStatus = C.status.data.reduce((a, b) => a + b, 0);
+    const pct = totalStatus ? Math.round((C.status.data[0] / totalStatus) * 100) : 0;
+
+    RC.doughnut('climateStatusChart', C.status.labels, C.status.data, {
+      colors: ['#10b981', '#f59e0b', '#ef4444'],
+      centerText: pct + '%', centerSub: 'concluíram',
+    });
+
+    // Participação por setor (barra horizontal empilhada, altura conforme nº de setores).
+    const sectorWrap = document.getElementById('climateSectorWrap');
+    if (sectorWrap) sectorWrap.style.height = Math.max(240, C.overview.labels.length * 34 + 40) + 'px';
+    RC.stackedBar('climateSectorChart', C.overview.labels, [
+      { label: 'Concluíram', data: C.overview.completed, color: '#10b981' },
+      { label: 'Em andamento', data: C.overview.in_progress, color: '#f59e0b' },
+      { label: 'Não iniciaram', data: C.overview.not_started, color: '#e5e7eb' },
+    ], { horizontal: true });
+
+    RC.doughnut('climateFuncaoChart', C.funcao.labels, C.funcao.data, {
+      centerText: '' + C.funcao.data.reduce((a, b) => a + b, 0), centerSub: 'respostas',
+    });
+    RC.doughnut('climateTempoChart', C.tempo.labels, C.tempo.data, {
+      centerText: '' + C.tempo.data.reduce((a, b) => a + b, 0), centerSub: 'respostas',
+    });
+
+    RC.radar('climateRadarChart', C.sections.labels, C.sections.data);
+
+    // Médias por pergunta (barra horizontal, altura conforme nº de perguntas).
+    const qWrap = document.getElementById('climateQuestionsWrap');
+    if (qWrap) qWrap.style.height = Math.max(300, C.questions.labels.length * 26 + 30) + 'px';
+    RC.hbar('climateQuestionsChart', C.questions.labels, C.questions.data, {
+      label: 'Média', max: 5, stepSize: 1, colorFn: RC.SCALE_COLORS,
+    });
+  });
+})();
+</script>
 {% endblock %}

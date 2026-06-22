@@ -40,11 +40,24 @@
         <p>Ainda não há respostas enviadas para gerar gráficos e análises.</p>
       </div>
     {% else %}
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h2 class="text-base font-semibold text-gray-900 mb-1"><i class="fas fa-chart-pie mr-2 text-rose-500"></i>Status de participação</h2>
+          <p class="text-xs text-gray-400 mb-3">Distribuição geral dos colaboradores.</p>
+          <div style="position:relative;height:250px"><canvas id="exitStatusChart"></canvas></div>
+        </div>
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h2 class="text-base font-semibold text-gray-900 mb-1"><i class="fas fa-bullseye mr-2 text-indigo-500"></i>Perfil das avaliações</h2>
+          <p class="text-xs text-gray-400 mb-3">Visão geral das notas médias (escala 1 a 5).</p>
+          <div style="position:relative;height:300px"><canvas id="exitRadarChart"></canvas></div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div class="bg-white rounded-xl shadow p-5">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 class="text-lg font-semibold text-gray-900 mb-1"><i class="fas fa-star-half-alt mr-2 text-amber-500"></i>Médias das avaliações (1 a 5)</h2>
           <p class="text-xs text-gray-500 mb-4">Calculadas sobre as respostas enviadas.</p>
-          <div style="position: relative; height: 280px;"><canvas id="scaleChart"></canvas></div>
+          <div style="position: relative; height: 300px;"><canvas id="scaleChart"></canvas></div>
         </div>
         <div class="bg-white rounded-xl shadow p-5">
           <h2 class="text-lg font-semibold text-gray-900 mb-1"><i class="fas fa-route mr-2 text-purple-500"></i>Onde as pessoas pararam</h2>
@@ -166,64 +179,43 @@
 </div>
 
 {% if totals.responses > 0 %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% include 'feedback/_charts_setup.html' %}
 <script id="exit-scale-labels" type="application/json">{{ scale_labels_json|safe }}</script>
 <script id="exit-scale-values" type="application/json">{{ scale_values_json|safe }}</script>
 <script id="exit-choice-stats" type="application/json">{{ choice_stats_json|safe }}</script>
+<script id="exit-status" type="application/json">[{{ totals.completed }}, {{ totals.in_progress }}, {{ totals.not_started }}]</script>
 <script>
 (function () {
   function parseJSON(id) {
     try { return JSON.parse(document.getElementById(id).textContent); }
     catch (e) { return null; }
   }
-  function start() {
-    if (typeof Chart === 'undefined') { return setTimeout(start, 120); }
-
+  RC.ready(function () {
+    RC.applyDefaults();
     const scaleLabels = parseJSON('exit-scale-labels') || [];
     const scaleValues = parseJSON('exit-scale-values') || [];
-    const scaleCanvas = document.getElementById('scaleChart');
-    if (scaleCanvas && scaleLabels.length) {
-      new Chart(scaleCanvas, {
-        type: 'bar',
-        data: {
-          labels: scaleLabels,
-          datasets: [{
-            label: 'Média (1-5)',
-            data: scaleValues,
-            backgroundColor: scaleValues.map(v => v >= 4 ? '#16a34a' : v >= 3 ? '#f59e0b' : '#e11d48'),
-            borderRadius: 6,
-          }]
-        },
-        options: {
-          indexAxis: 'y',
-          scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } } },
-          plugins: { legend: { display: false } },
-          responsive: true,
-          maintainAspectRatio: false,
-        }
+    const status = parseJSON('exit-status') || [0, 0, 0];
+
+    const totalStatus = status.reduce((a, b) => a + b, 0);
+    const pct = totalStatus ? Math.round((status[0] / totalStatus) * 100) : 0;
+    RC.doughnut('exitStatusChart', ['Concluíram', 'Em andamento', 'Não iniciaram'], status, {
+      colors: ['#10b981', '#f59e0b', '#e5e7eb'],
+      centerText: pct + '%', centerSub: 'concluíram',
+    });
+
+    if (scaleLabels.length) {
+      RC.radar('exitRadarChart', scaleLabels, scaleValues, { label: 'Média' });
+      RC.hbar('scaleChart', scaleLabels, scaleValues, {
+        label: 'Média (1-5)', max: 5, stepSize: 1, colorFn: RC.SCALE_COLORS,
       });
     }
 
-    const palette = ['#e11d48', '#f59e0b', '#16a34a', '#2563eb', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
-    const choiceStats = parseJSON('exit-choice-stats') || [];
-    choiceStats.forEach((c, i) => {
-      const canvas = document.getElementById('choiceChart' + i);
-      if (!canvas) return;
-      new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-          labels: c.labels,
-          datasets: [{ data: c.data, backgroundColor: c.labels.map((_, j) => palette[j % palette.length]) }]
-        },
-        options: {
-          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } },
-          responsive: true,
-          maintainAspectRatio: false,
-        }
+    (parseJSON('exit-choice-stats') || []).forEach((c, i) => {
+      RC.doughnut('choiceChart' + i, c.labels, c.data, {
+        centerText: '' + c.data.reduce((a, b) => a + b, 0), centerSub: 'respostas',
       });
     });
-  }
-  start();
+  });
 })();
 </script>
 {% endif %}

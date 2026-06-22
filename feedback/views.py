@@ -125,6 +125,7 @@ CLIMATE_SURVEY_SECTIONS = [
             {'key': 'comunicacao_equipe', 'label': 'Minha equipe coopera para atingir os resultados.'},
             {'key': 'comunicacao_respeito', 'label': 'Os conflitos são tratados com respeito.'},
             {'key': 'comunicacao_integracao', 'label': 'Sinto que existe integração entre os setores/lojas.'},
+            {'key': 'comunicacao_etica', 'label': 'Confio que a Rede Confiança procura agir de maneira ética e transparente.'},
         ],
     },
     {
@@ -135,6 +136,18 @@ CLIMATE_SURVEY_SECTIONS = [
             {'key': 'reconhecimento_crescimento', 'label': 'Vejo oportunidades de crescimento profissional.'},
             {'key': 'reconhecimento_treinamento', 'label': 'Os treinamentos recebidos me preparam para a função.'},
             {'key': 'reconhecimento_justica', 'label': 'Percebo justiça nas decisões que impactam minha rotina.'},
+            {'key': 'reconhecimento_consistencia', 'label': 'As regras de campanhas, comissões e reconhecimentos são aplicadas de forma consistente.'},
+            {'key': 'reconhecimento_desempenho', 'label': 'Pessoas que apresentam um bom desempenho recebem reconhecimento.'},
+            {'key': 'reconhecimento_remuneracao', 'label': 'Considero que minha remuneração e meus benefícios são compatíveis com minhas responsabilidades.'},
+        ],
+    },
+    {
+        'key': 'inovacao',
+        'title': 'Inovação e melhoria contínua',
+        'questions': [
+            {'key': 'inovacao_causas', 'label': 'A empresa procura resolver as causas dos problemas, e não apenas situações pontuais.'},
+            {'key': 'inovacao_praticas', 'label': 'Boas práticas e aprendizados são compartilhados entre as lojas e equipes.'},
+            {'key': 'inovacao_liberdade', 'label': 'Tenho liberdade para propor formas mais simples e eficientes de realizar meu trabalho.'},
         ],
     },
     {
@@ -145,8 +158,36 @@ CLIMATE_SURVEY_SECTIONS = [
             {'key': 'engajamento_metas', 'label': 'Conheço as metas e objetivos esperados para meu trabalho.'},
             {'key': 'engajamento_recomendacao', 'label': 'Eu recomendaria a empresa como um bom lugar para trabalhar.'},
             {'key': 'engajamento_permanencia', 'label': 'Tenho vontade de continuar trabalhando aqui.'},
+            {'key': 'engajamento_missao', 'label': 'A missão e os valores da Rede Confiança são percebidos nas decisões do dia a dia.'},
+            {'key': 'engajamento_direcao', 'label': 'Confio na direção que a empresa está seguindo.'},
+            {'key': 'engajamento_cliente', 'label': 'As decisões da empresa demonstram preocupação com a experiência do cliente.'},
         ],
     },
+    {
+        'key': 'bem_estar',
+        'title': 'Bem-estar',
+        'questions': [
+            {'key': 'bem_estar_cobranca', 'label': 'A cobrança por resultados acontece de forma respeitosa.'},
+            {'key': 'bem_estar_seguranca', 'label': 'Sinto segurança para comunicar comportamentos inadequados, assédio, discriminação ou atitudes antiéticas.'},
+            {'key': 'bem_estar_preocupacao', 'label': 'A empresa demonstra preocupação verdadeira com o bem-estar dos colaboradores.'},
+            {'key': 'bem_estar_respeito', 'label': 'As relações de trabalho são respeitosas, independentemente do cargo da pessoa.'},
+        ],
+    },
+]
+
+CLIMATE_FUNCTION_OPTIONS = [
+    'Vendas',
+    'Liderança de loja',
+    'Administrativo de loja',
+    'Administrativo escritório',
+]
+
+CLIMATE_TENURE_OPTIONS = [
+    'Menos de 3 meses',
+    'De 3 a 6 meses',
+    'De 7 meses a 1 ano',
+    'De 1 a 2 anos',
+    'Mais de 2 anos',
 ]
 
 CLIMATE_OPEN_QUESTIONS = [
@@ -253,13 +294,8 @@ def my_pending(request):
 @require_http_methods(['GET', 'POST'])
 def climate_survey(request):
     user = request.user
-    user_sector_ids = list(user.sectors.values_list('id', flat=True))
-    if user.sector_id and user.sector_id not in user_sector_ids:
-        user_sector_ids.append(user.sector_id)
-
-    available_sectors = Sector.objects.filter(id__in=user_sector_ids).order_by('name')
-    if not available_sectors.exists():
-        available_sectors = Sector.objects.all().order_by('name')
+    # Identificação do setor mostra todas as lojas/setores cadastrados.
+    available_sectors = Sector.objects.all().order_by('name')
 
     selected_sector = _primary_sector_for_user(user) or available_sectors.first()
     participation, _ = ClimateSurveyParticipation.objects.get_or_create(
@@ -278,7 +314,13 @@ def climate_survey(request):
             messages.error(request, 'Selecione o setor para responder a pesquisa.')
             return redirect('feedback:climate_survey')
 
-        answers = {'likert': {}, 'open': {}}
+        funcao = (request.POST.get('funcao') or '').strip()
+        tempo_empresa = (request.POST.get('tempo_empresa') or '').strip()
+        if funcao not in CLIMATE_FUNCTION_OPTIONS or tempo_empresa not in CLIMATE_TENURE_OPTIONS:
+            messages.error(request, 'Informe sua função e o tempo de empresa para responder a pesquisa.')
+            return redirect('feedback:climate_survey')
+
+        answers = {'likert': {}, 'open': {}, 'profile': {'funcao': funcao, 'tempo_empresa': tempo_empresa}}
         missing = []
         for key in _climate_question_keys():
             value = request.POST.get(key)
@@ -326,6 +368,8 @@ def climate_survey(request):
         'sections': CLIMATE_SURVEY_SECTIONS,
         'open_questions': CLIMATE_OPEN_QUESTIONS,
         'likert_options': CLIMATE_LIKERT_OPTIONS,
+        'function_options': CLIMATE_FUNCTION_OPTIONS,
+        'tenure_options': CLIMATE_TENURE_OPTIONS,
         'available_sectors': available_sectors,
         'selected_sector': selected_sector,
         'participation': participation,
@@ -444,9 +488,17 @@ def climate_survey_report(request):
     for bucket in overview:
         bucket['completed_pct'] = round((bucket['completed'] / bucket['total']) * 100, 1) if bucket['total'] else 0.0
 
+    funcao_filter = (request.GET.get('funcao') or '').strip()
+    tempo_filter = (request.GET.get('tempo') or '').strip()
+
     responses = ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('sector')
     if selected_sector:
         responses = responses.filter(sector=selected_sector)
+    responses = list(responses)
+    if funcao_filter in CLIMATE_FUNCTION_OPTIONS:
+        responses = [r for r in responses if (r.answers or {}).get('profile', {}).get('funcao') == funcao_filter]
+    if tempo_filter in CLIMATE_TENURE_OPTIONS:
+        responses = [r for r in responses if (r.answers or {}).get('profile', {}).get('tempo_empresa') == tempo_filter]
 
     question_stats = []
     for section in CLIMATE_SURVEY_SECTIONS:
@@ -463,6 +515,25 @@ def climate_survey_report(request):
                 'avg': avg,
                 'count': len(values),
             })
+
+    # Perfil dos respondentes (função e tempo de empresa) com base nas respostas anônimas.
+    def _profile_distribution(field, options):
+        counter = {opt: 0 for opt in options}
+        total = 0
+        for response in responses:
+            value = (response.answers or {}).get('profile', {}).get(field)
+            if value:
+                counter[value] = counter.get(value, 0) + 1
+                total += 1
+        return [
+            {'label': opt, 'count': cnt, 'pct': round((cnt / total) * 100, 1) if total else 0.0}
+            for opt, cnt in counter.items()
+        ]
+
+    profile_stats = {
+        'funcao': _profile_distribution('funcao', CLIMATE_FUNCTION_OPTIONS),
+        'tempo_empresa': _profile_distribution('tempo_empresa', CLIMATE_TENURE_OPTIONS),
+    }
 
     dropout = (
         ClimateSurveyParticipation.objects
@@ -481,16 +552,60 @@ def climate_survey_report(request):
     }
     totals['completed_pct'] = round((totals['completed'] / totals['total']) * 100, 1) if totals['total'] else 0.0
 
+    # Médias por categoria (radar).
+    section_avgs = {}
+    for item in question_stats:
+        section_avgs.setdefault(item['section'], []).append(item['avg'])
+    section_labels, section_values = [], []
+    for section in CLIMATE_SURVEY_SECTIONS:
+        vals = [v for v in section_avgs.get(section['title'], []) if v is not None]
+        section_labels.append(section['title'])
+        section_values.append(round(sum(vals) / len(vals), 2) if vals else 0)
+
+    import json
+    charts = {
+        'status': {
+            'labels': ['Concluíram', 'Em andamento', 'Não iniciaram'],
+            'data': [totals['completed'], totals['in_progress'], totals['not_started']],
+        },
+        'overview': {
+            'labels': [b['sector_name'] for b in overview],
+            'completed': [b['completed'] for b in overview],
+            'in_progress': [b['in_progress'] for b in overview],
+            'not_started': [b['not_started'] for b in overview],
+        },
+        'sections': {'labels': section_labels, 'data': section_values},
+        'questions': {
+            'labels': [item['question'] for item in question_stats],
+            'data': [item['avg'] or 0 for item in question_stats],
+        },
+        'funcao': {
+            'labels': [i['label'] for i in profile_stats['funcao']],
+            'data': [i['count'] for i in profile_stats['funcao']],
+        },
+        'tempo': {
+            'labels': [i['label'] for i in profile_stats['tempo_empresa']],
+            'data': [i['count'] for i in profile_stats['tempo_empresa']],
+        },
+    }
+
     return render(request, 'feedback/climate_report.html', {
         'totals': totals,
         'overview': overview,
         'detailed': rows,
         'question_stats': question_stats,
+        'profile_stats': profile_stats,
         'dropout': dropout,
         'selected_sector': selected_sector,
         'status_filter': status_filter,
+        'funcao_filter': funcao_filter,
+        'tempo_filter': tempo_filter,
+        'function_options': CLIMATE_FUNCTION_OPTIONS,
+        'tenure_options': CLIMATE_TENURE_OPTIONS,
         'all_sectors': Sector.objects.all().order_by('name'),
         'survey_key': CLIMATE_SURVEY_KEY,
+        'analysis_count': len(responses),
+        'charts_json': json.dumps(charts),
     })
 
 

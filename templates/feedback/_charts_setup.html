@@ -1,0 +1,161 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+/* Estilo compartilhado dos gráficos dos relatórios (clima + desligamento). */
+window.RC = (function () {
+  function ready(cb) {
+    if (typeof Chart !== 'undefined') return cb();
+    setTimeout(() => ready(cb), 100);
+  }
+
+  const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#ec4899', '#84cc16', '#f97316'];
+  const SCALE_COLORS = v => v >= 4 ? '#10b981' : v >= 3 ? '#f59e0b' : '#ef4444';
+
+  function applyDefaults() {
+    Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = '#6b7280';
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.boxWidth = 8;
+    Chart.defaults.plugins.legend.labels.padding = 14;
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(17,24,39,0.92)';
+    Chart.defaults.plugins.tooltip.padding = 12;
+    Chart.defaults.plugins.tooltip.cornerRadius = 10;
+    Chart.defaults.plugins.tooltip.titleFont = { weight: '600', size: 13 };
+    Chart.defaults.plugins.tooltip.boxPadding = 6;
+    Chart.defaults.plugins.tooltip.usePointStyle = true;
+    Chart.defaults.animation.duration = 900;
+    Chart.defaults.animation.easing = 'easeOutQuart';
+  }
+
+  /* Gradiente vertical para barras/áreas. */
+  function gradient(ctx, area, hex) {
+    if (!area) return hex;
+    const g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
+    g.addColorStop(0, hex);
+    g.addColorStop(1, hex + '33');
+    return g;
+  }
+
+  /* Plugin: texto central em doughnut. */
+  const centerText = {
+    id: 'centerText',
+    afterDraw(chart, args, opts) {
+      if (!opts || !opts.text) return;
+      const { ctx, chartArea: { left, right, top, bottom } } = chart;
+      const x = (left + right) / 2, y = (top + bottom) / 2;
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 26px ' + Chart.defaults.font.family;
+      ctx.fillText(opts.text, x, y - 6);
+      if (opts.sub) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '500 12px ' + Chart.defaults.font.family;
+        ctx.fillText(opts.sub, x, y + 16);
+      }
+      ctx.restore();
+    }
+  };
+
+  function doughnut(id, labels, data, opts) {
+    opts = opts || {};
+    const el = document.getElementById(id);
+    if (!el) return;
+    const colors = opts.colors || labels.map((_, i) => PALETTE[i % PALETTE.length]);
+    new Chart(el, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#fff', borderWidth: 2, hoverOffset: 8 }] },
+      plugins: [centerText],
+      options: {
+        cutout: '66%',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: opts.legend || 'bottom', labels: { font: { size: 11 } } },
+          centerText: { text: opts.centerText, sub: opts.centerSub },
+          tooltip: { callbacks: { label(c) {
+            const tot = c.dataset.data.reduce((a, b) => a + b, 0);
+            const pct = tot ? Math.round((c.parsed / tot) * 100) : 0;
+            return ` ${c.label}: ${c.parsed} (${pct}%)`;
+          } } }
+        }
+      }
+    });
+  }
+
+  function hbar(id, labels, data, opts) {
+    opts = opts || {};
+    const el = document.getElementById(id);
+    if (!el) return;
+    const ctx = el.getContext('2d');
+    new Chart(el, {
+      type: 'bar',
+      data: { labels, datasets: [{
+        label: opts.label || 'Valor',
+        data,
+        backgroundColor(c) {
+          const hex = opts.colorFn ? opts.colorFn(data[c.dataIndex]) : PALETTE[c.dataIndex % PALETTE.length];
+          return gradient(ctx, c.chart.chartArea, hex);
+        },
+        borderRadius: 8, borderSkipped: false, maxBarThickness: 26,
+      }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { beginAtZero: true, max: opts.max, grid: { color: '#f1f5f9' }, ticks: { stepSize: opts.stepSize } },
+          y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  function stackedBar(id, labels, datasets, opts) {
+    opts = opts || {};
+    const el = document.getElementById(id);
+    if (!el) return;
+    new Chart(el, {
+      type: 'bar',
+      data: { labels, datasets: datasets.map(d => ({
+        label: d.label, data: d.data, backgroundColor: d.color, borderRadius: 6, borderSkipped: false, maxBarThickness: 30,
+      })) },
+      options: {
+        indexAxis: opts.horizontal ? 'y' : 'x',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
+          y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } }
+        },
+        plugins: { legend: { position: 'bottom' } }
+      }
+    });
+  }
+
+  function radar(id, labels, data, opts) {
+    opts = opts || {};
+    const el = document.getElementById(id);
+    if (!el) return;
+    new Chart(el, {
+      type: 'radar',
+      data: { labels, datasets: [{
+        label: opts.label || 'Média',
+        data,
+        backgroundColor: 'rgba(99,102,241,0.18)',
+        borderColor: '#6366f1', borderWidth: 2,
+        pointBackgroundColor: '#6366f1', pointBorderColor: '#fff', pointRadius: 4, pointHoverRadius: 6,
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { r: {
+          suggestedMin: 0, suggestedMax: 5,
+          ticks: { stepSize: 1, backdropColor: 'transparent', color: '#9ca3af' },
+          grid: { color: '#e5e7eb' }, angleLines: { color: '#e5e7eb' },
+          pointLabels: { font: { size: 11 }, color: '#374151' }
+        } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  return { ready, applyDefaults, doughnut, hbar, stackedBar, radar, PALETTE, SCALE_COLORS };
+})();
+</script>
