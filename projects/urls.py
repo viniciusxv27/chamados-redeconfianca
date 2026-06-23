@@ -54,6 +54,9 @@ urlpatterns = [
     path('support/transfer/list/', views_chat.support_transfer_list, name='support_transfer_list'),
     path('support/transfer/create/', views_chat.create_support_transfer, name='create_support_transfer'),
     path('support/transfer/<int:transfer_id>/respond/', views_chat.respond_support_transfer, name='respond_support_transfer'),
+    path('support/transfer/report/', views_chat.support_transfer_report_page, name='support_transfer_report'),
+    path('support/transfer/report/api/', views_chat.support_transfer_report_api, name='support_transfer_report_api'),
+    path('support/transfer/report/export/', views_chat.export_transfer_report, name='export_transfer_report'),
     path('support/chat/<int:chat_id>/files/upload/', views_chat.upload_chat_file, name='upload_chat_file'),
     path('support/chat/<int:chat_id>/rate/', views_chat.rate_support_chat, name='rate_support_chat'),
     

@@ -1,0 +1,411 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Relatórios de Transferências{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kpi-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .chart-card, .table-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .table-card table thead th { position: sticky; top: 0; z-index: 1; }
+    .table-scroll { max-height: 400px; overflow-y: auto; }
+    @media (max-width: 640px) {
+        .kpi-value { font-size: 1.75rem !important; }
+        .chart-container { height: 220px !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <a href="javascript:history.back()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">
+                    <i class="fas fa-exchange-alt text-blue-500 mr-2"></i>Relatórios de Transferências
+                </h1>
+                <p class="text-gray-500 text-sm mt-1">Análise de transferências entre lojas — quem abre para quem</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mb-6 shadow-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-calendar-alt mr-1 text-gray-400"></i>Data Inicial</label>
+                <input type="date" id="repStartDate" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-calendar-alt mr-1 text-gray-400"></i>Data Final</label>
+                <input type="date" id="repEndDate" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-flag mr-1 text-gray-400"></i>Status</label>
+                <select id="repStatus" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    <option value="all">Todos</option>
+                    {% for value, label in status_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-store mr-1 text-gray-400"></i>Loja que envia</label>
+                <select id="repSendingSector" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    <option value="all">Todas</option>
+                    {% for sector in report_sectors %}
+                    <option value="{{ sector.id }}">{{ sector.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-store-alt mr-1 text-gray-400"></i>Loja que recebe</label>
+                <select id="repReceivingSector" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    <option value="all">Todas</option>
+                    {% for sector in report_sectors %}
+                    <option value="{{ sector.id }}">{{ sector.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button onclick="loadTransferReport()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 px-3 rounded-lg transition-colors font-medium">
+                    <i class="fas fa-search mr-1"></i>Buscar
+                </button>
+                <button onclick="exportTransferReport()" class="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 px-3 rounded-lg transition-colors font-medium">
+                    <i class="fas fa-file-excel mr-1"></i>Excel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="repLoading" class="hidden">
+        <div class="flex items-center justify-center py-12 text-center">
+            <div>
+                <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-3"></i>
+                <p class="text-gray-500">Carregando relatório...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="repContent">
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6">
+            <div class="kpi-card bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 p-4 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-blue-600" id="repTotal">0</div>
+                <div class="text-xs sm:text-sm text-blue-800/70 mt-1 font-medium">Total</div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200 p-4 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-yellow-600" id="repAguardando">0</div>
+                <div class="text-xs sm:text-sm text-yellow-800/70 mt-1 font-medium">Aguardando</div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-green-50 to-green-100 border border-green-200 p-4 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-green-600" id="repAceitas">0</div>
+                <div class="text-xs sm:text-sm text-green-800/70 mt-1 font-medium">Aceitas</div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-red-50 to-red-100 border border-red-200 p-4 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-red-600" id="repRecusadas">0</div>
+                <div class="text-xs sm:text-sm text-red-800/70 mt-1 font-medium">Recusadas</div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 p-4 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-gray-600" id="repCanceladas">0</div>
+                <div class="text-xs sm:text-sm text-gray-800/70 mt-1 font-medium">Canceladas</div>
+            </div>
+            <div class="kpi-card bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 p-4 rounded-xl text-center">
+                <div class="kpi-value text-2xl sm:text-3xl font-bold text-purple-600" id="repAcceptance">0%</div>
+                <div class="text-xs sm:text-sm text-purple-800/70 mt-1 font-medium">Taxa aceitação</div>
+            </div>
+        </div>
+
+        <!-- Gráficos linha 1 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-chart-pie text-blue-500 mr-2"></i>Por Status</h4>
+                <div class="chart-container" style="position: relative; height: 300px;"><canvas id="chartStatus"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-chart-line text-indigo-500 mr-2"></i>Transferências por Dia</h4>
+                <div class="chart-container" style="position: relative; height: 300px;"><canvas id="chartByDay"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Gráficos linha 2 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-5">
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-store text-green-500 mr-2"></i>Lojas que mais Enviam</h4>
+                <div class="chart-container" style="position: relative; height: 300px;"><canvas id="chartSending"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-store-alt text-orange-500 mr-2"></i>Lojas que mais Recebem</h4>
+                <div class="chart-container" style="position: relative; height: 300px;"><canvas id="chartReceiving"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tabela: Quem abre pra quem -->
+        <div class="table-card mb-5">
+            <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-route text-blue-500 mr-2"></i>Quem abre para quem (rotas)</h4>
+            <div class="table-scroll overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Loja que envia</th>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Loja que recebe</th>
+                            <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase">Total</th>
+                            <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase">Aceitas</th>
+                            <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase">Recusadas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="repRouteTable">
+                        <tr><td colspan="5" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tabela: Por quem cria -->
+        <div class="table-card mb-5">
+            <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-user-edit text-purple-500 mr-2"></i>Quem mais abre transferências</h4>
+            <div class="table-scroll overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Usuário</th>
+                            <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase">Total criadas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="repCreatorTable">
+                        <tr><td colspan="2" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tabela: Detalhado -->
+        <div class="table-card mb-5">
+            <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-list text-gray-600 mr-2"></i>Transferências detalhadas</h4>
+            <div class="table-scroll overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Criado em</th>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Produto / IMEI</th>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Envia</th>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Recebe</th>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Criado por</th>
+                            <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="repDetailTable">
+                        <tr><td colspan="6" class="text-center text-gray-400 py-6">Selecione um período e clique em Buscar</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let chartStatus = null, chartByDay = null, chartSending = null, chartReceiving = null;
+
+const REP_COLORS = [
+    'rgba(59,130,246,0.8)', 'rgba(16,185,129,0.8)', 'rgba(245,158,11,0.8)', 'rgba(239,68,68,0.8)',
+    'rgba(139,92,246,0.8)', 'rgba(236,72,153,0.8)', 'rgba(20,184,166,0.8)', 'rgba(249,115,22,0.8)',
+    'rgba(99,102,241,0.8)', 'rgba(168,85,247,0.8)', 'rgba(34,197,94,0.8)', 'rgba(234,179,8,0.8)',
+];
+const STATUS_COLORS = {
+    'AGUARDANDO_RECEBIMENTO': 'rgba(245,158,11,0.8)',
+    'ACEITA': 'rgba(16,185,129,0.8)',
+    'RECUSADA': 'rgba(239,68,68,0.8)',
+    'CANCELADA': 'rgba(156,163,175,0.8)',
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    document.getElementById('repEndDate').valueAsDate = endDate;
+    document.getElementById('repStartDate').valueAsDate = startDate;
+    loadTransferReport();
+});
+
+function repToast(message, type) {
+    if (typeof showToast === 'function') { showToast(message, type || 'info'); }
+}
+
+function escapeHtmlRep(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+}
+
+function buildReportParams() {
+    const params = new URLSearchParams();
+    const start = document.getElementById('repStartDate').value;
+    const end = document.getElementById('repEndDate').value;
+    if (start) params.append('start_date', start);
+    if (end) params.append('end_date', end);
+    const status = document.getElementById('repStatus').value;
+    if (status && status !== 'all') params.append('status', status);
+    const sending = document.getElementById('repSendingSector').value;
+    if (sending && sending !== 'all') params.append('sending_sector_id', sending);
+    const receiving = document.getElementById('repReceivingSector').value;
+    if (receiving && receiving !== 'all') params.append('receiving_sector_id', receiving);
+    return params;
+}
+
+function loadTransferReport() {
+    document.getElementById('repLoading').classList.remove('hidden');
+    document.getElementById('repContent').classList.add('opacity-50');
+
+    fetch(`/projects/support/transfer/report/api/?${buildReportParams()}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('repLoading').classList.add('hidden');
+            document.getElementById('repContent').classList.remove('opacity-50');
+            if (data.success) {
+                renderReport(data.report);
+            } else {
+                repToast('Erro ao carregar relatório: ' + (data.error || ''), 'error');
+            }
+        })
+        .catch(err => {
+            document.getElementById('repLoading').classList.add('hidden');
+            document.getElementById('repContent').classList.remove('opacity-50');
+            console.error('Erro ao carregar relatório:', err);
+            repToast('Erro ao carregar relatório', 'error');
+        });
+}
+
+function exportTransferReport() {
+    repToast('Gerando Excel...', 'info');
+    window.open(`/projects/support/transfer/report/export/?${buildReportParams()}`, '_blank');
+}
+
+function renderReport(report) {
+    document.getElementById('repTotal').textContent = report.total || 0;
+    document.getElementById('repAguardando').textContent = report.aguardando || 0;
+    document.getElementById('repAceitas').textContent = report.aceitas || 0;
+    document.getElementById('repRecusadas').textContent = report.recusadas || 0;
+    document.getElementById('repCanceladas').textContent = report.canceladas || 0;
+    document.getElementById('repAcceptance').textContent = (report.acceptance_rate || 0) + '%';
+
+    // Rotas
+    renderRows('repRouteTable', report.by_route, 5, r => `
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(r.sending)}</td>
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(r.receiving)}</td>
+        <td class="px-3 py-2.5 text-center font-semibold">${r.total}</td>
+        <td class="px-3 py-2.5 text-center text-green-600">${r.aceitas}</td>
+        <td class="px-3 py-2.5 text-center text-red-600">${r.recusadas}</td>`);
+
+    // Criadores
+    renderRows('repCreatorTable', report.by_creator, 2, r => `
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(r.name)}</td>
+        <td class="px-3 py-2.5 text-center font-semibold">${r.total}</td>`);
+
+    // Detalhado
+    renderRows('repDetailTable', report.transfers, 6, t => `
+        <td class="px-3 py-2.5 text-left whitespace-nowrap">${escapeHtmlRep(t.created_at)}</td>
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.product_name)}<div class="text-xs text-gray-400 font-mono">${escapeHtmlRep(t.imei)}</div></td>
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.sending_sector)}<div class="text-xs text-gray-400">${escapeHtmlRep(t.sending_manager)}</div></td>
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.receiving_sector)}<div class="text-xs text-gray-400">${escapeHtmlRep(t.receiving_manager)}</div></td>
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.created_by)}</td>
+        <td class="px-3 py-2.5 text-center"><span class="text-[11px] px-2 py-1 rounded-full ${statusBadge(t.status)}">${escapeHtmlRep(t.status_display)}</span></td>`);
+
+    renderReportCharts(report);
+}
+
+function statusBadge(status) {
+    switch (status) {
+        case 'ACEITA': return 'bg-green-100 text-green-800';
+        case 'RECUSADA': return 'bg-red-100 text-red-800';
+        case 'CANCELADA': return 'bg-gray-100 text-gray-700';
+        default: return 'bg-yellow-100 text-yellow-800';
+    }
+}
+
+function renderRows(tbodyId, data, colspan, rowFn) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-gray-400 py-6">Nenhum dado disponível</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = data.map(item =>
+        `<tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">${rowFn(item)}</tr>`
+    ).join('');
+}
+
+function destroyReportCharts() {
+    [chartStatus, chartByDay, chartSending, chartReceiving].forEach(c => { if (c) c.destroy(); });
+    chartStatus = chartByDay = chartSending = chartReceiving = null;
+}
+
+function renderReportCharts(report) {
+    destroyReportCharts();
+
+    const statusData = (report.by_status || []).filter(s => s.total > 0);
+    if (statusData.length) {
+        chartStatus = new Chart(document.getElementById('chartStatus').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: statusData.map(s => s.label),
+                datasets: [{
+                    data: statusData.map(s => s.total),
+                    backgroundColor: statusData.map(s => STATUS_COLORS[s.status] || 'rgba(59,130,246,0.8)'),
+                    borderColor: '#fff', borderWidth: 2,
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } } }
+        });
+    }
+
+    if (report.by_day && report.by_day.length) {
+        chartByDay = new Chart(document.getElementById('chartByDay').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: report.by_day.map(d => d.date),
+                datasets: [{
+                    label: 'Transferências', data: report.by_day.map(d => d.total),
+                    borderColor: 'rgba(99,102,241,1)', backgroundColor: 'rgba(99,102,241,0.15)',
+                    fill: true, tension: 0.3, pointRadius: 3,
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    }
+
+    if (report.by_sending && report.by_sending.length) {
+        const top = report.by_sending.slice(0, 12);
+        chartSending = new Chart(document.getElementById('chartSending').getContext('2d'), {
+            type: 'bar',
+            data: { labels: top.map(s => s.name), datasets: [{ label: 'Enviadas', data: top.map(s => s.total), backgroundColor: REP_COLORS.slice(0, top.length), borderRadius: 4 }] },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    }
+
+    if (report.by_receiving && report.by_receiving.length) {
+        const top = report.by_receiving.slice(0, 12);
+        chartReceiving = new Chart(document.getElementById('chartReceiving').getContext('2d'), {
+            type: 'bar',
+            data: { labels: top.map(s => s.name), datasets: [{ label: 'Recebidas', data: top.map(s => s.total), backgroundColor: REP_COLORS.slice(0, top.length), borderRadius: 4 }] },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    }
+}
+</script>
+{% endblock %}

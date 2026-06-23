@@ -704,22 +704,56 @@ def transfer_users_by_sector(request, sector_id):
     })
 
 
-@login_required
-def support_transfer_list(request):
-    """Lista transferências relacionadas ao usuário logado."""
-    sector_ids = _user_sector_ids(request.user)
-    filters = (
-        Q(created_by=request.user)
-        | Q(sending_manager=request.user)
-        | Q(receiving_manager=request.user)
+def _scoped_transfers(user):
+    """Queryset de transferências visíveis pelo usuário (supervisores veem tudo)."""
+    if _user_is_supervisor_or_higher(user):
+        return SupportTransferRequest.objects.all()
+    sector_ids = _user_sector_ids(user)
+    return SupportTransferRequest.objects.filter(
+        Q(created_by=user)
+        | Q(sending_manager=user)
+        | Q(receiving_manager=user)
         | Q(sending_sector_id__in=sector_ids)
         | Q(receiving_sector_id__in=sector_ids)
     )
 
-    if _user_is_supervisor_or_higher(request.user):
-        transfers = SupportTransferRequest.objects.all()
-    else:
-        transfers = SupportTransferRequest.objects.filter(filters)
+
+def _apply_transfer_filters(request, qs):
+    """Aplica filtros de data/status/loja a um queryset de transferências."""
+    from datetime import datetime
+
+    start = (request.GET.get('start_date') or '').strip()
+    end = (request.GET.get('end_date') or '').strip()
+    if start:
+        try:
+            qs = qs.filter(created_at__date__gte=datetime.strptime(start, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+    if end:
+        try:
+            qs = qs.filter(created_at__date__lte=datetime.strptime(end, '%Y-%m-%d').date())
+        except ValueError:
+            pass
+
+    status = (request.GET.get('status') or '').strip()
+    if status and status != 'all':
+        qs = qs.filter(status=status)
+
+    sending = (request.GET.get('sending_sector_id') or '').strip()
+    if sending and sending != 'all':
+        qs = qs.filter(sending_sector_id=sending)
+
+    receiving = (request.GET.get('receiving_sector_id') or '').strip()
+    if receiving and receiving != 'all':
+        qs = qs.filter(receiving_sector_id=receiving)
+
+    return qs
+
+
+@login_required
+def support_transfer_list(request):
+    """Lista transferências relacionadas ao usuário logado."""
+    transfers = _scoped_transfers(request.user)
 
     transfers = transfers.select_related(
         'created_by',
@@ -828,6 +862,264 @@ def respond_support_transfer(request, transfer_id):
         'transfer': _serialize_transfer(transfer, request.user),
         'message': 'Transferência atualizada.',
     })
+
+
+@login_required
+def support_transfer_report_page(request):
+    """Página de relatórios e análise de transferências."""
+    from users.models import Sector
+
+    if _user_is_supervisor_or_higher(request.user):
+        sectors = Sector.objects.all().order_by('name')
+    else:
+        sector_ids = _user_sector_ids(request.user)
+        sectors = Sector.objects.filter(id__in=sector_ids).order_by('name')
+
+    return render(request, 'support/transfer_report.html', {
+        'report_sectors': sectors,
+        'status_choices': SupportTransferRequest.STATUS_CHOICES,
+    })
+
+
+@login_required
+def support_transfer_report_api(request):
+    """Dados agregados de transferências para a página de relatórios."""
+    from django.db.models import Count
+
+    qs = _apply_transfer_filters(request, _scoped_transfers(request.user))
+
+    status_counts = {row['status']: row['c'] for row in qs.values('status').annotate(c=Count('id'))}
+    aceitas = status_counts.get('ACEITA', 0)
+    recusadas = status_counts.get('RECUSADA', 0)
+    aguardando = status_counts.get('AGUARDANDO_RECEBIMENTO', 0)
+    canceladas = status_counts.get('CANCELADA', 0)
+    total = aceitas + recusadas + aguardando + canceladas
+    decided = aceitas + recusadas
+    acceptance_rate = round(aceitas / decided * 100, 1) if decided else 0
+
+    status_labels = dict(SupportTransferRequest.STATUS_CHOICES)
+    by_status = [
+        {'status': 'AGUARDANDO_RECEBIMENTO', 'label': 'Aguardando', 'total': aguardando},
+        {'status': 'ACEITA', 'label': 'Aceitas', 'total': aceitas},
+        {'status': 'RECUSADA', 'label': 'Recusadas', 'total': recusadas},
+        {'status': 'CANCELADA', 'label': 'Canceladas', 'total': canceladas},
+    ]
+
+    by_sending = [
+        {'name': r['sending_sector__name'] or 'N/A', 'total': r['total']}
+        for r in qs.values('sending_sector__name').annotate(total=Count('id')).order_by('-total')
+    ]
+    by_receiving = [
+        {'name': r['receiving_sector__name'] or 'N/A', 'total': r['total']}
+        for r in qs.values('receiving_sector__name').annotate(total=Count('id')).order_by('-total')
+    ]
+
+    def _full_name(first, last, username):
+        name = f"{first or ''} {last or ''}".strip()
+        return name or username or 'N/A'
+
+    by_creator = [
+        {
+            'name': _full_name(r['created_by__first_name'], r['created_by__last_name'], r['created_by__username']),
+            'total': r['total'],
+        }
+        for r in qs.values(
+            'created_by__first_name', 'created_by__last_name', 'created_by__username'
+        ).annotate(total=Count('id')).order_by('-total')[:20]
+    ]
+
+    by_route = [
+        {
+            'sending': r['sending_sector__name'] or 'N/A',
+            'receiving': r['receiving_sector__name'] or 'N/A',
+            'total': r['total'],
+            'aceitas': r['aceitas'],
+            'recusadas': r['recusadas'],
+        }
+        for r in qs.values('sending_sector__name', 'receiving_sector__name').annotate(
+            total=Count('id'),
+            aceitas=Count('id', filter=Q(status='ACEITA')),
+            recusadas=Count('id', filter=Q(status='RECUSADA')),
+        ).order_by('-total')[:100]
+    ]
+
+    by_day = [
+        {'date': r['created_at__date'].strftime('%d/%m'), 'total': r['total']}
+        for r in qs.values('created_at__date').annotate(total=Count('id')).order_by('created_at__date')
+        if r['created_at__date']
+    ]
+
+    detail_qs = qs.select_related(
+        'created_by', 'sending_sector', 'sending_manager',
+        'receiving_sector', 'receiving_manager', 'responded_by',
+    ).order_by('-created_at')[:300]
+    transfers = [
+        {
+            'created_at': timezone.localtime(t.created_at).strftime('%d/%m/%Y %H:%M'),
+            'product_name': t.product_name,
+            'imei': t.imei,
+            'sending_sector': t.sending_sector.name if t.sending_sector_id else 'N/A',
+            'sending_manager': (t.sending_manager.get_full_name() or t.sending_manager.username) if t.sending_manager_id else 'N/A',
+            'receiving_sector': t.receiving_sector.name if t.receiving_sector_id else 'N/A',
+            'receiving_manager': (t.receiving_manager.get_full_name() or t.receiving_manager.username) if t.receiving_manager_id else 'N/A',
+            'created_by': t.created_by.get_full_name() or t.created_by.username,
+            'status': t.status,
+            'status_display': status_labels.get(t.status, t.status),
+            'responded_by': (t.responded_by.get_full_name() or t.responded_by.username) if t.responded_by_id else '',
+            'responded_at': timezone.localtime(t.responded_at).strftime('%d/%m/%Y %H:%M') if t.responded_at else '',
+        }
+        for t in detail_qs
+    ]
+
+    return JsonResponse({
+        'success': True,
+        'report': {
+            'total': total,
+            'aguardando': aguardando,
+            'aceitas': aceitas,
+            'recusadas': recusadas,
+            'canceladas': canceladas,
+            'acceptance_rate': acceptance_rate,
+            'by_status': by_status,
+            'by_sending': by_sending,
+            'by_receiving': by_receiving,
+            'by_creator': by_creator,
+            'by_route': by_route,
+            'by_day': by_day,
+            'transfers': transfers,
+        },
+    })
+
+
+@login_required
+def export_transfer_report(request):
+    """Exporta o relatório de transferências em Excel."""
+    from datetime import datetime
+    from django.db.models import Count
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    qs = _apply_transfer_filters(request, _scoped_transfers(request.user))
+    status_labels = dict(SupportTransferRequest.STATUS_CHOICES)
+
+    start = (request.GET.get('start_date') or '').strip()
+    end = (request.GET.get('end_date') or '').strip()
+    if start and end:
+        try:
+            period_label = (
+                f"{datetime.strptime(start, '%Y-%m-%d').strftime('%d/%m/%Y')} a "
+                f"{datetime.strptime(end, '%Y-%m-%d').strftime('%d/%m/%Y')}"
+            )
+        except ValueError:
+            period_label = 'Período completo'
+    else:
+        period_label = 'Período completo'
+
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    header_fill = PatternFill(start_color='2563EB', end_color='2563EB', fill_type='solid')
+    title_font = Font(bold=True, size=14)
+    border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'),
+    )
+
+    def style_headers(ws, row, num_cols):
+        for col in range(1, num_cols + 1):
+            cell = ws.cell(row=row, column=col)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = border
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    wb = Workbook()
+
+    # ===== Aba 1: Resumo =====
+    ws = wb.active
+    ws.title = 'Resumo'
+    ws['A1'] = f'Relatório de Transferências - {period_label}'
+    ws['A1'].font = title_font
+    ws.merge_cells('A1:B1')
+    ws['A2'] = f'Gerado em: {timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")}'
+
+    status_counts = {row['status']: row['c'] for row in qs.values('status').annotate(c=Count('id'))}
+    aceitas = status_counts.get('ACEITA', 0)
+    recusadas = status_counts.get('RECUSADA', 0)
+    decided = aceitas + recusadas
+    acceptance_rate = round(aceitas / decided * 100, 1) if decided else 0
+
+    ws['A4'] = 'Métrica'
+    ws['B4'] = 'Valor'
+    style_headers(ws, 4, 2)
+    resumo = [
+        ('Total de transferências', qs.count()),
+        ('Aguardando recebimento', status_counts.get('AGUARDANDO_RECEBIMENTO', 0)),
+        ('Aceitas', aceitas),
+        ('Recusadas', recusadas),
+        ('Canceladas', status_counts.get('CANCELADA', 0)),
+        ('Taxa de aceitação', f'{acceptance_rate}%'),
+    ]
+    for i, (nome, valor) in enumerate(resumo, start=5):
+        ws.cell(row=i, column=1, value=nome).border = border
+        ws.cell(row=i, column=2, value=valor).border = border
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 18
+
+    # ===== Aba 2: Por Rota (quem envia -> quem recebe) =====
+    ws_route = wb.create_sheet('Por Rota')
+    headers = ['Loja que envia', 'Loja que recebe', 'Total', 'Aceitas', 'Recusadas']
+    for col, h in enumerate(headers, start=1):
+        ws_route.cell(row=1, column=col, value=h)
+    style_headers(ws_route, 1, len(headers))
+    route_rows = qs.values('sending_sector__name', 'receiving_sector__name').annotate(
+        total=Count('id'),
+        aceitas=Count('id', filter=Q(status='ACEITA')),
+        recusadas=Count('id', filter=Q(status='RECUSADA')),
+    ).order_by('-total')
+    for i, r in enumerate(route_rows, start=2):
+        ws_route.cell(row=i, column=1, value=r['sending_sector__name'] or 'N/A')
+        ws_route.cell(row=i, column=2, value=r['receiving_sector__name'] or 'N/A')
+        ws_route.cell(row=i, column=3, value=r['total'])
+        ws_route.cell(row=i, column=4, value=r['aceitas'])
+        ws_route.cell(row=i, column=5, value=r['recusadas'])
+    for col, width in zip('ABCDE', [28, 28, 10, 10, 12]):
+        ws_route.column_dimensions[col].width = width
+
+    # ===== Aba 3: Detalhado =====
+    ws_det = wb.create_sheet('Detalhado')
+    det_headers = [
+        'Criado em', 'Produto', 'IMEI', 'Loja envia', 'Resp. envia',
+        'Loja recebe', 'Resp. recebe', 'Criado por', 'Status', 'Respondido por', 'Respondido em',
+    ]
+    for col, h in enumerate(det_headers, start=1):
+        ws_det.cell(row=1, column=col, value=h)
+    style_headers(ws_det, 1, len(det_headers))
+    detail_qs = qs.select_related(
+        'created_by', 'sending_sector', 'sending_manager',
+        'receiving_sector', 'receiving_manager', 'responded_by',
+    ).order_by('-created_at')
+    for i, t in enumerate(detail_qs, start=2):
+        ws_det.cell(row=i, column=1, value=timezone.localtime(t.created_at).strftime('%d/%m/%Y %H:%M'))
+        ws_det.cell(row=i, column=2, value=t.product_name)
+        ws_det.cell(row=i, column=3, value=t.imei)
+        ws_det.cell(row=i, column=4, value=t.sending_sector.name if t.sending_sector_id else 'N/A')
+        ws_det.cell(row=i, column=5, value=(t.sending_manager.get_full_name() or t.sending_manager.username) if t.sending_manager_id else 'N/A')
+        ws_det.cell(row=i, column=6, value=t.receiving_sector.name if t.receiving_sector_id else 'N/A')
+        ws_det.cell(row=i, column=7, value=(t.receiving_manager.get_full_name() or t.receiving_manager.username) if t.receiving_manager_id else 'N/A')
+        ws_det.cell(row=i, column=8, value=t.created_by.get_full_name() or t.created_by.username)
+        ws_det.cell(row=i, column=9, value=status_labels.get(t.status, t.status))
+        ws_det.cell(row=i, column=10, value=(t.responded_by.get_full_name() or t.responded_by.username) if t.responded_by_id else '')
+        ws_det.cell(row=i, column=11, value=timezone.localtime(t.responded_at).strftime('%d/%m/%Y %H:%M') if t.responded_at else '')
+    for col, width in zip('ABCDEFGHIJK', [17, 24, 18, 20, 20, 20, 20, 20, 22, 20, 17]):
+        ws_det.column_dimensions[col].width = width
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    filename = f'relatorio_transferencias_{timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M")}.xlsx'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
 
 
 @login_required
