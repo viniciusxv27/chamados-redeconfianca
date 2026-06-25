@@ -249,3 +249,97 @@ def get_realized_sales_from_mysql(
             pass
 
     return result
+
+
+def get_network_realized_sales_from_mysql(
+    *,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+) -> Dict[str, float]:
+    """Soma o realizado por pilar de TODA a rede (sem filtro de vendedor/PDV).
+
+    Usado pelo comissionamento "A parte", que mede o atingimento da rede inteira.
+    Mesma lógica de ``get_realized_sales_from_mysql`` (corte D-1, filtros de
+    serviço), porém sem cláusula de filtro por vendedor/loja.
+
+    Retorna ``{pilar: valor_em_reais, 'fixa_qty': contagem_de_vendas_fixa}``.
+    Em caso de erro de conexão, devolve zeros (não bloqueia).
+    """
+    try:
+        import pymysql
+    except ImportError:
+        return dict(EMPTY_RESULT)
+
+    from datetime import timedelta
+    now = timezone.now()
+    year = year or now.year
+    month = month or now.month
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+
+    try:
+        conn = pymysql.connect(**_mysql_config())
+    except Exception:
+        return dict(EMPTY_RESULT)
+
+    result = dict(EMPTY_RESULT)
+    base_where = 'YEAR(data_da_venda) = %s AND MONTH(data_da_venda) = %s AND data_da_venda <= %s'
+    base_params = (year, month, yesterday)
+    try:
+        with conn.cursor() as cur:
+            # ---------- vendas_produto (Smartphone / Eletronicos / Essenciais) ----------
+            cur.execute(
+                f"""
+                SELECT pilar, SUM(`valor_líquido_de_venda_do_produto`)
+                FROM vendas_produto
+                WHERE {base_where}
+                GROUP BY pilar
+                """,
+                base_params,
+            )
+            for pilar, total in cur.fetchall():
+                key = PILAR_TO_KEY.get(_normalize(pilar))
+                if key:
+                    result[key] = result.get(key, 0.0) + _to_float(total)
+
+            # ---------- vendas_servicos (Movel / SVA / Seguros) ----------
+            cur.execute(
+                f"""
+                SELECT pilar, SUM(COALESCE(receita_calculada, Receita, 0)) AS total_valor
+                FROM vendas_servicos
+                WHERE {base_where}
+                  AND Venda_ativa = '1' AND `Status_do_Serviço` = 'Confirmado'
+                GROUP BY pilar
+                """,
+                base_params,
+            )
+            for pilar, total_valor in cur.fetchall():
+                key = PILAR_TO_KEY.get(_normalize(pilar))
+                if not key or key == 'fixa':
+                    continue
+                result[key] = result.get(key, 0.0) + _to_float(total_valor)
+
+            # ---------- Pilar Fixa = Serviço Técnico 'Alta Banda Larga' / 'Alta TV' ----------
+            cur.execute(
+                f"""
+                SELECT SUM(COALESCE(receita_calculada, Receita, 0)) AS total_valor,
+                       COUNT(*) AS qtd
+                FROM vendas_servicos
+                WHERE {base_where}
+                  AND Venda_ativa = '1' AND `Status_do_Serviço` = 'Confirmado'
+                  AND UPPER(`Serviço_Técnico`) IN ('ALTA BANDA LARGA', 'ALTA TV')
+                """,
+                base_params,
+            )
+            row_st = cur.fetchone()
+            if row_st:
+                add_valor, add_qtd = row_st
+                result['fixa'] = result.get('fixa', 0.0) + _to_float(add_valor)
+                result['fixa_qty'] = result.get('fixa_qty', 0.0) + float(add_qtd or 0)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return result

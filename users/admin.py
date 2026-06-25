@@ -1,6 +1,22 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Sector
+from .models import User, Sector, CommissionMonthlyTotal, AParteCommissionConfig
+
+
+@admin.register(CommissionMonthlyTotal)
+class CommissionMonthlyTotalAdmin(admin.ModelAdmin):
+    list_display = ('person_name', 'role', 'month', 'year', 'total_commission', 'synced_at', 'synced_by')
+    list_filter = ('year', 'month', 'role')
+    search_fields = ('person_name',)
+    ordering = ('-year', '-month', 'person_name')
+
+
+@admin.register(AParteCommissionConfig)
+class AParteCommissionConfigAdmin(admin.ModelAdmin):
+    list_display = ('user', 'base_salary', 'is_active', 'updated_at', 'updated_by')
+    list_filter = ('is_active',)
+    search_fields = ('user__first_name', 'user__last_name', 'user__email')
+    raw_id_fields = ('user',)
 
 
 @admin.register(Sector)

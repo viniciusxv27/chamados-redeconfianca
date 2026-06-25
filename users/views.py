@@ -2104,6 +2104,16 @@ def system_config_view(request):
     if not available_year_choices:
         available_year_choices = [display_ref_year]
     
+    from users.models import CommissionMonthlyTotal
+    synced_totals = list(
+        CommissionMonthlyTotal.objects.filter(
+            year=display_ref_year, month=display_ref_month
+        ).order_by('person_name')
+    )
+    synced_last = CommissionMonthlyTotal.objects.filter(
+        year=display_ref_year, month=display_ref_month
+    ).order_by('-synced_at').first()
+
     context = {
         'config': config,
         'commission_form': commission_form,
@@ -2111,6 +2121,9 @@ def system_config_view(request):
         'active_version': active_version,
         'reference_month': display_ref_month,
         'reference_year': display_ref_year,
+        'synced_totals': synced_totals,
+        'synced_totals_count': len(synced_totals),
+        'synced_last': synced_last,
         'month_choices': [
             (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
             (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
@@ -2171,6 +2184,257 @@ def release_commission_view(request):
         f'Agora está visível para todos os usuários.'
     )
     return redirect('system_config')
+
+
+def _extract_remuneracao_final(role, row_data):
+    """Extrai o valor de remuneração final de uma linha (dict) da planilha."""
+    row_data = row_data or {}
+
+    def _to_decimal(value):
+        if value is None or value == '':
+            return None
+        try:
+            return Decimal(str(value).replace('R$', '').replace(' ', '').replace(',', '.'))
+        except Exception:
+            return None
+
+    # Chaves conhecidas por papel
+    candidate_keys = [
+        'REMUNERACAO_FINAL_TOTAL', 'REMUNERACAO_FINAL', 'REMUNERAÇÃO_FINAL',
+        ' REMUNERAÇÃO FINAL COO/SNP', 'REMUNERAÇÃO FINAL COO/SNP',
+        'REMUNERAÇÃO FINAL', 'REMUNERACAO FINAL',
+    ]
+    for key in candidate_keys:
+        if key in row_data:
+            val = _to_decimal(row_data.get(key))
+            if val is not None:
+                return val
+
+    # Fallback: qualquer coluna que contenha REMUNERA + FINAL
+    for col, value in row_data.items():
+        col_up = str(col).upper().replace('Ç', 'C').replace('Ã', 'A')
+        if 'REMUNERA' in col_up and 'FINAL' in col_up:
+            val = _to_decimal(value)
+            if val is not None:
+                return val
+
+    return Decimal('0.00')
+
+
+@login_required
+@require_POST
+def sync_commission_table_view(request):
+    """Sincroniza a tabela de totais de comissionamento (nome, mês, ano, valor).
+
+    Lê as planilhas de comissionamento do mês de referência e grava o valor total
+    que cada pessoa receberá em CommissionMonthlyTotal. Para usuários do grupo
+    'A PARTE', grava o valor calculado pelo modelo de comissionamento à parte.
+    """
+    from users.models import (
+        SystemConfig, CommissionSpreadsheetVersion, CommissionMonthlyTotal,
+        AParteCommissionConfig,
+    )
+    from users.commission_views import (
+        fetch_all_users_from_sheet, get_excel_urls,
+        SHEET_CN, SHEET_GERENTE, SHEET_COORDENADOR,
+    )
+
+    if request.user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Apenas Superadmin pode sincronizar a tabela.')
+        return redirect('dashboard')
+
+    config = SystemConfig.get_config()
+    default_year, default_month = config.get_display_reference_month_year(base_date=timezone.now())
+    try:
+        ref_month = int(request.POST.get('month') or default_month)
+        ref_year = int(request.POST.get('year') or default_year)
+    except (TypeError, ValueError):
+        ref_month, ref_year = default_month, default_year
+
+    urls = get_excel_urls(ref_year, ref_month)
+    version = CommissionSpreadsheetVersion.objects.filter(year=ref_year, month=ref_month).first()
+
+    sheet_role_map = {
+        SHEET_CN: 'cn',
+        SHEET_GERENTE: 'gerente',
+        SHEET_COORDENADOR: 'coordenador',
+    }
+
+    # Usuários "A parte": calculados pelo modelo próprio (não pela sheet).
+    aparte_names = set()
+    rows_by_key = {}  # (person_name_norm, role) -> CommissionMonthlyTotal
+
+    try:
+        from simulator.services import (
+            get_all_aparte_users, get_network_metas_from_power_bi, compute_aparte_commission,
+            get_aparte_factors,
+        )
+        from simulator.sql_realizado import get_network_realized_sales_from_mysql
+
+        aparte_users = get_all_aparte_users()
+        if aparte_users:
+            metas_rede = get_network_metas_from_power_bi(ref_year, ref_month)
+            realizado_rede = get_network_realized_sales_from_mysql(year=ref_year, month=ref_month)
+            for au in aparte_users:
+                cfg = AParteCommissionConfig.objects.filter(user=au).first()
+                factors = get_aparte_factors(cfg)
+                base = cfg.base_salary if cfg else 0
+                calc = compute_aparte_commission(base, factors, metas_rede, realizado_rede)
+                name = au.get_full_name() or au.first_name or au.email
+                norm = _normalize_commission_user_name(name)
+                aparte_names.add(norm)
+                rows_by_key[(norm, 'aparte')] = CommissionMonthlyTotal(
+                    year=ref_year, month=ref_month, person_name=name, role='aparte',
+                    total_commission=Decimal(str(round(calc['total'], 2))),
+                    source_version=version, synced_by=request.user,
+                )
+    except Exception as exc:
+        messages.warning(request, f'Aviso ao calcular comissionamento "A parte": {exc}')
+
+    erros = []
+    for sheet_name, role in sheet_role_map.items():
+        sheet_result = fetch_all_users_from_sheet(sheet_name, excel_url=urls['comissao'])
+        if not sheet_result.get('success'):
+            erros.append(sheet_result.get('error') or f'Falha ao ler {sheet_name}')
+            continue
+        for entry in sheet_result.get('users', []):
+            name = str(entry.get('nome') or '').strip()
+            if not name:
+                continue
+            norm = _normalize_commission_user_name(name)
+            if norm in aparte_names:
+                continue  # já contabilizado pelo modelo "A parte"
+            total = _extract_remuneracao_final(role, entry.get('data') or {})
+            rows_by_key[(norm, role)] = CommissionMonthlyTotal(
+                year=ref_year, month=ref_month, person_name=name, role=role,
+                total_commission=total, source_version=version, synced_by=request.user,
+            )
+
+    rows = list(rows_by_key.values())
+    if not rows and erros:
+        messages.error(request, 'Não foi possível sincronizar: ' + '; '.join(erros))
+        return redirect('system_config')
+
+    with transaction.atomic():
+        CommissionMonthlyTotal.objects.filter(year=ref_year, month=ref_month).delete()
+        if rows:
+            CommissionMonthlyTotal.objects.bulk_create(rows, batch_size=500)
+
+    msg = f'Tabela sincronizada: {len(rows)} pessoas em {ref_month:02d}/{ref_year}.'
+    if erros:
+        msg += ' Avisos: ' + '; '.join(erros)
+    messages.success(request, msg)
+    return redirect('system_config')
+
+
+def _aparte_pillar_labels():
+    return [
+        ('movel', 'Móvel'), ('fixa', 'Fixa'), ('smartphones', 'Smartphones'),
+        ('eletronicos', 'Eletrônicos'), ('essenciais', 'Essenciais'),
+        ('seguros', 'Seguros'), ('sva', 'SVA'),
+    ]
+
+
+@login_required
+def aparte_config_view(request):
+    """Mini-sistema de comissionamento "A parte" (superadmin).
+
+    Permite escolher um usuário do grupo 'A PARTE', definir o salário base e os
+    fatores de cada pilar, e visualizar a comissão calculada por mês (usando a
+    meta da rede de cada mês).
+    """
+    from users.models import AParteCommissionConfig, APARTE_DEFAULT_FACTORS
+    from simulator.services import (
+        get_all_aparte_users, get_network_metas_from_power_bi, compute_aparte_commission,
+        get_aparte_factors, APARTE_PILLAR_ORDER,
+    )
+
+    if request.user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Apenas Superadmin pode acessar esta área.')
+        return redirect('dashboard')
+
+    aparte_users = get_all_aparte_users()
+    selected_user = None
+    selected_user_id = request.GET.get('user_id') or request.POST.get('user_id')
+    if selected_user_id:
+        selected_user = User.objects.filter(id=selected_user_id, is_active=True).first()
+
+    config = None
+    if selected_user:
+        config, _ = AParteCommissionConfig.objects.get_or_create(user=selected_user)
+
+    if request.method == 'POST' and selected_user and config:
+        # Salário base
+        try:
+            base_raw = (request.POST.get('base_salary') or '0').replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+            config.base_salary = Decimal(base_raw or '0')
+        except Exception:
+            config.base_salary = config.base_salary or Decimal('0.00')
+
+        # Fatores: factor__<pilar>__<row>__<col>
+        factors = get_aparte_factors(config)
+        for pilar in APARTE_PILLAR_ORDER:
+            table = [list(r) for r in factors.get(pilar, [])]
+            for r_idx, frow in enumerate(table):
+                for c_idx in range(len(frow)):
+                    field = f"factor__{pilar}__{r_idx}__{c_idx}"
+                    if field in request.POST:
+                        raw = (request.POST.get(field) or '').replace(',', '.').strip()
+                        try:
+                            table[r_idx][c_idx] = float(raw) if raw != '' else 0.0
+                        except ValueError:
+                            pass
+            factors[pilar] = table
+        config.factors = factors
+        config.is_active = request.POST.get('is_active') == 'on'
+        config.updated_by = request.user
+        config.save()
+        messages.success(request, f'Configuração de {selected_user.get_full_name()} salva.')
+        return redirect(f"{request.path}?user_id={selected_user.id}")
+
+    # Montar dados para o template
+    factor_tables = []
+    monthly_preview = []
+    if selected_user and config:
+        factors = get_aparte_factors(config)
+        for pilar, label in _aparte_pillar_labels():
+            factor_tables.append({
+                'key': pilar,
+                'label': label,
+                'rows': factors.get(pilar, []),
+            })
+
+        # Preview mensal: meses com metas no Power BI (+ mês atual).
+        try:
+            from power_bi.models import GoalUpload
+            from simulator.sql_realizado import get_network_realized_sales_from_mysql
+            uploads = list(GoalUpload.objects.order_by('-year', '-month')[:12])
+            meses_pt = {
+                1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
+                7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez',
+            }
+            for up in uploads:
+                metas_rede = get_network_metas_from_power_bi(up.year, up.month)
+                realizado_rede = get_network_realized_sales_from_mysql(year=up.year, month=up.month)
+                calc = compute_aparte_commission(config.base_salary, factors, metas_rede, realizado_rede)
+                monthly_preview.append({
+                    'label': f"{meses_pt.get(up.month, up.month)}/{up.year}",
+                    'total': calc['total'],
+                    'rows': calc['rows'],
+                })
+        except Exception:
+            pass
+
+    context = {
+        'user': request.user,
+        'aparte_users': aparte_users,
+        'selected_user': selected_user,
+        'config': config,
+        'factor_tables': factor_tables,
+        'monthly_preview': monthly_preview,
+        'has_group': bool(aparte_users) or True,
+    }
+    return render(request, 'users/aparte_config.html', context)
 
 
 @login_required

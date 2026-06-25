@@ -25,6 +25,22 @@ ROLE_CONSULTOR = 'consultor'
 ROLE_GERENTE = 'gerente'
 ROLE_COORDENADOR = 'coordenador'
 ROLE_SUPERADMIN = 'superadmin'
+ROLE_APART = 'aparte'
+
+# Nome do grupo de comunicação que identifica usuários com comissionamento "A parte".
+APARTE_GROUP_NAME = 'A PARTE'
+
+# Pilares do comissionamento "A parte" (unificados, sem split A/B).
+APARTE_PILLAR_ORDER = ['movel', 'fixa', 'smartphones', 'eletronicos', 'essenciais', 'seguros', 'sva']
+APARTE_PILLAR_LABELS = {
+    'movel': 'Móvel',
+    'fixa': 'Fixa',
+    'smartphones': 'Smartphones',
+    'eletronicos': 'Eletrônicos',
+    'essenciais': 'Essenciais',
+    'seguros': 'Seguros',
+    'sva': 'SVA',
+}
 
 # Grupo de comunicação SNIPER (configurado em /users/manage/groups/).
 # Coordenadores neste grupo recebem 75% da comissão padrão.
@@ -558,9 +574,43 @@ def pdv_threshold_rate(table: List[List[Optional[float]]], col_index: int) -> Tu
     return threshold, rate
 
 
+def get_aparte_group() -> Optional['CommunicationGroup']:
+    """Retorna o grupo de comunicação 'A PARTE' (comissionamento à parte)."""
+    group = CommunicationGroup.objects.filter(name__iexact=APARTE_GROUP_NAME).first()
+    if not group:
+        group = CommunicationGroup.objects.filter(name__icontains=APARTE_GROUP_NAME).first()
+    return group
+
+
+def is_aparte_user(user: User) -> bool:
+    """Indica se o usuário pertence ao grupo 'A PARTE'."""
+    group = get_aparte_group()
+    if not group:
+        return False
+    try:
+        return group.members.filter(id=user.id).exists()
+    except Exception:
+        return False
+
+
+def get_all_aparte_users() -> List[User]:
+    """Usuários com comissionamento 'A parte' (membros do grupo 'A PARTE')."""
+    group = get_aparte_group()
+    if not group:
+        return []
+    return list(
+        group.members.filter(is_active=True).order_by('first_name', 'last_name')
+    )
+
+
 def get_user_role(user: User) -> str:
     if user.is_superuser or getattr(user, 'hierarchy', None) == 'SUPERADMIN':
         return ROLE_SUPERADMIN
+
+    # Comissionamento "A parte" tem prioridade: o usuário usa o modelo de fatores
+    # sobre o atingimento da rede, independente de ser CN/gerente.
+    if is_aparte_user(user):
+        return ROLE_APART
 
     # Grupo SNIPER (id=22) tem prioridade sobre COORDENADORES: snipers usam o
     # cálculo de coordenador (75% do coordenador atribuído).
@@ -942,6 +992,43 @@ def get_pdv_metas_for_coordinator(coord_name: str) -> Dict[str, float]:
         coord_in_row = normalize_text((entry.row_data or {}).get('COORDENAÇÃO') or '')
         if coord_in_row != target:
             continue
+        pilar_key = POWER_BI_PILAR_MAP.get((entry.pilar or '').upper().strip())
+        if not pilar_key:
+            continue
+        try:
+            value = float(entry.goal_value or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        result[pilar_key] = result.get(pilar_key, 0.0) + value
+    return result
+
+
+def _goal_upload_for(year: Optional[int], month: Optional[int]):
+    """Retorna o GoalUpload de um mês específico (fallback para o mais recente)."""
+    from power_bi.models import GoalUpload
+    upload = None
+    if year and month:
+        upload = GoalUpload.objects.filter(year=year, month=month).first()
+    if not upload:
+        upload = _latest_goal_upload()
+    return upload
+
+
+def get_network_metas_from_power_bi(year: Optional[int] = None, month: Optional[int] = None) -> Dict[str, float]:
+    """Soma as metas de PDV (META_PDV_REAL) de TODA a rede para um mês.
+
+    Usada pelo comissionamento "A parte" (atingimento medido sobre a meta total
+    da rede). Fallback para o upload de metas mais recente.
+    """
+    from power_bi.models import GoalEntry
+
+    upload = _goal_upload_for(year, month)
+    if not upload:
+        return {}
+
+    result: Dict[str, float] = {}
+    qs = GoalEntry.objects.filter(upload=upload, sheet_type='META_PDV_REAL')
+    for entry in qs:
         pilar_key = POWER_BI_PILAR_MAP.get((entry.pilar or '').upper().strip())
         if not pilar_key:
             continue
@@ -2009,6 +2096,152 @@ def compute_coordenador_simulation(
             'bonus_6_7': bonus_value,
             'ganho_total': total_coordinator,
             'ganho_total_sniper': total_coordinator if is_sniper else total_coordinator * sniper_rate,
+        },
+    }
+
+
+def get_aparte_factors(config) -> Dict[str, Any]:
+    """Devolve os fatores do usuário "A parte" (config) ou os padrões."""
+    from users.models import APARTE_DEFAULT_FACTORS
+    factors = getattr(config, 'factors', None) if config else None
+    if not factors:
+        import copy
+        return copy.deepcopy(APARTE_DEFAULT_FACTORS)
+    return factors
+
+
+def compute_aparte_commission(
+    base_salary: Any,
+    factors: Dict[str, Any],
+    metas: Dict[str, float],
+    realized: Dict[str, float],
+) -> Dict[str, Any]:
+    """Núcleo do comissionamento "A parte".
+
+    Para cada pilar: atingimento = realizado_rede / meta_rede; fator pela faixa;
+    comissão = fator × salário base. Fixa usa atingimento por quantidade.
+    Retorna ``{rows: [...], total: float}``.
+    """
+    base = to_float(base_salary)
+    metas = metas or {}
+    realized = realized or {}
+    rows: List[Dict[str, Any]] = []
+    total = 0.0
+
+    for key in APARTE_PILLAR_ORDER:
+        meta = to_float(metas.get(key, 0.0))
+        table = factors.get(key, []) if factors else []
+
+        if key == 'fixa':
+            qty = to_float(realized.get('fixa_qty', 0.0))
+            revenue = to_float(realized.get('fixa', 0.0))
+            att = (qty / meta) if meta else 0.0
+            display_proj = qty
+        else:
+            revenue = to_float(realized.get(key, 0.0))
+            att = (revenue / meta) if meta else 0.0
+            display_proj = revenue
+            qty = None
+
+        rate = vlookup(att, table, 3)
+        commission_value = rate * base
+        total += commission_value
+
+        rows.append({
+            'key': key,
+            'label': APARTE_PILLAR_LABELS.get(key, key),
+            'meta': meta,
+            'proj': display_proj,
+            'attainment': att,
+            'commission_rate': rate,
+            'commission_value': commission_value,
+            'hunter2_value': 0.0,
+            'hunter3_value': 0.0,
+            'quantity': qty if key == 'fixa' else None,
+            'revenue': revenue if key == 'fixa' else None,
+        })
+
+    return {'rows': rows, 'total': total}
+
+
+# Mapeia o pilar unificado "A parte" → chave usada no formulário do simulador
+# (SIMULATOR_INPUT_PILLARS_DISPLAY usa _a para eletrônicos/essenciais).
+_APARTE_SIM_INPUT_KEY = {
+    'movel': 'movel',
+    'fixa': 'fixa',
+    'smartphones': 'smartphones',
+    'eletronicos': 'eletronicos_a',
+    'essenciais': 'essenciais_a',
+    'seguros': 'seguros',
+    'sva': 'sva',
+}
+
+
+def compute_aparte_simulation(
+    user: User,
+    config,
+    hunter_levels: Optional[Dict[str, int]] = None,
+    view_mode: str = VIEW_PROJECAO,
+    simulator_inputs: Optional[Dict[str, Any]] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Simulação do comissionamento "A parte" para o dashboard do simulador."""
+    now = timezone.now()
+    year = year or now.year
+    month = month or now.month
+
+    base_salary = getattr(config, 'base_salary', 0) if config else 0
+    factors = get_aparte_factors(config)
+    metas = get_network_metas_from_power_bi(year, month)
+
+    if view_mode == VIEW_REALIZADO:
+        realized = get_network_realized_sales_from_mysql(year=year, month=month)
+    elif view_mode == VIEW_SIMULADOR:
+        realized = {}
+        for key in APARTE_PILLAR_ORDER:
+            sim_key = _APARTE_SIM_INPUT_KEY.get(key, key)
+            if key == 'fixa':
+                realized['fixa_qty'] = _get_sim_input(simulator_inputs, 'fixa', 'qty')
+                realized['fixa'] = _get_sim_input(simulator_inputs, 'fixa', 'real')
+            else:
+                realized[key] = _get_sim_input(simulator_inputs, sim_key, 'real')
+        # Permite sobrescrever a meta da rede por pilar.
+        metas = dict(metas or {})
+        for key in APARTE_PILLAR_ORDER:
+            sim_key = _APARTE_SIM_INPUT_KEY.get(key, key)
+            override = _get_sim_input_optional(simulator_inputs, sim_key, 'meta')
+            if override is None and sim_key != key:
+                override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            if override is not None:
+                metas[key] = override
+    else:  # VIEW_PROJECAO
+        net = get_network_realized_sales_from_mysql(year=year, month=month)
+        du_passed, du_total = get_business_days_info()
+        realized = {
+            key: project_from_realized(net.get(key, 0.0), du_passed, du_total)
+            for key in APARTE_PILLAR_ORDER
+        }
+        realized['fixa_qty'] = project_from_realized(net.get('fixa_qty', 0.0), du_passed, du_total)
+
+    result = compute_aparte_commission(base_salary, factors, metas, realized)
+    rows = result['rows']
+    total = result['total']
+
+    return {
+        'user_name': user.get_full_name() or user.first_name or user.email,
+        'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
+        'pdv': get_store_name_from_user(user),
+        'coordinator': '',
+        'view_mode': view_mode,
+        'base_salary': float(to_float(base_salary)),
+        'rows': rows,
+        'totals': {
+            'total_commission': total,
+            'hunter2': 0.0,
+            'hunter3': 0.0,
+            'bonus_6_7': 0.0,
+            'ganho_total': total,
         },
     }
 

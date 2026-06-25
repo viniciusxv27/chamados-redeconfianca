@@ -1607,6 +1607,7 @@ def fetch_vendedores_por_filial(user_sector, urls=None):
         excel_file_rem, error = download_excel_file(urls['comissao'], "remuneracao_cn")
         ating_por_vendedor = {}  # {vendedor_nome_upper: {pilar: pct}}
         remuneracao_por_vendedor = {}  # {vendedor_nome_upper: remuneracao_final}
+        cn_order = []  # lista ordenada de CNs vinda da Planilha de Comissionamento
         
         if not error:
             try:
@@ -1692,7 +1693,10 @@ def fetch_vendedores_por_filial(user_sector, urls=None):
                         nome = str(row[nome_col_rem]).strip().upper() if pd.notna(row[nome_col_rem]) else ''
                         if not nome:
                             continue
-                        
+
+                        # Lista ordenada de CNs da loja (fonte: Planilha de Comissionamento)
+                        cn_order.append({'nome_upper': nome, 'nome_display': nome.title()})
+
                         # Percentuais de atingimento
                         ating_por_vendedor[nome] = {}
                         for pilar_key, col in ating_cols.items():
@@ -1718,120 +1722,82 @@ def fetch_vendedores_por_filial(user_sector, urls=None):
             except Exception as e:
                 pass  # Silently handle errors reading REMUNERAÇÃO CN
         
-        # 2. Buscar dados de comissão da BASE_PAGAMENTO
-        excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento")
-        if error:
-            return []
-        
-        excel_file.seek(0)
-        df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
-        
-        # Colunas
-        colunas_lower = {col.lower(): col for col in df.columns}
-        filial_col = colunas_lower.get('filial') or df.columns[df.columns.str.lower().str.contains('filial')].tolist()[0] if any(df.columns.str.lower().str.contains('filial')) else None
-        vendedor_col = colunas_lower.get('vendedor') or df.columns[df.columns.str.lower().str.contains('vendedor')].tolist()[0] if any(df.columns.str.lower().str.contains('vendedor')) else None
-        receita_col = colunas_lower.get('receita') or df.columns[df.columns.str.lower().str.contains('receita')].tolist()[0] if any(df.columns.str.lower().str.contains('receita')) else None
-        pilar_col = colunas_lower.get('pilar') or df.columns[df.columns.str.lower().str.contains('pilar')].tolist()[0] if any(df.columns.str.lower().str.contains('pilar')) else None
-        
-        if not all([filial_col, vendedor_col, receita_col, pilar_col]):
-            return []
-        
-        # Filtrar por filial exata
-        df['filial_norm'] = df[filial_col].astype(str).str.strip().str.upper()
-        df_filial = df[df['filial_norm'] == user_sector_normalized]
-        
-        if df_filial.empty:
-            return []
-        
-        # Agrupar por vendedor e pilar
-        vendedores = {}
-        for idx, row in df_filial.iterrows():
-            vendedor_nome = str(row[vendedor_col]).strip().upper() if pd.notna(row[vendedor_col]) else ''
-            if not vendedor_nome:
-                continue
-                
-            if vendedor_nome not in vendedores:
-                vendedores[vendedor_nome] = {
-                    'nome': vendedor_nome.title(),
-                    'nome_upper': vendedor_nome,
-                    'pilares_valores': {p: 0 for p in pilares_ordem},
-                    'comissao_total': 0,
-                    'remuneracao_final': 0,
-                }
-            
-            # Identificar pilar
-            pilar_val = str(row[pilar_col]).strip().upper() if pd.notna(row[pilar_col]) else ''
-            pilar_key = None
-            
-            # Tentarmatch mais preciso primeiro
-            if pilar_val in pilar_mapping:
-                pilar_key = pilar_mapping[pilar_val]
-            else:
-                # Tentativa mais flexível - buscar parte do texto
-                for key, value in pilar_mapping.items():
-                    if key in pilar_val:
-                        pilar_key = value
-                        break
-            
-            # Debug quando não encontrar pilar
-            if not pilar_key:
-                print(f"[DEBUG] Pilar não mapeado: '{pilar_val}' para vendedor {vendedor_nome}")
-            
-            # Somar receita
-            if pilar_key:
-                receita = row[receita_col]
-                if pd.notna(receita):
-                    try:
-                        valor = float(receita)
-                        vendedores[vendedor_nome]['pilares_valores'][pilar_key] += valor
-                        vendedores[vendedor_nome]['comissao_total'] += valor
-                    except (ValueError, TypeError):
-                        pass
-        
-        # Converter para formato esperado pelo template
+        # 2. Buscar valores R$ por pilar da BASE_PAGAMENTO (apenas para enriquecer).
+        #    A LISTA de CNs vem da Planilha de Comissionamento (REMUNERAÇÃO CN);
+        #    a BASE_PAGAMENTO serve só para os valores R$ por pilar (gráficos).
+        base_pag_por_vendedor = {}  # {vendedor_upper: {pilar_key: valor}}
+        try:
+            excel_file, error_bp = download_excel_file(urls['base_pagamento'], "base_pagamento")
+            if not error_bp:
+                excel_file.seek(0)
+                df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
+                colunas_lower = {str(col).lower(): col for col in df.columns}
+                filial_col = colunas_lower.get('filial')
+                vendedor_col = colunas_lower.get('vendedor')
+                receita_col = colunas_lower.get('receita')
+                pilar_col = colunas_lower.get('pilar')
+                if all([filial_col, vendedor_col, receita_col, pilar_col]):
+                    df['filial_norm'] = df[filial_col].astype(str).str.strip().str.upper()
+                    df_filial = df[df['filial_norm'] == user_sector_normalized]
+                    for idx, row in df_filial.iterrows():
+                        vendedor_nome = str(row[vendedor_col]).strip().upper() if pd.notna(row[vendedor_col]) else ''
+                        if not vendedor_nome:
+                            continue
+                        pilar_val = str(row[pilar_col]).strip().upper() if pd.notna(row[pilar_col]) else ''
+                        pilar_key = pilar_mapping.get(pilar_val)
+                        if not pilar_key:
+                            for k, v in pilar_mapping.items():
+                                if k in pilar_val:
+                                    pilar_key = v
+                                    break
+                        if not pilar_key:
+                            continue
+                        receita = row[receita_col]
+                        if pd.notna(receita):
+                            try:
+                                valor = float(receita)
+                            except (ValueError, TypeError):
+                                continue
+                            bucket = base_pag_por_vendedor.setdefault(
+                                vendedor_nome, {p: 0 for p in pilares_ordem})
+                            bucket[pilar_key] += valor
+        except Exception:
+            base_pag_por_vendedor = {}
+
+        # 3. Montar resultado a partir da LISTA de CNs da Planilha de Comissionamento.
+        def _match_dados(nome_upper, mapping):
+            """Casa um nome (exato ou por primeiro+último nome) num dict por nome."""
+            if nome_upper in mapping:
+                return mapping[nome_upper]
+            nome_clean = ' '.join(nome_upper.split())
+            for outro, dados in mapping.items():
+                outro_clean = ' '.join(str(outro).split())
+                if nome_clean == outro_clean:
+                    return dados
+                np_ = nome_clean.split()
+                op_ = outro_clean.split()
+                if len(np_) >= 2 and len(op_) >= 2 and np_[0] == op_[0] and np_[-1] == op_[-1]:
+                    return dados
+            return None
+
         result = []
-        for vendedor_nome, dados in vendedores.items():
-            nome_upper = dados['nome_upper']
-            
-            # Buscar percentual de atingimento - tentar match exato primeiro, depois fuzzy
-            vendedor_ating = None
-            if nome_upper in ating_por_vendedor:
-                vendedor_ating = ating_por_vendedor[nome_upper]
-            else:
-                # Tentar match parcial/fuzzy
-                for ating_nome in ating_por_vendedor.keys():
-                    # Remover espaços extras e comparar
-                    nome_clean = ' '.join(nome_upper.split())
-                    ating_clean = ' '.join(ating_nome.split())
-                    if nome_clean == ating_clean:
-                        vendedor_ating = ating_por_vendedor[ating_nome]
-                        break
-                    # Comparar primeiras palavras (nome e sobrenome)
-                    nome_parts = nome_clean.split()
-                    ating_parts = ating_clean.split()
-                    if len(nome_parts) >= 2 and len(ating_parts) >= 2:
-                        if nome_parts[0] == ating_parts[0] and nome_parts[-1] == ating_parts[-1]:
-                            vendedor_ating = ating_por_vendedor[ating_nome]
-                            break
-            
-            # Criar lista de pilares com percentual de ATINGIMENTO
+        for cn in cn_order:
+            nome_upper = cn['nome_upper']
+            vendedor_ating = _match_dados(nome_upper, ating_por_vendedor) or {}
+            pilares_valores = _match_dados(nome_upper, base_pag_por_vendedor) or {p: 0 for p in pilares_ordem}
+
             pilares = []
+            comissao_total = 0
             for p in pilares_ordem:
-                valor = dados['pilares_valores'][p]
-                # Buscar percentual de atingimento da planilha REMUNERAÇÃO CN
-                pct = 0
-                if vendedor_ating and p in vendedor_ating:
-                    pct = vendedor_ating[p]
-                
-                pilares.append({
-                    'nome': pilares_nomes[p],
-                    'pct': pct,
-                    'comissao': valor,
-                })
-            
-            # Remuneração final da planilha REMUNERAÇÃO CN ou usar comissao_total
-            remuneracao = remuneracao_por_vendedor.get(nome_upper, dados['comissao_total'])
-            
+                valor = pilares_valores.get(p, 0)
+                comissao_total += valor
+                pct = vendedor_ating.get(p, 0)
+                pilares.append({'nome': pilares_nomes[p], 'pct': pct, 'comissao': valor})
+
+            remuneracao = _match_dados(nome_upper, remuneracao_por_vendedor)
+            if remuneracao is None:
+                remuneracao = comissao_total
+
             # Buscar user_id no Django para o link "Ver detalhes"
             user_id = None
             nome_parts = nome_upper.split()
@@ -1843,32 +1809,32 @@ def fetch_vendedores_por_filial(user_sector, urls=None):
                 ).first()
                 if user_obj:
                     user_id = user_obj.id
-            if not user_id and len(nome_parts) >= 1:
+            if not user_id and nome_parts:
                 user_obj = User.objects.filter(
                     first_name__iexact=nome_parts[0],
                     is_active=True
                 ).first()
                 if user_obj:
                     user_id = user_obj.id
-            
+
             result.append({
-                'nome': dados['nome'],
+                'nome': cn['nome_display'],
                 'user_id': user_id,
                 'pilares': pilares,
-                'comissao_total': dados['comissao_total'],
+                'comissao_total': comissao_total,
                 'remuneracao_final': remuneracao,
                 # Campos individuais para o gráfico de representatividade
-                'movel_comissao': dados['pilares_valores']['movel'],
-                'fixa_comissao': dados['pilares_valores']['fixa'],
-                'smartphone_comissao': dados['pilares_valores']['smartphone'],
-                'eletronicos_comissao': dados['pilares_valores']['eletronicos'],
-                'essenciais_comissao': dados['pilares_valores']['essenciais'],
-                'seguro_comissao': dados['pilares_valores']['seguro'],
-                'sva_comissao': dados['pilares_valores']['sva'],
+                'movel_comissao': pilares_valores.get('movel', 0),
+                'fixa_comissao': pilares_valores.get('fixa', 0),
+                'smartphone_comissao': pilares_valores.get('smartphone', 0),
+                'eletronicos_comissao': pilares_valores.get('eletronicos', 0),
+                'essenciais_comissao': pilares_valores.get('essenciais', 0),
+                'seguro_comissao': pilares_valores.get('seguro', 0),
+                'sva_comissao': pilares_valores.get('sva', 0),
             })
-        
+
         return result
-        
+
     except Exception as e:
         return []
 

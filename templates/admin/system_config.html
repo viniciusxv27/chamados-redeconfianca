@@ -250,6 +250,75 @@
             </div>
         </form>
 
+        <!-- Sincronizar Tabela de Totais + Comissionamento A parte -->
+        <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-table text-blue-600 mr-2"></i>
+                    Tabela de Totais do Comissionamento
+                </h2>
+                <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                    {{ synced_totals_count }} registro(s) em {{ reference_month|stringformat:"02d" }}/{{ reference_year }}
+                </span>
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-600 mb-4">
+                    <i class="fas fa-info-circle text-blue-500 mr-1"></i>
+                    Grava o <b>valor total</b> que cada pessoa receberá do comissionamento (nome, mês,
+                    ano e valor) para a referência <b>{{ reference_month|stringformat:"02d" }}/{{ reference_year }}</b>.
+                    Usuários "A parte" entram com o valor do modelo próprio.
+                </p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <form method="post" action="{% url 'sync_commission_table' %}"
+                          onsubmit="return confirm('Sincronizar a tabela de totais para {{ reference_month|stringformat:"02d" }}/{{ reference_year }}?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="month" value="{{ reference_month }}">
+                        <input type="hidden" name="year" value="{{ reference_year }}">
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Sincronizar Tabela
+                        </button>
+                    </form>
+                    <a href="{% url 'aparte_config' %}"
+                       class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                        <i class="fas fa-user-cog mr-2"></i>
+                        Comissionamento A parte
+                    </a>
+                </div>
+
+                {% if synced_totals %}
+                <div class="mt-5 overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-xs font-medium text-gray-500 uppercase border-b border-gray-200">
+                                <th class="py-2 pr-4">Nome</th>
+                                <th class="py-2 px-2">Papel</th>
+                                <th class="py-2 px-2 text-right">Valor Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {% for t in synced_totals %}
+                            <tr>
+                                <td class="py-2 pr-4 text-gray-800">{{ t.person_name }}</td>
+                                <td class="py-2 px-2 text-gray-500">{{ t.get_role_display }}</td>
+                                <td class="py-2 px-2 text-right font-medium text-gray-800">R$ {{ t.total_commission|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if synced_last %}
+                <p class="mt-3 text-xs text-gray-400">
+                    Última sincronização: {{ synced_last.synced_at|date:"d/m/Y H:i" }}
+                    {% if synced_last.synced_by %} por {{ synced_last.synced_by.get_full_name }}{% endif %}
+                </p>
+                {% endif %}
+                {% else %}
+                <p class="mt-4 text-sm text-gray-500 italic">Nenhum total sincronizado para esta referência ainda.</p>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Liberação de Comissionamento (rascunhos visíveis só para superadmin) -->
         <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">

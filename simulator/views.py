@@ -19,10 +19,12 @@ from .services import (
     ROLE_COORDENADOR,
     ROLE_GERENTE,
     ROLE_SUPERADMIN,
+    ROLE_APART,
     get_all_coordinators,
     get_all_consultors,
     get_all_gerentes,
     get_all_snipers,
+    get_all_aparte_users,
     get_coordinator_sectors,
     get_factor_set,
     get_hunter_levels_from_request,
@@ -30,9 +32,11 @@ from .services import (
     get_sniper_coordinator,
     get_user_role,
     is_sniper_user,
+    is_aparte_user,
     compute_consultor_simulation,
     compute_gerente_simulation,
     compute_coordenador_simulation,
+    compute_aparte_simulation,
     update_factor_sets_from_post,
 )
 
@@ -91,18 +95,21 @@ def simulator_dashboard(request):
         gerentes = get_all_gerentes()
         consultors = get_all_consultors()
         snipers = get_all_snipers()
+        aparte_users = get_all_aparte_users()
 
         coordinator_ids = {u.id for u in coordinators}
+        aparte_ids = {u.id for u in aparte_users}
         sniper_targets = [
             {'id': user.id, 'label': f"{user.get_full_name()} (Sniper)", 'role': ROLE_COORDENADOR}
             for user in snipers if user.id not in coordinator_ids
         ]
 
         available_targets = (
-            [{'id': user.id, 'label': f"{user.get_full_name()} (Coordenador)", 'role': ROLE_COORDENADOR} for user in coordinators]
+            [{'id': user.id, 'label': f"{user.get_full_name()} (A parte)", 'role': ROLE_APART} for user in aparte_users]
+            + [{'id': user.id, 'label': f"{user.get_full_name()} (Coordenador)", 'role': ROLE_COORDENADOR} for user in coordinators if user.id not in aparte_ids]
             + sniper_targets
-            + [{'id': user.id, 'label': f"{user.get_full_name()} (Gerente)", 'role': ROLE_GERENTE} for user in gerentes]
-            + [{'id': user.id, 'label': f"{user.get_full_name()} (Consultor)", 'role': ROLE_CONSULTOR} for user in consultors]
+            + [{'id': user.id, 'label': f"{user.get_full_name()} (Gerente)", 'role': ROLE_GERENTE} for user in gerentes if user.id not in aparte_ids]
+            + [{'id': user.id, 'label': f"{user.get_full_name()} (Consultor)", 'role': ROLE_CONSULTOR} for user in consultors if user.id not in aparte_ids]
         )
 
         target_user_id = request.GET.get('user_id')
@@ -177,6 +184,15 @@ def simulator_dashboard(request):
         else:
             target_user = current_user
             target_role = ROLE_GERENTE
+    elif role == ROLE_APART:
+        # Usuário "A parte" vê apenas o próprio comissionamento.
+        available_targets = [{
+            'id': current_user.id,
+            'label': f"{current_user.get_full_name() or current_user.email} (A parte)",
+            'role': ROLE_APART,
+        }]
+        target_user = current_user
+        target_role = ROLE_APART
     else:
         sector_users = get_sector_consultors(current_user)
         available_targets = [
@@ -195,7 +211,14 @@ def simulator_dashboard(request):
             target_role = ROLE_CONSULTOR
 
     simulation = None
-    if target_user and target_role:
+    if target_user and target_role == ROLE_APART:
+        from users.models import AParteCommissionConfig
+        aparte_config = AParteCommissionConfig.objects.filter(user=target_user).first()
+        simulation = compute_aparte_simulation(
+            target_user, aparte_config, hunter_levels,
+            view_mode=view_mode, simulator_inputs=simulator_inputs,
+        )
+    elif target_user and target_role:
         factor_set = get_factor_set(target_role)
         if target_role == ROLE_CONSULTOR:
             simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)

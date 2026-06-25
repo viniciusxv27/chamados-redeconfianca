@@ -275,6 +275,123 @@ class CommissionUserReferenceHistory(models.Model):
         return f"{self.user_name} - {self.sheet_name} ({self.month:02d}/{self.year})"
 
 
+class CommissionMonthlyTotal(models.Model):
+    """Tabela de totais de comissionamento por pessoa/mês/ano.
+
+    Populada pelo botão "Sincronizar tabela" em /users/manage/system-config/.
+    Guarda o valor total que cada pessoa vai receber do comissionamento no mês.
+    """
+
+    ROLE_CHOICES = [
+        ('cn', 'CN'),
+        ('gerente', 'Gerente'),
+        ('coordenador', 'Coordenador'),
+        ('aparte', 'A parte'),
+    ]
+
+    year = models.PositiveSmallIntegerField(verbose_name="Ano")
+    month = models.PositiveSmallIntegerField(verbose_name="Mês")
+    person_name = models.CharField(max_length=255, verbose_name="Nome da Pessoa")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='cn', verbose_name="Papel")
+    total_commission = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0.00'),
+        verbose_name="Valor Total do Comissionamento"
+    )
+    source_version = models.ForeignKey(
+        CommissionSpreadsheetVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='monthly_totals',
+        verbose_name="Versão de Origem"
+    )
+    synced_at = models.DateTimeField(auto_now=True, verbose_name="Sincronizado em")
+    synced_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='commission_total_syncs',
+        verbose_name="Sincronizado por"
+    )
+
+    class Meta:
+        verbose_name = "Total de Comissionamento por Mês"
+        verbose_name_plural = "Totais de Comissionamento por Mês"
+        ordering = ['-year', '-month', 'person_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['year', 'month', 'person_name', 'role'],
+                name='unique_commission_monthly_total'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.person_name} - {self.month:02d}/{self.year}: R$ {self.total_commission}"
+
+
+# Fatores padrão do comissionamento "A parte" (planilha Comissionamento Eduarda).
+# Cada pilar mapeia para faixas [limite_inferior_atingimento, limite_superior, taxa].
+APARTE_DEFAULT_FACTORS = {
+    'movel': [[0.85, 0.8999, 0.03], [0.90, 0.9499, 0.05], [0.95, 0.9999, 0.12], [1.0, 999, 0.25]],
+    'fixa': [[0.85, 0.8999, 0.03], [0.90, 0.9499, 0.06], [0.95, 0.9999, 0.15], [1.0, 999, 0.32]],
+    'smartphones': [[0.85, 0.8999, 0.015], [0.90, 0.9499, 0.03], [0.95, 0.9999, 0.05], [1.0, 999, 0.10]],
+    'eletronicos': [[0.85, 0.8999, 0.015], [0.90, 0.9499, 0.03], [0.95, 0.9999, 0.05], [1.0, 999, 0.10]],
+    'essenciais': [[0.85, 0.8999, 0.015], [0.90, 0.9499, 0.03], [0.95, 0.9999, 0.05], [1.0, 999, 0.12]],
+    'seguros': [[0.85, 0.8999, 0.015], [0.90, 0.9499, 0.03], [0.95, 0.9999, 0.06], [1.0, 999, 0.15]],
+    'sva': [[0.85, 0.8999, 0.01], [0.90, 0.9499, 0.015], [0.95, 0.9999, 0.02], [1.0, 999, 0.03]],
+}
+
+
+def default_aparte_factors():
+    """Callable usado como default do JSONField (cópia profunda dos fatores)."""
+    import copy
+    return copy.deepcopy(APARTE_DEFAULT_FACTORS)
+
+
+class AParteCommissionConfig(models.Model):
+    """Configuração do comissionamento "A parte" por usuário.
+
+    O salário base é o multiplicador dos fatores por pilar (comissão_pilar =
+    fator(atingimento_rede) × salário base). Persiste até ser alterado.
+    """
+
+    user = models.OneToOneField(
+        'User',
+        on_delete=models.CASCADE,
+        related_name='aparte_commission_config',
+        verbose_name="Usuário"
+    )
+    base_salary = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0.00'),
+        verbose_name="Salário Base",
+        help_text="Valor base sobre o qual os fatores de cada pilar são aplicados"
+    )
+    factors = models.JSONField(
+        default=default_aparte_factors, blank=True,
+        verbose_name="Fatores por Pilar",
+        help_text="Faixas de atingimento da rede por pilar: [min, max, taxa]"
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
+    updated_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='aparte_config_updates',
+        verbose_name="Atualizado por"
+    )
+
+    class Meta:
+        verbose_name = "Configuração de Comissionamento A parte"
+        verbose_name_plural = "Configurações de Comissionamento A parte"
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f"A parte: {self.user.get_full_name()} (base R$ {self.base_salary})"
+
+
 def get_media_storage():
     """Return media storage backend"""
     if getattr(settings, 'USE_S3', False):
