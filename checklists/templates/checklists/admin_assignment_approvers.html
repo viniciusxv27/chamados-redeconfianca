@@ -15,7 +15,7 @@
                     </h1>
                     <p class="text-purple-100 mt-1">Configure quem pode aprovar atribuições de checklists</p>
                 </div>
-                <div class="flex gap-3">
+                <div class="flex flex-wrap gap-3">
                     <a href="{% url 'checklists:admin_pending_assignments' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
                         <i class="fas fa-clock mr-2"></i>Pendentes
                     </a>
@@ -74,7 +74,7 @@
             <div class="divide-y divide-gray-200">
                 {% for approver in approvers %}
                 <div class="p-4 hover:bg-gray-50 transition-colors">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div class="flex items-center gap-4">
                             <div class="h-12 w-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg">
                                 {{ approver.user.first_name|slice:":1" }}{{ approver.user.last_name|slice:":1" }}
