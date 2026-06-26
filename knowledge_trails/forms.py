@@ -98,12 +98,16 @@ class QuizQuestionForm(forms.ModelForm):
     
     class Meta:
         model = QuizQuestion
-        fields = ['question_text', 'points', 'order']
+        fields = ['question_text', 'question_type', 'points', 'order']
         widgets = {
             'question_text': forms.Textarea(attrs={
                 'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300 resize-none',
                 'rows': 3,
                 'placeholder': 'Digite a pergunta do quiz...'
+            }),
+            'question_type': forms.Select(attrs={
+                'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300',
+                'id': 'id_question_type'
             }),
             'points': forms.NumberInput(attrs={
                 'class': 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-300',
@@ -117,6 +121,7 @@ class QuizQuestionForm(forms.ModelForm):
         }
         labels = {
             'question_text': 'Pergunta',
+            'question_type': 'Tipo de Pergunta',
             'points': 'Pontos',
             'order': 'Ordem'
         }

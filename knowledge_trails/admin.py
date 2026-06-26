@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption,
+    KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption, QuizAnswer,
     TrailProgress, LessonProgress, Certificate, SlideImage
 )
 
@@ -102,10 +102,19 @@ class LessonAdmin(admin.ModelAdmin):
 
 @admin.register(QuizQuestion)
 class QuizQuestionAdmin(admin.ModelAdmin):
-    list_display = ['question_text', 'lesson', 'points', 'order']
-    list_filter = ['lesson__module__trail']
+    list_display = ['question_text', 'lesson', 'question_type', 'points', 'order']
+    list_filter = ['question_type', 'lesson__module__trail']
     search_fields = ['question_text']
     inlines = [QuizOptionInline]
+
+
+@admin.register(QuizAnswer)
+class QuizAnswerAdmin(admin.ModelAdmin):
+    list_display = ['user', 'question', 'is_correct', 'grading_status', 'awarded_points', 'attempt_number', 'answered_at']
+    list_filter = ['grading_status', 'is_correct', 'question__question_type', 'question__lesson__module__trail']
+    search_fields = ['user__first_name', 'user__last_name', 'answer_text']
+    readonly_fields = ['answered_at', 'graded_at']
+    raw_id_fields = ['user', 'question', 'selected_option', 'graded_by']
 
 
 @admin.register(TrailProgress)

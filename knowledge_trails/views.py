@@ -6,12 +6,45 @@ from django.db.models import Count, Sum, Q, Prefetch
 from django.utils import timezone
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
+from django.urls import reverse
 from .models import (
     KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption, QuizAnswer,
     TrailProgress, LessonProgress, Certificate
 )
 from users.models import Sector, User
 import json
+
+
+def _can_manage_trail(user, trail):
+    """Verifica se o usuário pode gerenciar/avaliar uma trilha específica."""
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    if user.is_superuser or getattr(user, 'hierarchy', None) in ['SUPERADMIN', 'ADMIN']:
+        return True
+    if getattr(user, 'hierarchy', None) == 'SUPERVISOR':
+        user_sectors = list(user.sectors.all())
+        if user.sector:
+            user_sectors.append(user.sector)
+        return trail.sector in user_sectors
+    return False
+
+
+def _compute_quiz_score(lesson, user, attempt_number):
+    """Calcula a pontuação (%) de uma tentativa com base nos pontos concedidos.
+
+    Múltipla escolha pontua automaticamente; discursivas pontuam após a
+    avaliação do gestor (awarded_points). Antes da avaliação valem 0.
+    """
+    questions = list(lesson.quiz_questions.all())
+    total_points = sum(q.points for q in questions)
+    if total_points <= 0:
+        return 0
+    earned = QuizAnswer.objects.filter(
+        user=user,
+        question__lesson=lesson,
+        attempt_number=attempt_number,
+    ).aggregate(total=Sum('awarded_points'))['total'] or 0
+    return min(round(earned / total_points * 100), 100)
 
 
 @login_required
@@ -243,40 +276,78 @@ def lesson_view(request, lesson_id):
         
         elif action == 'submit_quiz' and lesson.lesson_type == 'quiz':
             # Processar quiz
-            quiz_questions = lesson.quiz_questions.all()
-            correct_answers = 0
-            total_questions = quiz_questions.count()
-            
+            quiz_questions = list(lesson.quiz_questions.all())
+            total_points = sum(q.points for q in quiz_questions)
+            has_discursive = any(q.question_type == 'discursive' for q in quiz_questions)
+
             # Incrementar tentativa antes de salvar respostas
             lesson_progress.quiz_attempts += 1
             attempt_number = lesson_progress.quiz_attempts
-            
+
+            earned_points = 0
             for question in quiz_questions:
-                selected_option_id = request.POST.get(f'question_{question.id}')
-                if selected_option_id:
-                    selected_option = QuizOption.objects.filter(id=selected_option_id).first()
-                    if selected_option:
-                        is_correct = selected_option.is_correct
-                        if is_correct:
-                            correct_answers += 1
-                        
-                        # Salvar resposta do usuário
-                        QuizAnswer.objects.create(
-                            user=user,
-                            question=question,
-                            selected_option=selected_option,
-                            is_correct=is_correct,
-                            attempt_number=attempt_number
-                        )
-            
-            score = round((correct_answers / total_questions * 100)) if total_questions > 0 else 0
+                if question.question_type == 'discursive':
+                    # Resposta aberta: aguarda avaliação do gestor (0 pontos provisórios)
+                    answer_text = (request.POST.get(f'question_{question.id}_text') or '').strip()
+                    QuizAnswer.objects.create(
+                        user=user,
+                        question=question,
+                        selected_option=None,
+                        answer_text=answer_text,
+                        is_correct=False,
+                        grading_status='pending',
+                        awarded_points=0,
+                        attempt_number=attempt_number,
+                    )
+                else:
+                    selected_option_id = request.POST.get(f'question_{question.id}')
+                    selected_option = QuizOption.objects.filter(
+                        id=selected_option_id, question=question
+                    ).first() if selected_option_id else None
+                    is_correct = bool(selected_option and selected_option.is_correct)
+                    awarded = question.points if is_correct else 0
+                    earned_points += awarded
+                    QuizAnswer.objects.create(
+                        user=user,
+                        question=question,
+                        selected_option=selected_option,
+                        is_correct=is_correct,
+                        grading_status='auto',
+                        awarded_points=awarded,
+                        attempt_number=attempt_number,
+                    )
+
+            score = min(round(earned_points / total_points * 100), 100) if total_points > 0 else 0
             lesson_progress.quiz_score = score
-            
-            # Considerar aprovado com 70% ou mais
+
+            if has_discursive:
+                # Conclui ao enviar: as discursivas serão avaliadas pelo gestor depois
+                lesson_progress.mark_completed()
+                messages.success(
+                    request,
+                    f'✅ Quiz enviado! Você ganhou {lesson.points} pontos. '
+                    'As respostas discursivas serão avaliadas pelo gestor da trilha '
+                    f'(pontuação parcial: {score}%).'
+                )
+
+                trail_progress = trail.get_progress(user)
+                if trail_progress.status == 'completed' and trail.enable_certificate:
+                    certificate, cert_created = Certificate.objects.get_or_create(
+                        trail_progress=trail_progress,
+                        user=user,
+                        trail=trail
+                    )
+                    if cert_created:
+                        messages.success(request, '🎉 Parabéns! Você concluiu a trilha e recebeu um certificado!')
+                        return redirect('knowledge_trails:certificate_view', certificate_id=certificate.id)
+
+                return redirect('knowledge_trails:trail_detail', trail_id=trail.id)
+
+            # Quiz apenas de múltipla escolha: mantém o critério de 70% para aprovar
             if score >= 70:
                 lesson_progress.mark_completed()
                 messages.success(request, f'✅ Quiz concluído! Pontuação: {score}%. Você ganhou {lesson.points} pontos!')
-                
+
                 # Verificar conclusão da trilha
                 trail_progress = trail.get_progress(user)
                 if trail_progress.status == 'completed' and trail.enable_certificate:
@@ -288,7 +359,7 @@ def lesson_view(request, lesson_id):
                     if cert_created:
                         messages.success(request, '🎉 Parabéns! Você concluiu a trilha e recebeu um certificado!')
                         return redirect('knowledge_trails:certificate_view', certificate_id=certificate.id)
-                
+
                 return redirect('knowledge_trails:trail_detail', trail_id=trail.id)
             else:
                 lesson_progress.save()
@@ -1256,62 +1327,74 @@ def quiz_answers_view(request, lesson_id):
     )
     trail = lesson.module.trail
     user = request.user
-    
-    # Verificar permissão de gerenciamento
-    can_manage = False
-    if hasattr(user, 'hierarchy'):
-        if user.hierarchy in ['SUPERADMIN', 'ADMIN'] or user.is_superuser:
-            can_manage = True
-        elif user.hierarchy == 'SUPERVISOR':
-            user_sectors = list(user.sectors.all())
-            if user.sector:
-                user_sectors.append(user.sector)
-            can_manage = trail.sector in user_sectors
-    
-    if not can_manage:
+
+    if not _can_manage_trail(user, trail):
         messages.error(request, 'Você não tem permissão para ver as respostas deste quiz.')
         return redirect('knowledge_trails:dashboard')
-    
+
+    questions = lesson.quiz_questions.all().prefetch_related('options')
+    total_questions = questions.count()
+
     # Buscar todos os usuários que responderam o quiz
     user_progresses = LessonProgress.objects.filter(
         lesson=lesson,
         quiz_attempts__gt=0
     ).select_related('user').order_by('-quiz_score', 'completed_at')
-    
-    # Buscar questões do quiz
-    questions = lesson.quiz_questions.all().prefetch_related('options')
-    
-    # Preparar dados dos usuários com suas respostas
+
     users_data = []
+    total_correct = 0
+    total_answered = 0
+    pending_total = 0
     for progress in user_progresses:
-        user_answers = QuizAnswer.objects.filter(
+        user_answers = list(QuizAnswer.objects.filter(
             user=progress.user,
             question__lesson=lesson,
             attempt_number=progress.quiz_attempts  # Última tentativa
-        ).select_related('question', 'selected_option')
-        
-        answers_dict = {answer.question_id: answer for answer in user_answers}
-        
+        ).select_related('question', 'selected_option'))
+
+        answered = len(user_answers)
+        correct = sum(1 for a in user_answers if a.is_correct)
+        wrong = sum(
+            1 for a in user_answers
+            if not a.is_correct and a.grading_status != 'pending'
+        )
+        pending = sum(1 for a in user_answers if a.grading_status == 'pending')
+        last_answer = max((a.answered_at for a in user_answers), default=None)
+
+        total_correct += correct
+        total_answered += answered
+        pending_total += pending
+
         users_data.append({
             'user': progress.user,
             'progress': progress,
-            'answers': answers_dict
+            'correct': correct,
+            'wrong': wrong,
+            'pending': pending,
+            'answered': answered,
+            'percentage': progress.quiz_score or 0,
+            'attempt': progress.quiz_attempts,
+            'last_answer': last_answer,
         })
-    
+
     context = {
         'lesson': lesson,
         'trail': trail,
         'questions': questions,
         'users_data': users_data,
         'total_users': len(users_data),
+        'total_questions': total_questions,
+        'total_correct': total_correct,
+        'total_answered': total_answered,
+        'pending_total': pending_total,
     }
-    
+
     return render(request, 'knowledge_trails/quiz_answers.html', context)
 
 
 @login_required
 def user_quiz_detail(request, lesson_id, user_id):
-    """Ver detalhes das respostas de um usuário específico em um quiz"""
+    """Ver detalhes das respostas de um usuário e avaliar questões discursivas"""
     lesson = get_object_or_404(
         Lesson.objects.select_related('module__trail'),
         id=lesson_id,
@@ -1320,74 +1403,115 @@ def user_quiz_detail(request, lesson_id, user_id):
     trail = lesson.module.trail
     current_user = request.user
     target_user = get_object_or_404(User, id=user_id)
-    
-    # Verificar permissão
-    can_view = False
-    if current_user == target_user:
-        can_view = True
-    elif hasattr(current_user, 'hierarchy'):
-        if current_user.hierarchy in ['SUPERADMIN', 'ADMIN'] or current_user.is_superuser:
-            can_view = True
-        elif current_user.hierarchy == 'SUPERVISOR':
-            user_sectors = list(current_user.sectors.all())
-            if current_user.sector:
-                user_sectors.append(current_user.sector)
-            can_view = trail.sector in user_sectors
-    
+
+    can_manage = _can_manage_trail(current_user, trail)
+    can_view = can_manage or (current_user == target_user)
+
     if not can_view:
         messages.error(request, 'Você não tem permissão para ver estas respostas.')
         return redirect('knowledge_trails:dashboard')
-    
+
     # Progresso do usuário
     lesson_progress = LessonProgress.objects.filter(
         lesson=lesson,
         user=target_user
     ).first()
-    
+
     if not lesson_progress:
         messages.error(request, 'Este usuário ainda não respondeu o quiz.')
         return redirect('knowledge_trails:quiz_answers', lesson_id=lesson.id)
-    
-    # Buscar todas as tentativas
-    attempts = QuizAnswer.objects.filter(
-        user=target_user,
-        question__lesson=lesson
-    ).values('attempt_number').distinct().order_by('-attempt_number')
-    
+
     # Tentativa selecionada (última por padrão)
     selected_attempt = request.GET.get('attempt', lesson_progress.quiz_attempts)
     try:
         selected_attempt = int(selected_attempt)
-    except:
+    except (TypeError, ValueError):
         selected_attempt = lesson_progress.quiz_attempts
-    
-    # Buscar questões com respostas do usuário para a tentativa selecionada
-    questions = lesson.quiz_questions.all().prefetch_related('options')
-    user_answers = QuizAnswer.objects.filter(
+
+    # Avaliação de respostas discursivas (apenas gestores)
+    if request.method == 'POST':
+        if not can_manage:
+            messages.error(request, 'Você não tem permissão para avaliar respostas.')
+            return redirect('knowledge_trails:user_quiz_detail', lesson_id=lesson.id, user_id=target_user.id)
+
+        graded_any = False
+        discursive_answers = QuizAnswer.objects.filter(
+            user=target_user,
+            question__lesson=lesson,
+            attempt_number=selected_attempt,
+            question__question_type='discursive',
+        ).select_related('question')
+
+        for answer in discursive_answers:
+            raw_points = request.POST.get(f'grade_{answer.id}')
+            if raw_points is None or raw_points == '':
+                continue
+            try:
+                points = int(raw_points)
+            except (TypeError, ValueError):
+                continue
+            max_points = answer.question.points
+            points = max(0, min(points, max_points))
+            answer.awarded_points = points
+            answer.is_correct = points > 0
+            answer.grader_feedback = (request.POST.get(f'feedback_{answer.id}') or '').strip()
+            answer.grading_status = 'graded'
+            answer.graded_by = current_user
+            answer.graded_at = timezone.now()
+            answer.save(update_fields=[
+                'awarded_points', 'is_correct', 'grader_feedback',
+                'grading_status', 'graded_by', 'graded_at'
+            ])
+            graded_any = True
+
+        # Recalcular a pontuação da tentativa avaliada
+        new_score = _compute_quiz_score(lesson, target_user, selected_attempt)
+        if selected_attempt == lesson_progress.quiz_attempts:
+            lesson_progress.quiz_score = new_score
+            lesson_progress.save(update_fields=['quiz_score'])
+
+        if graded_any:
+            messages.success(request, f'✅ Avaliação salva! Nova pontuação da tentativa: {new_score}%.')
+        else:
+            messages.info(request, 'Nenhuma avaliação foi alterada.')
+        return redirect(
+            f"{reverse('knowledge_trails:user_quiz_detail', args=[lesson.id, target_user.id])}?attempt={selected_attempt}"
+        )
+
+    # Buscar todas as tentativas
+    attempts = list(QuizAnswer.objects.filter(
+        user=target_user,
+        question__lesson=lesson
+    ).values_list('attempt_number', flat=True).distinct().order_by('-attempt_number'))
+
+    # Respostas da tentativa selecionada, na ordem das questões
+    answers = list(QuizAnswer.objects.filter(
         user=target_user,
         question__lesson=lesson,
         attempt_number=selected_attempt
-    ).select_related('selected_option')
-    
-    answers_dict = {answer.question_id: answer for answer in user_answers}
-    
-    # Calcular estatísticas da tentativa
-    correct_count = user_answers.filter(is_correct=True).count()
-    total_questions = questions.count()
-    attempt_score = round((correct_count / total_questions * 100)) if total_questions > 0 else 0
-    
+    ).select_related('question', 'selected_option').prefetch_related('question__options'))
+    answers.sort(key=lambda a: (a.question.order, a.question_id))
+
+    # Estatísticas da tentativa (pontos concedidos / pontos possíveis)
+    correct_count = sum(1 for a in answers if a.is_correct)
+    wrong_count = sum(1 for a in answers if not a.is_correct and a.grading_status != 'pending')
+    pending_count = sum(1 for a in answers if a.grading_status == 'pending')
+    percentage = _compute_quiz_score(lesson, target_user, selected_attempt)
+
     context = {
         'lesson': lesson,
         'trail': trail,
         'target_user': target_user,
         'lesson_progress': lesson_progress,
-        'questions': questions,
-        'answers_dict': answers_dict,
+        'answers': answers,
         'attempts': attempts,
+        'current_attempt': selected_attempt,
         'selected_attempt': selected_attempt,
         'correct_count': correct_count,
-        'total_questions': total_questions,
-        'attempt_score': attempt_score,
+        'wrong_count': wrong_count,
+        'pending_count': pending_count,
+        'percentage': percentage,
+        'can_manage': can_manage,
     }
-    
+
     return render(request, 'knowledge_trails/user_quiz_detail.html', context)

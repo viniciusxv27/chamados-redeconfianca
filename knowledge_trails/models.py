@@ -500,7 +500,12 @@ class SlideImage(models.Model):
 
 class QuizQuestion(models.Model):
     """Pergunta de quiz para lições do tipo quiz"""
-    
+
+    QUESTION_TYPE_CHOICES = [
+        ('multiple_choice', 'Múltipla Escolha'),
+        ('discursive', 'Discursiva'),
+    ]
+
     lesson = models.ForeignKey(
         Lesson,
         on_delete=models.CASCADE,
@@ -508,20 +513,31 @@ class QuizQuestion(models.Model):
         verbose_name='Lição'
     )
     question_text = models.TextField(verbose_name='Pergunta')
+    question_type = models.CharField(
+        max_length=20,
+        choices=QUESTION_TYPE_CHOICES,
+        default='multiple_choice',
+        verbose_name='Tipo de Pergunta',
+        help_text='Múltipla escolha é corrigida automaticamente; discursiva é avaliada pelo gestor.'
+    )
     points = models.PositiveIntegerField(
         default=10,
         verbose_name='Pontos',
         help_text='Pontos ganhos ao acertar esta questão'
     )
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem')
-    
+
     class Meta:
         verbose_name = 'Pergunta de Quiz'
         verbose_name_plural = 'Perguntas de Quiz'
         ordering = ['order']
-        
+
     def __str__(self):
         return f'{self.lesson.title} - Q{self.order + 1}'
+
+    @property
+    def is_discursive(self):
+        return self.question_type == 'discursive'
 
 
 class QuizOption(models.Model):
@@ -548,7 +564,13 @@ class QuizOption(models.Model):
 
 class QuizAnswer(models.Model):
     """Resposta do usuário em uma questão de quiz"""
-    
+
+    GRADING_STATUS_CHOICES = [
+        ('auto', 'Corrigida automaticamente'),
+        ('pending', 'Aguardando avaliação'),
+        ('graded', 'Avaliada'),
+    ]
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -565,19 +587,57 @@ class QuizAnswer(models.Model):
         QuizOption,
         on_delete=models.CASCADE,
         related_name='user_selections',
-        verbose_name='Opção Selecionada'
+        verbose_name='Opção Selecionada',
+        null=True,
+        blank=True,
+        help_text='Preenchido apenas em questões de múltipla escolha.'
+    )
+    answer_text = models.TextField(
+        blank=True,
+        verbose_name='Resposta Discursiva',
+        help_text='Texto enviado pelo aluno em questões discursivas.'
     )
     is_correct = models.BooleanField(default=False, verbose_name='Resposta Correta')
+
+    # Avaliação (questões discursivas são avaliadas pelo gestor da trilha)
+    grading_status = models.CharField(
+        max_length=20,
+        choices=GRADING_STATUS_CHOICES,
+        default='auto',
+        verbose_name='Status da Avaliação'
+    )
+    awarded_points = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Pontos Concedidos'
+    )
+    graded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='graded_quiz_answers',
+        verbose_name='Avaliado por'
+    )
+    graded_at = models.DateTimeField(null=True, blank=True, verbose_name='Avaliado em')
+    grader_feedback = models.TextField(
+        blank=True,
+        verbose_name='Comentário do Avaliador'
+    )
+
     attempt_number = models.PositiveIntegerField(default=1, verbose_name='Número da Tentativa')
     answered_at = models.DateTimeField(auto_now_add=True, verbose_name='Respondido em')
-    
+
     class Meta:
         verbose_name = 'Resposta do Quiz'
         verbose_name_plural = 'Respostas do Quiz'
         ordering = ['-answered_at']
-        
+
     def __str__(self):
         return f'{self.user.get_full_name()} - {self.question.lesson.title} - Q{self.question.order + 1}'
+
+    @property
+    def is_pending_review(self):
+        return self.grading_status == 'pending'
 
 
 class TrailProgress(models.Model):

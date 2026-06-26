@@ -56,10 +56,19 @@
                         <div class="bg-gray-50 p-6">
                             <div class="flex justify-between items-start">
                                 <div class="flex-1">
-                                    <div class="flex items-center gap-3 mb-3">
+                                    <div class="flex items-center flex-wrap gap-2 sm:gap-3 mb-3">
                                         <span class="px-3 py-1 bg-purple-600 text-white text-sm font-bold rounded-full">
                                             Q{{ question.order|default:forloop.counter }}
                                         </span>
+                                        {% if question.question_type == 'discursive' %}
+                                        <span class="px-3 py-1 bg-indigo-100 text-indigo-800 text-sm font-semibold rounded-full">
+                                            <i class="fas fa-pen-fancy mr-1"></i> Discursiva
+                                        </span>
+                                        {% else %}
+                                        <span class="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-semibold rounded-full">
+                                            <i class="fas fa-list-ul mr-1"></i> Múltipla escolha
+                                        </span>
+                                        {% endif %}
                                         <span class="px-3 py-1 bg-yellow-400 text-yellow-900 text-sm font-semibold rounded-full">
                                             {{ question.points }} pontos
                                         </span>
@@ -79,8 +88,14 @@
                                 </div>
                             </div>
 
-                            <!-- Alternativas -->
+                            <!-- Alternativas / Resposta discursiva -->
                             <div class="mt-4 space-y-2">
+                                {% if question.question_type == 'discursive' %}
+                                <div class="bg-indigo-50 border-2 border-indigo-200 rounded-lg p-4 flex items-start gap-3">
+                                    <i class="fas fa-pen-fancy text-indigo-600 text-xl mt-0.5"></i>
+                                    <span class="text-indigo-800">Resposta aberta — o aluno responde em texto livre e o gestor avalia em <strong>Ver Respostas</strong>.</span>
+                                </div>
+                                {% else %}
                                 {% for option in question.options.all %}
                                 <div class="flex items-center gap-3 p-3 bg-white rounded-lg border-2 
                                             {% if option.is_correct %}border-green-500 bg-green-50{% else %}border-gray-200{% endif %}">
@@ -106,6 +121,7 @@
                                     <span class="text-yellow-800">Nenhuma alternativa criada ainda. Clique em "Editar" para adicionar alternativas.</span>
                                 </div>
                                 {% endfor %}
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -183,7 +199,11 @@
                         </li>
                         <li class="flex items-start gap-2">
                             <i class="fas fa-check text-green-600 mt-1"></i>
-                            <span>O aluno precisa de 70% ou mais para passar no quiz</span>
+                            <span>Questões <strong>discursivas</strong> (resposta aberta) são avaliadas manualmente pelo gestor em "Ver Respostas"</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-check text-green-600 mt-1"></i>
+                            <span>Em quizzes só de múltipla escolha, o aluno precisa de 70% ou mais para passar. Quizzes com discursivas concluem ao enviar e a nota é ajustada após a avaliação</span>
                         </li>
                     </ul>
                 </div>

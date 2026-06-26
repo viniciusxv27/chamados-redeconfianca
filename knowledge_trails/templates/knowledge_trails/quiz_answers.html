@@ -44,7 +44,13 @@
                 </div>
             </div>
 
-            <div class="p-8">
+            <div class="p-4 sm:p-8">
+                {% if pending_total %}
+                <div class="mb-6 bg-amber-50 border-2 border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                    <i class="fas fa-pen-fancy text-amber-600 text-xl mt-0.5"></i>
+                    <span class="text-amber-800">Há <strong>{{ pending_total }}</strong> resposta(s) discursiva(s) aguardando avaliação. Abra "Ver Detalhes" do aluno para atribuir os pontos.</span>
+                </div>
+                {% endif %}
                 <!-- Estatísticas Gerais -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                     <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg">
@@ -148,6 +154,11 @@
                                         <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
                                             <i class="fas fa-times mr-1"></i> {{ data.wrong }}
                                         </span>
+                                        {% if data.pending %}
+                                        <span class="inline-flex items-center px-3 py-1 mt-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800" title="Respostas discursivas a avaliar">
+                                            <i class="fas fa-pen-fancy mr-1"></i> {{ data.pending }} a avaliar
+                                        </span>
+                                        {% endif %}
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <div class="flex items-center justify-center gap-2">

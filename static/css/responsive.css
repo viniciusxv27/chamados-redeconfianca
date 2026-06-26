@@ -1,0 +1,63 @@
+/* =====================================================================
+   Camada global de responsividade (hardening)
+   ---------------------------------------------------------------------
+   Aplicada a TODAS as telas. Objetivo: evitar rolagem horizontal
+   acidental e garantir adaptação a celulares, tablets e desktops,
+   tanto no modo retrato quanto no modo paisagem.
+
+   Carregada DEPOIS de custom.css em base.html.
+   ===================================================================== */
+
+/* 1) Caixa previsível em todos os elementos. */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* 2) Evitar rolagem horizontal da página inteira.
+   overflow-x no <html> (e não no <body>) preserva o position: sticky
+   do cabeçalho e dos descendentes. */
+html { overflow-x: hidden; }
+body { max-width: 100%; }
+
+/* 3) Mídia nunca estoura o container. */
+img, svg, video, canvas, audio, iframe, embed, object {
+    max-width: 100%;
+}
+img, video { height: auto; }
+
+/* 4) Conteúdo longo (URLs, palavras enormes, código) quebra em telas
+   pequenas em vez de empurrar o layout. */
+pre {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.rc-break, .break-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+
+/* 5) Tabelas com rolagem horizontal automática em telas estreitas.
+   O wrapper .rc-table-scroll é aplicado via JS (em base.html) às
+   tabelas que ainda não estão dentro de um container rolável. */
+.rc-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.rc-table-scroll > table { min-width: max-content; }
+
+/* 6) Utilitário opcional para conteúdo de modal não ultrapassar a tela. */
+.rc-modal-content { max-height: 90vh; overflow-y: auto; }
+
+/* 7) Ajustes específicos para telas muito estreitas (celulares retrato). */
+@media (max-width: 480px) {
+    /* Reduz paddings exagerados herdados de cards/containers grandes. */
+    .rc-tight-sm { padding-left: 1rem !important; padding-right: 1rem !important; }
+}
+
+/* 8) Telas baixas em paisagem (celular deitado): permite rolagem e evita
+   que cabeçalhos "sticky" ocupem a tela inteira. */
+@media (max-height: 480px) and (orientation: landscape) {
+    .min-h-screen { min-height: 100vh; }
+}
+
+/* 9) Alvos de toque mínimos em dispositivos sem mouse fino. */
+@media (hover: none) and (pointer: coarse) {
+    button, a.btn, .rc-touch { touch-action: manipulation; }
+}

@@ -167,6 +167,7 @@
     </style>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="bg-gray-100 min-h-screen font-montserrat">
@@ -3676,5 +3677,33 @@
         });
     </script>
     {% include 'feedback/_reminder_popup.html' %}
+
+    <!-- Responsividade global: envolve tabelas "soltas" em um container rolável
+         para evitar overflow horizontal em celulares/tablets. -->
+    <script>
+    (function () {
+        function wrapTables() {
+            var SCROLL_ANCESTOR = '.rc-table-scroll, .overflow-x-auto, .overflow-auto, .overflow-scroll, .table-responsive';
+            document.querySelectorAll('main table, .page-content table, [class*="content"] table, table').forEach(function (table) {
+                // Já está dentro de um container rolável? Não mexe.
+                if (table.closest(SCROLL_ANCESTOR)) return;
+                // Evita reprocessar.
+                if (table.dataset.rcWrapped === '1') return;
+                var wrapper = document.createElement('div');
+                wrapper.className = 'rc-table-scroll';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+                table.dataset.rcWrapped = '1';
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wrapTables);
+        } else {
+            wrapTables();
+        }
+        // Reaplica em conteúdo carregado dinamicamente (ex.: dropdowns/AJAX).
+        window.rcWrapTables = wrapTables;
+    })();
+    </script>
 </body>
 </html>

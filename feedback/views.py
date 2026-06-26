@@ -35,6 +35,18 @@ def _is_superadmin(user) -> bool:
     return getattr(user, 'hierarchy', '') == 'SUPERADMIN'
 
 
+def _can_manage_feedback(user) -> bool:
+    """Pode atribuir, ver relatórios e gerenciar feedbacks.
+
+    Liberado para superadministradores e para a hierarquia "Administração" (ADMIN).
+    """
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return getattr(user, 'hierarchy', '') in ('SUPERADMIN', 'ADMIN')
+
+
 def _is_padrao(user) -> bool:
     return getattr(user, 'hierarchy', '') in ('PADRAO', 'PADRÃO')
 
@@ -240,6 +252,17 @@ def superadmin_required(view_func):
     return _wrapped
 
 
+def feedback_manager_required(view_func):
+    """Acesso liberado a superadmins e à hierarquia Administração (ADMIN)."""
+    @wraps(view_func)
+    @login_required
+    def _wrapped(request, *args, **kwargs):
+        if not _can_manage_feedback(request.user):
+            return HttpResponseForbidden('Acesso restrito aos gestores de feedback.')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
 def survey_manager_required(view_func):
     """Acesso liberado a superadmins e a usuários autorizados a gerenciar as pesquisas."""
     @wraps(view_func)
@@ -280,6 +303,7 @@ def dashboard(request):
         'received': received,
         'stats': stats,
         'is_superadmin': _is_superadmin(user),
+        'can_manage_feedback': _can_manage_feedback(user),
     }
     return render(request, 'feedback/dashboard.html', context)
 
@@ -1234,7 +1258,7 @@ def feedback_detail(request, feedback_id):
         pk=feedback_id,
     )
 
-    is_admin = _is_superadmin(request.user)
+    is_admin = _can_manage_feedback(request.user)
     if not (is_admin or request.user.id in (fb.evaluator_id, fb.evaluatee_id)):
         return HttpResponseForbidden('Você não tem permissão para ver este feedback.')
 
@@ -1260,7 +1284,7 @@ def feedback_detail(request, feedback_id):
     })
 
 
-@superadmin_required
+@feedback_manager_required
 @require_POST
 def regenerate_ai_summary(request, feedback_id):
     fb = get_object_or_404(Feedback, pk=feedback_id)
@@ -1276,7 +1300,7 @@ def regenerate_ai_summary(request, feedback_id):
 def user_history(request, user_id):
     target = get_object_or_404(User, pk=user_id)
 
-    is_admin = _is_superadmin(request.user)
+    is_admin = _can_manage_feedback(request.user)
     if not (is_admin or request.user.id == target.id):
         # Permite também ao avaliador atual ver histórico de quem ele avalia.
         has_relation = FeedbackAssignment.objects.filter(
@@ -1306,7 +1330,7 @@ def user_history(request, user_id):
     })
 
 
-@superadmin_required
+@feedback_manager_required
 def manage_all(request):
     q = (request.GET.get('q') or '').strip()
     feedbacks = Feedback.objects.select_related('evaluator', 'evaluatee').order_by('-created_at')
@@ -1337,7 +1361,7 @@ def manage_all(request):
     })
 
 
-@superadmin_required
+@feedback_manager_required
 @require_http_methods(['GET', 'POST'])
 def assign_view(request):
     if request.method == 'POST':
@@ -1380,7 +1404,7 @@ def assign_view(request):
     return render(request, 'feedback/assign.html', {})
 
 
-@superadmin_required
+@feedback_manager_required
 @require_POST
 def delete_assignment(request, assignment_id):
     a = get_object_or_404(FeedbackAssignment, pk=assignment_id)
@@ -1441,7 +1465,7 @@ def _rule_for_user(user, today):
     return PERIOD_RULES[-1], months
 
 
-@superadmin_required
+@feedback_manager_required
 def reports(request):
     today = timezone.localdate()
     sector_filter_id = request.GET.get('sector')

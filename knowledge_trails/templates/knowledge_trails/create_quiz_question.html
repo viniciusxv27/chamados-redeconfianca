@@ -25,6 +25,17 @@
                     {{ form.question_text }}
                 </div>
 
+                <div>
+                    <label for="{{ form.question_type.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        {{ form.question_type.label }}
+                    </label>
+                    {{ form.question_type }}
+                    <small class="text-gray-500 text-xs mt-1 block">
+                        <strong>Múltipla escolha:</strong> corrigida automaticamente pelas alternativas.
+                        <strong>Discursiva:</strong> resposta aberta, avaliada pelo gestor da trilha.
+                    </small>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label for="{{ form.points.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
@@ -45,8 +56,24 @@
 
                 <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
                     <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
-                    <strong>Próximo passo:</strong> Após criar a questão, você poderá adicionar as alternativas (mínimo 2, recomendado 4-5).
+                    <strong>Próximo passo:</strong>
+                    <span data-hint="multiple_choice">Após criar a questão de múltipla escolha, você poderá adicionar as alternativas (mínimo 2, recomendado 4-5).</span>
+                    <span data-hint="discursive" class="hidden">Questões discursivas não têm alternativas — o aluno responde em texto livre e o gestor avalia a resposta depois.</span>
                 </div>
+
+                <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var typeSelect = document.getElementById('id_question_type');
+                    if (!typeSelect) return;
+                    function syncHint() {
+                        document.querySelectorAll('[data-hint]').forEach(function (el) {
+                            el.classList.toggle('hidden', el.getAttribute('data-hint') !== typeSelect.value);
+                        });
+                    }
+                    typeSelect.addEventListener('change', syncHint);
+                    syncHint();
+                });
+                </script>
 
                 <div class="border-t-2 border-gray-100 pt-6 flex justify-end gap-3">
                     <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition-all duration-300 flex items-center gap-2">
