@@ -7,9 +7,9 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <!-- Page Header -->
     <div class="mb-8">
-        <div class="flex justify-between items-center">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">Histórico de Aprovações</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Histórico de Aprovações</h1>
                 <p class="text-gray-600 mt-2">Todas as aprovações de ordens de compra processadas no sistema</p>
             </div>
             
@@ -200,12 +200,12 @@
         <!-- Pagination -->
         {% if approvals.has_other_pages %}
         <div class="px-6 py-4 border-t border-gray-200">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div class="text-sm text-gray-700">
                     Mostrando {{ approvals.start_index }} - {{ approvals.end_index }} de {{ approvals.paginator.count }} resultados
                 </div>
-                
-                <div class="flex space-x-2">
+
+                <div class="flex flex-wrap gap-2">
                     {% if approvals.has_previous %}
                         <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ approvals.previous_page_number }}" 
                            class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md text-gray-500 hover:bg-gray-50">

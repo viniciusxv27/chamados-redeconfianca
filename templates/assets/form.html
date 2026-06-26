@@ -48,7 +48,7 @@
 
     <!-- Formulário -->
     <div class="bg-white shadow-lg rounded-lg">
-        <form method="post" enctype="multipart/form-data" class="space-y-6 p-6">
+        <form method="post" enctype="multipart/form-data" class="space-y-6 p-4 sm:p-6">
             {% csrf_token %}
             
             <!-- Informações Básicas -->
@@ -261,7 +261,7 @@
             </div>
 
             <!-- Botões -->
-            <div class="flex justify-between pt-6 border-t border-gray-200">
+            <div class="flex flex-wrap gap-3 justify-between pt-6 border-t border-gray-200">
                 <a href="{% if asset %}{% url 'assets:detail' asset.pk %}{% else %}{% url 'assets:list' %}{% endif %}" 
                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     <i class="fas fa-times mr-2"></i>

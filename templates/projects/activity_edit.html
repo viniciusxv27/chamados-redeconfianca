@@ -28,10 +28,10 @@
 {% block content %}
 <div class="container mx-auto px-4 py-6">
     <!-- Hero Header -->
-    <div class="activity-edit-hero rounded-3xl p-10 mb-8 text-white relative z-10">
+    <div class="activity-edit-hero rounded-3xl p-6 sm:p-8 lg:p-10 mb-8 text-white relative z-10">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
             <div>
-                <h1 class="text-4xl font-bold mb-2">
+                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2">
                     <i class="fas fa-edit mr-3"></i>
                     Editar Atividade
                 </h1>
@@ -59,7 +59,7 @@
 
     <!-- Formulário -->
     <div class="max-w-4xl mx-auto">
-        <div class="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+        <div class="bg-white rounded-3xl shadow-xl border border-gray-100 p-4 sm:p-6 lg:p-8 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
             <form method="post" id="activity-form">
                 {% csrf_token %}
                 

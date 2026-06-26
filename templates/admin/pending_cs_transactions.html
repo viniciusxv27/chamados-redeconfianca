@@ -6,12 +6,12 @@
 {% csrf_token %}
 <div class="max-w-6xl mx-auto px-4 py-8">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-8">
+    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">Transações C$ Pendentes</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Transações C$ Pendentes</h1>
             <p class="text-gray-600 mt-2">Aprovar ou rejeitar solicitações de crédito C$</p>
         </div>
-        <div class="flex space-x-3">
+        <div class="flex flex-wrap gap-3">
             <a href="{% url 'manage_cs' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
                 <i class="fas fa-arrow-left mr-2"></i>Voltar
             </a>

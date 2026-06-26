@@ -7,9 +7,9 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <!-- Page Header -->
     <div class="mb-8">
-        <div class="flex justify-between items-center">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">Arquivos</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Arquivos</h1>
                 <p class="text-gray-600 mt-2">Documentos e arquivos compartilhados</p>
                 
                 <!-- Breadcrumb -->
@@ -38,7 +38,7 @@
             </div>
             
             {% if user.can_upload_files %}
-            <div class="flex space-x-3">
+            <div class="flex flex-wrap gap-3">
                 <a href="{% url 'files:file_upload' %}{% if current_folder %}?folder={{ current_folder.id }}{% endif %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors inline-flex items-center">
                     <i class="fas fa-upload mr-2"></i>
                     Enviar Arquivo

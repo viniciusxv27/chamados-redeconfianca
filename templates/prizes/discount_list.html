@@ -6,13 +6,13 @@
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
-    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-8 mb-8 text-white shadow-lg">
+    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 sm:p-6 lg:p-8 mb-8 text-white shadow-lg">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
             <div>
-                <h1 class="text-4xl font-bold">Descontos de Prêmios</h1>
+                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">Descontos de Prêmios</h1>
                 <p class="text-xl opacity-90 mt-2">Gerencie cupons e promoções</p>
             </div>
-            <div class="flex space-x-3">
+            <div class="flex flex-wrap gap-3">
                 <a href="{% url 'manage_prizes' %}" class="bg-white bg-opacity-20 text-white hover:bg-opacity-30 px-5 py-3 rounded-lg font-medium transition-colors border border-white border-opacity-30">
                     <i class="fas fa-arrow-left mr-2"></i>Voltar
                 </a>

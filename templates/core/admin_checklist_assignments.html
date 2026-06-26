@@ -52,13 +52,13 @@
     <!-- Header -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center flex-wrap gap-3 mb-4">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Gerenciar Atribuições</h1>
                     <p class="text-gray-600">Gerencie as atribuições de templates para usuários</p>
                 </div>
-                
-                <div class="flex space-x-3">
+
+                <div class="flex flex-wrap gap-3">
                     <a href="{% url 'admin_checklist:create_assignment' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                         <i class="fas fa-plus mr-2"></i>Nova Atribuição
                     </a>

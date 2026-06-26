@@ -7,7 +7,7 @@
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
         <div class="px-6 py-4">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-wrap gap-3">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900 flex items-center">
                         <i class="fas fa-trash-alt text-red-500 mr-3"></i>
@@ -126,7 +126,7 @@
                     </div>
 
                     <!-- Buttons -->
-                    <div class="flex justify-end space-x-4 pt-6">
+                    <div class="flex flex-wrap justify-end gap-4 pt-6">
                         <a href="{% url 'manage_webhooks' %}" class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
                             Cancelar
                         </a>

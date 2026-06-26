@@ -49,12 +49,12 @@
     <!-- Header -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center flex-wrap gap-3 mb-4">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Gerenciar Atribuições</h1>
                     <p class="text-gray-600">Gerencie as atribuições de templates para usuários</p>
                 </div>
-                
+
                 <a href="{% url 'admin_checklist_dashboard' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
                     <i class="fas fa-arrow-left mr-2"></i>Voltar
                 </a>
@@ -111,13 +111,13 @@
     <div class="bg-white rounded-lg shadow">
         {% if assignments %}
             <div class="px-6 py-4 border-b border-gray-200">
-                <div class="flex justify-between items-center">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center flex-wrap gap-3">
                     <h3 class="text-lg font-medium text-gray-900">
                         {{ assignments.count }} atribuiç{{ assignments.count|pluralize:"ão,ões" }}
                     </h3>
-                    
+
                     <!-- Estatísticas -->
-                    <div class="flex items-center space-x-4 text-sm">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                         <div class="flex items-center">
                             <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
                             <span class="text-gray-600">{{ stats.assigned }} Atribuída{{ stats.assigned|pluralize }}</span>
@@ -287,7 +287,7 @@
 
 <!-- Modal para detalhes da atribuição -->
 <div id="assignmentModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-90vh overflow-hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h3 class="text-lg font-medium text-gray-900">Detalhes da Atribuição</h3>
             <button onclick="closeAssignmentModal()" class="text-gray-400 hover:text-gray-600">

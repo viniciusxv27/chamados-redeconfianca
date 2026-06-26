@@ -83,8 +83,8 @@
                     </div>
                 </div>
                 
-                <div class="flex justify-center space-x-4">
-                    <a href="{% url 'assets:product_detail' product.pk %}" 
+                <div class="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+                    <a href="{% url 'assets:product_detail' product.pk %}"
                        class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
                         Ver Itens do Produto
                     </a>
@@ -108,8 +108,8 @@
                 
                 <form method="post">
                     {% csrf_token %}
-                    <div class="flex justify-center space-x-4">
-                        <a href="{% url 'assets:product_list' %}" 
+                    <div class="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+                        <a href="{% url 'assets:product_list' %}"
                            class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
                             Cancelar
                         </a>

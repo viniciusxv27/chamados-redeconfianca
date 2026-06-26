@@ -15,7 +15,7 @@
                     </h1>
                     <p class="text-orange-100 mt-1">Aprove ou rejeite solicitações de atribuição de checklists</p>
                 </div>
-                <div class="flex gap-3">
+                <div class="flex flex-wrap gap-3">
                     {% if is_superadmin %}
                     <a href="{% url 'checklists:admin_assignment_approvers' %}" class="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors text-sm font-medium">
                         <i class="fas fa-cog mr-2"></i>Configurações

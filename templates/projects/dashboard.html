@@ -32,13 +32,13 @@
 {% block content %}
 <div class="container mx-auto px-4 py-6">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-8">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">Dashboard de Projetos</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard de Projetos</h1>
             <p class="text-gray-600 mt-1">Visão geral dos projetos do sistema</p>
         </div>
         {% if can_create %}
-        <div class="space-x-4">
+        <div class="flex flex-wrap gap-4">
             <a href="{% url 'projects:project_create' %}" 
                class="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white px-4 py-2 rounded-md font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
                 <i class="fas fa-plus mr-2"></i>Novo Projeto

@@ -5,7 +5,7 @@
 {% block title %}{% if can_execute %}Executar{% else %}Visualizar{% endif %} Checklist{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-6">
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-4 sm:p-6">
     <div class="max-w-5xl mx-auto">
         
         {% if can_execute %}
@@ -13,10 +13,10 @@
             {% csrf_token %}
         {% endif %}
         
-        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
-            <div class="flex items-center justify-between mb-6">
+        <div class="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-wrap gap-3 mb-6">
                 <div>
-                    <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+                    <h1 class="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
                         {% if can_execute %}Executar Checklist{% else %}📋 Visualizar Execução{% endif %}
                     </h1>
                     <h2 class="text-xl font-semibold text-gray-700 mb-2">{{ template.name }}</h2>
@@ -384,13 +384,13 @@
         </div>
 
         {% if can_execute %}
-        <div class="bg-white rounded-2xl shadow-xl p-8 sticky bottom-6 mt-8">
-            <div class="flex items-center justify-between">
+        <div class="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 sticky bottom-6 mt-8">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div class="text-gray-700">
                     <p class="text-sm mb-1">Ao enviar, seu checklist será enviado para aprovação</p>
                     <p class="text-xs text-gray-500">Certifique-se de completar todas as tarefas obrigatórias</p>
                 </div>
-                <button type="submit" class="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:from-purple-700 hover:to-indigo-700 transform hover:scale-105 transition-all shadow-lg">
+                <button type="submit" class="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:from-purple-700 hover:to-indigo-700 transform hover:scale-105 transition-all shadow-lg">
                     ✅ Enviar para Aprovação
                 </button>
             </div>
@@ -419,10 +419,10 @@
         {% endif %}
 
         {% if can_approve and execution.status == 'awaiting_approval' %}
-        <div class="bg-white rounded-2xl shadow-xl p-8 mt-8">
+        <div class="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 mt-8">
             <h3 class="text-xl font-bold text-gray-800 mb-4">⚖️ Ações de Aprovação</h3>
             <p class="text-gray-600 mb-6">Como supervisor, você pode aprovar ou reprovar esta execução.</p>
-            <div class="flex gap-4">
+            <div class="flex flex-col sm:flex-row gap-4">
                 <form method="post" action="{% url 'checklists:approve_checklist' execution.id %}" class="flex-1">
                     {% csrf_token %}
                     <button type="submit" onclick="return confirm('✅ Confirma a aprovação deste checklist?')" class="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-lg rounded-xl hover:from-green-600 hover:to-green-700 transform hover:scale-105 transition-all shadow-lg">

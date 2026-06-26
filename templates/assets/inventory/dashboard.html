@@ -144,7 +144,7 @@
         <!-- Pending Requests for Approvers -->
         {% if is_inventory_approver and pending_requests_count > 0 %}
         <div class="bg-white rounded-lg shadow border-l-4 border-yellow-400">
-            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex flex-wrap gap-2 justify-between items-center">
                 <h3 class="text-lg font-medium text-gray-900">
                     <i class="fas fa-clock text-yellow-500 mr-2"></i>
                     Solicitações Pendentes
@@ -168,7 +168,7 @@
         <!-- My Recent Requests -->
         {% if my_recent_requests %}
         <div class="bg-white rounded-lg shadow">
-            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex flex-wrap gap-2 justify-between items-center">
                 <h3 class="text-lg font-medium text-gray-900">
                     <i class="fas fa-clipboard-list text-indigo-600 mr-2"></i>
                     Minhas Solicitações
@@ -230,7 +230,7 @@
 
         <!-- Recent Movements -->
         <div class="bg-white rounded-lg shadow {% if not low_stock_products %}lg:col-span-2{% endif %}">
-            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex flex-wrap gap-2 justify-between items-center">
                 <h3 class="text-lg font-medium text-gray-900">
                     <i class="fas fa-history text-indigo-600 mr-2"></i>
                     Últimas Movimentações

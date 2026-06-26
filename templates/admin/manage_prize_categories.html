@@ -8,7 +8,7 @@
         <!-- Header -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
             <div class="px-6 py-4">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div class="flex items-center">
                         <i class="fas fa-tags text-primary text-2xl mr-3"></i>
                         <div>
@@ -16,7 +16,7 @@
                             <p class="text-sm text-gray-600">Gerencie as categorias disponíveis para organizar os prêmios</p>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-3">
+                    <div class="flex flex-wrap items-center gap-3">
                         <a href="{% url 'create_prize_category' %}" 
                            class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
                             <i class="fas fa-plus mr-2"></i>

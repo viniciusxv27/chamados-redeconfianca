@@ -20,7 +20,7 @@
             </h2>
             <p class="text-sm text-gray-600 mt-1">Selecione os produtos, defina as quantidades e envie para aprovação.</p>
         </div>
-        <div class="mt-4 md:mt-0 flex gap-2">
+        <div class="mt-4 md:mt-0 flex flex-wrap gap-2">
             <a href="{% url 'assets:my_orders' %}" class="px-4 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50"><i class="fas fa-clipboard-list mr-1"></i> Meus Pedidos</a>
             {% if can_manage %}
             <a href="{% url 'assets:manage_orders' %}" class="px-4 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50"><i class="fas fa-tasks mr-1"></i> Gerenciar</a>

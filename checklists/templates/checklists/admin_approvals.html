@@ -8,15 +8,15 @@
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-6">
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
-            <div class="flex items-center justify-between mb-6">
+        <div class="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 mb-8">
+            <div class="flex items-center justify-between flex-col sm:flex-row sm:items-center gap-4 mb-6">
                 <div>
-                    <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+                    <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
                         👑 Aprovação de Checklists
                     </h1>
                     <p class="text-gray-600">Revise e aprove os checklists executados</p>
                 </div>
-                <div class="flex gap-3">
+                <div class="flex gap-3 flex-wrap">
                     <a href="{% url 'checklists:checklist_reports' %}" 
                        class="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all font-semibold shadow-lg">
                         📊 Relatórios
@@ -123,7 +123,7 @@
                             <div class="flex items-start justify-between">
                                 <div class="flex-1">
                                     <h2 class="text-2xl font-bold mb-2">{{ execution.assignment.template.name }}</h2>
-                                    <div class="flex items-center gap-4 text-sm">
+                                    <div class="flex items-center gap-4 text-sm flex-wrap">
                                         <span class="flex items-center gap-2">
                                             <i class="fas fa-user"></i>
                                             {{ execution.assignment.assigned_to.get_full_name|default:execution.assignment.assigned_to.username }}
@@ -164,7 +164,7 @@
                             </div>
                             <br>
                             {% if execution.status == 'awaiting_approval' %}
-                                <div class="flex items-center gap-4">
+                                <div class="flex items-center gap-4 flex-wrap">
                                     <button onclick="showRejectModal({{ execution.id }}, '{{ execution.assignment.template.name|escapejs }}')"
                                             class="px-6 py-3 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-semibold">
                                         ❌ Rejeitar
@@ -320,14 +320,14 @@
                             </div>
 
                             <!-- Actions -->
-                            <div class="mt-8 flex items-center justify-between">
+                            <div class="mt-8 flex items-center justify-between flex-wrap gap-4">
                                 <a href="{% url 'checklists:view_execution' execution.id %}"
                                    class="px-6 py-3 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors font-semibold">
                                     👁️ Ver Detalhes
                                 </a>
-                                
+
                                 {% if execution.status == 'awaiting_approval' %}
-                                    <div class="flex items-center gap-4">
+                                    <div class="flex items-center gap-4 flex-wrap">
                                         <button onclick="showRejectModal({{ execution.id }}, '{{ execution.assignment.template.name|escapejs }}')"
                                                 class="px-6 py-3 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-semibold">
                                             ❌ Rejeitar

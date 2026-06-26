@@ -8,12 +8,12 @@
 {% block content %}
 <div class="container mx-auto px-6 py-8 max-w-7xl">
     <!-- Hero Section -->
-    <div class="bg-gradient-to-r from-orange-500 via-orange-600 to-yellow-500 text-white rounded-2xl p-10 mb-8 relative overflow-hidden">
+    <div class="bg-gradient-to-r from-orange-500 via-orange-600 to-yellow-500 text-white rounded-2xl p-4 sm:p-6 lg:p-10 mb-8 relative overflow-hidden">
         <div class="absolute top-0 right-0 w-48 h-48 bg-white bg-opacity-10 rounded-full transform translate-x-12 -translate-y-12"></div>
         <div class="relative z-10">
             <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div class="flex-1">
-                    <h1 class="text-4xl font-bold mb-4">{{ supplier.name }}</h1>
+                    <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4">{{ supplier.name }}</h1>
                     <p class="text-lg opacity-95 mb-6 leading-relaxed">{{ supplier.services|truncatechars:200 }}</p>
                     
                     <div class="flex flex-wrap gap-6 text-sm opacity-90">
@@ -32,7 +32,7 @@
                     </div>
                 </div>
                 
-                <div class="flex gap-3">
+                <div class="flex flex-wrap gap-3">
                     <a href="{% url 'suppliers:supplier_list' %}" class="bg-white text-slate-600 border-2 border-slate-200 px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:border-orange-300 hover:text-orange-600 hover:-translate-y-0.5 cursor-pointer no-underline inline-block">
                         <i class="fas fa-arrow-left mr-2"></i>Voltar
                     </a>

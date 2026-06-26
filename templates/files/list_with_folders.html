@@ -8,9 +8,9 @@
     {% csrf_token %}
     <!-- Page Header -->
     <div class="mb-8">
-        <div class="flex justify-between items-center">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">Arquivos</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Arquivos</h1>
                 
                 <!-- Breadcrumb -->
                 {% if breadcrumb or current_folder %}
@@ -38,10 +38,10 @@
             </div>
             
             {% if user.can_upload_files %}
-            <div class="flex space-x-3">
+            <div class="flex flex-wrap gap-3">
                 <!-- Admin actions for folders/categories -->
                 {% if user.can_view_sector_tickets %}
-                <div class="flex space-x-2">
+                <div class="flex flex-wrap gap-2">
                     <a href="{% url 'files:create_folder' %}{% if current_folder %}?parent={{ current_folder.id }}{% endif %}" 
                        class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors inline-flex items-center">
                         <i class="fas fa-folder-plus mr-2"></i>

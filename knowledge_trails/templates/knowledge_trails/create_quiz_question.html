@@ -7,15 +7,15 @@
 <div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
     <div class="max-w-4xl mx-auto">
         <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-8">
-                <h2 class="text-3xl font-bold flex items-center gap-3">
+            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 sm:p-6 lg:p-8">
+                <h2 class="text-2xl sm:text-3xl font-bold flex items-center gap-3">
                     <i class="fas fa-plus-circle"></i>
                     Criar Nova Questão
                 </h2>
                 <p class="mt-2 text-white text-opacity-90">{{ lesson.title }}</p>
             </div>
 
-            <form method="post" class="p-8 space-y-6">
+            <form method="post" class="p-4 sm:p-6 lg:p-8 space-y-6">
                 {% csrf_token %}
 
                 <div>

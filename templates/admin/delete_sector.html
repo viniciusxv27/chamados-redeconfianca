@@ -9,12 +9,12 @@
         <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
         </div>
-        <h1 class="text-3xl font-bold text-gray-900">Deletar Setor</h1>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Deletar Setor</h1>
         <p class="text-gray-600 mt-2">Esta ação não pode ser desfeita</p>
     </div>
 
     <!-- Warning Card -->
-    <div class="bg-white rounded-lg shadow-sm p-8">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 lg:p-8">
         <div class="text-center mb-6">
             <h2 class="text-xl font-semibold text-gray-900 mb-2">
                 Tem certeza que deseja deletar o setor "{{ sector.name }}"?
@@ -53,7 +53,7 @@
         {% endif %}
         
         <!-- Actions -->
-        <div class="flex justify-center space-x-4">
+        <div class="flex flex-wrap justify-center gap-4">
             <a href="{% url 'manage_sectors' %}" class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
                 <i class="fas fa-arrow-left mr-2"></i>
                 Voltar

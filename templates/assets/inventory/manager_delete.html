@@ -108,7 +108,7 @@
                 
                 <form method="post">
                     {% csrf_token %}
-                    <div class="flex justify-center space-x-4">
+                    <div class="flex flex-wrap justify-center gap-4">
                         <a href="{% url 'assets:manager_list' %}" 
                            class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
                             Cancelar

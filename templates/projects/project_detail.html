@@ -403,7 +403,7 @@
             <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div class="flex-1">
                     <div class="flex flex-col lg:flex-row lg:items-center gap-4 mb-4">
-                        <h1 class="text-4xl font-bold">{{ project.name }}</h1>
+                        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold">{{ project.name }}</h1>
                         <div class="flex flex-wrap gap-3">
                             {% if project.status == 'active' %}
                                 <span class="status-chip bg-emerald-500 text-white">
@@ -483,7 +483,7 @@
                     </div>
                 </div>
                 
-                <div class="flex gap-3">
+                <div class="flex flex-wrap gap-3">
                     <a href="{% url 'projects:project_list' %}" class="px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-semibold hover:bg-gray-200 transition-colors duration-200 inline-flex items-center gap-2">
                         <i class="fas fa-arrow-left"></i>Voltar
                     </a>

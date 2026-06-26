@@ -3,12 +3,12 @@
 {% block content %}
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
   <div class="max-w-5xl mx-auto">
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-comments mr-2 text-indigo-500"></i>Feedback de {{ fb.evaluatee.get_full_name|default:fb.evaluatee.username }}</h1>
         <p class="text-gray-500 text-sm">Aplicado por {{ fb.evaluator.get_full_name|default:fb.evaluator.username }} em {{ fb.data }}</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <a href="{% url 'feedback:user_history' fb.evaluatee.id %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50"><i class="fas fa-history mr-1"></i>Histórico do colaborador</a>
         <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
       </div>

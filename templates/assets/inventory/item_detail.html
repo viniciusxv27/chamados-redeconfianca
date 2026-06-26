@@ -70,7 +70,7 @@
                 </div>
             </div>
             {% if is_inventory_manager %}
-            <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
+            <div class="mt-4 flex flex-wrap gap-3 md:mt-0 md:ml-4">
                 {% if item.status == 'available' %}
                 <a href="{% url 'assets:stock_exit' %}?item={{ item.pk }}" 
                    class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700">

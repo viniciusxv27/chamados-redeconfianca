@@ -5,9 +5,9 @@
 {% block content %}
 <div class="max-w-4xl mx-auto px-4 py-8">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-8">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">Criar Setor</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Criar Setor</h1>
             <p class="text-gray-600 mt-2">Adicionar novo setor ao sistema</p>
         </div>
         <div class="flex space-x-3">
@@ -18,7 +18,7 @@
     </div>
 
     <!-- Form Card -->
-    <div class="bg-white rounded-lg shadow-sm p-8">
+    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 lg:p-8">
         <form method="post" class="space-y-6">
             {% csrf_token %}
             

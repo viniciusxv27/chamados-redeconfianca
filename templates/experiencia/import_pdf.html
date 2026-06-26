@@ -15,7 +15,7 @@
 
     {% if not preview_data %}
     <!-- Upload Form -->
-    <div class="bg-white rounded-xl shadow p-6">
+    <div class="bg-white rounded-xl shadow p-4 sm:p-6">
         <div class="mb-6">
             <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
                 <i class="fas fa-info-circle mr-1"></i>
@@ -44,7 +44,7 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo PDF *</label>
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition" id="dropZone">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-8 text-center hover:border-blue-400 transition" id="dropZone">
                     <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3"></i>
                     <p class="text-gray-500 mb-2">Arraste o PDF aqui ou clique para selecionar</p>
                     <input type="file" name="pdf_file" accept=".pdf" required id="pdfInput"

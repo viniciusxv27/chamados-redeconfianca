@@ -376,8 +376,8 @@
             </div>
             {% endif %}
             
-            <div class="flex justify-between items-center">
-                <div class="flex space-x-3">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <div class="flex flex-wrap gap-3">
                     <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors">
                         <i class="fas fa-search mr-2"></i>
                         Filtrar
@@ -387,8 +387,8 @@
                         Limpar
                     </a>
                 </div>
-                
-                <div class="flex items-center space-x-4">
+
+                <div class="flex flex-wrap items-center gap-4">
                     <!-- Seletor de itens por página -->
                     <div class="flex items-center space-x-2">
                         <label class="text-sm text-gray-600">Por página:</label>

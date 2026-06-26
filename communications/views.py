@@ -38,7 +38,7 @@ def _get_experience_window_alerts_for_dp():
     print(f"DEBUG: Found {users.count()} users with experience window")
 
     for user in users:
-        days_since_admission = (today - user.admission_date).days
+        days_since_admission = (today - user.admission_date).days - 1
         if days_since_admission < 0:
             continue
 

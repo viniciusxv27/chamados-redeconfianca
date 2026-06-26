@@ -9,7 +9,7 @@
             <h1 class="text-2xl font-bold text-gray-800">Remuneração Variável</h1>
             <p class="text-gray-500 text-sm mt-1">Visão Superadmin - Todos os usuários</p>
         </div>
-        <form method="get" class="flex items-center gap-2 mt-4 md:mt-0">
+        <form method="get" class="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
             <select name="month" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
                 {% for option in reference_month_options %}
                 <option value="{{ option.value }}" {% if selected_reference_month == option.value %}selected{% endif %}>{{ option.label }}</option>

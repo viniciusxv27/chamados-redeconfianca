@@ -4,12 +4,12 @@
 {% block title %}Detalhes do Elogio{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-pink-50 p-6">
+<div class="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-pink-50 p-4 sm:p-6">
     <div class="max-w-4xl mx-auto">
         <!-- Header -->
-        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
-            <div class="flex items-center justify-between mb-6">
-                <h1 class="text-4xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
+        <div class="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-wrap gap-3 mb-6">
+                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
                     ⭐ Detalhes do Elogio
                 </h1>
                 <a href="{% url 'compliments:dashboard' %}" 
@@ -22,8 +22,8 @@
         <!-- Compliment Card -->
         <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
             <!-- Header com gradiente -->
-            <div class="bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 p-8 text-white">
-                <div class="flex items-start justify-between">
+            <div class="bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 p-4 sm:p-6 lg:p-8 text-white">
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <!-- De (Sender) -->
                     <div class="flex items-center gap-4">
                         <div class="w-16 h-16 bg-white bg-opacity-30 rounded-full flex items-center justify-center backdrop-blur-sm">
@@ -39,13 +39,13 @@
                     </div>
 
                     <!-- Rating Stars -->
-                    <div class="text-right">
-                        <div class="flex gap-2 mb-2">
+                    <div class="text-left sm:text-right">
+                        <div class="flex flex-wrap gap-2 mb-2">
                             {% for i in "12345" %}
                                 {% if forloop.counter <= compliment.rating %}
-                                    <i class="fas fa-star text-yellow-300 text-3xl animate-pulse"></i>
+                                    <i class="fas fa-star text-yellow-300 text-2xl sm:text-3xl animate-pulse"></i>
                                 {% else %}
-                                    <i class="fas fa-star text-white text-opacity-30 text-3xl"></i>
+                                    <i class="fas fa-star text-white text-opacity-30 text-2xl sm:text-3xl"></i>
                                 {% endif %}
                             {% endfor %}
                         </div>
@@ -83,7 +83,7 @@
             </div>
 
             <!-- Body - Comentário -->
-            <div class="p-8">
+            <div class="p-4 sm:p-6 lg:p-8">
                 <div class="mb-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
                         <i class="fas fa-comment-dots text-orange-500 mr-3"></i>
@@ -122,8 +122,8 @@
                 </div>
 
                 <!-- Ações -->
-                <div class="mt-8 pt-8 border-t border-gray-200 flex items-center justify-between">
-                    <div class="flex items-center gap-4">
+                <div class="mt-8 pt-8 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between flex-wrap gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
                         {% if compliment.from_user == request.user %}
                             <span class="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
                                 <i class="fas fa-paper-plane mr-1"></i>

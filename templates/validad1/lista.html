@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="min-h-screen bg-gray-50 p-4">
-  <div class="flex items-center justify-between mb-4">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
     <div>
       <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
         <i class="fas fa-clipboard-check text-primary"></i>
@@ -11,7 +11,7 @@
       </h1>
       <p class="text-sm text-gray-600">Vendas do dia anterior — comparação com o Vivo GO.</p>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2 flex-wrap">
       <div class="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden text-sm shadow-sm">
         <button type="button" class="px-3 py-2 bg-primary text-white"><i class="fas fa-list"></i> Lista</button>
         <a href="{% url 'validad1:kanban' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="px-3 py-2 hover:bg-gray-50 text-gray-700"><i class="fas fa-columns"></i> Kanban</a>

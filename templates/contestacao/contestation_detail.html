@@ -14,7 +14,7 @@
 
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <!-- Header -->
-        <div class="px-5 py-4 border-b flex items-center justify-between
+        <div class="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3
             {% if c.status == 'pending' %}bg-yellow-50{% elif c.status == 'accepted' %}bg-blue-50{% elif c.status == 'confirmed' %}bg-green-50{% elif c.status == 'rejected' %}bg-red-50{% else %}bg-gray-50{% endif %}">
             <div>
                 <h1 class="text-lg font-bold text-gray-900">Contestação #{{ c.pk }}</h1>

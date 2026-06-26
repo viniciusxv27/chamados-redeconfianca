@@ -295,13 +295,13 @@
 
 <div class="container mx-auto px-4 py-6">
     <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">Dashboard de Suporte</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard de Suporte</h1>
             <p class="text-gray-600">Gerenciamento de tickets e atendimentos</p>
         </div>
-        
-        <div class="flex space-x-3">
+
+        <div class="flex flex-wrap gap-3">
             <button onclick="openCategoriesModal()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
                 <i class="fas fa-tags mr-2"></i>Categorias
             </button>
@@ -339,7 +339,7 @@
     </div>
 
     <!-- View Toggle -->
-    <div class="flex justify-between items-center mb-4">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div class="flex space-x-2">
             <button onclick="toggleView('kanban')" id="btn-kanban" class="px-4 py-2 rounded-lg bg-blue-500 text-white font-medium transition-colors">
                 <i class="fas fa-columns mr-2"></i>Kanban
@@ -348,10 +348,10 @@
                 <i class="fas fa-list mr-2"></i>Lista
             </button>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
             <div id="kanban-sector-filter-wrapper" class="flex items-center gap-2">
                 <label for="kanbanSectorFilter" class="text-sm font-medium text-gray-700">Setor:</label>
-                <select id="kanbanSectorFilter" onchange="applyKanbanFilter()" class="min-w-[220px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select id="kanbanSectorFilter" onchange="applyKanbanFilter()" class="w-full sm:w-auto sm:min-w-[220px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                     <option value="">Todos os setores</option>
                     {% for sector in user_sectors %}
                     <option value="{{ sector.id }}">{{ sector.name }}</option>

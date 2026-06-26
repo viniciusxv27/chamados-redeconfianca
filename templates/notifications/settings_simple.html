@@ -152,7 +152,7 @@
                         <span class="font-medium">Ativar horário silencioso</span>
                     </label>
                     
-                    <div id="quietHoursInputs" class="flex space-x-4 {% if not preferences.quiet_hours_enabled %}opacity-50{% endif %}">
+                    <div id="quietHoursInputs" class="flex flex-wrap gap-4 {% if not preferences.quiet_hours_enabled %}opacity-50{% endif %}">
                         <div>
                             <label class="block text-sm text-gray-600 mb-1">Início</label>
                             <input type="time" name="quiet_hours_start" 

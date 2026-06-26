@@ -5,8 +5,8 @@
 <div class="min-h-screen bg-gray-50 p-4 max-w-5xl mx-auto">
   <a href="{% url 'fibras:kanban' %}" class="text-sm text-primary hover:underline">&larr; Voltar ao Kanban</a>
 
-  <div class="bg-white rounded-lg border p-6 mt-3">
-    <div class="flex items-start justify-between">
+  <div class="bg-white rounded-lg border p-4 sm:p-6 mt-3">
+    <div class="flex items-start justify-between gap-2">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">{{ fibra.cliente|default:"—" }}</h1>
         <p class="text-sm text-gray-500">Venda <strong>{{ fibra.numero_da_venda }}</strong> · CPF {{ fibra.cpf|default:"—" }}</p>

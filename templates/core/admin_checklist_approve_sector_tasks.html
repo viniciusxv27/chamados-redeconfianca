@@ -9,7 +9,7 @@
     <div class="mb-8">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">Aprovar Tarefas de Setor</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Aprovar Tarefas de Setor</h1>
                 <p class="mt-2 text-gray-600">Analise e aprove tarefas criadas pelos setores para o Checklist ADM</p>
             </div>
             <div class="mt-4 sm:mt-0">
@@ -135,11 +135,11 @@
                 
                 <!-- Ações em lote -->
                 <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
-                    <div class="flex justify-between items-center">
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center flex-wrap gap-3">
                         <div class="text-sm text-gray-500">
                             <span id="selectedCount">0</span> tarefa(s) selecionada(s)
                         </div>
-                        <div class="flex space-x-3">
+                        <div class="flex flex-wrap gap-3">
                             <button type="submit" name="action" value="reject" 
                                     onclick="return confirmAction('rejeitar')"
                                     class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -170,7 +170,7 @@
 
 <!-- Modal para detalhes da tarefa -->
 <div id="taskModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-90vh overflow-hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h3 class="text-lg font-medium text-gray-900">Detalhes da Tarefa</h3>
             <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">

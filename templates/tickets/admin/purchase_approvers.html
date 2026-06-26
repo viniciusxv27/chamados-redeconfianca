@@ -7,9 +7,9 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <!-- Page Header -->
     <div class="mb-8">
-        <div class="flex justify-between items-center">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">Gestão de Aprovadores</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Gestão de Aprovadores</h1>
                 <p class="text-gray-600 mt-2">Configure usuários e valores máximos para aprovação de ordens de compra</p>
             </div>
             
@@ -74,7 +74,7 @@
             <!-- Flow Visualization -->
             <div class="mt-6 p-4 bg-gray-50 rounded-lg">
                 <h3 class="font-medium text-gray-900 mb-3">Fluxo de Aprovação</h3>
-                <div class="flex items-center space-x-2 text-sm">
+                <div class="flex flex-wrap items-center gap-2 text-sm">
                     {% for approver in approvers %}
                         {% if approver.is_active %}
                         <div class="bg-white px-3 py-2 rounded border">

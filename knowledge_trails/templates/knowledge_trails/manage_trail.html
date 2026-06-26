@@ -142,7 +142,7 @@
             </div>
 
             <!-- Usuários que Concluíram -->
-            <div class="bg-white rounded-3xl shadow-xl p-8">
+            <div class="bg-white rounded-3xl shadow-xl p-4 sm:p-6 lg:p-8">
                 <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
                     <i class="fas fa-user-check text-green-500 mr-3"></i>
                     Recém Concluídos
@@ -180,7 +180,7 @@
         </div>
 
         <!-- Informações da Trilha -->
-        <div class="bg-white rounded-3xl shadow-xl p-8 mt-6">
+        <div class="bg-white rounded-3xl shadow-xl p-4 sm:p-6 lg:p-8 mt-6">
             <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
                 <i class="fas fa-info-circle text-blue-500 mr-3"></i>
                 Informações da Trilha
@@ -213,7 +213,7 @@
                 <p class="text-gray-800">{{ trail.description|default:"Sem descrição disponível" }}</p>
             </div>
             
-            <div class="mt-6 flex items-center gap-4">
+            <div class="mt-6 flex flex-wrap items-center gap-4">
                 <div class="flex items-center">
                     <span class="px-4 py-2 rounded-lg font-semibold
                                  {% if trail.is_active %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">

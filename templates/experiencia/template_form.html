@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto">
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-6">
         <h1 class="text-2xl font-bold text-gray-900">
             <i class="fas fa-{% if template %}edit{% else %}plus{% endif %} text-blue-500 mr-2"></i>
             {% if template %}Editar Template{% else %}Novo Template{% endif %}
