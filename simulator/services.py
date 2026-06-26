@@ -15,7 +15,7 @@ from openpyxl import load_workbook
 from communications.models import CommunicationGroup
 from users.models import User, Sector
 from .models import SimulatorFactorSet, CoordinatorStoreAccess
-from .sql_realizado import get_realized_sales_from_mysql
+from .sql_realizado import get_realized_sales_from_mysql, get_network_realized_sales_from_mysql
 
 
 logger = logging.getLogger(__name__)

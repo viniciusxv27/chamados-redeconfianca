@@ -2789,18 +2789,96 @@ def fetch_lojas_por_coordenador(coordenador_nome, excel_url=None, cache_suffix=N
 # ============================================================================
 
 @login_required
+def is_user_aparte(user):
+    """Indica se o usuário pertence ao grupo 'A PARTE' (comissionamento à parte)."""
+    try:
+        from simulator.services import is_aparte_user
+        return is_aparte_user(user)
+    except Exception:
+        return False
+
+
+def get_aparte_commission_users():
+    """Lista de usuários com comissionamento 'A parte'."""
+    try:
+        from simulator.services import get_all_aparte_users
+        return get_all_aparte_users()
+    except Exception:
+        return []
+
+
+def build_aparte_commission_data(target_user, year, month):
+    """Calcula o comissionamento 'A parte' de um usuário para um mês/ano de referência."""
+    from users.models import AParteCommissionConfig
+    from simulator.services import (
+        get_network_metas_from_power_bi, compute_aparte_commission, get_aparte_factors,
+    )
+    from simulator.sql_realizado import get_network_realized_sales_from_mysql
+
+    config = AParteCommissionConfig.objects.filter(user=target_user).first()
+    factors = get_aparte_factors(config)
+    base = config.base_salary if config else 0
+    metas = get_network_metas_from_power_bi(year, month)
+    realized = get_network_realized_sales_from_mysql(year=year, month=month)
+    calc = compute_aparte_commission(base, factors, metas, realized)
+    return {'calc': calc, 'config': config, 'base_salary': float(base or 0)}
+
+
+@login_required
+def commission_aparte_view(request, target_user=None):
+    """Visão do comissionamento 'A parte' (usuário vê o seu; superadmin vê de qualquer um)."""
+    user = request.user
+    reference = resolve_commission_reference_from_request(request)
+
+    if reference['invalid_selection']:
+        messages.warning(request, 'Referência selecionada indisponível. Exibindo a referência disponível mais recente.')
+
+    is_self = target_user is None
+    if target_user is None:
+        target_user = user
+
+    data = build_aparte_commission_data(target_user, reference['year'], reference['month'])
+    # Enriquecer linhas com valores em percentual para o template.
+    for row in data['calc'].get('rows', []):
+        row['attainment_pct'] = (row.get('attainment') or 0) * 100
+        row['rate_pct'] = (row.get('commission_rate') or 0) * 100
+    meses = get_month_names(reference['year'], reference['month'])
+
+    context = {
+        'user': user,
+        'target_user': target_user,
+        'viewing_other': not is_self,
+        'role': 'aparte',
+        'aparte': data['calc'],
+        'base_salary': data['base_salary'],
+        'has_config': data['config'] is not None,
+        'meses': meses,
+        'reference_year_options': reference['year_options'],
+        'reference_month_options': reference['month_options'],
+        'reference_phase_options': reference['phase_options'],
+        'selected_reference_year': reference['year'],
+        'selected_reference_month': reference['month'],
+        'selected_reference_phase': reference['phase'],
+    }
+    return render(request, 'users/commission_aparte.html', context)
+
+
 def commission_view(request):
     """
     View principal para exibir dados de comissionamento
     Redireciona para a visão apropriada baseado no tipo de usuário
     """
     user = request.user
-    
+
     role = get_user_role(user)
-    
+
     # Superadmin vê todos
     if role == 'superadmin':
         return commission_superadmin_view(request)
+
+    # Comissionamento "A parte": usuário vê o próprio comissionamento à parte
+    if is_user_aparte(user):
+        return commission_aparte_view(request)
 
     # Coordenador tem visão especial
     if role == 'coordenador':
@@ -2838,6 +2916,9 @@ def commission_superadmin_view(request):
     viewing_user_id = request.GET.get('user')
     if viewing_user_id:
         target_user = get_object_or_404(User, id=viewing_user_id, is_active=True)
+        # Usuário "A parte": renderiza a visão de comissionamento à parte.
+        if is_user_aparte(target_user):
+            return commission_aparte_view(request, target_user=target_user)
         target_is_gerente = is_user_gerente(target_user)
         target_is_coordenador = is_user_coordenador(target_user)
         target_is_recepcionista = is_user_recepcionista(target_user)
@@ -2927,9 +3008,13 @@ def commission_superadmin_view(request):
     coordenadores = get_group_members_by_name('COORDENADORES')
     recepcionistas = get_group_members_by_name('RECEPCIONISTAS')
 
+    aparte_users = get_aparte_commission_users()
+    aparte_ids = [u.id for u in aparte_users]
+
     excluded_ids = set(gerentes.values_list('id', flat=True))
     excluded_ids.update(coordenadores.values_list('id', flat=True))
     excluded_ids.update(recepcionistas.values_list('id', flat=True))
+    excluded_ids.update(aparte_ids)
 
     cns = User.objects.filter(
         hierarchy='PADRAO',
@@ -2957,6 +3042,7 @@ def commission_superadmin_view(request):
         'coordenadores': coordenadores,
         'recepcionistas': recepcionistas,
         'cns': cns,
+        'aparte_users': aparte_users,
         'available_versions': available_versions,
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],
