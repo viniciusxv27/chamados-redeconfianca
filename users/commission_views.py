@@ -2788,7 +2788,6 @@ def fetch_lojas_por_coordenador(coordenador_nome, excel_url=None, cache_suffix=N
 # VIEWS
 # ============================================================================
 
-@login_required
 def is_user_aparte(user):
     """Indica se o usuário pertence ao grupo 'A PARTE' (comissionamento à parte)."""
     try:
@@ -2863,6 +2862,7 @@ def commission_aparte_view(request, target_user=None):
     return render(request, 'users/commission_aparte.html', context)
 
 
+@login_required
 def commission_view(request):
     """
     View principal para exibir dados de comissionamento
