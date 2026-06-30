@@ -467,6 +467,42 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
+
+    # Situação operacional/RH do colaborador
+    STATUS_ATIVO = 'ATIVO'
+    STATUS_INATIVO = 'INATIVO'
+    STATUS_AFASTADO = 'AFASTADO'
+    STATUS_CHOICES = [
+        (STATUS_ATIVO, 'Ativo'),
+        (STATUS_INATIVO, 'Inativo'),
+        (STATUS_AFASTADO, 'Afastado'),
+    ]
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ATIVO,
+        db_index=True,
+        verbose_name="Situação",
+        help_text="Situação do colaborador: ativo, inativo ou afastado"
+    )
+    inactivation_reason = models.TextField(
+        blank=True,
+        default='',
+        verbose_name="Motivo da Inativação"
+    )
+    leave_reason = models.TextField(
+        blank=True,
+        default='',
+        verbose_name="Motivo do Afastamento"
+    )
+    leave_attachment = models.FileField(
+        upload_to='afastamentos/%Y/%m/',
+        storage=get_media_storage(),
+        blank=True,
+        null=True,
+        verbose_name="Anexo do Afastamento"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

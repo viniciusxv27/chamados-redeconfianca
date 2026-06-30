@@ -781,7 +781,16 @@ def create_user_view(request):
         uniform_size_shirt = request.POST.get('uniform_size_shirt')
         uniform_size_pants = request.POST.get('uniform_size_pants')
         is_active = request.POST.get('is_active') == 'on'
-        
+
+        # Situação do colaborador (ativo/inativo/afastado)
+        valid_status = dict(User.STATUS_CHOICES)
+        status = request.POST.get('status') or User.STATUS_ATIVO
+        if status not in valid_status:
+            status = User.STATUS_ATIVO
+        inactivation_reason = request.POST.get('inactivation_reason', '').strip()
+        leave_reason = request.POST.get('leave_reason', '').strip()
+        leave_attachment = request.FILES.get('leave_attachment')
+
         # Campos de RH
         cpf = normalize_cpf(request.POST.get('cpf', ''))
         pis = request.POST.get('pis', '')
@@ -827,6 +836,9 @@ def create_user_view(request):
                 uniform_size_shirt=uniform_size_shirt,
                 uniform_size_pants=uniform_size_pants,
                 is_active=is_active,
+                status=status,
+                inactivation_reason=inactivation_reason if status == User.STATUS_INATIVO else '',
+                leave_reason=leave_reason if status == User.STATUS_AFASTADO else '',
                 cpf=cpf,
                 pis=pis,
                 job_title=job_title,
@@ -840,18 +852,23 @@ def create_user_view(request):
                 city=city,
             )
             
+            # Anexo de afastamento (somente quando a situação é "Afastado")
+            if status == User.STATUS_AFASTADO and leave_attachment:
+                user.leave_attachment = leave_attachment
+                user.save()
+
             # Atualizar setores múltiplos
             sectors = Sector.objects.filter(id__in=sectors_ids) if sectors_ids else Sector.objects.none()
             user.sectors.set(sectors)
-            
+
             # Se não tem setor principal definido, definir o primeiro da lista
             if not user.sector and sectors.exists():
                 user.sector = sectors.first()
                 user.save()
-            
+
             log_action(
-                request.user, 
-                'USER_CREATE', 
+                request.user,
+                'USER_CREATE',
                 f'Usuário criado: {user.full_name} ({user.email})',
                 request
             )
@@ -896,7 +913,17 @@ def edit_user_view(request, user_id):
         uniform_size_shirt = request.POST.get('uniform_size_shirt')
         uniform_size_pants = request.POST.get('uniform_size_pants')
         is_active = request.POST.get('is_active') == 'on'
-        
+
+        # Situação do colaborador (ativo/inativo/afastado)
+        valid_status = dict(User.STATUS_CHOICES)
+        status = request.POST.get('status') or User.STATUS_ATIVO
+        if status not in valid_status:
+            status = User.STATUS_ATIVO
+        inactivation_reason = request.POST.get('inactivation_reason', '').strip()
+        leave_reason = request.POST.get('leave_reason', '').strip()
+        leave_attachment = request.FILES.get('leave_attachment')
+        remove_leave_attachment = request.POST.get('remove_leave_attachment') == 'on'
+
         # Novos campos de RH
         cpf = normalize_cpf(request.POST.get('cpf', ''))
         pis = request.POST.get('pis', '')
@@ -941,7 +968,20 @@ def edit_user_view(request, user_id):
                 user_to_edit.uniform_size_shirt = uniform_size_shirt
                 user_to_edit.uniform_size_pants = uniform_size_pants
                 user_to_edit.is_active = is_active
-                
+
+                # Salvar situação do colaborador, mantendo os motivos coerentes
+                user_to_edit.status = status
+                user_to_edit.inactivation_reason = inactivation_reason if status == User.STATUS_INATIVO else ''
+                user_to_edit.leave_reason = leave_reason if status == User.STATUS_AFASTADO else ''
+                if status == User.STATUS_AFASTADO:
+                    if leave_attachment:
+                        user_to_edit.leave_attachment = leave_attachment
+                    elif remove_leave_attachment:
+                        user_to_edit.leave_attachment = None
+                else:
+                    # Ao sair do afastamento, descarta o anexo vinculado
+                    user_to_edit.leave_attachment = None
+
                 # Salvar novos campos de RH
                 user_to_edit.cpf = cpf
                 user_to_edit.pis = pis

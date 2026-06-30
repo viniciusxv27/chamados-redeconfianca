@@ -2284,3 +2284,104 @@ def export_contestation_report(request):
         ])
 
     return response
+
+
+@login_required
+def export_all_sales(request):
+    """Exporta CSV com TODAS as vendas da base (contestadas e não contestadas)."""
+    if not _can_manage_contestations(request.user):
+        messages.error(request, 'Sem permissão para exportar.')
+        return redirect('contestacao:dashboard')
+
+    # Contestações vinculadas, mais recentes primeiro, com os relacionamentos usados na linha.
+    contestations_qs = Contestation.objects.select_related(
+        'requester', 'reviewed_by', 'confirmed_by'
+    ).order_by('-created_at')
+
+    records = (
+        ExclusionRecord.objects
+        .prefetch_related(models.Prefetch('contestations', queryset=contestations_qs))
+        .order_by('filial', 'vendedor', '-imported_at')
+    )
+    records = _apply_exclusion_scope_for_user(records, request.user)
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="todas_vendas.csv"'
+
+    response.write('\ufeff')
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow([
+        'FILIAL',
+        'Vendedor',
+        'RECEITA',
+        'Pilar',
+        'Gerente',
+        'Coordenacao',
+        'Nº da Venda',
+        'Data da Venda',
+        'Nome Cliente',
+        'CPF/CNPJ',
+        'Plano/Produto',
+        'IMEI',
+        'Numero Acesso',
+        'Observacao',
+        'Contestada',
+        'ID Contestacao',
+        'Motivo Contestacao',
+        'Parecer Gestor',
+        'Parecer Gerente',
+        'Status Contestacao',
+        'Status Pagamento',
+        'Botao Clicado',
+        'Solicitante',
+        'Gestor',
+        'Confirmado Por',
+        'Data Criacao',
+        'Data Analise',
+        'Data Confirmacao',
+        'Data Pagamento',
+    ])
+
+    for record in records:
+        base_columns = [
+            record.filial,
+            record.vendedor,
+            f"{record.receita:.2f}",
+            record.pilar,
+            record.gerente,
+            record.coordenacao,
+            record.numero_venda,
+            record.data_venda,
+            record.nome_cliente,
+            record.cpf_cnpj,
+            record.plano_produto,
+            record.imei,
+            record.numero_acesso,
+            record.observacao,
+        ]
+
+        contestations = list(record.contestations.all())
+        c = contestations[0] if contestations else None  # mais recente (ordenado por -created_at)
+
+        if c:
+            writer.writerow(base_columns + [
+                'Sim',
+                c.pk,
+                c.reason,
+                c.review_notes,
+                c.confirmation_notes,
+                _status_label(c.status),
+                _payment_status_label(c.payment_status),
+                _approval_mode_label(c.approval_mode),
+                c.requester.full_name if c.requester else '',
+                c.reviewed_by.full_name if c.reviewed_by else '',
+                c.confirmed_by.full_name if c.confirmed_by else '',
+                c.created_at.strftime('%d/%m/%Y %H:%M') if c.created_at else '',
+                c.reviewed_at.strftime('%d/%m/%Y %H:%M') if c.reviewed_at else '',
+                c.confirmed_at.strftime('%d/%m/%Y %H:%M') if c.confirmed_at else '',
+                c.paid_at.strftime('%d/%m/%Y %H:%M') if c.paid_at else '',
+            ])
+        else:
+            writer.writerow(base_columns + ['Nao'] + [''] * 14)
+
+    return response

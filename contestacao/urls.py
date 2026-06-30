@@ -25,6 +25,7 @@ urlpatterns = [
     path('gerenciar/liberar-refazer/', views.release_sector_for_retry, name='release_sector_for_retry'),
     path('gerenciar/vendas-a-contestar-vivo/', views.contested_with_vivo, name='contested_with_vivo'),
     path('dashboard/exportar-vendas/', views.export_contested_sales, name='export_contested_sales'),
+    path('dashboard/exportar-todas-vendas/', views.export_all_sales, name='export_all_sales'),
     path('dashboard/exportar-relatorio/', views.export_contestation_report, name='export_contestation_report'),
     path('<int:pk>/', views.contestation_detail, name='contestation_detail'),
     path('<int:pk>/aprovar/', views.approve_contestation, name='approve_contestation'),

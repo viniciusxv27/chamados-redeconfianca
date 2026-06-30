@@ -39,7 +39,7 @@
                 </div>
             </div>
             
-            <form method="post" class="p-6">
+            <form method="post" enctype="multipart/form-data" class="p-6">
                 {% csrf_token %}
                 
                 <!-- Personal Information -->
@@ -355,17 +355,75 @@
                         </div>
                         
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                            <div class="flex items-center">
-                                <input type="checkbox" 
-                                       id="is_active" 
-                                       name="is_active" 
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Conta (Login)</label>
+                            <div class="flex items-center h-10">
+                                <input type="checkbox"
+                                       id="is_active"
+                                       name="is_active"
                                        {% if user_to_edit.is_active %}checked{% endif %}
                                        class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2">
                                 <label for="is_active" class="ml-2 text-sm text-gray-700">
-                                    Usuário Ativo
+                                    Conta ativa (permite login)
                                 </label>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Situação do colaborador -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                        <div>
+                            <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Situação *</label>
+                            <select id="status"
+                                    name="status"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                {% for key, value in user_to_edit.STATUS_CHOICES %}
+                                <option value="{{ key }}" {% if user_to_edit.status == key %}selected{% endif %}>{{ value }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Ativo, Inativo ou Afastado.</p>
+                        </div>
+                    </div>
+
+                    <!-- Motivo da inativação (visível quando Inativo) -->
+                    <div id="inactivationReasonWrap" class="mt-4 hidden">
+                        <label for="inactivation_reason" class="block text-sm font-medium text-gray-700 mb-2">Motivo da Inativação</label>
+                        <textarea id="inactivation_reason"
+                                  name="inactivation_reason"
+                                  rows="3"
+                                  placeholder="Descreva o motivo da inativação..."
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">{{ user_to_edit.inactivation_reason }}</textarea>
+                    </div>
+
+                    <!-- Motivo do afastamento + anexo (visível quando Afastado) -->
+                    <div id="leaveWrap" class="mt-4 hidden space-y-4">
+                        <div>
+                            <label for="leave_reason" class="block text-sm font-medium text-gray-700 mb-2">Motivo do Afastamento</label>
+                            <textarea id="leave_reason"
+                                      name="leave_reason"
+                                      rows="3"
+                                      placeholder="Descreva o motivo do afastamento..."
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">{{ user_to_edit.leave_reason }}</textarea>
+                        </div>
+                        <div>
+                            <label for="leave_attachment" class="block text-sm font-medium text-gray-700 mb-2">Anexo do Afastamento</label>
+                            {% if user_to_edit.leave_attachment %}
+                            <div class="flex items-center gap-3 mb-2 text-sm">
+                                <a href="{{ user_to_edit.leave_attachment.url }}" target="_blank" rel="noopener"
+                                   class="text-primary hover:underline inline-flex items-center">
+                                    <i class="fas fa-paperclip mr-1"></i> Ver anexo atual
+                                </a>
+                                <label class="inline-flex items-center text-gray-600">
+                                    <input type="checkbox" name="remove_leave_attachment" class="w-4 h-4 mr-1 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                                    Remover anexo
+                                </label>
+                            </div>
+                            {% endif %}
+                            <input type="file"
+                                   id="leave_attachment"
+                                   name="leave_attachment"
+                                   accept="image/*,.pdf,.doc,.docx"
+                                   class="w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-orange-600">
+                            <p class="text-xs text-gray-500 mt-1">Anexe o atestado/documento do afastamento (PDF, imagem ou Word).</p>
                         </div>
                     </div>
                 </div>
@@ -432,6 +490,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Alterna campos de motivo/anexo conforme a situação do colaborador
+    const statusSelect = document.getElementById('status');
+    const inactivationWrap = document.getElementById('inactivationReasonWrap');
+    const leaveWrap = document.getElementById('leaveWrap');
+    function toggleStatusFields() {
+        if (!statusSelect) return;
+        const value = statusSelect.value;
+        if (inactivationWrap) inactivationWrap.classList.toggle('hidden', value !== 'INATIVO');
+        if (leaveWrap) leaveWrap.classList.toggle('hidden', value !== 'AFASTADO');
+    }
+    if (statusSelect) {
+        statusSelect.addEventListener('change', toggleStatusFields);
+        toggleStatusFields();
+    }
+
     const cpfInput = document.getElementById('cpf');
     const sectorCheckboxes = document.querySelectorAll('input[name="sectors"]');
     const primarySectorSelect = document.getElementById('sector');
