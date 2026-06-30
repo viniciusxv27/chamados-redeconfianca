@@ -752,6 +752,32 @@ def get_sniper_coordinator(user: User) -> Optional[User]:
     return assignment.coordinator if assignment else None
 
 
+# Grupos "carteira" usados para descobrir o coordenador de consultores que não
+# têm COORDENAÇÃO preenchida na planilha. O nome retornado bate com o valor da
+# coluna COORDENAÇÃO da planilha (ex.: 'ARIEL'), pois é o mesmo usado por
+# all_pillars_ok / bonus_6_7_ok e pelos sumifs de meta da coordenação.
+CARTEIRA_COORDINATOR_GROUPS = [
+    ('CN CARTEIRA ARIEL', 'ARIEL'),
+    ('CN CARTEIRA THAYANDRA', 'THAYANDRA'),
+    ('CN CARTEIRA LUIZ', 'LUIZ'),
+]
+
+
+def get_coordinator_from_carteira_group(user: User) -> str:
+    """Resolve o coordenador de um consultor pelos grupos 'CN CARTEIRA <nome>'.
+
+    Fallback para quando a planilha não traz a COORDENAÇÃO do consultor.
+    Retorna o nome do coordenador (ex.: 'ARIEL') ou '' se não pertencer a nenhum.
+    """
+    for group_name, coord_name in CARTEIRA_COORDINATOR_GROUPS:
+        group = CommunicationGroup.objects.filter(name__iexact=group_name).first()
+        if not group:
+            group = CommunicationGroup.objects.filter(name__icontains=group_name).first()
+        if group and group.members.filter(id=user.id).exists():
+            return coord_name
+    return ''
+
+
 def get_hunter_levels_from_request(request) -> Dict[str, int]:
     levels = {}
     for key in ['movel', 'fixa', 'smartphones', 'eletronicos', 'essenciais', 'seguros', 'sva']:
@@ -1160,7 +1186,11 @@ def compute_consultor_simulation(
     pdv = str(real_row.get('PDV') or proj_row.get('PDV') or '').strip()
     if not pdv and getattr(user, 'sector', None):
         pdv = user.sector.name or ''
-    coord_name = str(proj_row.get('COORDENAÇÃO') or '').strip()
+    coord_name = str(proj_row.get('COORDENAÇÃO') or real_row.get('COORDENAÇÃO') or '').strip()
+    # Alguns consultores não têm COORDENAÇÃO na planilha: descobre o coordenador
+    # pelos grupos de carteira (CN CARTEIRA ARIEL/THAYANDRA/LUIZ).
+    if not coord_name:
+        coord_name = get_coordinator_from_carteira_group(user)
 
     # Metas vêm sempre da planilha REALIZADO (META_*), mas no modo Simulador
     # podem ser sobrescritas pelo usuário.
