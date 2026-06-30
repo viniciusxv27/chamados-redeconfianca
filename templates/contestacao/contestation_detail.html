@@ -69,13 +69,15 @@
         </div>
 
         <!-- Resposta do Gestor -->
-        {% if c.reviewed_by %}
+        {% if c.reviewed_by or c.review_notes or c.review_attachment %}
         <div class="px-5 py-4 border-b bg-blue-50">
             <h3 class="text-xs uppercase font-semibold text-blue-600 mb-2">Análise do Gestor</h3>
+            {% if c.reviewed_by %}
             <p class="text-sm text-gray-500 mb-1">{{ c.reviewed_by.full_name }} em {{ c.reviewed_at|date:"d/m/Y H:i" }}</p>
+            {% endif %}
             {% if c.review_notes %}
             <p class="text-sm text-blue-800">{{ c.review_notes }}</p>
-            {% else %}
+            {% elif c.reviewed_by %}
             <p class="text-sm text-gray-400 italic">Sem observações</p>
             {% endif %}
             {% if c.review_attachment %}
