@@ -49,13 +49,13 @@ def _get_experience_window_alerts_for_dp():
 
         if days_since_admission <= 45:
             window_name = '1a janela (45 dias)'
-            days_remaining = 45 - days_since_admission - 1
-            window_end_date = user.admission_date + timedelta(days=45)
+            days_remaining = 44 - days_since_admission - 1
+            window_end_date = user.admission_date + timedelta(days=44)
             window_key = 'FIRST'
         elif days_since_admission <= 90:
             window_name = '2a janela (90 dias)'
-            days_remaining = 90 - days_since_admission - 1
-            window_end_date = user.admission_date + timedelta(days=90)
+            days_remaining = 89 - days_since_admission - 1
+            window_end_date = user.admission_date + timedelta(days=89)
             window_key = 'SECOND'
         else:
             continue

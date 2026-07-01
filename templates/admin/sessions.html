@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+
+{% block title %}Sessões Ativas{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <a href="{% url 'manage_users' %}" class="text-gray-400 hover:text-gray-600" title="Voltar para usuários">
+                            <i class="fas fa-arrow-left"></i>
+                        </a>
+                        <h1 class="text-2xl font-bold text-gray-900">Sessões Ativas</h1>
+                    </div>
+                    <p class="text-gray-600 mt-1">Visualize quem está logado, com IP e localização, e derrube sessões quando necessário</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <input type="text" id="sessionSearch" onkeyup="filterSessions()" placeholder="Buscar por usuário, IP ou local..."
+                           class="border border-gray-300 rounded-lg px-4 py-2 w-full sm:w-72 focus:ring-2 focus:ring-primary focus:border-primary outline-none">
+                    <a href="{% url 'manage_sessions' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-sync-alt mr-2"></i>
+                        Atualizar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="px-6">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-indigo-100 rounded-lg">
+                        <i class="fas fa-desktop text-indigo-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-lg font-semibold text-gray-900">{{ total_sessions }}</h3>
+                        <p class="text-gray-600 text-sm">Sessões ativas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-green-100 rounded-lg">
+                        <i class="fas fa-users text-green-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-lg font-semibold text-gray-900">{{ online_users_count }}</h3>
+                        <p class="text-gray-600 text-sm">Usuários online</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center">
+                    <div class="p-3 bg-purple-100 rounded-lg">
+                        <i class="fas fa-mobile-alt text-purple-600 text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-lg font-semibold text-gray-900">{{ mobile_sessions_count }}</h3>
+                        <p class="text-gray-600 text-sm">Sessões em dispositivos móveis</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sessions Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
+            <table class="min-w-full divide-y divide-gray-200" id="sessionsTable">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Usuário</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">IP</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Localização</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Início</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Última atividade</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Ação</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for session in sessions %}
+                    <tr class="session-row hover:bg-gray-50 {% if session.is_current %}bg-indigo-50{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold uppercase">
+                                    {{ session.user.first_name|first|default:session.user.email|first }}
+                                </div>
+                                <div class="ml-3">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ session.user.get_full_name|default:session.user.email }}
+                                        {% if session.is_current %}
+                                        <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">Você</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-xs text-gray-500">{{ session.user.email }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-mono">{{ session.ip_address|default:"—" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            <i class="fas fa-map-marker-alt text-gray-400 mr-1"></i>{{ session.location|default:"Desconhecida" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            <i class="fas {% if session.is_mobile %}fa-mobile-alt{% else %}fa-desktop{% endif %} text-gray-400 mr-1"></i>{{ session.device_summary }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ session.created_at|date:"d/m/Y H:i" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ session.last_activity|date:"d/m/Y H:i" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                            <form method="post" action="{% url 'terminate_session' %}" class="inline"
+                                  onsubmit="return confirm('{% if session.is_current %}Isto encerrará a SUA sessão atual e você será deslogado. Continuar?{% else %}Derrubar a sessão de {{ session.user.get_full_name|default:session.user.email|escapejs }}?{% endif %}');">
+                                {% csrf_token %}
+                                <input type="hidden" name="session_key" value="{{ session.session_key }}">
+                                <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 transition-colors">
+                                    <i class="fas fa-power-off mr-1.5"></i>Derrubar
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                            <i class="fas fa-user-slash text-3xl mb-3 text-gray-300"></i>
+                            <p>Nenhuma sessão ativa no momento.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterSessions() {
+    const term = document.getElementById('sessionSearch').value.toLowerCase();
+    document.querySelectorAll('#sessionsTable tbody tr.session-row').forEach(function (row) {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

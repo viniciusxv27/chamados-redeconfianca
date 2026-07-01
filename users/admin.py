@@ -1,6 +1,15 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Sector, CommissionMonthlyTotal, AParteCommissionConfig
+from .models import User, Sector, CommissionMonthlyTotal, AParteCommissionConfig, UserSession
+
+
+@admin.register(UserSession)
+class UserSessionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'ip_address', 'location', 'last_activity', 'created_at')
+    list_filter = ('last_activity', 'created_at')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'ip_address', 'location')
+    ordering = ('-last_activity',)
+    readonly_fields = ('session_key', 'created_at', 'last_activity')
 
 
 @admin.register(CommissionMonthlyTotal)

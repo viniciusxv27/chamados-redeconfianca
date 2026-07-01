@@ -6,14 +6,12 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-door-open mr-2 text-rose-500"></i>Entrevista de Desligamento</h1>
+        <p class="text-sm text-gray-500 mt-1">Conduzida pelo entrevistador. Selecione o colaborador desligado e registre as respostas.</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        {% if can_manage_surveys %}
-          <a href="{% url 'feedback:exit_interview_report' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
-            <i class="fas fa-chart-bar mr-1"></i>Relatório
-          </a>
-        {% endif %}
-        <a href="{% url 'feedback:climate_survey' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Pesquisa de Clima</a>
+        <a href="{% url 'feedback:exit_interview_report' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+          <i class="fas fa-chart-bar mr-1"></i>Relatório
+        </a>
         <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
       </div>
     </div>
@@ -28,16 +26,73 @@
       </div>
     {% endif %}
 
-    {% if already_completed %}
-      <div class="bg-white rounded-xl shadow p-4 sm:p-6 lg:p-8 text-center">
-        <div class="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
-          <i class="fas fa-check text-2xl"></i>
+    {% if pending_dismissal %}
+      <div class="bg-white rounded-xl shadow overflow-hidden mb-6">
+        <div class="border-b bg-amber-50 p-4">
+          <h2 class="text-sm font-semibold text-amber-800"><i class="fas fa-user-clock mr-2"></i>Entrevistas registradas — aguardando desligamento de acesso</h2>
+          <p class="text-xs text-amber-700 mt-1">Inativa o login do colaborador e grava a data de demissão. Ação difícil de reverter.</p>
         </div>
-        <h2 class="text-xl font-semibold text-gray-900">Sua entrevista já foi registrada</h2>
-        <p class="text-gray-500 mt-2">Obrigado por compartilhar sua experiência conosco.</p>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Colaborador</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Setor</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entrevistador</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Efetuar desligamento</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {% for p in pending_dismissal %}
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium text-gray-900">{{ p.user.get_full_name|default:p.user.username }}</td>
+                <td class="px-4 py-2 text-gray-600">{{ p.sector.name|default:'—' }}</td>
+                <td class="px-4 py-2 text-gray-600">{{ p.interviewer.get_full_name|default:p.interviewer.username|default:'—' }}</td>
+                <td class="px-4 py-2">
+                  <form method="post" action="{% url 'feedback:exit_interview_dismiss' p.user.id %}" class="flex items-center justify-end gap-2"
+                        onsubmit="return confirm('Efetuar o desligamento de {{ p.user.get_full_name|default:p.user.username|escapejs }}? O login será inativado e a data de demissão gravada.');">
+                    {% csrf_token %}
+                    <input type="date" name="dismissal_date" value="{{ p.dismissal_date|date:'Y-m-d' }}" required
+                           class="px-2 py-1 border border-gray-300 rounded-md text-sm">
+                    <button type="submit" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 whitespace-nowrap">
+                      <i class="fas fa-user-slash mr-1"></i>Desligar
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-    {% else %}
-      <div class="bg-white rounded-xl shadow overflow-hidden">
+    {% endif %}
+
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <form method="post" id="exitForm">
+        {% csrf_token %}
+
+        <!-- Identificação do desligamento -->
+        <div class="p-5 sm:p-6 border-b bg-gray-50">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="subject_id" class="block text-sm font-medium text-gray-800 mb-1">Colaborador desligado <span class="text-rose-500">*</span></label>
+              <select name="subject_id" id="subject_id" required
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
+                <option value="">Selecione o colaborador…</option>
+                {% for u in candidate_users %}
+                  <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}{% if u.sector %} — {{ u.sector.name }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label for="dismissal_date" class="block text-sm font-medium text-gray-800 mb-1">Data de desligamento <span class="text-rose-500">*</span></label>
+              <input type="date" name="dismissal_date" id="dismissal_date" required value="{{ today|date:'Y-m-d' }}"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
+              <p class="text-xs text-gray-400 mt-1">Usada ao efetuar o desligamento do login do colaborador.</p>
+            </div>
+          </div>
+        </div>
+
         <div class="border-b bg-gray-50 p-4">
           <div class="flex items-center justify-between mb-2">
             <span id="exitStepLabel" class="text-sm font-semibold text-rose-700">Etapa 1</span>
@@ -48,9 +103,7 @@
           </div>
         </div>
 
-        <form method="post" id="exitForm" class="p-5 sm:p-6">
-          {% csrf_token %}
-
+        <div class="p-5 sm:p-6">
           {% for section in sections %}
             <section class="exit-step {% if not forloop.first %}hidden{% endif %}" data-step-title="{{ section.title }}">
               <h2 class="text-lg font-semibold text-gray-900 mb-5">{{ section.title }}</h2>
@@ -100,17 +153,16 @@
                 Avançar<i class="fas fa-arrow-right ml-1"></i>
               </button>
               <button type="submit" id="exitSubmit" class="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
-                <i class="fas fa-paper-plane mr-1"></i>Enviar Entrevista
+                <i class="fas fa-paper-plane mr-1"></i>Registrar Entrevista
               </button>
             </div>
           </div>
-        </form>
-      </div>
-    {% endif %}
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
-{% if not already_completed %}
 <script>
 (function () {
   const steps = Array.from(document.querySelectorAll('.exit-step'));
@@ -123,17 +175,6 @@
   const form = document.getElementById('exitForm');
   let current = 0;
 
-  function saveProgress(stepTitle) {
-    fetch('{% url "feedback:exit_interview_progress" %}', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-      },
-      body: JSON.stringify({ step: stepTitle })
-    }).catch(() => {});
-  }
-
   function showStep(index) {
     current = Math.max(0, Math.min(index, steps.length - 1));
     steps.forEach((step, i) => step.classList.toggle('hidden', i !== current));
@@ -144,7 +185,6 @@
     prevBtn.classList.toggle('hidden', current === 0);
     nextBtn.classList.toggle('hidden', current === steps.length - 1);
     submitBtn.classList.toggle('hidden', current !== steps.length - 1);
-    saveProgress(title);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -168,24 +208,32 @@
     return true;
   }
 
+  function validateSubject() {
+    const subject = document.getElementById('subject_id');
+    const date = document.getElementById('dismissal_date');
+    if (!subject.value) { subject.focus(); return false; }
+    if (!date.value) { date.focus(); return false; }
+    return true;
+  }
+
   nextBtn.addEventListener('click', () => {
+    if (current === 0 && !validateSubject()) return;
     if (!validateCurrentStep()) return;
     showStep(current + 1);
   });
   prevBtn.addEventListener('click', () => showStep(current - 1));
 
   form.addEventListener('submit', (event) => {
-    if (!validateCurrentStep()) {
+    if (!validateSubject() || !validateCurrentStep()) {
       event.preventDefault();
       return;
     }
     submitBtn.disabled = true;
     submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Enviando...';
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Registrando...';
   });
 
   showStep(0);
 })();
 </script>
-{% endif %}
 {% endblock %}

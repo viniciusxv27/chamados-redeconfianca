@@ -1,23 +1,30 @@
 def survey_menu(request):
-    """Controla a exibição do item 'Pesquisa de Clima' no menu.
+    """Controla a exibição dos itens de pesquisas no menu.
 
-    Superadmins e gestores das pesquisas sempre veem o item. Para os demais
-    usuários, depende da configuração `SurveySettings.climate_menu_visible`.
+    - 'Pesquisa de Clima': superadmins e gestores das pesquisas sempre veem;
+      para os demais depende de `SurveySettings.climate_menu_visible`.
+    - 'Entrevista de Desligamento': apenas superadmins e gestores liberados
+      (quem conduz a entrevista).
     """
     if not hasattr(request, 'user') or not request.user.is_authenticated:
-        return {'show_climate_menu': False}
+        return {'show_climate_menu': False, 'show_exit_interview_menu': False}
 
-    try:
-        from .models import SurveySettings
-
-        if SurveySettings.load().climate_menu_visible:
-            return {'show_climate_menu': True}
-    except Exception:
-        return {'show_climate_menu': True}
-
+    can_manage = False
     try:
         from .views import _can_manage_surveys
-
-        return {'show_climate_menu': _can_manage_surveys(request.user)}
+        can_manage = _can_manage_surveys(request.user)
     except Exception:
-        return {'show_climate_menu': False}
+        can_manage = False
+
+    show_climate = can_manage
+    try:
+        from .models import SurveySettings
+        if SurveySettings.load().climate_menu_visible:
+            show_climate = True
+    except Exception:
+        show_climate = True
+
+    return {
+        'show_climate_menu': show_climate,
+        'show_exit_interview_menu': can_manage,
+    }

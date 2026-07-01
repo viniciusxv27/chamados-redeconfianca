@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import User, Sector, normalize_cpf
+from .models import User, Sector, UserSession, normalize_cpf
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
 import json
@@ -261,6 +261,80 @@ def manage_users_view(request):
         'superadmin_count': superadmin_count,
     }
     return render(request, 'admin/users.html', context)
+
+
+@login_required
+def manage_sessions_view(request):
+    """Lista todas as sessões ativas dos usuários (IP, localização, dispositivo)."""
+    if not request.user.can_access_admin_panel():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+
+    from django.contrib.sessions.models import Session
+
+    now = timezone.now()
+    # Chaves de sessões do Django que ainda são válidas (não expiradas).
+    valid_keys = set(
+        Session.objects.filter(expire_date__gt=now).values_list('session_key', flat=True)
+    )
+
+    # Remove registros órfãos (sessões já expiradas/derrubadas) para manter a lista fiel.
+    UserSession.objects.exclude(session_key__in=valid_keys).delete()
+
+    sessions = list(
+        UserSession.objects.select_related('user', 'user__sector')
+        .filter(session_key__in=valid_keys)
+        .order_by('user__first_name', 'user__last_name', '-last_activity')
+    )
+
+    current_key = request.session.session_key
+    for s in sessions:
+        s.is_current = (s.session_key == current_key)
+
+    context = {
+        'user': request.user,
+        'sessions': sessions,
+        'total_sessions': len(sessions),
+        'online_users_count': len({s.user_id for s in sessions}),
+        'mobile_sessions_count': sum(1 for s in sessions if s.is_mobile),
+    }
+    return render(request, 'admin/sessions.html', context)
+
+
+@login_required
+@require_POST
+def terminate_session_view(request):
+    """Derruba uma sessão específica pelo session_key."""
+    if not request.user.can_access_admin_panel():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+
+    from django.contrib.sessions.models import Session
+
+    session_key = request.POST.get('session_key', '').strip()
+    if not session_key:
+        messages.error(request, 'Sessão inválida.')
+        return redirect('manage_sessions')
+
+    target = UserSession.objects.filter(session_key=session_key).select_related('user').first()
+    target_label = target.user.get_full_name() or target.user.email if target else 'usuário'
+
+    Session.objects.filter(session_key=session_key).delete()
+    UserSession.objects.filter(session_key=session_key).delete()
+
+    log_action(
+        request.user,
+        'ADMIN_ACTION',
+        f'Sessão derrubada ({session_key[:8]}...) do usuário {target_label}',
+        request,
+    )
+
+    if session_key == request.session.session_key:
+        messages.success(request, 'Sua própria sessão foi encerrada.')
+        return redirect('login')
+
+    messages.success(request, f'Sessão de {target_label} derrubada com sucesso.')
+    return redirect('manage_sessions')
 
 
 @login_required

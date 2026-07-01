@@ -401,11 +401,26 @@ class ExitInterviewParticipation(models.Model):
         related_name='exit_interview_participations',
         verbose_name='Setor',
     )
+    interviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exit_interviews_conducted',
+        verbose_name='Entrevistador',
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='IN_PROGRESS')
     last_step = models.CharField(max_length=120, blank=True, verbose_name='Última etapa')
     started_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Desligamento de acesso vinculado à entrevista
+    dismissal_date = models.DateField(
+        null=True, blank=True, verbose_name='Data de desligamento informada',
+    )
+    dismissal_executed_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='Desligamento de acesso efetuado em',
+    )
 
     class Meta:
         unique_together = ('survey_key', 'user')
@@ -427,7 +442,15 @@ class ExitInterviewResponse(models.Model):
         null=True,
         blank=True,
         related_name='exit_interview_responses_made',
-        verbose_name='Respondente',
+        verbose_name='Colaborador desligado',
+    )
+    interviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exit_interview_responses_conducted',
+        verbose_name='Entrevistador',
     )
     sector = models.ForeignKey(
         'users.Sector',

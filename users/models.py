@@ -641,3 +641,82 @@ class User(AbstractUser):
     
     def can_delete_tickets(self):
         return self.hierarchy in ['SUPERADMIN']
+
+
+class UserSession(models.Model):
+    """Rastreia as sessões ativas de cada usuário (IP, localização e dispositivo).
+
+    Cada registro está vinculado a uma sessão do Django (``django_session``)
+    através de ``session_key``, permitindo listar quem está logado e derrubar
+    sessões individualmente.
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='active_sessions',
+        verbose_name="Usuário"
+    )
+    session_key = models.CharField(
+        max_length=40, unique=True, db_index=True, verbose_name="Chave da Sessão"
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True, blank=True, verbose_name="Endereço IP"
+    )
+    user_agent = models.TextField(blank=True, verbose_name="User Agent")
+    location = models.CharField(
+        max_length=255, blank=True, verbose_name="Localização"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Início da Sessão")
+    last_activity = models.DateTimeField(auto_now=True, verbose_name="Última Atividade")
+
+    class Meta:
+        verbose_name = "Sessão de Usuário"
+        verbose_name_plural = "Sessões de Usuários"
+        ordering = ['-last_activity']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.ip_address or 'IP desconhecido'}"
+
+    @property
+    def device_summary(self):
+        """Resumo legível do navegador e sistema operacional a partir do user agent."""
+        ua = (self.user_agent or '').lower()
+
+        if 'windows' in ua:
+            os_name = 'Windows'
+        elif 'iphone' in ua or 'ipad' in ua:
+            os_name = 'iOS'
+        elif 'android' in ua:
+            os_name = 'Android'
+        elif 'mac os' in ua or 'macintosh' in ua:
+            os_name = 'macOS'
+        elif 'linux' in ua:
+            os_name = 'Linux'
+        elif ua:
+            os_name = 'Outro'
+        else:
+            os_name = 'Desconhecido'
+
+        if 'edg' in ua:
+            browser = 'Edge'
+        elif 'opr' in ua or 'opera' in ua:
+            browser = 'Opera'
+        elif 'chrome' in ua and 'chromium' not in ua:
+            browser = 'Chrome'
+        elif 'firefox' in ua:
+            browser = 'Firefox'
+        elif 'safari' in ua:
+            browser = 'Safari'
+        elif ua:
+            browser = 'Navegador'
+        else:
+            browser = 'Desconhecido'
+
+        return f"{browser} · {os_name}"
+
+    @property
+    def is_mobile(self):
+        ua = (self.user_agent or '').lower()
+        return any(k in ua for k in ['iphone', 'android', 'mobile', 'ipad'])
+
+    @property
+    def location_display(self):
+        return self.location or 'Localização desconhecida'

@@ -774,6 +774,15 @@ EXIT_INTERVIEW_SECTIONS = [
              'label': 'O que você mudaria no dia a dia da empresa?'},
         ],
     },
+    {
+        'key': 'encerramento',
+        'title': 'Bloco 3 – Encerramento',
+        'questions': [
+            {'key': 'possivel_recontratacao', 'type': 'choice', 'required': True,
+             'label': 'Possível Recontratação?',
+             'options': ['SIM', 'NÃO']},
+        ],
+    },
 ]
 
 EXIT_SCALE_OPTIONS = [1, 2, 3, 4, 5]
@@ -787,19 +796,24 @@ def _exit_questions():
     return out
 
 
-@login_required
+@survey_manager_required
 @require_http_methods(['GET', 'POST'])
 def exit_interview(request):
-    user = request.user
-    selected_sector = _primary_sector_for_user(user)
-
-    participation, _ = ExitInterviewParticipation.objects.get_or_create(
-        survey_key=EXIT_INTERVIEW_KEY,
-        user=user,
-        defaults={'sector': selected_sector, 'last_step': EXIT_INTERVIEW_SECTIONS[0]['title']},
-    )
-
+    """Entrevista de Desligamento conduzida pelo entrevistador (Superadmin ou
+    liberado). O entrevistador seleciona o colaborador desligado e registra as
+    respostas por ele (preenchimento unilateral)."""
     if request.method == 'POST':
+        subject_id = (request.POST.get('subject_id') or '').strip()
+        subject = User.objects.filter(pk=subject_id).first() if subject_id else None
+
+        dismissal_raw = (request.POST.get('dismissal_date') or '').strip()
+        dismissal_date = None
+        if dismissal_raw:
+            try:
+                dismissal_date = datetime.datetime.strptime(dismissal_raw, '%Y-%m-%d').date()
+            except ValueError:
+                dismissal_date = None
+
         answers = {'scale': {}, 'choice': {}, 'text': {}}
         missing = []
         for question in _exit_questions():
@@ -830,66 +844,124 @@ def exit_interview(request):
                     continue
                 answers['text'][question['key']] = raw
 
+        if subject is None:
+            messages.error(request, 'Selecione o colaborador desligado antes de registrar a entrevista.')
+            return redirect('feedback:exit_interview')
+        if dismissal_date is None:
+            messages.error(request, 'Informe a data de desligamento.')
+            return redirect('feedback:exit_interview')
         if missing:
-            messages.error(request, 'Responda todas as perguntas obrigatórias antes de enviar.')
+            messages.error(request, 'Responda todas as perguntas obrigatórias antes de registrar.')
             return redirect('feedback:exit_interview')
 
+        subject_sector = _primary_sector_for_user(subject)
         now = timezone.now()
-        duration = None
-        if participation.started_at:
-            duration = max(int((now - participation.started_at).total_seconds()), 0)
 
         ExitInterviewResponse.objects.create(
             survey_key=EXIT_INTERVIEW_KEY,
-            user=user,
-            sector=selected_sector,
+            user=subject,
+            interviewer=request.user,
+            sector=subject_sector,
             answers=answers,
-            duration_seconds=duration,
+            duration_seconds=None,
         )
 
+        participation, _ = ExitInterviewParticipation.objects.get_or_create(
+            survey_key=EXIT_INTERVIEW_KEY,
+            user=subject,
+            defaults={'sector': subject_sector},
+        )
+        participation.interviewer = request.user
+        participation.sector = subject_sector
         participation.status = 'COMPLETED'
         participation.last_step = 'Concluída'
         participation.completed_at = now
-        participation.save(update_fields=['status', 'last_step', 'completed_at', 'updated_at'])
+        participation.dismissal_date = dismissal_date
+        participation.save()
 
-        messages.success(request, 'Entrevista de Desligamento enviada com sucesso. Obrigado pela sua sinceridade.')
+        messages.success(
+            request,
+            f'Entrevista de {subject.get_full_name() or subject.username} registrada. '
+            'Confira abaixo e efetue o desligamento de acesso quando desejar.',
+        )
         return redirect('feedback:exit_interview')
+
+    # GET — formulário + colaboradores com entrevista feita aguardando desligamento
+    pending_dismissal = (
+        ExitInterviewParticipation.objects
+        .filter(
+            survey_key=EXIT_INTERVIEW_KEY,
+            status='COMPLETED',
+            dismissal_executed_at__isnull=True,
+            user__is_active=True,
+        )
+        .select_related('user', 'sector', 'interviewer')
+        .order_by('-completed_at')
+    )
+    candidate_users = (
+        User.objects.filter(is_active=True)
+        .exclude(pk=request.user.pk)
+        .select_related('sector')
+        .order_by('first_name', 'last_name')
+    )
 
     return render(request, 'feedback/exit_interview.html', {
         'survey_key': EXIT_INTERVIEW_KEY,
         'intro': EXIT_INTERVIEW_INTRO,
         'sections': EXIT_INTERVIEW_SECTIONS,
         'scale_options': EXIT_SCALE_OPTIONS,
-        'participation': participation,
-        'already_completed': participation.status == 'COMPLETED',
-        'is_superadmin': _is_superadmin(user),
-        'can_manage_surveys': _can_manage_surveys(user),
+        'candidate_users': candidate_users,
+        'pending_dismissal': pending_dismissal,
+        'today': timezone.localdate(),
+        'is_superadmin': _is_superadmin(request.user),
+        'can_manage_surveys': _can_manage_surveys(request.user),
     })
 
 
-@login_required
+@survey_manager_required
 @require_POST
-def exit_interview_progress(request):
-    import json
+def exit_interview_dismiss(request, user_id):
+    """Efetua o desligamento de acesso do colaborador: inativa o login e grava a
+    data de demissão. Vinculado à Entrevista de Desligamento."""
+    target = get_object_or_404(User, pk=user_id)
 
-    try:
-        payload = json.loads(request.body.decode('utf-8') or '{}')
-    except json.JSONDecodeError:
-        payload = {}
+    if target.pk == request.user.pk:
+        messages.error(request, 'Você não pode efetuar o próprio desligamento.')
+        return redirect('feedback:exit_interview')
 
-    step = (payload.get('step') or request.POST.get('step') or '').strip()[:120]
-
-    participation, _ = ExitInterviewParticipation.objects.get_or_create(
-        survey_key=EXIT_INTERVIEW_KEY,
-        user=request.user,
-        defaults={'sector': _primary_sector_for_user(request.user), 'last_step': step or EXIT_INTERVIEW_SECTIONS[0]['title']},
+    participation = (
+        ExitInterviewParticipation.objects
+        .filter(survey_key=EXIT_INTERVIEW_KEY, user=target)
+        .first()
     )
 
-    if participation.status != 'COMPLETED' and step:
-        participation.last_step = step
-        participation.save(update_fields=['last_step', 'updated_at'])
+    dismissal_raw = (request.POST.get('dismissal_date') or '').strip()
+    dismissal_date = None
+    if dismissal_raw:
+        try:
+            dismissal_date = datetime.datetime.strptime(dismissal_raw, '%Y-%m-%d').date()
+        except ValueError:
+            dismissal_date = None
+    if dismissal_date is None and participation and participation.dismissal_date:
+        dismissal_date = participation.dismissal_date
+    if dismissal_date is None:
+        dismissal_date = timezone.localdate()
 
-    return JsonResponse({'success': True})
+    target.is_active = False
+    target.demission_date = dismissal_date
+    target.save(update_fields=['is_active', 'demission_date'])
+
+    if participation:
+        participation.dismissal_date = dismissal_date
+        participation.dismissal_executed_at = timezone.now()
+        participation.save(update_fields=['dismissal_date', 'dismissal_executed_at', 'updated_at'])
+
+    messages.success(
+        request,
+        f'Desligamento efetuado: login de {target.get_full_name() or target.username} inativado '
+        f'e data de demissão registrada em {dismissal_date:%d/%m/%Y}.',
+    )
+    return redirect('feedback:exit_interview')
 
 
 @survey_manager_required
@@ -906,17 +978,19 @@ def exit_interview_report(request):
         except (TypeError, ValueError):
             selected_sector = None
 
-    users_qs = (
-        User.objects.filter(is_active=True)
-        .select_related('sector')
-        .order_by('first_name', 'last_name')
-    )
     participations = {
         item.user_id: item
         for item in ExitInterviewParticipation.objects
         .filter(survey_key=EXIT_INTERVIEW_KEY)
-        .select_related('user', 'sector')
+        .select_related('user', 'sector', 'interviewer')
     }
+    # Inclui colaboradores já desligados (inativos) que possuem entrevista, para
+    # que continuem aparecendo no relatório após o desligamento de acesso.
+    users_qs = (
+        User.objects.filter(Q(is_active=True) | Q(id__in=list(participations.keys())))
+        .select_related('sector')
+        .order_by('first_name', 'last_name')
+    )
 
     rows = []
     for user in users_qs:
@@ -941,7 +1015,7 @@ def exit_interview_report(request):
         status_map = {'completed': 'COMPLETED', 'in_progress': 'IN_PROGRESS', 'not_started': 'NOT_STARTED'}
         detailed = [row for row in detailed if row['status'] == status_map[status_filter]]
 
-    responses = ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY).select_related('sector', 'user')
+    responses = ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY).select_related('sector', 'user', 'interviewer')
     if selected_sector:
         responses = responses.filter(sector=selected_sector)
     responses = list(responses)
@@ -1041,6 +1115,7 @@ def exit_interview_report(request):
         response_rows.append({
             'response': response,
             'user': response.user,
+            'interviewer': response.interviewer,
             'sector': response.sector,
             'avg': avg,
             'duration_display': response.duration_display(),
@@ -1094,18 +1169,16 @@ def exit_interview_report(request):
 @survey_manager_required
 @require_POST
 def exit_interview_reset(request, user_id):
-    """Zera a entrevista de desligamento de um colaborador, permitindo refazê-la.
-
-    Remove apenas o controle de participação (as respostas são anônimas e não
-    ficam vinculadas ao usuário)."""
+    """Zera o controle de participação da entrevista de um colaborador,
+    permitindo que o entrevistador registre novamente. Não altera o login."""
     target = get_object_or_404(User, pk=user_id)
     deleted, _ = ExitInterviewParticipation.objects.filter(
         survey_key=EXIT_INTERVIEW_KEY, user=target
     ).delete()
     if deleted:
-        messages.success(request, f'Entrevista de {target.get_full_name() or target.username} zerada. Ele(a) poderá responder novamente.')
+        messages.success(request, f'Entrevista de {target.get_full_name() or target.username} zerada. Pode ser registrada novamente.')
     else:
-        messages.info(request, f'{target.get_full_name() or target.username} ainda não iniciou a entrevista.')
+        messages.info(request, f'{target.get_full_name() or target.username} ainda não possui entrevista registrada.')
     return redirect('feedback:exit_interview_report')
 
 
