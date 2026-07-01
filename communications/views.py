@@ -49,15 +49,19 @@ def _get_experience_window_alerts_for_dp():
 
         if days_since_admission <= 45:
             window_name = '1a janela (45 dias)'
-            days_remaining = 45 - days_since_admission
+            days_remaining = 45 - days_since_admission - 1
             window_end_date = user.admission_date + timedelta(days=45)
             window_key = 'FIRST'
         elif days_since_admission <= 90:
             window_name = '2a janela (90 dias)'
-            days_remaining = 90 - days_since_admission
+            days_remaining = 90 - days_since_admission - 1
             window_end_date = user.admission_date + timedelta(days=90)
             window_key = 'SECOND'
         else:
+            continue
+
+        # Não exibir no popup quem já passou da janela (days_remaining negativo)
+        if days_remaining < 0:
             continue
 
         print(f"DEBUG: User {user.id} - {user.full_name} has {days_remaining} days remaining in {window_name}")
