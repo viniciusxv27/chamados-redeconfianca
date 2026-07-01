@@ -2004,7 +2004,22 @@ def dashboard(request):
         messages.error(request, 'Sem permissão para acessar o dashboard.')
         return redirect('home')
 
+    # Filtro por mês (?month=YYYY-MM)
+    selected_month = (request.GET.get('month') or '').strip()
+    sel_year = sel_month = None
+    if selected_month:
+        try:
+            year_str, month_str = selected_month.split('-')
+            sel_year, sel_month = int(year_str), int(month_str)
+            if not (1 <= sel_month <= 12):
+                raise ValueError
+        except (ValueError, TypeError):
+            selected_month = ''
+            sel_year = sel_month = None
+
     qs = Contestation.objects.select_related('exclusion')
+    if sel_year:
+        qs = qs.filter(created_at__year=sel_year, created_at__month=sel_month)
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
     can_view_all_scope = _can_view_all_contestation_scope(request.user)
 
@@ -2025,6 +2040,8 @@ def dashboard(request):
 
     # Total na base (ExclusionRecord) com mesmo filtro de setor
     base_qs = ExclusionRecord.objects.all()
+    if sel_year:
+        base_qs = base_qs.filter(imported_at__year=sel_year, imported_at__month=sel_month)
     if not can_view_all_scope:
         user_sectors = list(request.user.sectors.values_list('name', flat=True))
         if request.user.sector:
@@ -2144,6 +2161,7 @@ def dashboard(request):
         'avg_manager_request_time': avg_manager_request_time,
         'avg_awaiting_manager_time': avg_awaiting_manager_time,
         'avg_payment_time': avg_payment_time,
+        'selected_month': selected_month,
     }
     return render(request, 'contestacao/dashboard.html', context)
 

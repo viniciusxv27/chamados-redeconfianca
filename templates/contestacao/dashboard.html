@@ -9,6 +9,24 @@
             <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-chart-bar mr-2 text-teal-600"></i> Dashboard de Contestações</h1>
             <p class="text-sm text-gray-500 mt-1">Visão geral das contestações</p>
         </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <form method="get" class="flex items-center gap-2">
+                <label for="month" class="text-sm font-medium text-gray-600"><i class="fas fa-calendar-alt mr-1 text-teal-600"></i> Mês</label>
+                <input type="month" id="month" name="month" value="{{ selected_month }}"
+                       class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500">
+                <button type="submit" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700">
+                    <i class="fas fa-filter mr-2"></i> Filtrar
+                </button>
+                {% if selected_month %}
+                <a href="{% url 'contestacao:dashboard' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    <i class="fas fa-times mr-2"></i> Limpar
+                </a>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 mb-6">
         <div class="flex flex-wrap gap-2">
             <a href="{% url 'contestacao:export_contested_sales' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-emerald-600 text-white rounded-md hover:bg-emerald-700">
                 <i class="fas fa-file-csv mr-2"></i> Exportar Vendas Contestadas
