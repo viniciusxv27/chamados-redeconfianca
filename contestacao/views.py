@@ -546,6 +546,112 @@ def _find_column(df, name):
     return None
 
 
+# Campos importados da planilha BASE_EXCLUSAO (usados também no bulk_update).
+EXCLUSION_IMPORT_FIELDS = [
+    'filial', 'vendedor', 'receita', 'pilar', 'gerente', 'coordenacao',
+    'numero_venda', 'data_venda', 'nome_cliente', 'cpf_cnpj',
+    'plano_produto', 'imei', 'numero_acesso', 'observacao',
+]
+
+
+def _detect_exclusion_columns(df):
+    """Localiza as colunas da planilha BASE_EXCLUSAO.
+
+    Retorna (cols, missing) onde cols mapeia nome-do-campo -> coluna do
+    DataFrame (ou None) e missing lista as colunas obrigatórias ausentes.
+    """
+    cols = {
+        'filial': _find_column(df, 'FILIAL'),
+        'vendedor': _find_column(df, 'VENDEDOR'),
+        'receita': _find_column(df, 'RECEITA'),
+        'pilar': _find_column(df, 'PILAR'),
+        'gerente': _find_column(df, 'GERENTE'),
+        'coordenacao': _find_column(df, 'COORDENACAO') or _find_column(df, 'COORDENAÇÃO') or _find_column(df, 'COORDENADOR'),
+        'numero_venda': _find_column(df, 'Nº DA VENDA') or _find_column(df, 'N DA VENDA') or _find_column(df, 'NUMERO_VENDA'),
+        'data_venda': _find_column(df, 'DATA'),
+        'nome_cliente': _find_column(df, 'NOME CLIENTE') or _find_column(df, 'CLIENTE'),
+        'cpf_cnpj': _find_column(df, 'CPF/CNPJ') or _find_column(df, 'CPF'),
+        'plano_produto': _find_column(df, 'PLANO/PRODUTO') or _find_column(df, 'PLANO') or _find_column(df, 'PRODUTO'),
+        'imei': _find_column(df, 'IMEI'),
+        'numero_acesso': _find_column(df, 'NUMERO ACESSO') or _find_column(df, 'NUMERO_ACESSO'),
+        'observacao': _find_column(df, 'OBSERVAÇÃO') or _find_column(df, 'OBSERVACAO') or _find_column(df, 'OBS'),
+    }
+    missing = [name for name in ('filial', 'vendedor', 'receita', 'pilar') if not cols.get(name)]
+    return cols, missing
+
+
+def _row_to_exclusion_fields(row, cols):
+    """Converte uma linha do DataFrame em dict de campos do ExclusionRecord.
+
+    Retorna None quando a linha não tem vendedor (linha vazia).
+    """
+    vendedor_val = str(row.get(cols['vendedor'], '')).strip()
+    if not vendedor_val or vendedor_val == 'nan':
+        return None
+
+    receita_val = row.get(cols['receita'], 0)
+    try:
+        receita_val = float(receita_val) if pd.notna(receita_val) else 0
+    except (ValueError, TypeError):
+        receita_val = 0
+
+    def _text(key):
+        col = cols.get(key)
+        return str(row.get(col, '')).strip() if col else ''
+
+    return {
+        'filial': _text('filial'),
+        'vendedor': vendedor_val,
+        'receita': receita_val,
+        'pilar': _text('pilar'),
+        'gerente': _text('gerente'),
+        'coordenacao': _text('coordenacao'),
+        'numero_venda': _text('numero_venda'),
+        'data_venda': _format_sale_date_value(row.get(cols['data_venda'], '')) if cols.get('data_venda') else '',
+        'nome_cliente': _text('nome_cliente'),
+        'cpf_cnpj': _text('cpf_cnpj'),
+        'plano_produto': _text('plano_produto'),
+        'imei': _text('imei'),
+        'numero_acesso': _text('numero_acesso'),
+        'observacao': _text('observacao'),
+    }
+
+
+def _exclusion_match_key(numero_venda, pilar, vendedor, filial, receita, data_venda):
+    """Chave para casar uma linha da planilha com um ExclusionRecord existente.
+
+    Usa o Nº da Venda (+ pilar + vendedor) quando disponível; caso contrário,
+    cai para uma chave composta pelos demais campos identificadores. A mesma
+    função é usada para linhas da planilha e para registros do banco, de modo
+    que a normalização (case/acentos/decimais) seja idêntica dos dois lados.
+    """
+    numero_venda = (numero_venda or '').strip().upper()
+    pilar = (pilar or '').strip().upper()
+    vendedor = _normalize_person_name(vendedor)
+    filial = (filial or '').strip().upper()
+    try:
+        receita_norm = f'{Decimal(str(receita or 0)):.2f}'
+    except (InvalidOperation, ValueError, TypeError):
+        receita_norm = str(receita)
+    if numero_venda:
+        return ('NV', numero_venda, pilar, vendedor)
+    return ('CMP', filial, vendedor, pilar, receita_norm, (data_venda or '').strip().upper())
+
+
+def _fields_match_key(fields):
+    return _exclusion_match_key(
+        fields.get('numero_venda'), fields.get('pilar'), fields.get('vendedor'),
+        fields.get('filial'), fields.get('receita'), fields.get('data_venda'),
+    )
+
+
+def _record_match_key(record):
+    return _exclusion_match_key(
+        record.numero_venda, record.pilar, record.vendedor,
+        record.filial, record.receita, record.data_venda,
+    )
+
+
 @login_required
 def sync_exclusions(request):
     """Sincroniza registros da planilha BASE_EXCLUSAO para o banco de dados."""
@@ -561,22 +667,8 @@ def sync_exclusions(request):
         messages.error(request, f'Erro ao baixar planilha: {error}')
         return redirect('contestacao:exclusion_list')
 
-    filial_col = _find_column(df, 'FILIAL')
-    vendedor_col = _find_column(df, 'VENDEDOR')
-    receita_col = _find_column(df, 'RECEITA')
-    pilar_col = _find_column(df, 'PILAR')
-    gerente_col = _find_column(df, 'GERENTE')
-    coord_col = _find_column(df, 'COORDENACAO') or _find_column(df, 'COORDENAÇÃO') or _find_column(df, 'COORDENADOR')
-    nvenda_col = _find_column(df, 'Nº DA VENDA') or _find_column(df, 'N DA VENDA') or _find_column(df, 'NUMERO_VENDA')
-    data_col = _find_column(df, 'DATA')
-    cliente_col = _find_column(df, 'NOME CLIENTE') or _find_column(df, 'CLIENTE')
-    cpf_col = _find_column(df, 'CPF/CNPJ') or _find_column(df, 'CPF')
-    plano_col = _find_column(df, 'PLANO/PRODUTO') or _find_column(df, 'PLANO') or _find_column(df, 'PRODUTO')
-    imei_col = _find_column(df, 'IMEI')
-    acesso_col = _find_column(df, 'NUMERO ACESSO') or _find_column(df, 'NUMERO_ACESSO')
-    obs_col = _find_column(df, 'OBSERVAÇÃO') or _find_column(df, 'OBSERVACAO') or _find_column(df, 'OBS')
-
-    if not filial_col or not vendedor_col or not receita_col or not pilar_col:
+    cols, missing = _detect_exclusion_columns(df)
+    if missing:
         messages.error(request, 'Colunas obrigatórias não encontradas na planilha (FILIAL, VENDEDOR, RECEITA, PILAR).')
         return redirect('contestacao:exclusion_list')
 
@@ -590,32 +682,10 @@ def sync_exclusions(request):
 
     records = []
     for _, row in df.iterrows():
-        vendedor_val = str(row.get(vendedor_col, '')).strip()
-        if not vendedor_val or vendedor_val == 'nan':
+        fields = _row_to_exclusion_fields(row, cols)
+        if fields is None:
             continue
-        receita_val = row.get(receita_col, 0)
-        try:
-            receita_val = float(receita_val) if pd.notna(receita_val) else 0
-        except (ValueError, TypeError):
-            receita_val = 0
-
-        records.append(ExclusionRecord(
-            sync_batch=sync_batch,
-            filial=str(row.get(filial_col, '')).strip(),
-            vendedor=vendedor_val,
-            receita=receita_val,
-            pilar=str(row.get(pilar_col, '')).strip(),
-            gerente=str(row.get(gerente_col, '')).strip() if gerente_col else '',
-            coordenacao=str(row.get(coord_col, '')).strip() if coord_col else '',
-            numero_venda=str(row.get(nvenda_col, '')).strip() if nvenda_col else '',
-            data_venda=_format_sale_date_value(row.get(data_col, '')) if data_col else '',
-            nome_cliente=str(row.get(cliente_col, '')).strip() if cliente_col else '',
-            cpf_cnpj=str(row.get(cpf_col, '')).strip() if cpf_col else '',
-            plano_produto=str(row.get(plano_col, '')).strip() if plano_col else '',
-            imei=str(row.get(imei_col, '')).strip() if imei_col else '',
-            numero_acesso=str(row.get(acesso_col, '')).strip() if acesso_col else '',
-            observacao=str(row.get(obs_col, '')).strip() if obs_col else '',
-        ))
+        records.append(ExclusionRecord(sync_batch=sync_batch, **fields))
 
     ExclusionRecord.objects.bulk_create(records, batch_size=500)
     sync_batch.record_count = len(records)
@@ -627,6 +697,109 @@ def sync_exclusions(request):
         extra_data={'sync_batch_id': sync_batch.pk},
     )
     messages.success(request, f'{len(records)} registros de exclusão importados com sucesso!')
+    return redirect('contestacao:exclusion_list')
+
+
+@login_required
+def update_exclusions(request):
+    """Atualiza os registros do lote ATUAL com a planilha BASE_EXCLUSAO nova,
+    SEM criar um novo lote nem reiniciar a janela de contestação.
+
+    Diferente de `sync_exclusions`, NÃO registra um histórico 'synced' (que
+    redefiniria o ciclo/janela e faria todas as lojas reabrirem). Em vez disso:
+      - registros existentes têm os valores atualizados a partir da planilha,
+        mantendo intactas as contestações já vinculadas ao mesmo registro;
+      - linhas novas da planilha são inseridas no mesmo lote atual;
+      - vendas que saíram da planilha são preservadas (não são apagadas).
+    """
+    if not _can_sync_exclusions(request.user):
+        messages.error(request, 'Sem permissão para atualizar.')
+        return redirect('contestacao:exclusion_list')
+
+    if request.method != 'POST':
+        return redirect('contestacao:exclusion_list')
+
+    latest_batch = _get_latest_sync_batch()
+    if latest_batch is None:
+        messages.error(request, 'Nenhum lote sincronizado ainda. Clique em "Sincronizar Planilha" primeiro.')
+        return redirect('contestacao:exclusion_list')
+
+    # Força novo download: a planilha pode ter sido re-enviada no mesmo link do
+    # OneDrive, e o conteúdo fica em cache por 5 minutos.
+    cache.delete('contestacao_base_exclusao_content')
+
+    df, error = _download_exclusion_spreadsheet()
+    if error or df is None:
+        messages.error(request, f'Erro ao baixar planilha: {error}')
+        return redirect('contestacao:exclusion_list')
+
+    cols, missing = _detect_exclusion_columns(df)
+    if missing:
+        messages.error(request, 'Colunas obrigatórias não encontradas na planilha (FILIAL, VENDEDOR, RECEITA, PILAR).')
+        return redirect('contestacao:exclusion_list')
+
+    # Indexa os registros do lote atual por chave de correspondência. Chaves
+    # repetidas viram uma fila para casar 1-para-1 com as linhas da planilha.
+    existing_by_key = {}
+    for record in ExclusionRecord.objects.filter(sync_batch=latest_batch):
+        existing_by_key.setdefault(_record_match_key(record), []).append(record)
+
+    to_update = []
+    to_create = []
+    matched_count = 0
+    for _, row in df.iterrows():
+        fields = _row_to_exclusion_fields(row, cols)
+        if fields is None:
+            continue
+        bucket = existing_by_key.get(_fields_match_key(fields))
+        if bucket:
+            record = bucket.pop(0)
+            changed = False
+            for field in EXCLUSION_IMPORT_FIELDS:
+                new_value = fields[field]
+                if field == 'receita':
+                    # receita é Decimal no banco; compara em Decimal p/ evitar
+                    # updates falsos por diferença de tipo (float vs Decimal).
+                    if Decimal(str(record.receita)) != Decimal(str(new_value)):
+                        record.receita = new_value
+                        changed = True
+                    continue
+                if getattr(record, field) != new_value:
+                    setattr(record, field, new_value)
+                    changed = True
+            matched_count += 1
+            if changed:
+                to_update.append(record)
+        else:
+            to_create.append(ExclusionRecord(sync_batch=latest_batch, **fields))
+
+    if to_update:
+        ExclusionRecord.objects.bulk_update(to_update, EXCLUSION_IMPORT_FIELDS, batch_size=500)
+    if to_create:
+        ExclusionRecord.objects.bulk_create(to_create, batch_size=500)
+
+    # Registros do lote que não vieram na planilha nova — mantidos como estão.
+    kept_count = sum(len(bucket) for bucket in existing_by_key.values())
+
+    latest_batch.record_count = ExclusionRecord.objects.filter(sync_batch=latest_batch).count()
+    author = getattr(request.user, 'full_name', '') or request.user.get_username()
+    stamp = timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M')
+    note_line = (
+        f'[{stamp}] Atualização sem reiniciar por {author}: '
+        f'{matched_count} correspondentes ({len(to_update)} alterados), '
+        f'{len(to_create)} novos, {kept_count} mantidos.'
+    )
+    latest_batch.notes = f'{latest_batch.notes}\n{note_line}'.strip() if latest_batch.notes else note_line
+    latest_batch.save(update_fields=['record_count', 'notes'])
+
+    messages.success(
+        request,
+        (
+            f'Planilha atualizada no lote atual: {len(to_update)} registro(s) alterado(s), '
+            f'{len(to_create)} novo(s) adicionado(s), {kept_count} mantido(s). '
+            f'A janela de contestação e as contestações em andamento foram preservadas.'
+        )
+    )
     return redirect('contestacao:exclusion_list')
 
 

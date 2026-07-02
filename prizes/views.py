@@ -288,8 +288,8 @@ def manage_redemptions(request):
     search = request.GET.get('search', '')
     status_filter = request.GET.get('status', '')
     
-    redemptions = Redemption.objects.select_related('user', 'prize', 'prize__category').all()
-    
+    redemptions = Redemption.objects.select_related('user', 'user__sector', 'prize', 'prize__category').prefetch_related('user__sectors').all()
+
     if search:
         redemptions = redemptions.filter(
             Q(user__first_name__icontains=search) |
@@ -341,7 +341,7 @@ def export_redemptions_excel(request):
     search = request.GET.get('search', '')
     status_filter = request.GET.get('status', '')
 
-    redemptions = Redemption.objects.select_related('user', 'prize', 'prize__category', 'approved_by').all()
+    redemptions = Redemption.objects.select_related('user', 'user__sector', 'prize', 'prize__category', 'approved_by').prefetch_related('user__sectors').all()
 
     if search:
         redemptions = redemptions.filter(
@@ -362,7 +362,7 @@ def export_redemptions_excel(request):
     ws.title = "Resgates"
 
     headers = [
-        'ID', 'Usuário', 'E-mail', 'Prêmio', 'Categoria', 'Custo (C$)',
+        'ID', 'Usuário', 'E-mail', 'Setor', 'Telefone', 'Prêmio', 'Categoria', 'Custo (C$)',
         'Status', 'Data do Resgate', 'Data da Aprovação', 'Data da Entrega',
         'Aprovado/Atualizado por', 'Observações'
     ]
@@ -380,18 +380,21 @@ def export_redemptions_excel(request):
     status_map = dict(Redemption.STATUS_CHOICES)
 
     for row, redemption in enumerate(redemptions, 2):
+        primary_sector = redemption.user.primary_sector
         ws.cell(row=row, column=1, value=redemption.id)
         ws.cell(row=row, column=2, value=redemption.user.full_name)
         ws.cell(row=row, column=3, value=redemption.user.email or "")
-        ws.cell(row=row, column=4, value=redemption.prize.name)
-        ws.cell(row=row, column=5, value=redemption.prize.category.name if redemption.prize.category else "")
-        ws.cell(row=row, column=6, value=float(redemption.prize.value_cs))
-        ws.cell(row=row, column=7, value=status_map.get(redemption.status, redemption.status))
-        ws.cell(row=row, column=8, value=redemption.redeemed_at.strftime("%d/%m/%Y %H:%M") if redemption.redeemed_at else "")
-        ws.cell(row=row, column=9, value=redemption.approved_at.strftime("%d/%m/%Y %H:%M") if redemption.approved_at else "")
-        ws.cell(row=row, column=10, value=redemption.delivered_at.strftime("%d/%m/%Y %H:%M") if redemption.delivered_at else "")
-        ws.cell(row=row, column=11, value=redemption.approved_by.full_name if redemption.approved_by else "")
-        ws.cell(row=row, column=12, value=redemption.notes or redemption.delivery_notes or "")
+        ws.cell(row=row, column=4, value=primary_sector.name if primary_sector else "")
+        ws.cell(row=row, column=5, value=redemption.user.phone or "")
+        ws.cell(row=row, column=6, value=redemption.prize.name)
+        ws.cell(row=row, column=7, value=redemption.prize.category.name if redemption.prize.category else "")
+        ws.cell(row=row, column=8, value=float(redemption.prize.value_cs))
+        ws.cell(row=row, column=9, value=status_map.get(redemption.status, redemption.status))
+        ws.cell(row=row, column=10, value=redemption.redeemed_at.strftime("%d/%m/%Y %H:%M") if redemption.redeemed_at else "")
+        ws.cell(row=row, column=11, value=redemption.approved_at.strftime("%d/%m/%Y %H:%M") if redemption.approved_at else "")
+        ws.cell(row=row, column=12, value=redemption.delivered_at.strftime("%d/%m/%Y %H:%M") if redemption.delivered_at else "")
+        ws.cell(row=row, column=13, value=redemption.approved_by.full_name if redemption.approved_by else "")
+        ws.cell(row=row, column=14, value=redemption.notes or redemption.delivery_notes or "")
 
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):

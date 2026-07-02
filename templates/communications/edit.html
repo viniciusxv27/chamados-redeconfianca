@@ -103,7 +103,7 @@
                         <!-- Rich Text Editor Toolbar -->
                         <div class="border border-gray-300 rounded-lg overflow-hidden">
                             <div class="bg-gray-50 px-3 py-2 border-b border-gray-300">
-                                <div class="flex items-center space-x-1">
+                                <div class="flex flex-wrap items-center gap-1">
                                     <button type="button" onclick="formatText('bold')" class="p-2 hover:bg-gray-200 rounded">
                                         <i class="fas fa-bold text-gray-600"></i>
                                     </button>
@@ -286,13 +286,13 @@
                     </div>
 
                     <!-- Botões -->
-                    <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-                        <a href="{% url 'communications:communication_detail' communication.id %}" 
-                           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 sm:gap-4 pt-6 border-t border-gray-200">
+                        <a href="{% url 'communications:communication_detail' communication.id %}"
+                           class="w-full sm:w-auto text-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
                             Cancelar
                         </a>
-                        <button type="submit" 
-                                class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                        <button type="submit"
+                                class="w-full sm:w-auto bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center justify-center">
                             <i class="fas fa-save mr-2"></i>
                             Salvar Alterações
                         </button>

@@ -47,7 +47,7 @@
               <tr class="hover:bg-gray-50">
                 <td class="px-4 py-2 font-medium text-gray-900">{{ p.user.get_full_name|default:p.user.username }}</td>
                 <td class="px-4 py-2 text-gray-600">{{ p.sector.name|default:'—' }}</td>
-                <td class="px-4 py-2 text-gray-600">{{ p.interviewer.get_full_name|default:p.interviewer.username|default:'—' }}</td>
+                <td class="px-4 py-2 text-gray-600">{% if p.interviewer %}{{ p.interviewer.get_full_name|default:p.interviewer.username }}{% else %}—{% endif %}</td>
                 <td class="px-4 py-2">
                   <form method="post" action="{% url 'feedback:exit_interview_dismiss' p.user.id %}" class="flex items-center justify-end gap-2"
                         onsubmit="return confirm('Efetuar o desligamento de {{ p.user.get_full_name|default:p.user.username|escapejs }}? O login será inativado e a data de demissão gravada.');">

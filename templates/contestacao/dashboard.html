@@ -3,14 +3,14 @@
 {% block title %}Dashboard – Contestações{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
             <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-chart-bar mr-2 text-teal-600"></i> Dashboard de Contestações</h1>
             <p class="text-sm text-gray-500 mt-1">Visão geral das contestações</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <form method="get" class="flex items-center gap-2">
+            <form method="get" class="flex flex-wrap items-center gap-2">
                 <label for="month" class="text-sm font-medium text-gray-600"><i class="fas fa-calendar-alt mr-1 text-teal-600"></i> Mês</label>
                 <input type="month" id="month" name="month" value="{{ selected_month }}"
                        class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500">
@@ -44,7 +44,7 @@
     </div>
 
     <!-- Cards principais -->
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
         <!-- Total na Base -->
         <div class="bg-white border rounded-xl p-5 shadow-sm">
             <div class="flex items-center justify-between mb-3">

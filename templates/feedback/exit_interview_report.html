@@ -11,7 +11,7 @@
       <a href="{% url 'feedback:exit_interview' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Colaboradores</p>
         <p class="text-3xl font-bold text-gray-900 mt-1">{{ totals.total }}</p>
@@ -168,10 +168,10 @@
             <details class="group">
               <summary class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 list-none">
                 <span class="w-9 h-9 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-sm font-semibold shrink-0">
-                  {{ r.user.first_name|first|upper }}{{ r.user.last_name|first|upper }}
+                  {% if r.user %}{{ r.user.first_name|first|upper }}{{ r.user.last_name|first|upper }}{% else %}?{% endif %}
                 </span>
                 <div class="min-w-0 flex-1">
-                  <p class="font-medium text-gray-900 truncate">{{ r.user.get_full_name|default:r.user.username|default:"Sem identificação" }}</p>
+                  <p class="font-medium text-gray-900 truncate">{% if r.user %}{{ r.user.get_full_name|default:r.user.username }}{% else %}Sem identificação{% endif %}</p>
                   <p class="text-xs text-gray-500 truncate">{{ r.sector.name|default:"Sem setor" }} · {{ r.response.submitted_at|date:"d/m/Y H:i" }}</p>
                 </div>
                 <div class="hidden sm:flex items-center gap-2 shrink-0">
@@ -242,8 +242,8 @@
               <th class="p-3 text-left">Colaborador</th>
               <th class="p-3 text-left">Setor</th>
               <th class="p-3 text-left">Status</th>
-              <th class="p-3 text-left">Última etapa</th>
-              <th class="p-3 text-left">Concluído em</th>
+              <th class="p-3 text-left hidden md:table-cell">Última etapa</th>
+              <th class="p-3 text-left hidden md:table-cell">Concluído em</th>
               <th class="p-3 text-right">Ações</th>
             </tr>
           </thead>
@@ -252,7 +252,7 @@
               <tr class="hover:bg-gray-50">
                 <td class="p-3">
                   <p class="font-medium text-gray-900">{{ row.user.get_full_name|default:row.user.username }}</p>
-                  <p class="text-xs text-gray-500">{{ row.user.email }}</p>
+                  <p class="text-xs text-gray-500 truncate max-w-[180px]">{{ row.user.email }}</p>
                 </td>
                 <td class="p-3">{{ row.sector.name|default:"Sem setor" }}</td>
                 <td class="p-3">
@@ -264,8 +264,8 @@
                     <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600"><i class="fas fa-minus"></i>{{ row.status_label }}</span>
                   {% endif %}
                 </td>
-                <td class="p-3 text-gray-600">{{ row.participation.last_step|default:"-" }}</td>
-                <td class="p-3 text-gray-600">{{ row.participation.completed_at|date:"d/m/Y H:i"|default:"-" }}</td>
+                <td class="p-3 text-gray-600 hidden md:table-cell">{{ row.participation.last_step|default:"-" }}</td>
+                <td class="p-3 text-gray-600 hidden md:table-cell">{{ row.participation.completed_at|date:"d/m/Y H:i"|default:"-" }}</td>
                 <td class="p-3 text-right">
                   {% if row.status != "NOT_STARTED" %}
                     <form method="post" action="{% url 'feedback:exit_interview_reset' row.user.id %}" onsubmit="return confirm('Zerar a entrevista de {{ row.user.get_full_name|default:row.user.username|escapejs }}? Ele(a) poderá responder novamente.');">

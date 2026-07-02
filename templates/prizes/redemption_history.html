@@ -19,7 +19,7 @@
     </div>
 
     <!-- Estatísticas -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow-md p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-blue-100 rounded-full">
@@ -90,7 +90,7 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for redemption in redemptions %}
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
+                        <td class="px-6 py-4">
                             <div class="flex items-center">
                                 {% if redemption.prize.image %}
                                 <img src="{{ redemption.prize.image.url }}" alt="{{ redemption.prize.name }}" class="w-12 h-12 rounded-lg object-cover mr-4">
@@ -99,9 +99,9 @@
                                     <i class="fas fa-gift text-gray-400"></i>
                                 </div>
                                 {% endif %}
-                                <div>
+                                <div class="min-w-0 max-w-[16rem]">
                                     <div class="text-sm font-medium text-gray-900">{{ redemption.prize.name }}</div>
-                                    <div class="text-sm text-gray-500">{{ redemption.prize.description|truncatechars:50 }}</div>
+                                    <div class="text-sm text-gray-500 truncate">{{ redemption.prize.description|truncatechars:50 }}</div>
                                 </div>
                             </div>
                         </td>
@@ -167,7 +167,7 @@
     <!-- Paginação -->
     {% if redemptions.has_other_pages %}
     <div class="flex justify-center mt-8">
-        <nav class="flex space-x-2">
+        <nav class="flex flex-wrap justify-center gap-2">
             {% if redemptions.has_previous %}
                 <a href="?page={{ redemptions.previous_page_number }}" 
                    class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">

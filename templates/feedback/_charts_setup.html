@@ -10,6 +10,13 @@ window.RC = (function () {
   const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#ec4899', '#84cc16', '#f97316'];
   const SCALE_COLORS = v => v >= 4 ? '#10b981' : v >= 3 ? '#f59e0b' : '#ef4444';
 
+  /* Trunca rótulos longos do eixo em telas estreitas (o texto completo continua no tooltip). */
+  function truncateTick(v) {
+    const l = String(this.getLabelForValue(v));
+    const max = window.innerWidth < 640 ? 18 : 40;
+    return l.length > max ? l.slice(0, max) + '…' : l;
+  }
+
   function applyDefaults() {
     Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
     Chart.defaults.font.size = 12;
@@ -102,7 +109,7 @@ window.RC = (function () {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         scales: {
           x: { beginAtZero: true, max: opts.max, grid: { color: '#f1f5f9' }, ticks: { stepSize: opts.stepSize } },
-          y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } }
+          y: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 }, callback: truncateTick } }
         },
         plugins: { legend: { display: false } }
       }
@@ -123,7 +130,7 @@ window.RC = (function () {
         responsive: true, maintainAspectRatio: false,
         scales: {
           x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
-          y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 } } }
+          y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false, font: { size: 11 }, callback: truncateTick } }
         },
         plugins: { legend: { position: 'bottom' } }
       }

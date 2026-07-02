@@ -156,6 +156,12 @@
                                     <div>
                                         <div class="text-sm font-medium text-gray-900">{{ redemption.user.full_name }}</div>
                                         <div class="text-sm text-gray-500">{{ redemption.user.email }}</div>
+                                        <div class="text-xs text-gray-500 mt-0.5">
+                                            <span><i class="fas fa-building mr-1"></i>{% if redemption.user.primary_sector %}{{ redemption.user.primary_sector.name }}{% else %}Sem setor{% endif %}</span>
+                                            {% if redemption.user.phone %}
+                                                <span class="ml-2"><i class="fas fa-phone mr-1"></i>{{ redemption.user.phone }}</span>
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 </div>
                             </td>

@@ -39,12 +39,14 @@
                     {% for ticket in tickets %}
                     <div class="px-6 py-4 hover:bg-gray-50">
                         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                            <div class="flex items-center">
+                            <div class="flex flex-col items-start lg:flex-row lg:items-center">
+                                <span class="text-xs text-gray-400 lg:hidden block">Código</span>
                                 <a href="{% url 'ticket_detail' ticket.id %}?next={{ request.get_full_path|urlencode }}" class="text-blue-600 hover:text-blue-800 font-medium">
                                     #{{ ticket.id }}
                                 </a>
                             </div>
-                            <div class="flex items-center">
+                            <div class="flex flex-col items-start lg:flex-row lg:items-center">
+                                <span class="text-xs text-gray-400 lg:hidden block">Título</span>
                                 <div>
                                     <div class="text-sm font-medium text-gray-900 truncate">
                                         {{ ticket.title }}
@@ -54,12 +56,14 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex items-center">
+                            <div class="flex flex-col items-start lg:flex-row lg:items-center">
+                                <span class="text-xs text-gray-400 lg:hidden block">Setor</span>
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                     {{ ticket.sector.name }}
                                 </span>
                             </div>
-                            <div class="flex items-center">
+                            <div class="flex flex-col items-start lg:flex-row lg:items-center">
+                                <span class="text-xs text-gray-400 lg:hidden block">Responsável</span>
                                 {% if ticket.assigned_to %}
                                     <div class="flex items-center">
                                         <div class="flex-shrink-0 h-8 w-8">
@@ -79,7 +83,8 @@
                                     <span class="text-sm text-gray-500 italic">Não atribuído</span>
                                 {% endif %}
                             </div>
-                            <div class="flex items-center">
+                            <div class="flex flex-col items-start lg:flex-row lg:items-center">
+                                <span class="text-xs text-gray-400 lg:hidden block">Fechado em</span>
                                 <div class="text-sm text-gray-900">
                                     {% if ticket.closed_at %}
                                         {{ ticket.closed_at|date:"d/m/Y H:i" }}
@@ -88,7 +93,8 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            <div class="flex items-center">
+                            <div class="flex flex-col items-start lg:flex-row lg:items-center">
+                                <span class="text-xs text-gray-400 lg:hidden block">Status</span>
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                     <i class="fas fa-check-circle mr-1 text-green-500"></i>
                                     Fechado

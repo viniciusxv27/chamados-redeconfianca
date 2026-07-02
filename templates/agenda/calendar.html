@@ -46,13 +46,20 @@
     .color-option { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
     .color-option:hover { transform: scale(1.2); }
     .color-option.selected { border-color: #1f2937; box-shadow: 0 0 0 2px white, 0 0 0 4px #1f2937; }
+
+    /* Toolbar do FullCalendar em telas pequenas */
+    @media (max-width: 640px) {
+        .fc .fc-header-toolbar { flex-wrap: wrap; row-gap: .5rem; justify-content: center; }
+        .fc .fc-toolbar-title { font-size: 1rem; }
+        .fc .fc-button { padding: .25rem .5rem; font-size: .72rem; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-full mx-auto py-4 sm:py-6 px-4 sm:px-6 agenda-shell">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 px-4 pt-4 sm:px-6 sm:pt-5">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 pt-4 sm:pt-5">
         <div class="flex-1 min-w-0">
             <h2 class="text-2xl font-bold text-gray-900">
                 <i class="fas fa-calendar-alt text-primary mr-2"></i>
@@ -179,7 +186,7 @@
 <div id="eventModal" class="fixed inset-0 z-50 hidden">
     <div class="modal-backdrop absolute inset-0" onclick="closeModal()"></div>
     <div class="relative flex items-center justify-center min-h-full p-4">
-        <div class="modal-content bg-white rounded-xl shadow-2xl w-full max-w-lg relative">
+        <div class="modal-content rc-modal-content bg-white rounded-xl shadow-2xl w-full max-w-lg relative">
             <div class="flex items-center justify-between px-5 py-4 border-b">
                 <h3 class="text-lg font-bold text-gray-900" id="modalTitle">Novo Evento</h3>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-lg"></i></button>
@@ -192,19 +199,19 @@
                            class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
                            placeholder="Ex.: Reunião de equipe">
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Início *</label>
                         <input type="datetime-local" id="eventStart" required
-                               class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
+                               class="w-full min-w-0 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Fim *</label>
                         <input type="datetime-local" id="eventEnd" required
-                               class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
+                               class="w-full min-w-0 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                         <select id="eventType" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">

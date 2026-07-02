@@ -7,6 +7,7 @@ urlpatterns = [
     path('', views.exclusion_list, name='exclusion_list'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('sincronizar/', views.sync_exclusions, name='sync_exclusions'),
+    path('atualizar/', views.update_exclusions, name='update_exclusions'),
     path('historico/', views.contestation_history, name='contestation_history'),
     path('contestar/<int:exclusion_id>/', views.create_contestation, name='create_contestation'),
     path('contestar-lote/', views.bulk_create_contestation, name='bulk_create_contestation'),

@@ -26,7 +26,7 @@
                 {% if category.description %}
                 <p class="text-blue-100 text-lg">{{ category.description }}</p>
                 {% endif %}
-                <div class="mt-4 flex items-center space-x-4">
+                <div class="mt-4 flex flex-wrap items-center gap-2">
                     <span class="bg-white/20 px-3 py-1 rounded-full text-sm">
                         <i class="fas fa-gift mr-2"></i>{{ prizes.paginator.count }} prêmios disponíveis
                     </span>
@@ -36,7 +36,7 @@
                 </div>
             </div>
             {% if category.icon %}
-            <div class="text-6xl opacity-20">
+            <div class="text-6xl opacity-20 hidden sm:block">
                 <i class="{{ category.icon }}"></i>
             </div>
             {% endif %}
@@ -166,7 +166,7 @@
     <!-- Paginação -->
     {% if prizes.has_other_pages %}
     <div class="flex justify-center mt-8">
-        <nav class="flex space-x-2">
+        <nav class="flex flex-wrap justify-center gap-2">
             {% if prizes.has_previous %}
                 <a href="?page={{ prizes.previous_page_number }}" 
                    class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">

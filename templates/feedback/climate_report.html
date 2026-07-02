@@ -11,7 +11,7 @@
       <a href="{% url 'feedback:climate_survey' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Colaboradores</p>
         <p class="text-3xl font-bold text-gray-900 mt-1">{{ totals.total }}</p>
@@ -103,7 +103,7 @@
           <input type="hidden" name="status" value="{{ status_filter }}">
           <div>
             <label class="block text-xs text-gray-500">Setor</label>
-            <select name="sector" class="border rounded-lg px-2 py-1 text-sm">
+            <select name="sector" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="">Todos</option>
               {% for sector in all_sectors %}
                 <option value="{{ sector.id }}" {% if selected_sector and selected_sector.id == sector.id %}selected{% endif %}>{{ sector.name }}</option>
@@ -112,7 +112,7 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500">Função</label>
-            <select name="funcao" class="border rounded-lg px-2 py-1 text-sm">
+            <select name="funcao" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="">Todas</option>
               {% for option in function_options %}
                 <option value="{{ option }}" {% if funcao_filter == option %}selected{% endif %}>{{ option }}</option>
@@ -121,7 +121,7 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500">Tempo de empresa</label>
-            <select name="tempo" class="border rounded-lg px-2 py-1 text-sm">
+            <select name="tempo" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="">Todos</option>
               {% for option in tenure_options %}
                 <option value="{{ option }}" {% if tempo_filter == option %}selected{% endif %}>{{ option }}</option>
@@ -130,7 +130,7 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500">Resposta — pergunta</label>
-            <select name="q_key" class="border rounded-lg px-2 py-1 text-sm max-w-[220px]">
+            <select name="q_key" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="">Qualquer</option>
               {% for opt in answer_filter_options %}
                 <option value="{{ opt.key }}" {% if answer_key == opt.key %}selected{% endif %}>{{ opt.label|truncatechars:50 }}</option>
@@ -139,7 +139,7 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500">Nota</label>
-            <select name="q_val" class="border rounded-lg px-2 py-1 text-sm">
+            <select name="q_val" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="">Qualquer</option>
               {% for v in likert_scale_values %}
                 <option value="{{ v }}" {% if answer_val == v|stringformat:"s" %}selected{% endif %}>{{ v }}</option>
@@ -331,7 +331,7 @@
           <input type="hidden" name="q_val" value="{{ answer_val }}">
           <div>
             <label class="block text-xs text-gray-500">Setor</label>
-            <select name="sector" class="border rounded-lg px-2 py-1 text-sm">
+            <select name="sector" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="">Todos</option>
               {% for sector in all_sectors %}
                 <option value="{{ sector.id }}" {% if selected_sector and selected_sector.id == sector.id %}selected{% endif %}>{{ sector.name }}</option>
@@ -340,7 +340,7 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500">Status</label>
-            <select name="status" class="border rounded-lg px-2 py-1 text-sm">
+            <select name="status" class="border rounded-lg px-2 py-1 text-sm max-w-full sm:max-w-[220px]">
               <option value="" {% if not status_filter %}selected{% endif %}>Todos</option>
               <option value="completed" {% if status_filter == "completed" %}selected{% endif %}>Concluída</option>
               <option value="in_progress" {% if status_filter == "in_progress" %}selected{% endif %}>Em andamento</option>
@@ -369,7 +369,7 @@
               <tr class="hover:bg-gray-50">
                 <td class="p-3">
                   <p class="font-medium text-gray-900">{{ row.user.get_full_name|default:row.user.username }}</p>
-                  <p class="text-xs text-gray-500">{{ row.user.email }}</p>
+                  <p class="text-xs text-gray-500 truncate max-w-[180px]">{{ row.user.email }}</p>
                 </td>
                 <td class="p-3">{{ row.sector.name|default:"Sem setor" }}</td>
                 <td class="p-3">

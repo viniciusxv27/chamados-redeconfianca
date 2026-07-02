@@ -136,7 +136,7 @@
     <!-- Atingimentos do Coordenador -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-6">Seus Atingimentos por Pilar</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-4">
             {% for pilar in data.pilares %}
             <div class="text-center p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
                 <div class="text-2xl mb-2">{{ pilar.icon }}</div>
@@ -162,30 +162,20 @@
                     </div>
                 </div>
                 
-                <!-- Evolução em tabela -->
-                <div class="w-full mb-2">
-                    <table class="w-full text-[10px]">
-                        <tbody>
-                            <tr>
-                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_3 }}:</td>
-                                <td class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
-                                    {{ pilar.pct_3|floatformat:2 }}%
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_2 }}:</td>
-                                <td class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
-                                    {{ pilar.pct_2|floatformat:2 }}%
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="text-gray-500 pr-1 text-left">{{ meses.mes_pct_1 }}:</td>
-                                <td class="{% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-bold">
-                                    {{ pilar.pct_1|floatformat:2 }}%
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <!-- Evolução -->
+                <div class="w-full mb-2 space-y-1 text-[10px]">
+                    <div class="flex justify-between gap-1">
+                        <span class="text-gray-500">{{ meses.mes_pct_3 }}:</span>
+                        <span class="{% if pilar.pct_3 >= 100 %}text-green-600{% elif pilar.pct_3 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">{{ pilar.pct_3|floatformat:2 }}%</span>
+                    </div>
+                    <div class="flex justify-between gap-1">
+                        <span class="text-gray-500">{{ meses.mes_pct_2 }}:</span>
+                        <span class="{% if pilar.pct_2 >= 100 %}text-green-600{% elif pilar.pct_2 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">{{ pilar.pct_2|floatformat:2 }}%</span>
+                    </div>
+                    <div class="flex justify-between gap-1">
+                        <span class="text-gray-500">{{ meses.mes_pct_1 }}:</span>
+                        <span class="{% if pilar.pct_1 >= 100 %}text-green-600{% elif pilar.pct_1 >= 80 %}text-yellow-600{% else %}text-red-600{% endif %} font-bold">{{ pilar.pct_1|floatformat:2 }}%</span>
+                    </div>
                 </div>
                 
                 <!-- Habilitado -->
@@ -557,7 +547,7 @@
             <table class="w-full">
                 <thead>
                     <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <th class="pb-3 pr-4">Nome</th>
+                        <th class="pb-3 pr-4 sticky left-0 bg-white z-10">Nome</th>
                         <th class="pb-3 px-2">PDV</th>
                         <th class="pb-3 px-2 text-center">Móvel</th>
                         <th class="pb-3 px-2 text-center">Fixa</th>
@@ -572,7 +562,7 @@
                 <tbody class="divide-y divide-gray-100">
                     {% for gerente in gerentes_data %}
                     <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="py-3 pr-4">
+                        <td class="py-3 pr-4 sticky left-0 bg-white z-10">
                             <div class="flex items-center gap-3">
                                 <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-semibold text-sm">
                                     {{ gerente.nome|slice:":1" }}
@@ -662,7 +652,7 @@
     <!-- Atingimentos por Pilar -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-6">Atingimentos por Pilar</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-4">
             {% for pilar in data.pilares %}
             <div class="text-center p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
                 <div class="text-2xl mb-2">{{ pilar.icon }}</div>
@@ -685,15 +675,15 @@
                 </div>
                 
                 <div class="space-y-1 text-xs text-gray-500">
-                    <div class="flex justify-between">
+                    <div class="flex flex-wrap justify-between">
                         <span>Total:</span>
                         <span class="font-medium text-gray-700">R$ {{ pilar.total|floatformat:2 }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex flex-wrap justify-between">
                         <span>Pago:</span>
                         <span class="font-medium text-green-600">R$ {{ pilar.pago|floatformat:2 }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex flex-wrap justify-between">
                         <span>Exclusão:</span>
                         <span class="font-medium text-red-600">R$ {{ pilar.exclusao|floatformat:2 }}</span>
                     </div>
@@ -903,14 +893,14 @@
                 <h3 class="text-xl font-bold" id="modalPilarTitulo">Vendas do Pilar</h3>
                 <p class="text-purple-100 text-sm mt-1">Detalhamento de vendas</p>
                 <!-- Totalizadores -->
-                <div class="flex gap-6 mt-3">
+                <div class="flex flex-wrap gap-3 mt-3">
                     <div class="bg-white/10 rounded-lg px-4 py-2">
                         <p class="text-purple-200 text-xs">Soma Base Paga</p>
-                        <p class="text-white font-bold text-lg" id="somaBasePaga">R$ 0,00</p>
+                        <p class="text-white font-bold text-base sm:text-lg" id="somaBasePaga">R$ 0,00</p>
                     </div>
                     <div class="bg-white/10 rounded-lg px-4 py-2">
                         <p class="text-purple-200 text-xs">Soma Base Exclusão</p>
-                        <p class="text-white font-bold text-lg" id="somaBaseExclusao">R$ 0,00</p>
+                        <p class="text-white font-bold text-base sm:text-lg" id="somaBaseExclusao">R$ 0,00</p>
                     </div>
                 </div>
             </div>
@@ -943,7 +933,7 @@
         </div>
         
         <!-- Footer -->
-        <div class="border-t border-gray-200 p-4 bg-gray-50 rounded-b-2xl flex justify-between items-center">
+        <div class="border-t border-gray-200 p-4 bg-gray-50 rounded-b-2xl flex flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2">
             <p class="text-sm text-gray-500">Use a aba acima para alternar entre Pago e Exclusão</p>
             <button onclick="exportarVendasExcel()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

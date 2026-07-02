@@ -116,7 +116,7 @@
                 </div>
                 {% endif %}
                 
-                <div class="prose max-w-none">
+                <div class="prose max-w-none break-words overflow-x-auto">
                     {{ communication.message|safe }}
                 </div>
                 
@@ -335,8 +335,8 @@
                 
                 <form method="post" action="{% url 'communications:update_communication_status' communication.id %}" class="mb-4">
                     {% csrf_token %}
-                    <div class="flex space-x-3">
-                        <button type="submit" name="status" value="ESTOU_CIENTE" 
+                    <div class="flex flex-wrap gap-3">
+                        <button type="submit" name="status" value="ESTOU_CIENTE"
                                 class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center">
                             <i class="fas fa-check mr-2"></i>
                             Estou Ciente
@@ -378,7 +378,7 @@
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Status dos Destinatários</h3>
                 
                 <!-- Estatísticas -->
-                <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
                     <div class="bg-red-50 p-3 rounded-lg text-center">
                         <div class="text-2xl font-bold text-red-600">
                             {{ status_counts.not_viewed }}
@@ -403,18 +403,18 @@
                 <div class="space-y-2 max-h-96 overflow-y-auto">
                     {% for status in users_status %}
                     <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                        <div class="flex items-center space-x-3 min-w-0 flex-1">
+                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
                                 <span class="text-xs font-medium text-gray-600">
                                     {{ status.user.first_name|first|upper }}{{ status.user.last_name|first|upper }}
                                 </span>
                             </div>
-                            <div>
-                                <div class="font-medium text-gray-900">{{ status.user.get_full_name }}</div>
-                                <div class="text-sm text-gray-500">{{ status.user.email }} - {{ status.user.sector.name }}</div>
+                            <div class="min-w-0">
+                                <div class="font-medium text-gray-900 truncate">{{ status.user.get_full_name }}</div>
+                                <div class="text-sm text-gray-500 truncate">{{ status.user.email }} - {{ status.user.sector.name }}</div>
                             </div>
                         </div>
-                        <div class="text-right">
+                        <div class="text-right flex-shrink-0">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                                 {% if status.status == 'ESTOU_CIENTE' %}bg-green-100 text-green-800
                                 {% elif status.status == 'ESTOU_COM_DUVIDA' %}bg-yellow-100 text-yellow-800

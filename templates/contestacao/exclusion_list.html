@@ -122,7 +122,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+<div class="max-w-7xl mx-auto pt-4 sm:pt-6 pb-40 sm:pb-32 px-4 sm:px-6 lg:px-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-gray-900"><i class="fas fa-file-excel mr-2" style="color: var(--primary)"></i> Base de Exclusão{% if showing_old_records %} <span class="text-sm font-normal text-amber-700">(Contestações antigas — somente conferência)</span>{% endif %}</h1>
@@ -157,6 +157,13 @@
                 <i class="fas fa-list mr-2"></i> Minhas Contestações
             </a>
             {% if can_sync %}
+            <form method="post" action="{% url 'contestacao:update_exclusions' %}"
+                  onsubmit="return confirm('Atualizar os dados do lote ATUAL com a planilha nova, sem reiniciar a contestação?\n\n• Vendas existentes têm os valores atualizados\n• Vendas novas são adicionadas\n• Vendas removidas da planilha são mantidas\n• A janela e as contestações em andamento são preservadas');">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition" style="background-color: #0ea5e9" onclick="this.disabled=true;this.innerHTML='<i class=\'fas fa-spinner fa-spin mr-2\'></i> Atualizando...';this.form.submit();">
+                    <i class="fas fa-rotate mr-2"></i> Atualizar sem reiniciar
+                </button>
+            </form>
             <form method="post" action="{% url 'contestacao:sync_exclusions' %}">
                 {% csrf_token %}
                 <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition" style="background-color: #10b981" onclick="this.disabled=true;this.innerHTML='<i class=\'fas fa-spinner fa-spin mr-2\'></i> Sincronizando...';this.form.submit();">
@@ -232,8 +239,8 @@
     {% if records %}
     <!-- Tabela desktop -->
     <div class="hidden sm:block bg-white rounded-lg overflow-hidden shadow-sm" style="border: 1px solid #d0d0d0 !important;">
-        <div>
-            <table class="w-full table-fixed divide-y divide-gray-200 text-[11px]">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[950px] divide-y divide-gray-200 text-[11px]">
                 <thead style="background-color: var(--light-gray); border-bottom: 2px solid var(--primary)">
                     <tr>
                         <th class="w-[16%] px-3 py-3 text-left text-[10px] font-semibold text-gray-700 uppercase">Vendedor / Cliente</th>
@@ -330,9 +337,9 @@
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info and not contestation_blocked %}
                     <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
-                        <td colspan="12" class="px-4 py-4">
+                        <td colspan="6" class="px-4 py-4">
                             <div class="reason-content bg-white rounded-lg p-5 shadow-sm" style="background-color: #ffffff !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
-                                <div style="display: grid; grid-template-columns: 1.8fr 1fr; gap: 1.5rem;">
+                                <div class="grid grid-cols-1 md:grid-cols-[1.8fr_1fr] gap-6">
                                     <div>
                                         <label class="block mb-2.5 text-sm font-semibold text-gray-800">Motivo da contestação</label>
                                         <textarea class="reason-input w-full" data-id="{{ r.pk }}" placeholder="Descreva o motivo da contestação para {{ r.vendedor }}..." style="min-height: 6.5rem; padding: 1rem !important; border: 2px solid #d1d5db !important; border-radius: 0.75rem !important; background-color: #f9fafb !important; font-size: 0.875rem !important; resize: vertical !important; transition: all 0.2s ease !important;"></textarea>
@@ -510,8 +517,8 @@
 <!-- Barra flutuante - enviar contestações -->
 <div id="bulkBar" class="hidden fixed bottom-0 inset-x-0 z-40">
     <div class="max-w-5xl mx-auto px-4 pb-4">
-        <div class="bulk-panel rounded-xl shadow-2xl overflow-hidden" style="background: #ffedd5 !important; border: 2px solid #fb923c !important; box-shadow: 0 24px 50px rgba(194, 65, 12, 0.35), 0 0 0 6px rgba(251, 146, 60, 0.32) !important;">
-            <div class="bulk-header px-5 py-3 flex items-center justify-between gap-4" style="background: #ea580c !important; border-bottom: 1px solid #c2410c !important;">
+        <div class="bulk-panel rounded-xl shadow-2xl overflow-x-hidden overflow-y-auto max-h-[60vh]" style="background: #ffedd5 !important; border: 2px solid #fb923c !important; box-shadow: 0 24px 50px rgba(194, 65, 12, 0.35), 0 0 0 6px rgba(251, 146, 60, 0.32) !important;">
+            <div class="bulk-header px-5 py-3 flex flex-wrap items-center justify-between gap-3" style="background: #ea580c !important; border-bottom: 1px solid #c2410c !important;">
                 <div class="flex items-center gap-3">
                     <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #c2410c" id="bulkCount">0</span>
                     <div class="text-sm text-white">

@@ -130,11 +130,11 @@
             <tr>
               <th class="p-3 text-left">Colaborador</th>
               <th class="p-3 text-left">PDV / Setor</th>
-              <th class="p-3 text-left">Tempo de casa</th>
+              <th class="p-3 text-left hidden lg:table-cell">Tempo de casa</th>
               <th class="p-3 text-left">Regra</th>
-              <th class="p-3 text-left">Período desde</th>
+              <th class="p-3 text-left hidden lg:table-cell">Período desde</th>
               <th class="p-3 text-right">Feedbacks no período</th>
-              <th class="p-3 text-left">Último feedback</th>
+              <th class="p-3 text-left hidden lg:table-cell">Último feedback</th>
               <th class="p-3 text-center">Situação</th>
               <th class="p-3"></th>
             </tr>
@@ -144,17 +144,17 @@
               <tr class="hover:bg-gray-50">
                 <td class="p-3">
                   <p class="font-medium text-gray-800">{{ r.user.get_full_name|default:r.user.username }}</p>
-                  <p class="text-xs text-gray-500">{{ r.user.email }}</p>
+                  <p class="text-xs text-gray-500 truncate max-w-[180px]">{{ r.user.email }}</p>
                 </td>
                 <td class="p-3">{{ r.sector.name|default:'—' }}</td>
-                <td class="p-3">{{ r.tenure_months }} meses</td>
+                <td class="p-3 hidden lg:table-cell">{{ r.tenure_months }} meses</td>
                 <td class="p-3">
                   <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{{ r.rule.period_label }}</span>
                 </td>
-                <td class="p-3 text-gray-600">{{ r.period_start }}</td>
+                <td class="p-3 text-gray-600 hidden lg:table-cell">{{ r.period_start }}</td>
                 <td class="p-3 text-right font-semibold">{{ r.count_in_period }}</td>
-                <td class="p-3 text-gray-600">{{ r.last_feedback|date:"d/m/Y"|default:'—' }}</td>
-                <td class="p-3 text-center">
+                <td class="p-3 text-gray-600 hidden lg:table-cell">{{ r.last_feedback|date:"d/m/Y"|default:'—' }}</td>
+                <td class="p-3 text-center whitespace-nowrap">
                   {% if r.compliant %}
                     <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700"><i class="fas fa-check"></i> Em dia</span>
                   {% else %}

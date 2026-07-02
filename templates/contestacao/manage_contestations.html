@@ -4,7 +4,7 @@
 {% block title %}Gerenciar Contestações{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+<div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
             <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-gavel mr-2 text-indigo-600"></i> Gerenciar Contestações{% if showing_old_contestations %} <span class="text-sm font-normal text-amber-700">(Antigas — somente conferência)</span>{% endif %}</h1>
@@ -56,9 +56,9 @@
               class="px-3 py-1.5 text-sm rounded-md {% if not status_filter %}bg-gray-800 text-white{% else %}bg-white border text-gray-600 hover:bg-gray-50{% endif %}">Todas - {{ all_metrics.sectors }} setor{{ all_metrics.sectors|pluralize:"es" }} ({{ all_metrics.lines }} linha{{ all_metrics.lines|pluralize:"s" }})</a>
         
         <!-- Store filter -->
-        <div class="ml-auto flex items-center gap-2">
+        <div class="sm:ml-auto flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <label class="text-xs text-gray-500 font-medium">Loja:</label>
-            <select onchange="applyFilialFilter(this.value)" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <select onchange="applyFilialFilter(this.value)" class="max-w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
                 <option value="">Todas</option>
                 {% for f in filiais %}
                 <option value="{{ f }}" {% if filial_filter == f %}selected{% endif %}>{{ f }}</option>
@@ -68,7 +68,7 @@
             <input type="month"
                    value="{{ opened_month_filter }}"
                    onchange="applyOpenedMonthFilter(this.value)"
-                   class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                   class="max-w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                    title="Filtra por mês de abertura quando o status estiver em 'Todas'">
         </div>
     </div>
@@ -241,8 +241,8 @@
         {% for c in contestations %}
         <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
             <div class="p-4">
-                <div class="flex items-start justify-between mb-2">
-                    <div>
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 mb-1">
                             {% if status_filter == 'confirmed' and c.status == 'confirmed' and c.payment_status == 'pending_payment' %}
                             <label class="inline-flex items-center mr-1" title="Selecionar para pagamento em lote">
@@ -379,7 +379,7 @@
                             </button>
                         </form>
                     </div>
-                    <div class="flex flex-col items-end gap-1">
+                    <div class="flex sm:flex-col items-center sm:items-end gap-1 shrink-0">
                         <span class="text-xs text-gray-400">{{ c.created_at|date:"d/m/Y H:i" }}</span>
                         <a href="{% url 'contestacao:contestation_detail' c.pk %}" class="inline-flex items-center px-2 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100">
                             <i class="fas fa-eye mr-1"></i> Visualizar

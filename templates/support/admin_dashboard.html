@@ -366,14 +366,14 @@
     </div>
 
     <!-- Kanban Board -->
-    <div id="kanban-view" class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[70vh] overflow-hidden">
+    <div id="kanban-view" class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-auto lg:h-[70vh] overflow-visible lg:overflow-hidden">
         <!-- Abertos -->
         <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
             <div class="p-4 font-semibold border-b border-gray-200 bg-red-100 text-red-800 flex justify-between items-center">
                 <span>Abertos</span>
                 <span class="bg-red-200 px-2 py-1 rounded-full text-xs">{{ stats.open }}</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="open-tickets" data-status="ABERTO">
+            <div class="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none drop-zone" id="open-tickets" data-status="ABERTO">
                 <!-- Tickets abertos serão carregados aqui -->
             </div>
         </div>
@@ -384,7 +384,7 @@
                 <span>Em Andamento</span>
                 <span class="bg-yellow-200 px-2 py-1 rounded-full text-xs">{{ stats.in_progress }}</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="progress-tickets" data-status="EM_ANDAMENTO">
+            <div class="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none drop-zone" id="progress-tickets" data-status="EM_ANDAMENTO">
                 <!-- Tickets em andamento serão carregados aqui -->
             </div>
         </div>
@@ -395,7 +395,7 @@
                 <span>Fechados</span>
                 <span class="bg-green-200 px-2 py-1 rounded-full text-xs" id="closed-count">0</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2 drop-zone" id="closed-tickets" data-status="FECHADO">
+            <div class="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none drop-zone" id="closed-tickets" data-status="FECHADO">
                 <!-- Tickets fechados serão carregados aqui -->
             </div>
         </div>
@@ -2672,7 +2672,7 @@ function editCategory(id, name, description, sectorId, defaultAgentIds, requestC
     // Criar modal de edição simples
     const modalHtml = `
         <div id="editCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
-            <div class="bg-white rounded-lg p-6 w-96">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
                 <h3 class="text-lg font-semibold mb-4">Editar Categoria</h3>
                 <div class="space-y-4">
                     <div>
