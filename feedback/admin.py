@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     ClimateSurveyParticipation,
     ClimateSurveyResponse,
+    ExitInterviewAccessPermission,
     ExitInterviewParticipation,
     ExitInterviewResponse,
     Feedback,
@@ -72,6 +73,14 @@ class SurveyManagerPermissionAdmin(admin.ModelAdmin):
 class SurveySettingsAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'climate_menu_visible', 'updated_at')
     readonly_fields = ('updated_at',)
+
+
+@admin.register(ExitInterviewAccessPermission)
+class ExitInterviewAccessPermissionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'granted_by', 'created_at')
+    search_fields = ('user__first_name', 'user__last_name', 'user__email')
+    autocomplete_fields = ('user', 'granted_by')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(ExitInterviewParticipation)

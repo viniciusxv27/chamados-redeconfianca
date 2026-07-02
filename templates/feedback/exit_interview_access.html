@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Acessos - Entrevista de Desligamento{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+  <div class="max-w-4xl mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-door-open mr-2 text-rose-600"></i>Acessos da Entrevista de Desligamento</h1>
+        <p class="text-sm text-gray-500 mt-1">Selecione quem pode ver o botão no menu e conduzir a entrevista.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url 'feedback:exit_interview' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+        <a href="{% url 'feedback:survey_access' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Acessos das Pesquisas</a>
+      </div>
+    </div>
+
+    {% if messages %}
+      <div class="space-y-2 mb-4">
+        {% for message in messages %}
+          <div class="p-3 rounded-lg text-sm {% if message.tags == 'success' %}bg-green-50 text-green-700 border border-green-200{% elif message.tags == 'info' %}bg-blue-50 text-blue-700 border border-blue-200{% else %}bg-red-50 text-red-700 border border-red-200{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="bg-white rounded-xl shadow p-5 mb-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-3"><i class="fas fa-user-plus mr-2 text-green-600"></i>Liberar novo usuário</h2>
+      <form method="post" id="exitAccessGrantForm" class="flex flex-col sm:flex-row gap-2">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="grant">
+        <input type="hidden" name="user_id" id="selectedExitAccessUserId">
+        <div class="relative flex-1">
+          <input type="text" id="exitAccessUserSearch" autocomplete="off" placeholder="Buscar usuário por nome ou e-mail..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
+          <div id="exitAccessUserResults" class="absolute z-10 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg hidden max-h-64 overflow-y-auto"></div>
+        </div>
+        <button type="submit" id="exitAccessGrantBtn" disabled class="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fas fa-check mr-1"></i>Liberar
+        </button>
+      </form>
+      <p id="selectedExitAccessUserLabel" class="text-sm text-gray-600 mt-2 hidden"></p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow">
+      <div class="p-5 border-b">
+        <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-users mr-2 text-rose-500"></i>Usuários com botão liberado</h2>
+        <p class="text-xs text-gray-500 mt-1">Superadmins sempre veem o botão automaticamente e não precisam aparecer nesta lista.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-3 text-left">Usuário</th>
+              <th class="p-3 text-left">Setor</th>
+              <th class="p-3 text-left">Liberado por</th>
+              <th class="p-3 text-left">Em</th>
+              <th class="p-3 text-right"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for perm in permissions %}
+              <tr class="hover:bg-gray-50">
+                <td class="p-3">
+                  <p class="font-medium text-gray-900">{{ perm.user.get_full_name|default:perm.user.username }}</p>
+                  <p class="text-xs text-gray-500">{{ perm.user.email }}</p>
+                </td>
+                <td class="p-3 text-gray-600">{{ perm.user.sector.name|default:"-" }}</td>
+                <td class="p-3 text-gray-600">{{ perm.granted_by.get_full_name|default:"-" }}</td>
+                <td class="p-3 text-gray-600">{{ perm.created_at|date:"d/m/Y" }}</td>
+                <td class="p-3 text-right">
+                  <form method="post" onsubmit="return confirm('Remover o botão de Entrevista de Desligamento deste usuário?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="revoke">
+                    <input type="hidden" name="user_id" value="{{ perm.user.id }}">
+                    <button type="submit" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100"><i class="fas fa-trash mr-1"></i>Remover</button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="p-6 text-center text-gray-500">Nenhum usuário liberado ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const input = document.getElementById('exitAccessUserSearch');
+  const results = document.getElementById('exitAccessUserResults');
+  const hidden = document.getElementById('selectedExitAccessUserId');
+  const grantBtn = document.getElementById('exitAccessGrantBtn');
+  const selectedLabel = document.getElementById('selectedExitAccessUserLabel');
+  let timer = null;
+
+  function clearSelection() {
+    hidden.value = '';
+    grantBtn.disabled = true;
+    selectedLabel.classList.add('hidden');
+  }
+
+  input.addEventListener('input', () => {
+    clearSelection();
+    const q = input.value.trim();
+    clearTimeout(timer);
+    if (q.length < 2) {
+      results.classList.add('hidden');
+      return;
+    }
+    timer = setTimeout(() => {
+      fetch('{% url "feedback:api_search_users" %}?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+          results.innerHTML = '';
+          if (!data.results || !data.results.length) {
+            results.innerHTML = '<div class="px-4 py-2 text-sm text-gray-500">Nenhum usuário encontrado.</div>';
+          } else {
+            data.results.forEach(u => {
+              const item = document.createElement('button');
+              item.type = 'button';
+              item.className = 'w-full text-left px-4 py-2 text-sm hover:bg-rose-50 border-b last:border-0';
+              item.innerHTML = `<span class="font-medium text-gray-800">${u.name}</span><br><span class="text-xs text-gray-500">${u.email}${u.sector ? ' · ' + u.sector : ''}</span>`;
+              item.addEventListener('click', () => {
+                hidden.value = u.id;
+                input.value = u.name;
+                grantBtn.disabled = false;
+                selectedLabel.textContent = 'Selecionado: ' + u.name + ' (' + u.email + ')';
+                selectedLabel.classList.remove('hidden');
+                results.classList.add('hidden');
+              });
+              results.appendChild(item);
+            });
+          }
+          results.classList.remove('hidden');
+        })
+        .catch(() => { results.classList.add('hidden'); });
+    }, 250);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!results.contains(e.target) && e.target !== input) {
+      results.classList.add('hidden');
+    }
+  });
+})();
+</script>
+{% endblock %}

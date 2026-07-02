@@ -16,6 +16,7 @@ from .forms import AssignmentForm, FeedbackForm
 from .models import (
     ClimateSurveyParticipation,
     ClimateSurveyResponse,
+    ExitInterviewAccessPermission,
     ExitInterviewParticipation,
     ExitInterviewResponse,
     Feedback,
@@ -233,13 +234,26 @@ def _primary_sector_for_user(user):
 
 
 def _can_manage_surveys(user) -> bool:
-    """Pode gerenciar a Pesquisa de Clima e a Entrevista de Desligamento
-    (e ver os relatórios): superadmins ou usuários liberados manualmente."""
+    """Pode gerenciar a Pesquisa de Clima e ver seus relatórios.
+
+    A Entrevista de Desligamento usa a permissão específica
+    `_can_access_exit_interview`.
+    """
     if not user.is_authenticated:
         return False
     if _is_superadmin(user):
         return True
     return SurveyManagerPermission.objects.filter(user=user).exists()
+
+
+def _can_access_exit_interview(user) -> bool:
+    """Pode ver/conduzir a Entrevista de Desligamento: superadmin ou usuário
+    liberado manualmente na tela de acessos da entrevista."""
+    if not user.is_authenticated:
+        return False
+    if _is_superadmin(user):
+        return True
+    return ExitInterviewAccessPermission.objects.filter(user=user).exists()
 
 
 def superadmin_required(view_func):
@@ -264,12 +278,23 @@ def feedback_manager_required(view_func):
 
 
 def survey_manager_required(view_func):
-    """Acesso liberado a superadmins e a usuários autorizados a gerenciar as pesquisas."""
+    """Acesso liberado a superadmins e gestores da Pesquisa de Clima."""
     @wraps(view_func)
     @login_required
     def _wrapped(request, *args, **kwargs):
         if not _can_manage_surveys(request.user):
             return HttpResponseForbidden('Acesso restrito aos gestores das pesquisas.')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+def exit_interview_access_required(view_func):
+    """Acesso liberado a superadmins e a usuários autorizados para entrevista."""
+    @wraps(view_func)
+    @login_required
+    def _wrapped(request, *args, **kwargs):
+        if not _can_access_exit_interview(request.user):
+            return HttpResponseForbidden('Acesso restrito aos usuários liberados para Entrevista de Desligamento.')
         return view_func(request, *args, **kwargs)
     return _wrapped
 
@@ -796,7 +821,7 @@ def _exit_questions():
     return out
 
 
-@survey_manager_required
+@exit_interview_access_required
 @require_http_methods(['GET', 'POST'])
 def exit_interview(request):
     """Entrevista de Desligamento conduzida pelo entrevistador (Superadmin ou
@@ -915,10 +940,11 @@ def exit_interview(request):
         'today': timezone.localdate(),
         'is_superadmin': _is_superadmin(request.user),
         'can_manage_surveys': _can_manage_surveys(request.user),
+        'can_configure_exit_interview_access': _is_superadmin(request.user),
     })
 
 
-@survey_manager_required
+@exit_interview_access_required
 @require_POST
 def exit_interview_dismiss(request, user_id):
     """Efetua o desligamento de acesso do colaborador: inativa o login e grava a
@@ -964,7 +990,7 @@ def exit_interview_dismiss(request, user_id):
     return redirect('feedback:exit_interview')
 
 
-@survey_manager_required
+@exit_interview_access_required
 def exit_interview_report(request):
     status_filter = (request.GET.get('status') or '').strip().lower()
     sector_filter_id = request.GET.get('sector')
@@ -1166,7 +1192,7 @@ def exit_interview_report(request):
     })
 
 
-@survey_manager_required
+@exit_interview_access_required
 @require_POST
 def exit_interview_reset(request, user_id):
     """Zera o controle de participação da entrevista de um colaborador,
@@ -1185,6 +1211,49 @@ def exit_interview_reset(request, user_id):
 # ---------------------------------------------------------------------------
 # Gestão de acessos às pesquisas (somente superadmin)
 # ---------------------------------------------------------------------------
+
+@superadmin_required
+@require_http_methods(['GET', 'POST'])
+def exit_interview_access(request):
+    """Configura quem pode ver/conduzir a Entrevista de Desligamento."""
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        user_id = request.POST.get('user_id')
+        target = User.objects.filter(pk=user_id).first()
+        if not target:
+            messages.error(request, 'Usuário não encontrado.')
+            return redirect('feedback:exit_interview_access')
+
+        if action == 'grant':
+            if _is_superadmin(target):
+                messages.info(request, f'{target.get_full_name() or target.username} já é superadmin e tem acesso.')
+            else:
+                ExitInterviewAccessPermission.objects.get_or_create(
+                    user=target,
+                    defaults={'granted_by': request.user},
+                )
+                messages.success(
+                    request,
+                    f'Botão de Entrevista de Desligamento liberado para {target.get_full_name() or target.username}.',
+                )
+        elif action == 'revoke':
+            ExitInterviewAccessPermission.objects.filter(user=target).delete()
+            messages.success(
+                request,
+                f'Acesso à Entrevista de Desligamento removido de {target.get_full_name() or target.username}.',
+            )
+
+        return redirect('feedback:exit_interview_access')
+
+    permissions = (
+        ExitInterviewAccessPermission.objects
+        .select_related('user', 'user__sector', 'granted_by')
+        .order_by('user__first_name', 'user__last_name')
+    )
+    return render(request, 'feedback/exit_interview_access.html', {
+        'permissions': permissions,
+    })
+
 
 @superadmin_required
 @require_http_methods(['GET', 'POST'])

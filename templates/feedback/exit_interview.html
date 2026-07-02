@@ -9,6 +9,11 @@
         <p class="text-sm text-gray-500 mt-1">Conduzida pelo entrevistador. Selecione o colaborador desligado e registre as respostas.</p>
       </div>
       <div class="flex flex-wrap gap-2">
+        {% if can_configure_exit_interview_access %}
+          <a href="{% url 'feedback:exit_interview_access' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+            <i class="fas fa-user-shield mr-1"></i>Acessos
+          </a>
+        {% endif %}
         <a href="{% url 'feedback:exit_interview_report' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
           <i class="fas fa-chart-bar mr-1"></i>Relatório
         </a>

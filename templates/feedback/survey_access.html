@@ -6,9 +6,14 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-user-shield mr-2 text-indigo-600"></i>Acessos das Pesquisas</h1>
-        <p class="text-sm text-gray-500 mt-1">Libere usuários para gerenciar a Pesquisa de Clima e a Entrevista de Desligamento e ver os relatórios.</p>
+        <p class="text-sm text-gray-500 mt-1">Libere usuários para gerenciar a Pesquisa de Clima e ver seus relatórios. A Entrevista de Desligamento tem uma tela própria de acessos.</p>
       </div>
-      <a href="{% url 'feedback:climate_survey' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url 'feedback:exit_interview_access' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+          <i class="fas fa-door-open mr-1"></i>Acessos da Entrevista
+        </a>
+        <a href="{% url 'feedback:climate_survey' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
+      </div>
     </div>
 
     {% if messages %}
@@ -63,7 +68,7 @@
     </div>
 
     <div class="bg-white rounded-xl shadow p-5 mb-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-3"><i class="fas fa-user-plus mr-2 text-green-600"></i>Liberar novo usuário</h2>
+      <h2 class="text-lg font-semibold text-gray-900 mb-3"><i class="fas fa-user-plus mr-2 text-green-600"></i>Liberar gestor da Pesquisa de Clima</h2>
       <form method="post" id="grantForm" class="flex flex-col sm:flex-row gap-2">
         {% csrf_token %}
         <input type="hidden" name="action" value="grant">
@@ -82,7 +87,7 @@
     <div class="bg-white rounded-xl shadow">
       <div class="p-5 border-b">
         <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-users mr-2 text-indigo-500"></i>Usuários liberados</h2>
-        <p class="text-xs text-gray-500 mt-1">Superadministradores já têm acesso automático e não aparecem nesta lista.</p>
+        <p class="text-xs text-gray-500 mt-1">Superadministradores já têm acesso automático. Para liberar o botão de Entrevista de Desligamento, use a tela específica.</p>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">

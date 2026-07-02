@@ -319,8 +319,7 @@ class ClimateSurveyResponse(models.Model):
 
 
 class SurveyManagerPermission(models.Model):
-    """Usuários liberados para gerenciar a Pesquisa de Clima e a Entrevista de
-    Desligamento (incluindo a visualização dos relatórios).
+    """Usuários liberados para gerenciar a Pesquisa de Clima e seus relatórios.
 
     Superadministradores têm acesso independente desta tabela; este registro
     serve para liberar usuários que não são superadmin.
@@ -343,12 +342,44 @@ class SurveyManagerPermission(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Acesso à gestão de pesquisas'
-        verbose_name_plural = 'Acessos à gestão de pesquisas'
+        verbose_name = 'Acesso à gestão da Pesquisa de Clima'
+        verbose_name_plural = 'Acessos à gestão da Pesquisa de Clima'
         ordering = ['user__first_name', 'user__last_name']
 
     def __str__(self):
-        return f'Gestão de pesquisas: {self.user}'
+        return f'Gestão da Pesquisa de Clima: {self.user}'
+
+
+class ExitInterviewAccessPermission(models.Model):
+    """Usuários liberados para ver e conduzir a Entrevista de Desligamento.
+
+    Superadministradores têm acesso automático; esta tabela libera usuários que
+    não são superadmin sem conceder gestão da Pesquisa de Clima.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='exit_interview_access_permission',
+        verbose_name='Usuário liberado',
+    )
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exit_interview_permissions_granted',
+        verbose_name='Liberado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Acesso à Entrevista de Desligamento'
+        verbose_name_plural = 'Acessos à Entrevista de Desligamento'
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'Entrevista de Desligamento: {self.user}'
 
 
 class SurveySettings(models.Model):
