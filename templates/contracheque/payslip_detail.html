@@ -25,6 +25,10 @@
                 <span class="inline-flex items-center px-3 py-2 bg-emerald-100 text-emerald-800 text-sm font-medium rounded-md">
                     <i class="fas fa-check-circle mr-2"></i> Assinado
                 </span>
+                <a href="{% url 'contracheque:payslip_signed_pdf' payslip.pk %}"
+                   class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700">
+                    <i class="fas fa-file-signature mr-2"></i> Baixar assinado
+                </a>
                 {% endif %}
                 <a href="{% url 'contracheque:payslip_pdf' payslip.pk %}" target="_blank"
                    class="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">

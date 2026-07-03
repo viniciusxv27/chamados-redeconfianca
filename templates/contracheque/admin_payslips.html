@@ -186,6 +186,11 @@
                                 <a href="{% url 'contracheque:payslip_pdf' ps.pk %}" target="_blank" class="text-green-600 hover:text-green-800" title="PDF">
                                     <i class="fas fa-file-pdf"></i>
                                 </a>
+                                {% if ps.is_signed %}
+                                <a href="{% url 'contracheque:payslip_signed_pdf' ps.pk %}" class="text-emerald-600 hover:text-emerald-800" title="Baixar documento assinado">
+                                    <i class="fas fa-file-signature"></i>
+                                </a>
+                                {% endif %}
                                 <form method="post" action="{% url 'contracheque:admin_reupload_payslip_pdf' ps.pk %}" class="inline-flex items-center gap-1" enctype="multipart/form-data"
                                       onsubmit="return confirmReupload(this, '{{ ps.user.full_name|escapejs }}', '{{ ps.period_display|escapejs }}')">
                                     {% csrf_token %}

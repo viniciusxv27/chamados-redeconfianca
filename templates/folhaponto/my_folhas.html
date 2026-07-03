@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Minhas Folhas de Ponto{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-fingerprint text-teal-600 mr-2"></i> Minhas Folhas de Ponto
+        </h2>
+        <div class="flex flex-wrap gap-2 items-center">
+            {% if user.hierarchy == 'SUPERADMIN' %}
+            <a href="{% url 'folhaponto:admin_folhas' %}"
+               class="inline-flex items-center px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                <i class="fas fa-cog mr-2"></i> Administrar
+            </a>
+            {% endif %}
+            <form method="get" class="flex items-center gap-2">
+                <select name="year" onchange="this.form.submit()" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-teal-500 focus:border-teal-500">
+                    <option value="">Todos os anos</option>
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if selected_year == y|stringformat:"d" %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+    </div>
+
+    {% if folhas %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for f in folhas %}
+        <a href="{% url 'folhaponto:folha_detail' f.pk %}" class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition group">
+            <div class="px-4 py-3 border-b bg-teal-50 flex items-center justify-between">
+                <span class="text-sm font-bold text-teal-800">{{ f.month_name }}/{{ f.year }}</span>
+                {% if f.is_signed %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i> Assinada</span>
+                {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-clock mr-1"></i> Pendente</span>
+                {% endif %}
+            </div>
+            <div class="px-4 py-4 space-y-2">
+                <div class="flex justify-between items-baseline">
+                    <div>
+                        <p class="text-xs text-gray-400">Horas trabalhadas</p>
+                        <p class="text-xl font-bold text-teal-700">{{ f.total_trabalhadas|default:"—" }}</p>
+                    </div>
+                    {% if f.total_saldo %}
+                    <div class="text-right">
+                        <p class="text-xs text-gray-400">Saldo</p>
+                        <p class="text-sm font-bold {% if '-' in f.total_saldo %}text-red-600{% else %}text-green-600{% endif %}">{{ f.total_saldo }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 pt-1">
+                    {% if f.dias_faltosos %}<span><i class="fas fa-user-slash text-red-400 mr-1"></i>{{ f.dias_faltosos }} falta(s)</span>{% endif %}
+                    {% if f.job_title %}<span class="truncate">{{ f.job_title }}</span>{% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white shadow rounded-lg p-8 text-center">
+        <i class="fas fa-fingerprint text-4xl text-gray-300 mb-3"></i>
+        <p class="text-gray-500">Nenhuma folha de ponto encontrada.</p>
+        {% if selected_year %}
+        <a href="{% url 'folhaponto:my_folhas' %}" class="text-sm text-teal-600 hover:underline mt-2 inline-block">Ver todos os anos</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

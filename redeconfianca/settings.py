@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'agenda',  # Agenda / Calendário
     'contestacao',  # Contestação de Exclusões
     'contracheque',  # Contracheques / Recibos de Pagamento
+    'folhaponto',  # Folha de Ponto / Cartão de Ponto
     'experiencia',  # Experiência Vivo
     'power_bi',  # Dashboards Power BI
     'simulator',  # Simulador de comissionamento

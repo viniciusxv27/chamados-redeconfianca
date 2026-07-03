@@ -155,6 +155,69 @@ def payslip_pdf(request, pk):
     return response
 
 
+@login_required
+def payslip_signed_pdf(request, pk):
+    """Download do contracheque + folha 'Certificado de Assinatura Digital'."""
+    payslip = get_object_or_404(Payslip, pk=pk)
+
+    if payslip.user != request.user and not is_superadmin(request.user):
+        messages.error(request, 'Sem permissão.')
+        return redirect('contracheque:my_payslips')
+
+    if not payslip.is_signed:
+        messages.error(request, 'Este contracheque ainda não foi assinado.')
+        return redirect('contracheque:payslip_detail', pk=payslip.pk)
+
+    pdf_content = _read_pdf_bytes(payslip.pdf_file) if payslip.pdf_file else None
+
+    # Se for PDF multipágina antigo, recorta a página do funcionário
+    if pdf_content and payslip.pdf_page_number is not None:
+        try:
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(pdf_content)
+            multi = len(doc) > 1
+            doc.close()
+            if multi:
+                single = extract_single_page_pdf(pdf_content, payslip.pdf_page_number)
+                if single:
+                    pdf_content = single
+        except Exception:
+            pass
+
+    from core.signature_cert import build_signed_pdf
+
+    extra = [
+        f'Proventos: R$ {payslip.total_earnings}  |  '
+        f'Descontos: R$ {payslip.total_deductions}  |  '
+        f'Líquido: R$ {payslip.net_pay}',
+    ]
+    signed_str = timezone.localtime(payslip.signed_at).strftime('%d/%m/%Y às %H:%M') \
+        if payslip.signed_at else ''
+
+    signed_bytes = build_signed_pdf(
+        pdf_content,
+        doc_title=f'Contracheque – {payslip.period_display}',
+        person_name=payslip.user.full_name,
+        cpf=payslip.user.cpf or payslip.cpf,
+        signed_at_str=signed_str,
+        ip=payslip.signature_ip,
+        record_id=payslip.pk,
+        signature_data_url=payslip.signature_image,
+        hash_value=payslip.signature_hash,
+        extra_lines=extra,
+    )
+
+    if not signed_bytes:
+        messages.error(request, 'Não foi possível gerar o documento assinado.')
+        return redirect('contracheque:payslip_detail', pk=payslip.pk)
+
+    response = HttpResponse(signed_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'attachment; filename="contracheque_assinado_{payslip.user.pk}_{payslip.year}_{payslip.month:02d}.pdf"'
+    )
+    return response
+
+
 # ─── Área Administrativa (SUPERADMIN) ────────────────────────────────────────
 
 @login_required

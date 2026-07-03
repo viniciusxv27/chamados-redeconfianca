@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+
+{% block title %}Administrar Folhas de Ponto{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-fingerprint text-purple-600 mr-2"></i> Folhas de Ponto – Administração
+        </h2>
+        <div class="flex gap-2 flex-wrap">
+            <a href="{% url 'folhaponto:my_folhas' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                <i class="fas fa-arrow-left mr-2"></i> Minhas
+            </a>
+            <a href="{% url 'folhaponto:admin_import' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700">
+                <i class="fas fa-upload mr-2"></i> Importar PDFs
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form method="get" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs font-medium text-gray-500 mb-1">Buscar</label>
+                <input type="text" name="q" value="{{ search }}" placeholder="Nome, CPF..." class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Ano</label>
+                <select name="year" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
+                    <option value="">Todos</option>
+                    {% for y in years %}<option value="{{ y }}" {% if selected_year == y|stringformat:"d" %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Mês</label>
+                <select name="month" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
+                    <option value="">Todos</option>
+                    {% for m_val, m_name in month_choices %}<option value="{{ m_val }}" {% if selected_month == m_val|stringformat:"d" %}selected{% endif %}>{{ m_name }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700"><i class="fas fa-search mr-1"></i> Filtrar</button>
+        </form>
+    </div>
+
+    <!-- Ações em lote -->
+    <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3"><i class="fas fa-tools text-gray-400 mr-1"></i> Ações em Lote</h3>
+        <div class="flex flex-wrap gap-4">
+            <form id="full-month-form" class="flex items-end gap-2" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Mês</label>
+                    <select name="month" id="full-month" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for m_val, m_name in month_choices %}<option value="{{ m_val }}">{{ m_name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Ano</label>
+                    <select name="year" id="full-year" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">PDF Completo</label>
+                    <input type="file" name="pdf_file" id="full-pdf-file" accept=".pdf" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white">
+                </div>
+                <button type="submit" class="px-3 py-1.5 bg-amber-600 text-white text-sm rounded-md hover:bg-amber-700"><i class="fas fa-cut mr-1"></i> Processar PDF Completo</button>
+            </form>
+
+            <form id="bulk-delete-form" class="flex items-end gap-2">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Mês</label>
+                    <select name="month" id="del-month" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for m_val, m_name in month_choices %}<option value="{{ m_val }}">{{ m_name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Ano</label>
+                    <select name="year" id="del-year" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700"><i class="fas fa-trash-alt mr-1"></i> Excluir Todas do Mês</button>
+            </form>
+
+            <form method="get" action="{% url 'folhaponto:export_signature_report' %}" class="flex items-end gap-2">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Mês</label>
+                    <select name="month" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for m_val, m_name in month_choices %}<option value="{{ m_val }}">{{ m_name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Ano</label>
+                    <select name="year" required class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"><i class="fas fa-download mr-1"></i> Relatório Assinaturas</button>
+            </form>
+        </div>
+        <div id="full-month-result" class="hidden mt-3"></div>
+        <div id="bulk-delete-result" class="hidden mt-3"></div>
+    </div>
+
+    <!-- Tabela -->
+    {% if folhas %}
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Funcionário</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Período</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Assinatura</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Trabalhadas</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Faltas</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for f in folhas %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">
+                            <p class="text-sm font-medium text-gray-900">{{ f.user.full_name }}</p>
+                            <p class="text-xs text-gray-400">{{ f.user.cpf }}</p>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-700">{{ f.period_display }}</td>
+                        <td class="px-4 py-3 text-center">
+                            {% if f.is_signed %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i> Assinado</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-clock mr-1"></i> Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-right text-teal-700">{{ f.total_trabalhadas|default:"—" }}</td>
+                        <td class="px-4 py-3 text-sm text-right font-bold {% if '-' in f.total_saldo %}text-red-700{% else %}text-green-700{% endif %}">{{ f.total_saldo|default:"—" }}</td>
+                        <td class="px-4 py-3 text-sm text-center {% if f.dias_faltosos %}text-red-600 font-bold{% else %}text-gray-400{% endif %}">{{ f.dias_faltosos }}</td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="flex justify-center gap-2 items-center flex-wrap">
+                                <a href="{% url 'folhaponto:folha_detail' f.pk %}" class="text-indigo-600 hover:text-indigo-800" title="Visualizar"><i class="fas fa-eye"></i></a>
+                                <a href="{% url 'folhaponto:folha_pdf' f.pk %}" target="_blank" class="text-teal-600 hover:text-teal-800" title="PDF"><i class="fas fa-file-pdf"></i></a>
+                                {% if f.is_signed %}
+                                <a href="{% url 'folhaponto:folha_signed_pdf' f.pk %}" class="text-emerald-600 hover:text-emerald-800" title="Baixar documento assinado"><i class="fas fa-file-signature"></i></a>
+                                {% endif %}
+                                <form method="post" action="{% url 'folhaponto:admin_reupload_folha_pdf' f.pk %}" class="inline-flex items-center gap-1" enctype="multipart/form-data" onsubmit="return confirmReupload(this, '{{ f.user.full_name|escapejs }}', '{{ f.period_display|escapejs }}')">
+                                    {% csrf_token %}
+                                    <label class="cursor-pointer text-blue-600 hover:text-blue-800" title="Selecionar novo PDF">
+                                        <i class="fas fa-cloud-upload-alt"></i>
+                                        <input type="file" name="pdf_file" accept=".pdf" class="hidden" required>
+                                    </label>
+                                    <button type="submit" class="text-blue-600 hover:text-blue-800" title="Reenviar PDF"><i class="fas fa-sync-alt"></i></button>
+                                </form>
+                                <form method="post" action="{% url 'folhaponto:admin_delete_folha' f.pk %}" class="inline" onsubmit="return confirm('Excluir folha de ponto de {{ f.user.full_name }} – {{ f.period_display }}?')">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-red-600 hover:text-red-800" title="Excluir"><i class="fas fa-trash-alt"></i></button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white shadow rounded-lg p-8 text-center">
+        <i class="fas fa-fingerprint text-4xl text-gray-300 mb-3"></i>
+        <p class="text-gray-500">Nenhuma folha de ponto encontrada.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.getElementById('bulk-delete-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const month = document.getElementById('del-month').value;
+    const year = document.getElementById('del-year').value;
+    const monthName = document.getElementById('del-month').selectedOptions[0].text;
+    if (!confirm(`Tem certeza que deseja excluir TODAS as folhas de ponto de ${monthName}/${year}? Esta ação não pode ser desfeita.`)) return;
+    const resultEl = document.getElementById('bulk-delete-result');
+    try {
+        const resp = await fetch('{% url "folhaponto:api_bulk_delete" %}', { method: 'POST', body: new FormData(this) });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+            resultEl.className = 'mt-3 bg-emerald-50 border border-emerald-200 rounded p-3';
+            resultEl.innerHTML = `<p class="text-sm text-emerald-800"><i class="fas fa-check-circle mr-1"></i> ${data.message}</p>`;
+            resultEl.classList.remove('hidden');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
+            resultEl.innerHTML = `<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> ${data.error}</p>`;
+            resultEl.classList.remove('hidden');
+        }
+    } catch (err) {
+        resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
+        resultEl.innerHTML = '<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> Erro de conexão.</p>';
+        resultEl.classList.remove('hidden');
+    }
+});
+
+document.getElementById('full-month-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const pdfInput = document.getElementById('full-pdf-file');
+    if (!pdfInput.files.length) { alert('Selecione o PDF completo do mês.'); return; }
+    if (!(pdfInput.files[0].name || '').toLowerCase().endsWith('.pdf')) { alert('Arquivo inválido. Envie um PDF (.pdf).'); return; }
+    const monthName = document.getElementById('full-month').selectedOptions[0].text;
+    const year = document.getElementById('full-year').value;
+    if (!confirm(`Processar PDF completo de ${monthName}/${year}? O sistema vai recortar e salvar 1 folha por colaborador.`)) return;
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const oldBtnHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Processando...';
+    const resultEl = document.getElementById('full-month-result');
+    try {
+        const resp = await fetch('{% url "folhaponto:api_process_full_pdf" %}', { method: 'POST', body: new FormData(this) });
+        const data = await resp.json();
+        if (resp.ok) {
+            const details = (data.results || []).slice(0, 15).map((r) => {
+                const tone = r.status === 'error' ? 'text-red-700' : (r.status === 'skip' ? 'text-yellow-700' : 'text-emerald-700');
+                return `<p class="text-xs ${tone}">• ${r.message}</p>`;
+            }).join('');
+            resultEl.className = 'mt-3 bg-emerald-50 border border-emerald-200 rounded p-3';
+            resultEl.innerHTML = `<p class="text-sm text-emerald-800"><i class="fas fa-check-circle mr-1"></i> ${data.message}</p>
+                <p class="text-xs text-emerald-700 mt-1">Sucesso: ${data.success_count} | Criadas: ${data.created_count} | Atualizadas: ${data.updated_count} | Não encontrados: ${(data.unmatched || []).length}</p>
+                ${details ? `<div class="mt-2 space-y-1">${details}</div>` : ''}`;
+            resultEl.classList.remove('hidden');
+            pdfInput.value = '';
+            setTimeout(() => location.reload(), 1800);
+        } else {
+            resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
+            resultEl.innerHTML = `<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> ${data.error || 'Erro ao processar PDF completo.'}</p>`;
+            resultEl.classList.remove('hidden');
+        }
+    } catch (err) {
+        resultEl.className = 'mt-3 bg-red-50 border border-red-200 rounded p-3';
+        resultEl.innerHTML = '<p class="text-sm text-red-800"><i class="fas fa-exclamation-circle mr-1"></i> Erro de conexão.</p>';
+        resultEl.classList.remove('hidden');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = oldBtnHtml;
+    }
+});
+
+function confirmReupload(formEl, employeeName, periodDisplay) {
+    const fileInput = formEl.querySelector('input[name="pdf_file"]');
+    if (!fileInput || !fileInput.files || !fileInput.files.length) { alert('Selecione um arquivo PDF para reenviar.'); return false; }
+    if (!(fileInput.files[0].name || '').toLowerCase().endsWith('.pdf')) { alert('Arquivo inválido. Envie um PDF (.pdf).'); return false; }
+    return confirm(`Reenviar PDF de ${employeeName} (${periodDisplay})?`);
+}
+</script>
+{% endblock %}

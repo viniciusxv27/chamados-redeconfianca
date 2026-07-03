@@ -112,6 +112,7 @@ urlpatterns = [
     path('agenda/', include('agenda.urls')),  # Agenda / Calendário
     path('contestacao/', include('contestacao.urls')),  # Contestação de Exclusões
     path('contracheque/', include('contracheque.urls')),  # Contracheques
+    path('folha-ponto/', include('folhaponto.urls')),  # Folha de Ponto
     path('experiencia/', include('experiencia.urls')),  # Experiência Vivo
     path('power-bi/', include('power_bi.urls')),  # Dashboards Power BI
     path('simulator/', include('simulator.urls')),  # Simulador

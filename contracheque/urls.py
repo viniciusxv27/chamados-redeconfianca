@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.my_payslips, name='my_payslips'),
     path('<int:pk>/', views.payslip_detail, name='payslip_detail'),
     path('<int:pk>/pdf/', views.payslip_pdf, name='payslip_pdf'),
+    path('<int:pk>/pdf-assinado/', views.payslip_signed_pdf, name='payslip_signed_pdf'),
 
     # Área pessoal – Informes de Rendimentos
     path('informes/', views.my_income_reports, name='my_income_reports'),
