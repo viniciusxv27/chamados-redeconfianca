@@ -2806,19 +2806,100 @@ def get_aparte_commission_users():
         return []
 
 
-def build_aparte_commission_data(target_user, year, month):
+# Aba e células fixas da "Planilha de Vendas e Metas" usadas para o realizado
+# da rede no comissionamento "A parte". A aba "RESULTADO COO SNP" traz uma
+# linha por coordenação (linhas 3, 4 e 5); a soma das três = realizado da rede.
+SHEET_RESULTADO_COO = "RESULTADO COO SNP"
+APARTE_REALIZED_ROWS = (3, 4, 5)  # linhas da planilha (1-based) que somamos
+APARTE_REALIZED_COLS = {
+    'movel': ['E'],
+    'fixa': ['H'],           # REAL (quantidade) — usada no atingimento da Fixa
+    'smartphones': ['L'],
+    'essenciais': ['O', 'P'],  # REAL - A + REAL - B
+    'eletronicos': ['S', 'T'],  # REAL - A + REAL - B
+    'seguros': ['W'],
+    'sva': ['Z'],
+}
+APARTE_FIXA_REVENUE_COLS = ['I']  # RECEITA da Fixa (usada só para exibição)
+
+
+def fetch_aparte_realized_from_vendas(urls=None, cache_suffix=None):
+    """Realizado da rede para o comissionamento 'A parte', lido da Planilha de
+    Vendas e Metas (aba "RESULTADO COO SNP", células fixas por pilar).
+
+    Retorna dict no mesmo formato de get_network_realized_sales_from_mysql:
+    {movel, fixa, fixa_qty, smartphones, eletronicos, essenciais, seguros, sva}.
+    """
+    from openpyxl.utils import column_index_from_string
+
+    cache_key = f"aparte_realized_vendas_{cache_suffix or 'default'}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    empty = {
+        'movel': 0.0, 'fixa': 0.0, 'fixa_qty': 0.0, 'smartphones': 0.0,
+        'eletronicos': 0.0, 'essenciais': 0.0, 'seguros': 0.0, 'sva': 0.0,
+    }
+
+    try:
+        if urls is None:
+            urls = get_excel_urls()
+        excel_url = urls.get('vendas')
+        excel_file, error = download_excel_file(excel_url, "vendas_aparte")
+        if error:
+            print(f"[fetch_aparte_realized_from_vendas] Erro ao baixar planilha: {error}")
+            return dict(empty)
+
+        try:
+            df = pd.read_excel(
+                excel_file, sheet_name=SHEET_RESULTADO_COO,
+                header=None, engine='openpyxl',
+            )
+        except Exception as e:
+            print(f"[fetch_aparte_realized_from_vendas] Erro ao ler aba '{SHEET_RESULTADO_COO}': {e}")
+            return dict(empty)
+
+        # Índices 0-based das linhas existentes na planilha.
+        row_idx = [r - 1 for r in APARTE_REALIZED_ROWS if (r - 1) < df.shape[0]]
+
+        def sum_cols(cols):
+            total = 0.0
+            for letter in cols:
+                ci = column_index_from_string(letter) - 1
+                if ci >= df.shape[1] or not row_idx:
+                    continue
+                serie = pd.to_numeric(df.iloc[row_idx, ci], errors='coerce').fillna(0)
+                total += float(serie.sum())
+            return total
+
+        result = {pilar: sum_cols(cols) for pilar, cols in APARTE_REALIZED_COLS.items()}
+        # Coluna H = quantidade da Fixa (base do atingimento); coluna I = receita.
+        result['fixa_qty'] = result['fixa']
+        result['fixa'] = sum_cols(APARTE_FIXA_REVENUE_COLS)
+
+        cache.set(cache_key, result, 300)
+        return result
+    except Exception as e:
+        print(f"[fetch_aparte_realized_from_vendas] Erro: {e}")
+        return dict(empty)
+
+
+def build_aparte_commission_data(target_user, year, month, phase=None):
     """Calcula o comissionamento 'A parte' de um usuário para um mês/ano de referência."""
     from users.models import AParteCommissionConfig
     from simulator.services import (
         get_network_metas_from_power_bi, compute_aparte_commission, get_aparte_factors,
     )
-    from simulator.sql_realizado import get_network_realized_sales_from_mysql
 
     config = AParteCommissionConfig.objects.filter(user=target_user).first()
     factors = get_aparte_factors(config)
     base = config.base_salary if config else 0
     metas = get_network_metas_from_power_bi(year, month)
-    realized = get_network_realized_sales_from_mysql(year=year, month=month)
+    # Realizado da rede vem da Planilha de Vendas e Metas do período/fase selecionado.
+    urls = get_excel_urls(year, month, phase)
+    cache_suffix = f"{year}_{month:02d}_{phase or 'pos'}"
+    realized = fetch_aparte_realized_from_vendas(urls=urls, cache_suffix=cache_suffix)
     calc = compute_aparte_commission(base, factors, metas, realized)
     return {'calc': calc, 'config': config, 'base_salary': float(base or 0)}
 
@@ -2836,7 +2917,9 @@ def commission_aparte_view(request, target_user=None):
     if target_user is None:
         target_user = user
 
-    data = build_aparte_commission_data(target_user, reference['year'], reference['month'])
+    data = build_aparte_commission_data(
+        target_user, reference['year'], reference['month'], reference['phase'],
+    )
     # Enriquecer linhas com valores em percentual para o template.
     for row in data['calc'].get('rows', []):
         row['attainment_pct'] = (row.get('attainment') or 0) * 100
