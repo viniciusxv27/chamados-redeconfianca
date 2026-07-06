@@ -98,7 +98,11 @@ def _sector_feedback_targets(user):
 def _can_give_sector_feedback(user, evaluatee) -> bool:
     if evaluatee is None:
         return False
-    return _sector_feedback_targets(user).filter(id=evaluatee.id).exists()
+    if _sector_feedback_targets(user).filter(id=evaluatee.id).exists():
+        return True
+    # Supervisores podem avaliar os colaboradores PADRÃO do seu setor.
+    from .supervisor_lock import _supervisor_sector_targets
+    return _supervisor_sector_targets(user).filter(id=evaluatee.id).exists()
 
 
 CLIMATE_SURVEY_KEY = 'clima_organizacional_2026'
@@ -1494,11 +1498,23 @@ def manage_all(request):
         .annotate(total=Count('id'))
         .order_by('-total')[:20]
     )
+    max_user_total = user_stats[0]['total'] if user_stats else 0
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    kpis = {
+        'total_feedbacks': Feedback.objects.count(),
+        'feedbacks_month': Feedback.objects.filter(data__gte=month_start).count(),
+        'active_assignments': FeedbackAssignment.objects.filter(status='ACTIVE').count(),
+        'evaluated_users': Feedback.objects.values('evaluatee_id').distinct().count(),
+    }
 
     return render(request, 'feedback/manage.html', {
         'feedbacks': feedbacks[:100],
         'assignments': assignments[:100],
         'user_stats': user_stats,
+        'max_user_total': max_user_total,
+        'kpis': kpis,
         'q': q,
     })
 

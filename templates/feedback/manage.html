@@ -3,79 +3,168 @@
 {% block content %}
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
   <div class="max-w-6xl mx-auto">
-    <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
-      <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-cogs mr-2 text-purple-500"></i>Gerenciar Feedbacks</h1>
-      <div class="flex gap-2 flex-wrap">
-        <a href="{% url 'feedback:assign' %}" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">Nova Atribuição</a>
-        <a href="{% url 'feedback:dashboard' %}" class="px-3 py-2 bg-white border rounded-lg text-sm">Voltar</a>
+
+    <!-- Hero -->
+    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 p-6 sm:p-8 mb-6 text-white shadow-lg">
+      <div class="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10"></div>
+      <div class="absolute -right-16 top-16 w-56 h-56 rounded-full bg-white/5"></div>
+      <div class="relative flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-bold flex items-center gap-3">
+            <i class="fas fa-comments"></i> Gerenciar Feedbacks
+          </h1>
+          <p class="text-white/80 mt-1 text-sm">Acompanhe atribuições, feedbacks aplicados e o ranking de avaliações.</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <a href="{% url 'feedback:reports' %}" class="px-4 py-2 bg-white/15 hover:bg-white/25 backdrop-blur rounded-lg text-sm font-medium transition-colors"><i class="fas fa-chart-line mr-1"></i>Relatórios</a>
+          <a href="{% url 'feedback:assign' %}" class="px-4 py-2 bg-white text-indigo-700 hover:bg-indigo-50 rounded-lg text-sm font-semibold transition-colors"><i class="fas fa-plus mr-1"></i>Nova Atribuição</a>
+        </div>
       </div>
     </div>
 
-    <form method="get" class="mb-4">
-      <input type="text" name="q" value="{{ q }}" placeholder="Buscar por colaborador, avaliador ou setor..." class="w-full sm:w-96 px-4 py-2 border rounded-lg" />
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="fas fa-clipboard-list"></i></div>
+          <div>
+            <div class="text-2xl font-bold text-gray-800">{{ kpis.total_feedbacks }}</div>
+            <div class="text-xs text-gray-500">Feedbacks no total</div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fas fa-calendar-check"></i></div>
+          <div>
+            <div class="text-2xl font-bold text-gray-800">{{ kpis.feedbacks_month }}</div>
+            <div class="text-xs text-gray-500">Aplicados no mês</div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fas fa-user-tag"></i></div>
+          <div>
+            <div class="text-2xl font-bold text-gray-800">{{ kpis.active_assignments }}</div>
+            <div class="text-xs text-gray-500">Atribuições ativas</div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-fuchsia-100 text-fuchsia-600 flex items-center justify-center"><i class="fas fa-users"></i></div>
+          <div>
+            <div class="text-2xl font-bold text-gray-800">{{ kpis.evaluated_users }}</div>
+            <div class="text-xs text-gray-500">Colaboradores avaliados</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Busca -->
+    <form method="get" class="mb-6">
+      <div class="relative max-w-xl">
+        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+        <input type="text" name="q" value="{{ q }}" placeholder="Buscar por colaborador, avaliador ou setor..."
+               class="w-full pl-11 pr-24 py-2.5 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+        <button class="absolute right-1.5 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition-colors">Buscar</button>
+      </div>
+      {% if q %}<a href="{% url 'feedback:manage' %}" class="inline-block mt-2 text-xs text-gray-500 hover:text-indigo-600"><i class="fas fa-times mr-1"></i>Limpar busca "{{ q }}"</a>{% endif %}
     </form>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-white rounded-xl shadow overflow-hidden">
-        <div class="p-4 border-b bg-gray-100"><h2 class="font-semibold">Atribuições</h2></div>
+      <!-- Atribuições -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 class="font-semibold text-gray-800 flex items-center gap-2"><i class="fas fa-user-tag text-amber-500"></i>Atribuições</h2>
+          <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{{ assignments|length }}</span>
+        </div>
         {% if assignments %}
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-600 text-left"><tr><th class="p-3">Avaliador</th><th class="p-3">Avaliado</th><th class="p-3">Recorrência</th><th class="p-3">Status</th><th class="p-3"></th></tr></thead>
-            <tbody class="divide-y">
-              {% for a in assignments %}
-              <tr>
-                <td class="p-3">{{ a.evaluator.get_full_name|default:a.evaluator.username }}</td>
-                <td class="p-3">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}{% if a.evaluatee.has_experience_window %} <span class="ml-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">Janela exp.</span>{% endif %}</td>
-                <td class="p-3">{% if a.monthly %}<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs"><i class="fas fa-calendar-alt mr-1"></i>Mensal</span>{% else %}<span class="text-gray-400 text-xs">Eventual</span>{% endif %}</td>
-                <td class="p-3"><span class="px-2 py-1 rounded text-xs {% if a.status == 'ACTIVE' %}bg-emerald-100 text-emerald-800{% else %}bg-gray-100 text-gray-700{% endif %}">{{ a.get_status_display }}</span></td>
-                <td class="p-3"><form method="post" action="{% url 'feedback:delete_assignment' a.id %}" onsubmit="return confirm('Excluir atribuição?');">{% csrf_token %}<button class="text-red-600 hover:underline text-sm">Excluir</button></form></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="divide-y divide-gray-100 max-h-[28rem] overflow-y-auto">
+            {% for a in assignments %}
+            <div class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="font-medium text-gray-800 truncate">{{ a.evaluator.get_full_name|default:a.evaluator.username }}</span>
+                  <i class="fas fa-arrow-right text-gray-300 text-xs"></i>
+                  <span class="text-gray-700 truncate">{{ a.evaluatee.get_full_name|default:a.evaluatee.username }}</span>
+                </div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  {% if a.monthly %}<span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[11px] font-medium"><i class="fas fa-calendar-alt mr-1"></i>Mensal</span>
+                  {% else %}<span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[11px]">Eventual</span>{% endif %}
+                  {% if a.evaluatee.has_experience_window %}<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[11px]">Janela exp.</span>{% endif %}
+                  <span class="px-2 py-0.5 rounded-full text-[11px] {% if a.status == 'ACTIVE' %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">{{ a.get_status_display }}</span>
+                </div>
+              </div>
+              <form method="post" action="{% url 'feedback:delete_assignment' a.id %}" onsubmit="return confirm('Excluir atribuição?');">{% csrf_token %}
+                <button class="w-8 h-8 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Excluir"><i class="fas fa-trash-alt"></i></button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
         {% else %}
-          <p class="p-6 text-gray-500 text-sm">Sem atribuições.</p>
+          <div class="p-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><p class="text-sm">Sem atribuições.</p></div>
         {% endif %}
       </div>
 
-      <div class="bg-white rounded-xl shadow overflow-hidden">
-        <div class="p-4 border-b bg-gray-100"><h2 class="font-semibold">Feedbacks aplicados</h2></div>
+      <!-- Feedbacks aplicados -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 class="font-semibold text-gray-800 flex items-center gap-2"><i class="fas fa-clipboard-check text-emerald-500"></i>Feedbacks aplicados</h2>
+          <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{{ feedbacks|length }}</span>
+        </div>
         {% if feedbacks %}
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-600 text-left"><tr><th class="p-3">Data</th><th class="p-3">Avaliado</th><th class="p-3">Avaliador</th><th class="p-3">Média</th><th class="p-3"></th></tr></thead>
-            <tbody class="divide-y">
-              {% for f in feedbacks %}
-              <tr>
-                <td class="p-3">{{ f.data }}</td>
-                <td class="p-3"><a href="{% url 'feedback:user_history' f.evaluatee.id %}" class="text-indigo-600 hover:underline">{{ f.evaluatee.get_full_name|default:f.evaluatee.username }}</a></td>
-                <td class="p-3">{{ f.evaluator.get_full_name|default:f.evaluator.username }}</td>
-                <td class="p-3 font-semibold">{{ f.average_score|default:"—" }}</td>
-                <td class="p-3"><a href="{% url 'feedback:detail' f.id %}" class="text-indigo-600 hover:underline">Ver</a></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="divide-y divide-gray-100 max-h-[28rem] overflow-y-auto">
+            {% for f in feedbacks %}
+            <div class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                  {{ f.evaluatee.first_name.0 }}{{ f.evaluatee.last_name.0 }}
+                </div>
+                <div class="min-w-0">
+                  <a href="{% url 'feedback:user_history' f.evaluatee.id %}" class="text-sm font-medium text-gray-800 hover:text-indigo-600 truncate block">{{ f.evaluatee.get_full_name|default:f.evaluatee.username }}</a>
+                  <div class="text-xs text-gray-500 truncate">por {{ f.evaluator.get_full_name|default:f.evaluator.username }} · {{ f.data|date:"d/m/Y" }}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 flex-shrink-0">
+                {% if f.average_score %}<span class="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-semibold"><i class="fas fa-star text-amber-400 mr-1"></i>{{ f.average_score }}</span>{% endif %}
+                <a href="{% url 'feedback:detail' f.id %}" class="text-gray-400 hover:text-indigo-600" title="Ver detalhes"><i class="fas fa-chevron-right"></i></a>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
         {% else %}
-          <p class="p-6 text-gray-500 text-sm">Sem feedbacks registrados.</p>
+          <div class="p-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><p class="text-sm">Sem feedbacks registrados.</p></div>
         {% endif %}
       </div>
     </div>
 
-    <div class="bg-white rounded-xl shadow mt-6 p-6">
-      <h2 class="font-semibold mb-3">Top colaboradores avaliados</h2>
+    <!-- Ranking -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mt-6 p-5 sm:p-6">
+      <h2 class="font-semibold text-gray-800 mb-4 flex items-center gap-2"><i class="fas fa-trophy text-amber-500"></i>Top colaboradores avaliados</h2>
       {% if user_stats %}
-        <ul class="divide-y text-sm">
+        <ul class="space-y-3">
           {% for s in user_stats %}
-            <li class="py-2 flex items-center justify-between">
-              <a href="{% url 'feedback:user_history' s.evaluatee_id %}" class="text-indigo-600 hover:underline">{{ s.evaluatee__first_name }} {{ s.evaluatee__last_name }}</a>
-              <span class="text-gray-600">{{ s.total }} feedback(s)</span>
+            <li>
+              <div class="flex items-center justify-between text-sm mb-1">
+                <a href="{% url 'feedback:user_history' s.evaluatee_id %}" class="font-medium text-gray-700 hover:text-indigo-600 flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold {% if forloop.counter == 1 %}bg-amber-100 text-amber-700{% elif forloop.counter == 2 %}bg-gray-200 text-gray-700{% elif forloop.counter == 3 %}bg-orange-100 text-orange-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ forloop.counter }}</span>
+                  {{ s.evaluatee__first_name }} {{ s.evaluatee__last_name }}
+                </a>
+                <span class="text-gray-500 font-medium">{{ s.total }}</span>
+              </div>
+              <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full" style="width: {% widthratio s.total max_user_total 100 %}%"></div>
+              </div>
             </li>
           {% endfor %}
         </ul>
       {% else %}
-        <p class="text-gray-500 text-sm">Sem dados.</p>
+        <div class="p-6 text-center text-gray-400"><i class="fas fa-chart-bar text-3xl mb-2"></i><p class="text-sm">Sem dados.</p></div>
       {% endif %}
     </div>
+
   </div>
 </div>
 {% endblock %}

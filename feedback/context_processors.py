@@ -31,3 +31,32 @@ def survey_menu(request):
         'show_climate_menu': show_climate,
         'show_exit_interview_menu': can_access_exit_interview,
     }
+
+
+def supervisor_feedback_lock(request):
+    """Bloqueia o portal para SUPERVISOR com feedbacks de setor pendentes.
+
+    O popup é exibido em todas as páginas, exceto nas próprias telas de feedback
+    (para que o supervisor consiga aplicar as avaliações) e no logout.
+    """
+    empty = {'supervisor_feedback_lock': False, 'supervisor_pending_feedbacks': []}
+    if not hasattr(request, 'user') or not request.user.is_authenticated:
+        return empty
+    if getattr(request.user, 'hierarchy', '') != 'SUPERVISOR':
+        return empty
+
+    # Não bloqueia dentro do módulo de feedback nem no logout.
+    path = request.path or ''
+    if path.startswith('/feedback/') or 'logout' in path:
+        return empty
+
+    try:
+        from .supervisor_lock import supervisor_pending_feedback
+        pending = supervisor_pending_feedback(request.user)
+    except Exception:
+        pending = []
+
+    return {
+        'supervisor_feedback_lock': bool(pending),
+        'supervisor_pending_feedbacks': pending,
+    }
