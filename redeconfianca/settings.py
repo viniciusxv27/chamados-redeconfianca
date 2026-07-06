@@ -103,7 +103,6 @@ TEMPLATES = [
                 'assets.context_processors.inventory_context',
                 'contestacao.context_processors.contestacao_menu_context',
                 'feedback.context_processors.survey_menu',
-                'feedback.context_processors.supervisor_feedback_lock',
             ],
         },
     },

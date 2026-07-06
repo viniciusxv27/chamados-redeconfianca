@@ -98,11 +98,7 @@ def _sector_feedback_targets(user):
 def _can_give_sector_feedback(user, evaluatee) -> bool:
     if evaluatee is None:
         return False
-    if _sector_feedback_targets(user).filter(id=evaluatee.id).exists():
-        return True
-    # Supervisores podem avaliar os colaboradores PADRÃO do seu setor.
-    from .supervisor_lock import _supervisor_sector_targets
-    return _supervisor_sector_targets(user).filter(id=evaluatee.id).exists()
+    return _sector_feedback_targets(user).filter(id=evaluatee.id).exists()
 
 
 CLIMATE_SURVEY_KEY = 'clima_organizacional_2026'
