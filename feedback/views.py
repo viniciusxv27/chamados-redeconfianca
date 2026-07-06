@@ -975,8 +975,7 @@ def exit_interview_dismiss(request, user_id):
         dismissal_date = timezone.localdate()
 
     target.is_active = False
-    target.demission_date = dismissal_date
-    target.save(update_fields=['is_active', 'demission_date'])
+    target.save(update_fields=['is_active'])
 
     if participation:
         participation.dismissal_date = dismissal_date
