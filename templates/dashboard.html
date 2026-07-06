@@ -326,10 +326,6 @@
 (function () {
     const modal = document.getElementById('pickupAlertModal');
     if (!modal) return;
-    // Mostra uma vez por sessão, igual ao alerta da janela de experiência.
-    // A assinatura muda se um novo prêmio ficar pendente, reexibindo o popup.
-    const KEY = 'pickup_alert_shown_' + (modal.dataset.signature || '');
-
     window.closePickupAlert = function () {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -338,7 +334,6 @@
     function showPickup() {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        sessionStorage.setItem(KEY, '1');
     }
 
     // O alerta da janela de experiência carrega de forma assíncrona.
@@ -350,7 +345,6 @@
     }
 
     function start() {
-        if (sessionStorage.getItem(KEY)) return;
         const startedAt = performance.now();
         let reminderSeen = false;
         const iv = setInterval(function () {
