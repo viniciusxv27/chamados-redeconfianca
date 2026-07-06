@@ -529,7 +529,7 @@ def notify_pickup(request, redemption_id):
         redemption.save(update_fields=['pickup_deadline', 'pickup_notified_at'])
 
         # Notificação para o usuário
-        from core.notifications import Notification
+        from core.models import Notification
         deadline_str = pickup_deadline.strftime('%d/%m/%Y')
         Notification.objects.create(
             user=redemption.user,
