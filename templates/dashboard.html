@@ -329,16 +329,46 @@
     // Mostra uma vez por sessão, igual ao alerta da janela de experiência.
     // A assinatura muda se um novo prêmio ficar pendente, reexibindo o popup.
     const KEY = 'pickup_alert_shown_' + (modal.dataset.signature || '');
+
     window.closePickupAlert = function () {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     };
-    document.addEventListener('DOMContentLoaded', function () {
-        if (sessionStorage.getItem(KEY)) return;
+
+    function showPickup() {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         sessionStorage.setItem(KEY, '1');
-    });
+    }
+
+    // O alerta da janela de experiência carrega de forma assíncrona.
+    // Só exibimos o popup de retirada depois que aquele for exibido e fechado
+    // (ou depois de um curto período, caso ele não apareça).
+    function reminderVisible() {
+        const r = document.getElementById('feedback-reminder-modal');
+        return r && !r.classList.contains('hidden');
+    }
+
+    function start() {
+        if (sessionStorage.getItem(KEY)) return;
+        const startedAt = performance.now();
+        let reminderSeen = false;
+        const iv = setInterval(function () {
+            if (reminderVisible()) { reminderSeen = true; return; }
+            // Não está visível: se já apareceu e fechou, ou nunca apareceu no
+            // período de espera, mostramos o popup de retirada.
+            if (reminderSeen || performance.now() - startedAt > 2500) {
+                clearInterval(iv);
+                showPickup();
+            }
+        }, 250);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+    } else {
+        start();
+    }
 })();
 </script>
 {% endif %}
