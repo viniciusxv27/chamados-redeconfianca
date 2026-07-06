@@ -285,7 +285,7 @@
 
 {% if pickup_redemptions %}
 <!-- Popup: prêmios aguardando retirada na SEDE -->
-<div id="pickupAlertModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+<div id="pickupAlertModal" data-signature="{% for r in pickup_redemptions %}{{ r.id }}:{{ r.pickup_deadline|date:'Ymd' }}|{% endfor %}" class="hidden fixed inset-0 z-[9999] items-center justify-center bg-black/50 px-4">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div class="px-6 py-4 border-b border-gray-200 flex items-center">
             <i class="fas fa-gift text-primary text-xl mr-2"></i>
@@ -323,9 +323,23 @@
     </div>
 </div>
 <script>
-function closePickupAlert() {
-    document.getElementById('pickupAlertModal').remove();
-}
+(function () {
+    const modal = document.getElementById('pickupAlertModal');
+    if (!modal) return;
+    // Mostra uma vez por sessão, igual ao alerta da janela de experiência.
+    // A assinatura muda se um novo prêmio ficar pendente, reexibindo o popup.
+    const KEY = 'pickup_alert_shown_' + (modal.dataset.signature || '');
+    window.closePickupAlert = function () {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+    document.addEventListener('DOMContentLoaded', function () {
+        if (sessionStorage.getItem(KEY)) return;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        sessionStorage.setItem(KEY, '1');
+    });
+})();
 </script>
 {% endif %}
 {% endblock %}
