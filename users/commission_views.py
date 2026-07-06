@@ -666,16 +666,16 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
         'sva': {'total': 0, 'pago': 0, 'exclusao': 0},
     }
     
-    # Mapeamento de texto do pilar para chave
+    # Mapeamento de texto do pilar para chave (chaves sem acento; o texto do
+    # pilar também é normalizado sem acento antes da comparação).
     pilar_mapping = {
-        'MÓVEL': 'movel',
+        'MOVEL': 'movel',
         'FIXA': 'fixa',
         'SMART': 'smartphone',
         'SMARTPHONE': 'smartphone',
         'ELETRO': 'eletronicos',
-        'ELETRÔNICO': 'eletronicos',
+        'ELETRONICO': 'eletronicos',
         'ELETRONICOS': 'eletronicos',
-        'ELETRÔNICOS': 'eletronicos',
         'ESSEN': 'essenciais',
         'ESSENCIAL': 'essenciais',
         'ESSENCIAIS': 'essenciais',
@@ -684,11 +684,13 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
         'SEGUROS': 'seguro',
         'SVA': 'sva',
     }
-    
+
     def normalize_text(text):
         if pd.isna(text):
             return ""
-        return str(text).strip().upper()
+        text = str(text).strip().upper()
+        text = unicodedata.normalize('NFKD', text)
+        return ''.join(ch for ch in text if not unicodedata.combining(ch))
     
     def normalize_sector(sector_name):
         """Normaliza nome do setor para comparação."""
@@ -1005,8 +1007,10 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
     def normalize_text(text):
         if pd.isna(text):
             return ""
-        return str(text).strip().upper()
-    
+        text = str(text).strip().upper()
+        text = unicodedata.normalize('NFKD', text)
+        return ''.join(ch for ch in text if not unicodedata.combining(ch))
+
     def get_first_name(name):
         """Extrai o primeiro nome de uma string"""
         if pd.isna(name) or not str(name).strip():
