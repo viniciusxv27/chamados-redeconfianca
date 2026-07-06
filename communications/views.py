@@ -162,10 +162,20 @@ def home_feed(request):
     except Exception:
         mandatory_trails_pending = []
 
+    # Resgates aprovados aguardando retirada na SEDE (popup na home)
+    from prizes.models import Redemption
+    pickup_redemptions = Redemption.objects.filter(
+        user=request.user,
+        status='APROVADO',
+        pickup_notified_at__isnull=False,
+        pickup_deadline__isnull=False,
+    ).select_related('prize').order_by('pickup_deadline')
+
     context = {
         'pinned_communications': pinned_communications,
         'communications': communications,
         'recent_compliments': recent_compliments,
+        'pickup_redemptions': pickup_redemptions,
         'mandatory_trails_pending': mandatory_trails_pending,
         'show_mandatory_trails_popup': bool(mandatory_trails_pending),
         'show_experience_window_popup': show_experience_window_popup and (
