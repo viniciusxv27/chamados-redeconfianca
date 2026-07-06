@@ -1248,6 +1248,11 @@ def compute_consultor_simulation(
         _real_fixa_rev = _real_consultor.get('fixa', 0.0) or 0.0
         _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
         fixa_revenue = fixa_quantity * _ticket_medio_fixa
+        # Receita informada manualmente tem prioridade sobre a estimativa
+        # (qtd × ticket médio). O atingimento de Fixa continua sendo por quantidade.
+        _fixa_receita_input = _get_sim_input_optional(simulator_inputs, 'fixa', 'receita')
+        if _fixa_receita_input is not None:
+            fixa_revenue = _fixa_receita_input
         ind_values['fixa'] = fixa_revenue
     else:  # VIEW_PROJECAO
         # Projeção dinâmica: pega o realizado do MySQL e projeta pelo DU.
@@ -1651,6 +1656,11 @@ def compute_gerente_simulation(
         _real_fixa_rev = _real_pdv.get('fixa', 0.0) or 0.0
         _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
         fixa_revenue = fixa_quantity * _ticket_medio_fixa
+        # Receita informada manualmente tem prioridade sobre a estimativa
+        # (qtd × ticket médio). O atingimento de Fixa continua sendo por quantidade.
+        _fixa_receita_input = _get_sim_input_optional(simulator_inputs, 'fixa', 'receita')
+        if _fixa_receita_input is not None:
+            fixa_revenue = _fixa_receita_input
         proj_map['fixa'] = fixa_revenue
         # Permite sobrescrever metas
         for key in list(meta_map.keys()):
@@ -1971,6 +1981,11 @@ def compute_coordenador_simulation(
         _real_fixa_rev = _real_coord.get('fixa', 0.0) or 0.0
         _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
         fixa_revenue = fixa_quantity * _ticket_medio_fixa
+        # Receita informada manualmente tem prioridade sobre a estimativa
+        # (qtd × ticket médio). O atingimento de Fixa continua sendo por quantidade.
+        _fixa_receita_input = _get_sim_input_optional(simulator_inputs, 'fixa', 'receita')
+        if _fixa_receita_input is not None:
+            fixa_revenue = _fixa_receita_input
         proj_map['fixa'] = fixa_revenue
         for key in list(meta_map.keys()):
             override = _get_sim_input_optional(simulator_inputs, key, 'meta')
