@@ -104,7 +104,16 @@ def dashboard(request):
     
     # Comunicações recentes
     recent_comms = Communication.objects.order_by('-created_at')[:5]
-    
+
+    # Resgates aprovados aguardando retirada na SEDE (popup na home)
+    from prizes.models import Redemption
+    pickup_redemptions = Redemption.objects.filter(
+        user=user,
+        status='APROVADO',
+        pickup_notified_at__isnull=False,
+        pickup_deadline__isnull=False,
+    ).select_related('prize').order_by('pickup_deadline')
+
     context = {
         'stats': {
             'total_tickets': total_tickets,
@@ -117,6 +126,7 @@ def dashboard(request):
             'recent_communications': recent_communications,
         },
         'pinned_communications': pinned_communications,
+        'pickup_redemptions': pickup_redemptions,
         'tickets_by_category': tickets_by_category,
         'recent_tickets': recent_tickets,
         'recent_communications': recent_comms,

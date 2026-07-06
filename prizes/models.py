@@ -189,6 +189,9 @@ class Redemption(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Data da Aprovação")
     delivered_at = models.DateTimeField(null=True, blank=True, verbose_name="Data da Entrega")
     delivery_notes = models.TextField(blank=True, verbose_name="Observações de Entrega")
+    # Retirada na SEDE
+    pickup_deadline = models.DateField(null=True, blank=True, verbose_name="Data Limite para Retirada")
+    pickup_notified_at = models.DateTimeField(null=True, blank=True, verbose_name="Notificado para Retirada em")
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -206,6 +209,15 @@ class Redemption(models.Model):
     
     def __str__(self):
         return f"{self.user.full_name} - {self.prize.name}"
+
+    @property
+    def awaiting_pickup(self):
+        """Resgate aprovado, aguardando retirada na SEDE (usuário já notificado)."""
+        return (
+            self.status == 'APROVADO'
+            and self.pickup_deadline is not None
+            and self.pickup_notified_at is not None
+        )
 
 
 class CSTransaction(models.Model):

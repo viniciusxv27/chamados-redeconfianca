@@ -493,6 +493,73 @@ def update_redemption_status(request, redemption_id):
 
 @login_required
 @require_POST
+def notify_pickup(request, redemption_id):
+    """Notifica o usuário que o prêmio está na SEDE e define a data limite de retirada."""
+    if not request.user.can_manage_users():
+        return JsonResponse({'success': False, 'error': 'Acesso negado'})
+
+    redemption = get_object_or_404(Redemption, id=redemption_id)
+
+    if redemption.status != 'APROVADO':
+        return JsonResponse({'success': False, 'error': 'Apenas resgates aprovados podem ser notificados para retirada.'})
+
+    # Aceitar dados JSON ou form data
+    if request.content_type == 'application/json':
+        import json
+        data = json.loads(request.body)
+        deadline_raw = (data.get('pickup_deadline') or '').strip()
+    else:
+        deadline_raw = (request.POST.get('pickup_deadline') or '').strip()
+
+    if not deadline_raw:
+        return JsonResponse({'success': False, 'error': 'Informe a data limite para retirada.'})
+
+    from datetime import datetime
+    try:
+        pickup_deadline = datetime.strptime(deadline_raw, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'success': False, 'error': 'Data inválida.'})
+
+    if pickup_deadline < timezone.now().date():
+        return JsonResponse({'success': False, 'error': 'A data limite não pode ser no passado.'})
+
+    try:
+        redemption.pickup_deadline = pickup_deadline
+        redemption.pickup_notified_at = timezone.now()
+        redemption.save(update_fields=['pickup_deadline', 'pickup_notified_at'])
+
+        # Notificação para o usuário
+        from core.notifications import Notification
+        deadline_str = pickup_deadline.strftime('%d/%m/%Y')
+        Notification.objects.create(
+            user=redemption.user,
+            title='Prêmio disponível para retirada',
+            message=(
+                f'Seu resgate de "{redemption.prize.name}" está na SEDE. '
+                f'Retire até {deadline_str}.'
+            ),
+            notification_type='SYSTEM',
+            related_object_id=redemption.id,
+            related_url='/prizes/my-redemptions/',
+        )
+
+        # Log da ação
+        from core.middleware import log_action
+        log_action(
+            request.user,
+            'REDEMPTION_PICKUP_NOTIFY',
+            f'Usuário notificado sobre retirada do resgate #{redemption.id} até {deadline_str}',
+            request
+        )
+
+        return JsonResponse({'success': True})
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+@require_POST
 def cancel_redemption(request, redemption_id):
     """Cancelar resgate - Admin ou próprio usuário"""
     redemption = get_object_or_404(Redemption, id=redemption_id)

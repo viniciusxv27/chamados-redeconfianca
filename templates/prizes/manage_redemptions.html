@@ -214,7 +214,11 @@
                                         <i class="fas fa-check mr-1"></i>Aprovar
                                     </button>
                                 {% elif redemption.status == 'APROVADO' %}
-                                    <button onclick="updateStatus({{ redemption.id }}, 'ENTREGUE')" 
+                                    <button onclick="openPickupModal({{ redemption.id }}, '{{ redemption.user.full_name|escapejs }}'{% if redemption.pickup_deadline %}, '{{ redemption.pickup_deadline|date:"Y-m-d" }}'{% endif %})"
+                                            class="{% if redemption.pickup_notified_at %}text-purple-600 hover:text-purple-900{% else %}text-indigo-600 hover:text-indigo-900{% endif %}">
+                                        <i class="fas fa-bell mr-1"></i>{% if redemption.pickup_notified_at %}Retirada até {{ redemption.pickup_deadline|date:"d/m" }}{% else %}Notificar retirada{% endif %}
+                                    </button>
+                                    <button onclick="updateStatus({{ redemption.id }}, 'ENTREGUE')"
                                             class="text-green-600 hover:text-green-900">
                                         <i class="fas fa-truck mr-1"></i>Entregar
                                     </button>
@@ -268,7 +272,85 @@
     </div>
 </div>
 
+<!-- Modal Notificar Retirada -->
+<div id="pickupModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center">
+            <i class="fas fa-bell text-indigo-600 mr-2"></i>
+            <h3 class="text-lg font-semibold text-gray-900">Notificar retirada na SEDE</h3>
+        </div>
+        <div class="px-6 py-4">
+            <p class="text-sm text-gray-600 mb-4">
+                O usuário <span id="pickupUserName" class="font-semibold text-gray-900"></span> será avisado
+                de que o prêmio está na SEDE e deve ser retirado até a data escolhida.
+            </p>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data limite para retirada</label>
+            <input type="date" id="pickupDeadline"
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <button type="button" onclick="closePickupModal()"
+                    class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+                Cancelar
+            </button>
+            <button type="button" onclick="submitPickup()"
+                    class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
+                <i class="fas fa-paper-plane mr-1"></i>Notificar usuário
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
+let pickupRedemptionId = null;
+
+function openPickupModal(redemptionId, userName, currentDeadline) {
+    pickupRedemptionId = redemptionId;
+    document.getElementById('pickupUserName').textContent = userName;
+    const input = document.getElementById('pickupDeadline');
+    const today = new Date().toISOString().split('T')[0];
+    input.min = today;
+    input.value = currentDeadline || '';
+    const modal = document.getElementById('pickupModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closePickupModal() {
+    const modal = document.getElementById('pickupModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    pickupRedemptionId = null;
+}
+
+function submitPickup() {
+    const deadline = document.getElementById('pickupDeadline').value;
+    if (!deadline) {
+        alert('Selecione a data limite para retirada.');
+        return;
+    }
+    fetch(`/prizes/redemptions/${pickupRedemptionId}/notify-pickup/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pickup_deadline: deadline })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erro ao notificar: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erro ao notificar usuário');
+    });
+}
+
 function updateStatus(redemptionId, newStatus) {
     const statusText = {
         'APROVADO': 'aprovar',
