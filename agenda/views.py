@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, time, date as date_type
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files import File
+from django.core.files.storage import default_storage
 from django.db import close_old_connections
 from django.db.models import Case, IntegerField, Q, Value, When
 from django.http import JsonResponse
@@ -18,6 +19,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import User, Sector
+from core.storage import get_media_storage
 from .models import CalendarEvent, MeetingRequest, EventParticipant, MeetingTranscription
 
 try:
@@ -1399,10 +1401,9 @@ def _save_uploaded_audio_to_temp(uploaded_file):
     return tmp_file.name
 
 
-def _get_transcription_upload_temp_base():
-    base_dir = os.path.join(tempfile.gettempdir(), 'agenda_transcription_uploads')
-    os.makedirs(base_dir, exist_ok=True)
-    return base_dir
+# Prefixo (dentro do storage de mídia) onde ficam os pedaços brutos de cada
+# gravação. Com USE_S3=True isso vira o MinIO; caso contrário, o MEDIA_ROOT local.
+TRANSCRIPTION_PARTS_PREFIX = 'transcriptions/parts'
 
 
 def _sanitize_upload_id(value):
@@ -1412,8 +1413,68 @@ def _sanitize_upload_id(value):
     return upload_id
 
 
-def _get_upload_dir(upload_id):
-    return os.path.join(_get_transcription_upload_temp_base(), upload_id)
+def _get_transcription_parts_storage():
+    """Storage dos pedaços — o mesmo do audio_file (MinIO quando USE_S3)."""
+    return get_media_storage() or default_storage
+
+
+def _transcription_parts_dir(upload_id):
+    return f'{TRANSCRIPTION_PARTS_PREFIX}/{upload_id}'
+
+
+def _transcription_part_name(upload_id, chunk_index, suffix='.webm'):
+    suffix = suffix or '.webm'
+    return f'{_transcription_parts_dir(upload_id)}/part_{int(chunk_index):06d}{suffix}'
+
+
+def _list_transcription_parts(storage, upload_id):
+    """Nomes completos das partes já persistidas no storage, ordenados por índice."""
+    directory = _transcription_parts_dir(upload_id)
+    try:
+        _dirs, files = storage.listdir(directory)
+    except (FileNotFoundError, NotADirectoryError):
+        return []
+    except Exception:
+        files = []
+    part_files = sorted(name for name in files if name.startswith('part_'))
+    return [f'{directory}/{name}' for name in part_files]
+
+
+def _assemble_transcription_parts_to_temp(upload_id, original_audio_name):
+    """Baixa as partes do storage e concatena num arquivo temporário local.
+
+    Retorna (temp_path, parts_count) ou (None, 0) se não houver partes.
+    Feito por streaming (1MB por vez) para suportar gravações de muitas horas
+    sem carregar tudo na memória.
+    """
+    storage = _get_transcription_parts_storage()
+    parts = _list_transcription_parts(storage, upload_id)
+    if not parts:
+        return None, 0
+
+    _, ext = os.path.splitext(original_audio_name or 'audio.webm')
+    suffix = ext or '.webm'
+
+    tmp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_path = tmp_file.name
+    try:
+        for part_name in parts:
+            source = storage.open(part_name, 'rb')
+            try:
+                while True:
+                    data = source.read(1024 * 1024)
+                    if not data:
+                        break
+                    tmp_file.write(data)
+            finally:
+                try:
+                    source.close()
+                except Exception:
+                    pass
+    finally:
+        tmp_file.close()
+
+    return tmp_path, len(parts)
 
 
 @login_required
@@ -1440,43 +1501,48 @@ def api_transcription_upload_chunk(request):
     if not audio_chunk:
         return JsonResponse({'error': 'Nenhum chunk enviado.'}, status=400)
 
-    upload_dir = _get_upload_dir(upload_id)
-    os.makedirs(upload_dir, exist_ok=True)
-    part_path = os.path.join(upload_dir, f'part_{chunk_index:06d}')
-    tmp_path = part_path + '.tmp'
+    # Sufixo a partir do nome enviado (default .webm).
+    original_name = getattr(audio_chunk, 'name', '') or 'audio.webm'
+    _, ext = os.path.splitext(original_name)
+    suffix = ext or '.webm'
 
-    # Escrita atômica: grava em .tmp e renomeia ao final para evitar partes corrompidas
-    # caso o cliente reenvie o mesmo índice após uma falha de rede.
+    # Persiste a parte direto no storage de mídia (MinIO quando USE_S3), para que
+    # gravações longas (horas) não fiquem só em disco efêmero e não se percam se
+    # o processo/servidor reiniciar no meio.
+    storage = _get_transcription_parts_storage()
+    name = _transcription_part_name(upload_id, chunk_index, suffix)
+
     try:
-        with open(tmp_path, 'wb') as target:
-            for data in audio_chunk.chunks():
-                target.write(data)
-            target.flush()
-            try:
-                os.fsync(target.fileno())
-            except OSError:
-                pass
-        os.replace(tmp_path, part_path)
-    except Exception as exc:
+        # Idempotente: se o mesmo índice for reenviado após falha de rede,
+        # sobrescreve a parte anterior mantendo o nome determinístico.
+        if storage.exists(name):
+            storage.delete(name)
+        saved_name = storage.save(name, audio_chunk)
         try:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-        except OSError:
-            pass
-        return JsonResponse({'error': f'Falha ao salvar parte: {exc}'}, status=500)
+            size = storage.size(saved_name)
+        except Exception:
+            size = getattr(audio_chunk, 'size', 0)
+    except Exception as exc:
+        return JsonResponse({'error': f'Falha ao salvar parte no armazenamento: {exc}'}, status=500)
 
     return JsonResponse({
         'upload_id': upload_id,
         'chunk_index': chunk_index,
         'received': True,
-        'size': os.path.getsize(part_path),
+        'stored': saved_name,
+        'size': size,
     })
 
 
 @login_required
 @require_POST
 def api_transcription_upload_finalize(request):
-    """Finaliza upload chunked, monta o arquivo e inicia transcrição."""
+    """Finaliza upload chunked: valida as partes no MinIO e inicia a transcrição.
+
+    A montagem do áudio consolidado (baixar + concatenar as partes) NÃO é feita
+    aqui — ela roda no job em background. Para gravações de 24h isso evita
+    estourar o tempo da request e mantém o retorno rápido.
+    """
     from django.conf import settings as django_settings
 
     upload_id = _sanitize_upload_id(request.POST.get('upload_id'))
@@ -1504,19 +1570,13 @@ def api_transcription_upload_finalize(request):
     if not api_key:
         return JsonResponse({'error': 'Chave da API OpenAI não configurada. Configure OPENAI_API_KEY no .env'}, status=500)
 
-    upload_dir = _get_upload_dir(upload_id)
-    if not os.path.isdir(upload_dir):
-        return JsonResponse({'error': 'Upload não encontrado.'}, status=404)
-
-    parts = sorted(
-        [
-            name for name in os.listdir(upload_dir)
-            if name.startswith('part_')
-        ]
-    )
+    # As partes já foram persistidas no MinIO durante a gravação — aqui só
+    # conferimos quantas chegaram.
+    storage = _get_transcription_parts_storage()
+    parts = _list_transcription_parts(storage, upload_id)
 
     if not parts:
-        return JsonResponse({'error': 'Nenhuma parte do áudio foi recebida. Tente gravar novamente.'}, status=400)
+        return JsonResponse({'error': 'Nenhuma parte do áudio foi encontrada no armazenamento. Tente gravar novamente.'}, status=400)
 
     # Tolerância: se faltarem algumas partes (ex.: queda momentânea de rede),
     # processamos o que está disponível em vez de descartar todo o áudio.
@@ -1525,32 +1585,6 @@ def api_transcription_upload_finalize(request):
         missing_chunks = total_chunks - len(parts)
 
     original_audio_name = request.POST.get('original_audio_name', '') or 'audio.webm'
-    _, ext = os.path.splitext(original_audio_name)
-    suffix = ext or '.webm'
-
-    temp_output = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    temp_path = temp_output.name
-    try:
-        for part in parts:
-            part_path = os.path.join(upload_dir, part)
-            with open(part_path, 'rb') as source:
-                while True:
-                    chunk = source.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    temp_output.write(chunk)
-    finally:
-        temp_output.close()
-
-    for part in parts:
-        try:
-            os.unlink(os.path.join(upload_dir, part))
-        except OSError:
-            pass
-    try:
-        os.rmdir(upload_dir)
-    except OSError:
-        pass
 
     event = None
     if event_id:
@@ -1573,8 +1607,9 @@ def api_transcription_upload_finalize(request):
         api_key=api_key,
         mode='upload',
         options={
-            'temp_audio_path': temp_path,
+            'parts_upload_id': upload_id,
             'original_audio_name': original_audio_name,
+            'duration_hint': duration_seconds,
         },
     )
 
@@ -1615,10 +1650,19 @@ def _copy_storage_file_to_temp(field_file):
     return tmp_path
 
 
-def _convert_to_mp3(input_path):
+def _convert_to_mp3(input_path, timeout=None):
     """Converte áudio para mp3 (mono/16kHz) usando ffmpeg e retorna o path gerado."""
     base_name, _ = os.path.splitext(input_path)
     output_path = f'{base_name}_normalized.mp3'
+
+    if timeout is None:
+        # Timeout adaptativo ao tamanho: gravações longas (várias horas) levam
+        # mais tempo para transcodificar. ~4s por MB, mínimo 30min, teto 6h.
+        try:
+            size_mb = os.path.getsize(input_path) / (1024 * 1024)
+        except OSError:
+            size_mb = 0
+        timeout = int(max(1800, min(6 * 3600, size_mb * 4)))
 
     try:
         subprocess.run(
@@ -1627,7 +1671,7 @@ def _convert_to_mp3(input_path):
                 '-ab', '64k', '-ar', '16000', '-ac', '1', output_path,
             ],
             capture_output=True,
-            timeout=1800,  # Aumentado para 30min (era 900)
+            timeout=timeout,
             check=True,
         )
         return output_path
@@ -1652,13 +1696,15 @@ def _extract_whisper_text_and_duration(whisper_response):
     return raw_text.strip(), duration
 
 
-def _transcribe_audio_from_storage(client, field_file):
+def _transcribe_audio_from_storage(client, field_file, duration_hint=0):
     """Transcreve um áudio armazenado no storage (S3/local) com uso seguro de memória."""
     temp_source_path = _copy_storage_file_to_temp(field_file)
     original_name = os.path.basename(getattr(field_file, 'name', '') or 'audio.webm')
 
     try:
-        return _transcribe_audio_path(client, temp_source_path, original_name)
+        return _transcribe_audio_path(
+            client, temp_source_path, original_name, duration_hint=duration_hint
+        )
     finally:
         if os.path.exists(temp_source_path):
             os.unlink(temp_source_path)
@@ -1681,15 +1727,25 @@ def _probe_audio_duration_seconds(file_path):
         return None
 
 
-def _transcribe_audio_path(client, source_path, original_filename):
+def _transcribe_audio_path(client, source_path, original_filename, duration_hint=0):
     """Converte para mp3 quando possível, divide em partes se necessário e transcreve com retry."""
     whisper_max_size = 24 * 1024 * 1024  # 24MB
     long_audio_seconds = 1500  # acima de ~25min, segmentar para mais robustez
 
-    duration_seconds = _probe_audio_duration_seconds(source_path)
+    duration_hint = int(duration_hint or 0)
+
+    # A duração vinda do ffprobe é a fonte primária; o hint (cronômetro do
+    # cliente) entra como fallback. Isso é essencial em gravações de 24h cujo
+    # webm concatenado às vezes não expõe a duração — sem o hint, a segmentação
+    # assumiria só 1h e cortaria o restante do áudio.
+    probed_duration = _probe_audio_duration_seconds(source_path)
+    duration_seconds = probed_duration or (duration_hint or None)
+
     if duration_seconds and duration_seconds >= long_audio_seconds:
         try:
-            raw_text = _split_and_transcribe(client, source_path)
+            raw_text = _split_and_transcribe(
+                client, source_path, total_duration_hint=duration_seconds
+            )
             return raw_text, int(duration_seconds)
         except Exception:
             # Se falhar a segmentacao, tenta o fluxo tradicional
@@ -1713,7 +1769,9 @@ def _transcribe_audio_path(client, source_path, original_filename):
                 return _try_transcribe_file(client, mp3_path, is_converted=True, max_retries=3)
 
             # Se ainda for grande, divide em segmentos
-            raw_text = _split_and_transcribe(client, mp3_path)
+            raw_text = _split_and_transcribe(
+                client, mp3_path, total_duration_hint=duration_seconds or duration_hint
+            )
             return raw_text, duration_seconds
         finally:
             if os.path.exists(mp3_path):
@@ -1759,9 +1817,11 @@ def _try_transcribe_file(client, file_path, is_converted=False, max_retries=2, r
             raise
 
 
-def _split_and_transcribe(client, mp3_path):
+def _split_and_transcribe(client, mp3_path, total_duration_hint=0):
     """Divide áudio grande em segmentos de tempo e concatena as transcrições com retry."""
-    total_duration = _probe_audio_duration_seconds(mp3_path) or 3600
+    # Fallback para o hint (cronômetro do cliente) quando o ffprobe não consegue
+    # ler a duração — sem isso, gravações longas seriam truncadas em 1h.
+    total_duration = _probe_audio_duration_seconds(mp3_path) or int(total_duration_hint or 0) or 3600
 
     if total_duration >= 6 * 3600:
         segment_seconds = 900
@@ -1906,12 +1966,34 @@ def _ensure_transcription_calendar_event(transcription, user):
     transcription.save(update_fields=['calendar_event_created'])
 
 
-def _process_transcription_upload_job(transcription_id, client, source_path=None, original_audio_name=None):
+def _process_transcription_upload_job(
+    transcription_id,
+    client,
+    source_path=None,
+    original_audio_name=None,
+    parts_upload_id=None,
+    duration_hint=0,
+):
     """Pipeline principal de transcrição inicial."""
     transcription = MeetingTranscription.objects.select_related('owner').get(pk=transcription_id)
     temp_path = source_path
 
+    # Fluxo de gravação longa: as partes foram salvas no MinIO durante a captura.
+    # Aqui baixamos e concatenamos num único arquivo temporário para transcrever.
+    # As partes NÃO são apagadas (ficam como backup para reprocessar).
+    if not temp_path and parts_upload_id:
+        temp_path, _parts_count = _assemble_transcription_parts_to_temp(
+            parts_upload_id, original_audio_name
+        )
+        if not temp_path:
+            raise ValueError('Nenhuma parte do áudio foi encontrada no armazenamento.')
+
+    duration_hint = int(duration_hint or 0) or int(getattr(transcription, 'duration_seconds', 0) or 0)
+
     if temp_path:
+        # Salva o áudio consolidado no MinIO cedo. Assim, se a transcrição falhar
+        # no meio, o áudio completo já está persistido e o reprocessamento
+        # consegue retranscrever do zero sem perder a gravação.
         original_name = original_audio_name or os.path.basename(temp_path) or 'audio.webm'
         with open(temp_path, 'rb') as audio_stream:
             transcription.audio_file.save(original_name, File(audio_stream), save=False)
@@ -1923,12 +2005,15 @@ def _process_transcription_upload_job(transcription_id, client, source_path=None
                 client,
                 temp_path,
                 original_audio_name or os.path.basename(temp_path) or 'audio.webm',
+                duration_hint=duration_hint,
             )
         else:
             if not transcription.audio_file:
                 raise ValueError('Arquivo de áudio não encontrado para processamento.')
 
-            raw_text, duration = _transcribe_audio_from_storage(client, transcription.audio_file)
+            raw_text, duration = _transcribe_audio_from_storage(
+                client, transcription.audio_file, duration_hint=duration_hint
+            )
 
         if not raw_text:
             raise ValueError('Falha ao transcrever áudio enviado.')
@@ -2075,6 +2160,8 @@ def _run_transcription_background_job(transcription_id, api_key, mode, options=N
                 client,
                 source_path=options.get('temp_audio_path'),
                 original_audio_name=options.get('original_audio_name'),
+                parts_upload_id=options.get('parts_upload_id'),
+                duration_hint=options.get('duration_hint', 0),
             )
         else:
             _process_transcription_reprocess_job(transcription_id, client, options=options)
