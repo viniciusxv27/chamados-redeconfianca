@@ -8,6 +8,7 @@ urlpatterns = [
     path('pesquisa-clima/', views.climate_survey, name='climate_survey'),
     path('pesquisa-clima/progresso/', views.climate_survey_progress, name='climate_survey_progress'),
     path('pesquisa-clima/relatorio/', views.climate_survey_report, name='climate_survey_report'),
+    path('pesquisa-clima/relatorio/exportar/', views.climate_survey_report_export, name='climate_survey_report_export'),
     path('pesquisa-clima/acessos/', views.survey_access, name='survey_access'),
 
     # Entrevista de Desligamento

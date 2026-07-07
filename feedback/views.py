@@ -4,7 +4,7 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Max, Q
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -478,8 +478,7 @@ def climate_survey_progress(request):
     return JsonResponse({'success': True})
 
 
-@survey_manager_required
-def climate_survey_report(request):
+def _build_climate_report_context(request):
     sector_filter_id = request.GET.get('sector')
     status_filter = (request.GET.get('status') or '').strip().lower()
 
@@ -636,6 +635,8 @@ def climate_survey_report(request):
             'duration_display': response.duration_display(),
             'likert_items': likert_items,
             'open_items': open_items,
+            'likert_raw': likert,
+            'open_raw': open_answers,
         })
 
     avg_duration_seconds = round(sum(duration_values) / len(duration_values)) if duration_values else None
@@ -700,7 +701,7 @@ def climate_survey_report(request):
         },
     }
 
-    return render(request, 'feedback/climate_report.html', {
+    return {
         'totals': totals,
         'overview': overview,
         'detailed': rows,
@@ -723,7 +724,173 @@ def climate_survey_report(request):
         'answer_key': answer_key,
         'answer_val': answer_val,
         'likert_scale_values': [1, 2, 3, 4, 5],
-    })
+    }
+
+
+@survey_manager_required
+def climate_survey_report(request):
+    context = _build_climate_report_context(request)
+    return render(request, 'feedback/climate_report.html', context)
+
+
+@survey_manager_required
+def climate_survey_report_export(request):
+    """Exporta o relatório completo da Pesquisa de Clima para .xlsx.
+
+    Respeita os mesmos filtros da tela (setor, status, função, tempo e resposta),
+    gerando uma planilha com várias abas: resumo, participação por setor,
+    participação detalhada, médias por pergunta, perfil e respostas individuais.
+    """
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    ctx = _build_climate_report_context(request)
+
+    header_fill = PatternFill('solid', fgColor='0284C7')
+    header_font = Font(bold=True, color='FFFFFF', name='Calibri', size=11)
+    title_font = Font(bold=True, size=13, color='0F172A')
+
+    def _style_header(ws, row=1, ncols=None):
+        ncols = ncols or ws.max_column
+        for col_idx in range(1, ncols + 1):
+            cell = ws.cell(row=row, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    def _autosize(ws, widths):
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+    wb = openpyxl.Workbook()
+
+    # --- Aba 1: Resumo -------------------------------------------------------
+    ws = wb.active
+    ws.title = 'Resumo'
+    totals = ctx['totals']
+    ws['A1'] = 'Relatório da Pesquisa de Clima'
+    ws['A1'].font = title_font
+
+    filtros = []
+    if ctx['selected_sector']:
+        filtros.append(f"Setor: {ctx['selected_sector'].name}")
+    if ctx['status_filter']:
+        filtros.append(f"Status: {ctx['status_filter']}")
+    if ctx['funcao_filter']:
+        filtros.append(f"Função: {ctx['funcao_filter']}")
+    if ctx['tempo_filter']:
+        filtros.append(f"Tempo de empresa: {ctx['tempo_filter']}")
+    ws['A2'] = 'Filtros aplicados: ' + ('; '.join(filtros) if filtros else 'Nenhum')
+    ws['A2'].font = Font(italic=True, color='64748B')
+
+    summary_rows = [
+        ('Colaboradores', totals['total']),
+        ('Concluíram', totals['completed']),
+        ('Em andamento', totals['in_progress']),
+        ('Não iniciaram', totals['not_started']),
+        ('% Conclusão', f"{totals['completed_pct']}%"),
+        ('Respostas recebidas', totals['responses']),
+        ('Respostas analisadas (com filtros)', ctx['analysis_count']),
+        ('Tempo médio de resposta', ctx['avg_duration_display'] or '-'),
+    ]
+    start = 4
+    ws.cell(row=start, column=1, value='Indicador')
+    ws.cell(row=start, column=2, value='Valor')
+    _style_header(ws, row=start, ncols=2)
+    for offset, (label, value) in enumerate(summary_rows, start + 1):
+        ws.cell(row=offset, column=1, value=label)
+        ws.cell(row=offset, column=2, value=value)
+    _autosize(ws, [38, 24])
+
+    # --- Aba 2: Participação por setor --------------------------------------
+    ws = wb.create_sheet('Participação por setor')
+    headers = ['Setor', 'Total', 'Concluíram', 'Em andamento', 'Não iniciaram', '% Conclusão']
+    ws.append(headers)
+    _style_header(ws)
+    for bucket in ctx['overview']:
+        ws.append([
+            bucket['sector_name'], bucket['total'], bucket['completed'],
+            bucket['in_progress'], bucket['not_started'], f"{bucket['completed_pct']}%",
+        ])
+    _autosize(ws, [34, 10, 12, 14, 14, 12])
+    ws.freeze_panes = 'A2'
+
+    # --- Aba 3: Participação detalhada --------------------------------------
+    ws = wb.create_sheet('Participação (detalhado)')
+    ws.append(['Colaborador', 'Setor', 'Status'])
+    _style_header(ws)
+    for row in ctx['detailed']:
+        ws.append([
+            row['user'].get_full_name() or row['user'].username,
+            row['sector'].name if row['sector'] else 'Sem setor',
+            row['status_label'],
+        ])
+    _autosize(ws, [34, 30, 16])
+    ws.freeze_panes = 'A2'
+
+    # --- Aba 4: Médias por pergunta -----------------------------------------
+    ws = wb.create_sheet('Médias por pergunta')
+    ws.append(['Seção', 'Pergunta', 'Média', 'Respostas'])
+    _style_header(ws)
+    for item in ctx['question_stats']:
+        ws.append([
+            item['section'], item['question'],
+            item['avg'] if item['avg'] is not None else '-', item['count'],
+        ])
+    _autosize(ws, [28, 60, 10, 12])
+    ws.freeze_panes = 'A2'
+
+    # --- Aba 5: Perfil dos respondentes -------------------------------------
+    ws = wb.create_sheet('Perfil dos respondentes')
+    ws.append(['Categoria', 'Opção', 'Quantidade', '%'])
+    _style_header(ws)
+    for label, key in [('Função', 'funcao'), ('Tempo de empresa', 'tempo_empresa')]:
+        for item in ctx['profile_stats'][key]:
+            ws.append([label, item['label'], item['count'], f"{item['pct']}%"])
+    _autosize(ws, [22, 34, 14, 10])
+    ws.freeze_panes = 'A2'
+
+    # --- Aba 6: Respostas individuais ---------------------------------------
+    ws = wb.create_sheet('Respostas individuais')
+    likert_keys = _climate_question_keys()
+    label_map = _climate_question_label_map()
+    base_headers = ['Data/Hora', 'Colaborador', 'Setor', 'Função', 'Tempo de empresa', 'Média geral', 'Duração']
+    likert_headers = [label_map.get(k, k) for k in likert_keys]
+    open_headers = [q['label'] for q in CLIMATE_OPEN_QUESTIONS]
+    ws.append(base_headers + likert_headers + open_headers)
+    _style_header(ws)
+
+    for row in ctx['response_rows']:
+        response = row['response']
+        submitted = timezone.localtime(response.submitted_at).strftime('%d/%m/%Y %H:%M') if response.submitted_at else ''
+        user_obj = row['user']
+        line = [
+            submitted,
+            (user_obj.get_full_name() or user_obj.username) if user_obj else 'Anônimo',
+            row['sector'].name if row['sector'] else 'Sem setor',
+            row['funcao'] or '',
+            row['tempo_empresa'] or '',
+            row['avg'] if row['avg'] is not None else '',
+            row['duration_display'] or '',
+        ]
+        likert_raw = row.get('likert_raw') or {}
+        line.extend(likert_raw.get(k, '') for k in likert_keys)
+        open_raw = row.get('open_raw') or {}
+        line.extend(open_raw.get(q['key'], '') for q in CLIMATE_OPEN_QUESTIONS)
+        ws.append(line)
+
+    widths = [16, 30, 26, 20, 18, 12, 12] + [10] * len(likert_headers) + [45] * len(open_headers)
+    _autosize(ws, widths)
+    ws.freeze_panes = 'B2'
+
+    filename = f'relatorio_pesquisa_clima_{timezone.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
 
 
 # ---------------------------------------------------------------------------
