@@ -235,6 +235,12 @@ class ExperienciaAnswer(models.Model):
         verbose_name='Resposta',
     )
     observation = models.TextField(blank=True, verbose_name='Observação')
+    ticket_number = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Número do Chamado',
+        help_text='Preenchido quando a resposta é "Não".',
+    )
     photo = models.ImageField(
         upload_to=upload_experiencia_photo,
         storage=get_media_storage(),

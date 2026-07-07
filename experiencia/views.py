@@ -444,10 +444,16 @@ def fill_todo(request, todo_id):
                 else:
                     response = 'nao'
             observation = request.POST.get(f'observation_{question.id}', '').strip()
+            ticket_number = request.POST.get(f'ticket_number_{question.id}', '').strip()
             photos = request.FILES.getlist(f'photos_{question.id}')
 
+            # Número do chamado só faz sentido quando a resposta é "Não"
+            effective_response = response or 'nao'
+            if effective_response != 'nao':
+                ticket_number = ''
+
             # Skip empty answers in draft mode
-            if action == 'draft' and not response and not observation and not photos:
+            if action == 'draft' and not response and not observation and not ticket_number and not photos:
                 continue
 
             answer, created = ExperienciaAnswer.objects.get_or_create(
@@ -456,6 +462,7 @@ def fill_todo(request, todo_id):
                 defaults={
                     'response': response or 'nao',
                     'observation': observation,
+                    'ticket_number': ticket_number,
                     'answered_by': user,
                     'answered_at': timezone.now(),
                     'status': 'pendente',
@@ -465,6 +472,7 @@ def fill_todo(request, todo_id):
                 if response:
                     answer.response = response
                 answer.observation = observation
+                answer.ticket_number = ticket_number if answer.response == 'nao' else ''
                 answer.answered_by = user
                 answer.answered_at = timezone.now()
                 if action != 'draft':

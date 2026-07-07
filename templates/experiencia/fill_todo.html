@@ -118,6 +118,18 @@
                     </div>
                 </div>
 
+                <!-- Número do Chamado (aparece apenas quando "Não") -->
+                <div class="ticket-section" id="ticket_section_{{ item.question.id }}"
+                     {% if item.answer.response != 'nao' %}style="display:none"{% endif %}>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        <i class="fas fa-hashtag text-red-500 mr-1"></i>Número do Chamado
+                    </label>
+                    <input type="text" name="ticket_number_{{ item.question.id }}"
+                           value="{{ item.answer.ticket_number|default:'' }}"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 draft-field"
+                           placeholder="Informe o número do chamado">
+                </div>
+
                 <!-- Observação (opcional) -->
                 <div>
                     <label class="block text-sm text-gray-600 mb-1">Observação (opcional)</label>
@@ -215,6 +227,10 @@ document.querySelectorAll('.response-radio').forEach(function(radio) {
         if (section) {
             section.style.display = this.value === 'nao_se_aplica' ? 'none' : '';
         }
+        var ticketSection = document.getElementById('ticket_section_' + qid);
+        if (ticketSection) {
+            ticketSection.style.display = this.value === 'nao' ? '' : 'none';
+        }
         scheduleDraftSave();
     });
 });
@@ -240,6 +256,9 @@ function saveDraft() {
         formData.set(r.name, r.value);
     });
     form.querySelectorAll('textarea').forEach(function(t) {
+        formData.set(t.name, t.value);
+    });
+    form.querySelectorAll('input[type=text]').forEach(function(t) {
         formData.set(t.name, t.value);
     });
 
@@ -276,6 +295,10 @@ document.querySelectorAll('.response-radio:checked').forEach(function(radio) {
     var section = document.getElementById('photo_section_' + qid);
     if (section && radio.value === 'nao_se_aplica') {
         section.style.display = 'none';
+    }
+    var ticketSection = document.getElementById('ticket_section_' + qid);
+    if (ticketSection) {
+        ticketSection.style.display = radio.value === 'nao' ? '' : 'none';
     }
 });
 
