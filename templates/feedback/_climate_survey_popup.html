@@ -69,24 +69,49 @@
     document.body.style.overflow = '';
   }
 
-  if (blocking) {
-    // Fase de bloqueio: sempre mostra, não pode ser fechado.
+  function showNow() {
     open();
-    // Clicar no fundo não fecha; ESC não fecha.
-    modal.addEventListener('click', function (e) { e.stopPropagation(); });
-  } else {
-    // Fase "pulável": aparece sempre que a home é recarregada (igual à janela
-    // de experiência e ao popup de resgate). Pular apenas fecha nesta visita.
-    open();
-
-    var skipBtn = document.getElementById('climate-survey-skip');
-    if (skipBtn) {
-      skipBtn.addEventListener('click', close);
+    if (blocking) {
+      // Fase de bloqueio: não pode ser fechado (clicar no fundo não fecha).
+      modal.addEventListener('click', function (e) { e.stopPropagation(); });
+    } else {
+      // Fase "pulável": pular / clicar fora apenas fecha nesta visita
+      // (reaparece no próximo reload).
+      var skipBtn = document.getElementById('climate-survey-skip');
+      if (skipBtn) skipBtn.addEventListener('click', close);
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) close();
+      });
     }
-    // Clicar fora também fecha (sem persistir — reaparece no próximo reload).
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) close();
+  }
+
+  function start() {
+    // Se o usuário tem o popup da janela de experiência, o de clima deve vir
+    // logo depois: espera a janela de experiência ser fechada para então abrir.
+    var exp = document.getElementById('experience-window-modal');
+    if (!exp) {
+      showNow();
+      return;
+    }
+
+    var wasOpened = !exp.classList.contains('hidden');
+    var obs = new MutationObserver(function () {
+      var hidden = exp.classList.contains('hidden');
+      if (!hidden) {
+        wasOpened = true;
+      } else if (wasOpened) {
+        // Janela de experiência foi fechada -> mostra o popup de clima.
+        obs.disconnect();
+        showNow();
+      }
     });
+    obs.observe(exp, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
   }
 })();
 </script>
