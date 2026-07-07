@@ -1,6 +1,7 @@
-const CACHE_NAME = 'rede-confianca-v1';
+const CACHE_NAME = 'rede-confianca-v2';
+// Não pré-cacheamos páginas HTML (ex.: '/') — elas usam network-first para
+// sempre refletir a versão mais recente do servidor. Só assets estáticos aqui.
 const urlsToCache = [
-  '/',
   '/static/css/custom.css',
   '/static/js/app.js',
   '/static/images/logo.png',
@@ -31,16 +32,35 @@ self.addEventListener('install', event => {
 
 // Fetch event
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version or fetch from network
-        if (response) {
+  const request = event.request;
+
+  // Só tratamos GET; deixa POST/PUT/etc. seguirem direto para a rede.
+  if (request.method !== 'GET') return;
+
+  const accept = request.headers.get('accept') || '';
+  const isNavigation = request.mode === 'navigate' || accept.includes('text/html');
+
+  if (isNavigation) {
+    // Network-first para páginas HTML: sempre busca a versão mais recente do
+    // servidor. (Antes era cache-first, o que "prendia" a home numa versão
+    // antiga em cache e impedia novos conteúdos/popups de aparecerem.)
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(request, copy))
+            .catch(() => {});
           return response;
-        }
-        return fetch(event.request);
-      }
-    )
+        })
+        .catch(() => caches.match(request).then(cached => cached || caches.match('/')))
+    );
+    return;
+  }
+
+  // Cache-first para assets estáticos (css/js/imagens/fontes).
+  event.respondWith(
+    caches.match(request).then(response => response || fetch(request))
   );
 });
 
