@@ -1,0 +1,102 @@
+{% if climate_survey_show %}
+<div id="climate-survey-modal"
+     class="hidden fixed inset-0 z-[10000] bg-black/60 items-center justify-center p-4"
+     data-blocking="{{ climate_survey_blocking|yesno:'true,false' }}">
+  <div class="climate-survey-card bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+    <div class="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-5 text-white">
+      <div class="flex items-center gap-3">
+        <i class="fas fa-clipboard-list text-2xl"></i>
+        <h3 class="text-lg font-bold leading-tight">Pesquisa de Clima Organizacional</h3>
+      </div>
+    </div>
+    <div class="px-6 py-5">
+      {% if climate_survey_blocking %}
+      <div class="mb-4 flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+        <i class="fas fa-exclamation-triangle text-red-500 mt-0.5"></i>
+        <p class="text-sm text-red-700">
+          O prazo para responder a Pesquisa de Clima <strong>encerrou (10/07)</strong>.
+          Para continuar utilizando o portal é necessário responder à pesquisa agora.
+        </p>
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-600 mb-3">
+        Sua opinião é muito importante! Reserve alguns minutos para responder a
+        <strong>Pesquisa de Clima Organizacional</strong>. É anônima e ajuda a melhorar o nosso dia a dia.
+      </p>
+      <div class="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+        <i class="fas fa-clock"></i>
+        <span>Responda até <strong>sexta-feira, 10/07</strong>. Depois disso será obrigatório para navegar no portal.</span>
+      </div>
+      {% endif %}
+    </div>
+    <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3">
+      {% if not climate_survey_blocking %}
+      <button type="button" id="climate-survey-skip"
+              class="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">
+        Pular por agora
+      </button>
+      {% endif %}
+      <a href="{% url 'feedback:climate_survey' %}"
+         class="px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold">
+        Responder pesquisa
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.__climateSurveyGateInit) return;
+  window.__climateSurveyGateInit = true;
+
+  var modal = document.getElementById('climate-survey-modal');
+  if (!modal) return;
+
+  var blocking = modal.getAttribute('data-blocking') === 'true';
+
+  function todayKey() {
+    var d = new Date();
+    return 'climate_survey_skipped_' + d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  }
+
+  function open() {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (blocking) {
+      // Impede rolagem/interação com o restante do portal.
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function close() {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.style.overflow = '';
+  }
+
+  if (blocking) {
+    // Fase de bloqueio: sempre mostra, não pode ser fechado.
+    open();
+    // Clicar no fundo não fecha; ESC não fecha.
+    modal.addEventListener('click', function (e) { e.stopPropagation(); });
+  } else {
+    // Fase "pulável": não mostra novamente se já foi pulado hoje.
+    var skipped = false;
+    try { skipped = localStorage.getItem(todayKey()) === '1'; } catch (e) {}
+    if (!skipped) open();
+
+    var skipBtn = document.getElementById('climate-survey-skip');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', function () {
+        try { localStorage.setItem(todayKey(), '1'); } catch (e) {}
+        close();
+      });
+    }
+    // Clicar fora fecha (equivale a pular, mas sem persistir o dia inteiro).
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) close();
+    });
+  }
+})();
+</script>
+{% endif %}
