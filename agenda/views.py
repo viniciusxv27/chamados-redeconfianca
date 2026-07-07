@@ -2079,7 +2079,11 @@ def _process_transcription_reprocess_job(transcription_id, client, options=None)
         raise ValueError('Não há texto bruto para retranscrever.')
 
     if not source_text and transcription.audio_file:
-        source_text, duration = _transcribe_audio_from_storage(client, transcription.audio_file)
+        source_text, duration = _transcribe_audio_from_storage(
+            client,
+            transcription.audio_file,
+            duration_hint=int(getattr(transcription, 'duration_seconds', 0) or 0),
+        )
         if duration:
             transcription.duration_seconds = duration
         if source_text:
