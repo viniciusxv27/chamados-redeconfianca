@@ -171,6 +171,55 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body class="bg-gray-100 min-h-screen font-montserrat">
+    {% if request.resolver_match.url_name == 'home' %}
+    <!-- Splash de entrada (somente no app instalado / PWA em celular) -->
+    <div id="rc-splash" aria-hidden="true" style="display:none">
+        <span class="rc-splash-glow"></span>
+        <img src="{% static 'images/logo-t.png' %}" alt="Rede Confiança" class="rc-splash-logo">
+    </div>
+    <script>
+    (function () {
+        try {
+            var mq = window.matchMedia;
+            var standalone = (mq && mq('(display-mode: standalone)').matches)
+                || window.navigator.standalone === true;
+            var isMobile = mq ? mq('(max-width: 1023px)').matches : (window.innerWidth < 1024);
+            // Só exibe uma vez por sessão do app (ao abrir o webapp), não a cada navegação.
+            var alreadyShown = sessionStorage.getItem('rc_splash_shown');
+
+            if (standalone && isMobile && !alreadyShown) {
+                sessionStorage.setItem('rc_splash_shown', '1');
+                var el = document.getElementById('rc-splash');
+                if (el) {
+                    el.style.display = 'flex';
+                    var removed = false;
+                    var dismiss = function () {
+                        if (removed) return;
+                        removed = true;
+                        el.classList.add('rc-splash-hide');
+                        setTimeout(function () {
+                            if (el && el.parentNode) el.parentNode.removeChild(el);
+                        }, 550);
+                    };
+                    // Mantém a splash pelo tempo da animação da logo (~1.6s) e até a
+                    // página terminar de carregar; o que terminar por último dispara a saída.
+                    var minElapsed = false, pageLoaded = document.readyState === 'complete';
+                    setTimeout(function () { minElapsed = true; if (pageLoaded) dismiss(); }, 1600);
+                    window.addEventListener('load', function () { pageLoaded = true; if (minElapsed) dismiss(); });
+                    // Rede de segurança: nunca deixa a splash presa.
+                    setTimeout(dismiss, 4000);
+                }
+            } else {
+                var splashEl = document.getElementById('rc-splash');
+                if (splashEl && splashEl.parentNode) splashEl.parentNode.removeChild(splashEl);
+            }
+        } catch (e) {
+            var s = document.getElementById('rc-splash');
+            if (s && s.parentNode) s.parentNode.removeChild(s);
+        }
+    })();
+    </script>
+    {% endif %}
     {% if user.is_authenticated %}
         <!-- Mobile Menu Button -->
         {% comment %} <button id="mobileMenuToggle" class="lg:hidden fixed top-4 left-4 z-50 bg-black text-white p-2 rounded-md">
@@ -853,6 +902,75 @@
     
     <script src="{% static 'js/app.js' %}"></script>
     <script src="{% static 'js/ios-notifications.js' %}"></script>
+    <!-- Interações globais: animação de clique em botões + skeleton de imagens -->
+    <script>
+    (function () {
+        // ---- Efeito de "pressionar" em botões e âncoras estilizadas como botão ----
+        var BTN_SELECTOR = 'button, input[type="submit"], input[type="button"], input[type="reset"], [role="button"], .btn';
+
+        function isButtonLike(el) {
+            if (!el || el.nodeType !== 1) return false;
+            if (el.matches(BTN_SELECTOR)) return true;
+            // Âncoras/labels que usam o padrão Tailwind de botão do projeto
+            // (cor de fundo sólida + cantos arredondados). Ignora bg só de hover.
+            if (el.matches('a, label, summary')) {
+                var c = typeof el.className === 'string' ? el.className : '';
+                return /(^|\s)bg-(primary|secondary|orange|blue|green|red|yellow|purple|indigo|pink|gray|teal|cyan|emerald)-\d/.test(c)
+                    && /(^|\s)rounded/.test(c);
+            }
+            return false;
+        }
+
+        function releaseAll() {
+            var pressed = document.querySelectorAll('.rc-pressed');
+            for (var i = 0; i < pressed.length; i++) pressed[i].classList.remove('rc-pressed');
+        }
+
+        document.addEventListener('pointerdown', function (e) {
+            if (e.button && e.button !== 0) return; // só clique principal
+            var el = e.target.closest(BTN_SELECTOR + ', a, label, summary');
+            if (el && isButtonLike(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true') {
+                el.classList.add('rc-pressed');
+            }
+        }, true);
+
+        ['pointerup', 'pointercancel', 'pointerleave', 'dragstart', 'contextmenu'].forEach(function (ev) {
+            document.addEventListener(ev, releaseAll, true);
+        });
+        window.addEventListener('blur', releaseAll);
+        document.addEventListener('scroll', releaseAll, { capture: true, passive: true });
+
+        // ---- Skeleton de imagens: remove o shimmer e revela a imagem ao carregar ----
+        function clearSkeleton(img) {
+            img.classList.add('rc-loaded');
+            var holder = img.closest('.rc-skeleton');
+            if (holder) holder.classList.remove('rc-skeleton');
+        }
+
+        function initImgSkeletons(root) {
+            var imgs = (root || document).querySelectorAll('img.rc-img-fade');
+            for (var i = 0; i < imgs.length; i++) {
+                (function (img) {
+                    if (img.dataset.rcImgInit === '1') return;
+                    img.dataset.rcImgInit = '1';
+                    if (img.complete && img.naturalWidth > 0) {
+                        clearSkeleton(img);
+                    } else {
+                        img.addEventListener('load', function () { clearSkeleton(img); }, { once: true });
+                        img.addEventListener('error', function () { clearSkeleton(img); }, { once: true });
+                    }
+                })(imgs[i]);
+            }
+        }
+
+        window.rcInitImgSkeletons = initImgSkeletons;
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () { initImgSkeletons(); });
+        } else {
+            initImgSkeletons();
+        }
+    })();
+    </script>
     <script>
         // Mobile Menu Toggle Functionality
         document.addEventListener('DOMContentLoaded', function() {

@@ -1,7 +1,7 @@
 {% if pickup_redemptions %}
 <!-- Popup: prêmios aguardando retirada na SEDE -->
-<div id="pickupAlertModal" class="hidden fixed inset-0 z-[9999] items-center justify-center bg-black/50 px-4">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+<div id="pickupAlertModal" class="rc-modal hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4">
+    <div class="rc-modal-card bg-white rounded-lg shadow-xl w-full max-w-md">
         <div class="px-6 py-4 border-b border-gray-200 flex items-center">
             <i class="fas fa-gift text-primary text-xl mr-2"></i>
             <h3 class="text-lg font-semibold text-gray-900">Prêmio disponível para retirada</h3>
@@ -43,13 +43,13 @@
     if (!modal) return;
 
     window.closePickupAlert = function () {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
+        modal.classList.remove('is-open');
+        setTimeout(function () { modal.classList.add('hidden'); }, 300);
     };
 
     function showPickup() {
         modal.classList.remove('hidden');
-        modal.classList.add('flex');
+        requestAnimationFrame(function () { modal.classList.add('is-open'); });
     }
 
     // Só exibe o popup de retirada depois que os alertas da janela de

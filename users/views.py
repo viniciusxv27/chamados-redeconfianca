@@ -2632,8 +2632,31 @@ def update_profile_view(request):
         
         messages.success(request, 'Perfil atualizado com sucesso!')
         return redirect('profile')
-    
+
     return redirect('profile')
+
+
+@login_required
+@require_POST
+def upload_profile_photo_ajax(request):
+    """Upload rápido da foto de perfil via AJAX (usado pelo popup da Home)."""
+    photo = request.FILES.get('profile_picture')
+    if not photo:
+        return JsonResponse({'success': False, 'error': 'Nenhuma imagem foi enviada.'}, status=400)
+
+    content_type = (getattr(photo, 'content_type', '') or '').lower()
+    if not content_type.startswith('image/'):
+        return JsonResponse({'success': False, 'error': 'O arquivo enviado não é uma imagem válida.'}, status=400)
+
+    # Limite de 8 MB para evitar uploads muito grandes.
+    if photo.size > 8 * 1024 * 1024:
+        return JsonResponse({'success': False, 'error': 'A imagem deve ter no máximo 8 MB.'}, status=400)
+
+    user = request.user
+    user.profile_picture = photo
+    user.save()
+
+    return JsonResponse({'success': True, 'photo_url': user.profile_picture.url})
 
 
 @login_required

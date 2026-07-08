@@ -109,14 +109,14 @@ def home_feed(request):
         is_pinned=True
     ).filter(
         Q(send_to_all=True) | Q(recipients=request.user)
-    ).distinct().prefetch_related('images').order_by('-created_at')[:3]
-    
+    ).distinct().prefetch_related('images', 'liked_by').order_by('-created_at')[:3]
+
     # Feed de comunicados (não fixados)
     communications_list = Communication.objects.filter(
         is_pinned=False
     ).filter(
         Q(send_to_all=True) | Q(recipients=request.user)
-    ).distinct().prefetch_related('images').order_by('-created_at')
+    ).distinct().prefetch_related('images', 'liked_by').order_by('-created_at')
     
     # Buscar elogios recentes para o feed
     recent_compliments = []

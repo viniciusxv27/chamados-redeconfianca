@@ -326,16 +326,243 @@ h6 { font-size: 1rem; font-weight: 500; }
     outline-offset: 2px;
 }
 
+/* ============================================================
+   Rede Confiança — Interações globais
+   Animações de clique em botões, popups, skeletons e splash.
+   ============================================================ */
+
+/* --- Animação de clique universal (botões e elementos clicáveis) --- */
+button,
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+[role="button"],
+.btn,
+.rc-clickable {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    button,
+    input[type="submit"],
+    input[type="button"],
+    input[type="reset"],
+    [role="button"],
+    .btn,
+    .rc-clickable {
+        /* Usa a propriedade 'scale' (independente de 'transform') para não
+           sobrescrever elementos que já usam transform para posicionar
+           (ex.: setas do carrossel com -translate-y-1/2). */
+        transition: scale 0.13s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.13s ease;
+    }
+
+    /* Estado "pressionado" — aplicado por JS para cobrir também âncoras
+       estilizadas como botão (não só elementos <button>). */
+    .rc-pressed:not(:disabled) {
+        scale: 0.94;
+        filter: brightness(0.97);
+    }
+
+    /* Fallback puro-CSS para botões reais, caso o JS não carregue. */
+    button:not(:disabled):active,
+    input[type="submit"]:not(:disabled):active,
+    input[type="button"]:not(:disabled):active,
+    [role="button"]:active,
+    .btn:not(:disabled):active {
+        scale: 0.94;
+    }
+}
+
+/* Elementos desabilitados não animam o clique. */
+button:disabled,
+.btn:disabled,
+[disabled] {
+    scale: none !important;
+    filter: none !important;
+}
+
+/* --- Sistema reutilizável de popups (entrada/saída) --- */
+/* Uso: <div class="rc-modal ..."> ... <div class="rc-modal-card"> ... </div> </div>
+   Abrir: remover 'hidden' (display), no próximo frame adicionar 'is-open'.
+   Fechar: remover 'is-open', após ~280ms adicionar 'hidden'. */
+.rc-modal {
+    opacity: 0;
+    transition: opacity 220ms ease;
+}
+
+.rc-modal.is-open {
+    opacity: 1;
+}
+
+.rc-modal .rc-modal-card {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+    transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
+    will-change: transform, opacity;
+}
+
+.rc-modal.is-open .rc-modal-card {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rc-modal,
+    .rc-modal .rc-modal-card {
+        transition: none;
+    }
+    .rc-modal .rc-modal-card {
+        transform: none;
+    }
+}
+
+/* --- Popups mais compactos no mobile (conteúdo menos "grande") ---
+   Aplica-se a todos os cards de popup: os que usam .rc-modal-card e os dois
+   legados (.experience-window-card / .mandatory-trails-card). */
+@media (max-width: 640px) {
+    .rc-modal-card,
+    .experience-window-card,
+    .mandatory-trails-card {
+        border-radius: 0.9rem;
+    }
+
+    /* Seções internas (cabeçalho / corpo / rodapé) com menos espaçamento. */
+    .rc-modal-card > div,
+    .experience-window-card > div,
+    .mandatory-trails-card > div {
+        padding-left: 1rem;
+        padding-right: 1rem;
+        padding-top: 0.85rem;
+        padding-bottom: 0.85rem;
+    }
+
+    /* Títulos menores (o ícone dentro do h3 acompanha por herança). */
+    .rc-modal-card h3,
+    .experience-window-card h3,
+    .mandatory-trails-card h3 {
+        font-size: 1.02rem;
+        line-height: 1.35;
+    }
+
+    /* Ícones decorativos de cabeçalho menores (não afeta botões de fechar). */
+    .rc-modal-card i.text-3xl { font-size: 1.6rem; }
+    .rc-modal-card i.text-2xl { font-size: 1.45rem; }
+
+    /* Itens de lista dentro dos popups um pouco mais compactos. */
+    .mandatory-trails-card a.p-4 { padding: 0.75rem; }
+}
+
+/* --- Skeleton / shimmer para carregamentos --- */
+.rc-skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: #e5e7eb;
+}
+
+.rc-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+        90deg,
+        rgba(229, 231, 235, 0) 0%,
+        rgba(255, 255, 255, 0.7) 50%,
+        rgba(229, 231, 235, 0) 100%
+    );
+    animation: rcShimmer 1.4s infinite;
+}
+
+@keyframes rcShimmer {
+    100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rc-skeleton::after { animation: none; }
+}
+
+/* Placeholder de imagem: garante altura visível do shimmer enquanto carrega.
+   Ao terminar o carregamento o JS remove '.rc-skeleton' e a altura volta ao normal. */
+.rc-skeleton.rc-img-holder {
+    min-height: 10rem;
+}
+
+/* Imagem que aparece suavemente ao terminar de carregar (par do skeleton). */
+.rc-img-fade {
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.rc-img-fade.rc-loaded {
+    opacity: 1;
+}
+
+/* --- Splash de entrada — apenas no app (PWA) em celular, na Home --- */
+#rc-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: linear-gradient(160deg, #FF6B35 0%, #e55a2b 100%);
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+#rc-splash.rc-splash-hide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#rc-splash .rc-splash-glow {
+    position: absolute;
+    width: 240px;
+    height: 240px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.18);
+    filter: blur(24px);
+    animation: rcSplashPulse 1.5s ease-in-out infinite;
+}
+
+#rc-splash .rc-splash-logo {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    object-fit: contain;
+    animation: rcSplashLogo 1200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes rcSplashLogo {
+    0%   { opacity: 0; transform: scale(0.55) translateY(10px); }
+    45%  { opacity: 1; transform: scale(1.06) translateY(0); }
+    70%  { transform: scale(0.98); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes rcSplashPulse {
+    0%, 100% { transform: scale(0.9);  opacity: 0.45; }
+    50%      { transform: scale(1.12); opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #rc-splash .rc-splash-logo,
+    #rc-splash .rc-splash-glow { animation: none; }
+    #rc-splash .rc-splash-logo { opacity: 1; }
+}
+
 /* Print styles */
 @media print {
     .no-print {
         display: none !important;
     }
-    
+
     .sidebar {
         display: none !important;
     }
-    
+
     .main-content {
         margin-left: 0 !important;
     }
