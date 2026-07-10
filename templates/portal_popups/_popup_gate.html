@@ -1,0 +1,166 @@
+{% if portal_popup %}
+<div id="portal-popup-modal"
+     class="rc-modal hidden fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4"
+     data-blocking="{{ portal_popup_blocking|yesno:'true,false' }}"
+     data-popup-id="{{ portal_popup.id }}"
+     data-mode="{{ portal_popup.completion_mode }}"
+     data-complete-url="{% url 'portal_popups:complete' portal_popup.id %}">
+  <div class="rc-modal-card bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+    <div class="bg-gradient-to-r {{ portal_popup.gradient_classes }} px-6 py-5 text-white">
+      <div class="flex items-center gap-3">
+        <i class="{{ portal_popup.icon|default:'fas fa-bullhorn' }} text-2xl"></i>
+        <h3 class="text-lg font-bold leading-tight">{{ portal_popup.title }}</h3>
+      </div>
+    </div>
+    <div class="px-6 py-5">
+      {% if portal_popup_blocking %}
+      <div class="mb-4 flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+        <i class="fas fa-exclamation-triangle text-red-500 mt-0.5"></i>
+        <p class="text-sm text-red-700">
+          Para continuar utilizando o portal é necessário concluir esta ação.
+        </p>
+      </div>
+      {% endif %}
+      <p class="text-sm text-gray-600 whitespace-pre-line">{{ portal_popup.message }}</p>
+    </div>
+    <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3">
+      {% if not portal_popup_blocking %}
+      <button type="button" id="portal-popup-skip"
+              class="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">
+        Pular por agora
+      </button>
+      {% endif %}
+      {% if portal_popup.completion_mode == 'ACK' %}
+        <button type="button" id="portal-popup-ack"
+                class="px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold">
+          {{ portal_popup.action_label|default:'Li e estou ciente' }}
+        </button>
+      {% else %}
+        <a href="{{ portal_popup.action_url }}" id="portal-popup-action"
+           class="px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold">
+          {{ portal_popup.action_label|default:'Continuar' }}
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.__portalPopupGateInit) return;
+  window.__portalPopupGateInit = true;
+
+  var modal = document.getElementById('portal-popup-modal');
+  if (!modal) return;
+
+  var blocking = modal.getAttribute('data-blocking') === 'true';
+  var mode = modal.getAttribute('data-mode');
+  var completeUrl = modal.getAttribute('data-complete-url');
+  var popupId = modal.getAttribute('data-popup-id');
+  var skipKey = 'rc_portal_popup_skip_' + popupId;
+
+  function getCsrf() {
+    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+  }
+
+  function markCompleted() {
+    // Modos ACK e LINK registram a conclusão no servidor. Resolve com true
+    // apenas se o servidor confirmou (para não fechar um bloqueante à toa).
+    if (mode === 'EXTERNAL') return Promise.resolve(true);
+    return fetch(completeUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+    }).then(function (r) { return r.ok; }).catch(function () { return false; });
+  }
+
+  function open() {
+    modal.classList.remove('hidden');
+    requestAnimationFrame(function () { modal.classList.add('is-open'); });
+    if (blocking) document.body.style.overflow = 'hidden';
+  }
+
+  function close() {
+    modal.classList.remove('is-open');
+    setTimeout(function () { modal.classList.add('hidden'); }, 300);
+    document.body.style.overflow = '';
+  }
+
+  function showNow() {
+    // Enquanto pulável, respeita um "pular" já feito nesta sessão.
+    if (!blocking && sessionStorage.getItem(skipKey) === '1') return;
+
+    open();
+
+    if (blocking) {
+      // Não pode ser fechado clicando fora.
+      modal.addEventListener('click', function (e) { e.stopPropagation(); });
+    } else {
+      var skipBtn = document.getElementById('portal-popup-skip');
+      if (skipBtn) skipBtn.addEventListener('click', function () {
+        sessionStorage.setItem(skipKey, '1');
+        close();
+      });
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) { sessionStorage.setItem(skipKey, '1'); close(); }
+      });
+    }
+
+    var ackBtn = document.getElementById('portal-popup-ack');
+    if (ackBtn) ackBtn.addEventListener('click', function () {
+      ackBtn.disabled = true;
+      markCompleted().then(function (ok) {
+        if (ok === false && blocking) {
+          // Bloqueante cuja conclusão não foi registrada: mantém o popup
+          // aberto para o usuário tentar de novo (senão ele "some" mas volta
+          // no próximo carregamento, sem nunca destravar).
+          ackBtn.disabled = false;
+          alert('Não foi possível registrar sua confirmação. Verifique a conexão e tente novamente.');
+          return;
+        }
+        close();
+      });
+    });
+
+    var actionLink = document.getElementById('portal-popup-action');
+    if (actionLink) actionLink.addEventListener('click', function (e) {
+      // Para "visitar link": registra conclusão antes de navegar.
+      if (mode === 'LINK') {
+        e.preventDefault();
+        var href = actionLink.getAttribute('href');
+        markCompleted().then(function () { window.location.href = href; });
+      }
+    });
+  }
+
+  // Espera outros popups da home fecharem antes de abrir (evita empilhamento).
+  var OTHERS = ['#experience-window-modal', '#mandatory-trails-modal',
+                '#feedback-reminder-modal', '#pickupAlertModal'];
+
+  function anyOtherOpen() {
+    return OTHERS.some(function (sel) {
+      var el = document.querySelector(sel);
+      return el && !el.classList.contains('hidden');
+    });
+  }
+
+  function start() {
+    // Popup bloqueante tem prioridade e abre imediatamente.
+    if (blocking || !anyOtherOpen()) { showNow(); return; }
+
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      if (!anyOtherOpen()) { clearInterval(timer); showNow(); }
+      else if (tries > 40) { clearInterval(timer); }  // ~20s de segurança
+    }, 500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+</script>
+{% endif %}

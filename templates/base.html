@@ -819,7 +819,7 @@
                                 </button>
                                 
                                 <!-- Notifications Dropdown -->
-                                <div id="notification-dropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
+                                <div id="notification-dropdown" class="rc-dropdown absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
                                     <div class="p-4 border-b border-gray-200">
                                         <h3 class="font-semibold text-gray-800">Notificações</h3>
                                     </div>
@@ -849,9 +849,9 @@
                                         </div>
                                     {% endif %}
                                     <span class="hidden sm:block text-xs sm:text-sm">{{ user.first_name }}</span>
-                                    <i class="fas fa-chevron-down text-xs"></i>
+                                    <i id="userMenuChevron" class="fas fa-chevron-down text-xs transition-transform duration-200"></i>
                                 </button>
-                                <div id="userMenuDropdown" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50 hidden">
+                                <div id="userMenuDropdown" class="rc-dropdown absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50 hidden">
                                     <div class="px-4 py-2 border-b border-gray-100">
                                         <p class="text-sm font-medium text-gray-900">{{ user.full_name }}</p>
                                         <p class="text-xs text-gray-500">{{ user.email }}</p>
@@ -868,6 +868,11 @@
                                     {% if user.can_manage_users %}
                                     <a href="{% url 'admin_panel' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
                                         <i class="fas fa-cogs mr-2"></i> Painel Administrativo
+                                    </a>
+                                    {% endif %}
+                                    {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
+                                    <a href="{% url 'portal_popups:list' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                                        <i class="fas fa-window-restore mr-2"></i> Popups do Portal
                                     </a>
                                     {% endif %}
                                     <div class="border-t border-gray-100"></div>
@@ -1098,16 +1103,25 @@
 
             // User menu dropdown functionality
             if (userMenuToggle && userMenuDropdown) {
+                const userMenuChevron = document.getElementById('userMenuChevron');
+                const syncUserMenuChevron = function() {
+                    if (!userMenuChevron) return;
+                    const isOpen = !userMenuDropdown.classList.contains('hidden');
+                    userMenuChevron.style.transform = isOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+                };
+
                 userMenuToggle.addEventListener('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     userMenuDropdown.classList.toggle('hidden');
+                    syncUserMenuChevron();
                 });
 
                 // Close dropdown when clicking outside
                 document.addEventListener('click', function(e) {
                     if (!userMenuToggle.contains(e.target) && !userMenuDropdown.contains(e.target)) {
                         userMenuDropdown.classList.add('hidden');
+                        syncUserMenuChevron();
                     }
                 });
             }
@@ -3818,7 +3832,7 @@
         });
     </script>
     {% include 'feedback/_reminder_popup.html' %}
-    {% include 'feedback/_climate_survey_popup.html' %}
+    {% include 'portal_popups/_popup_gate.html' %}
 
     <!-- Responsividade global: envolve tabelas "soltas" em um container rolável
          para evitar overflow horizontal em celulares/tablets. -->

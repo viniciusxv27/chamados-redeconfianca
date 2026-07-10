@@ -126,63 +126,238 @@
         </table>
       </div>
     </div>
+
+    <!-- Isenção da Pesquisa de Clima -->
+    <div class="bg-white rounded-xl shadow p-5 mt-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1"><i class="fas fa-user-slash mr-2 text-amber-600"></i>Isentar da Pesquisa de Clima</h2>
+      <p class="text-xs text-gray-500 mb-3">O usuário isento não recebe o popup obrigatório e é removido do relatório (não conta como "não iniciou", nem entra nas médias).</p>
+      <form method="post" id="exemptForm" class="flex flex-col sm:flex-row gap-2">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="exempt">
+        <input type="hidden" name="user_id" id="exemptUserId">
+        <div class="relative flex-1">
+          <input type="text" id="exemptSearch" autocomplete="off" placeholder="Buscar usuário por nome ou e-mail..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
+          <div id="exemptResults" class="absolute z-10 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg hidden max-h-64 overflow-y-auto"></div>
+        </div>
+        <input type="text" name="reason" placeholder="Motivo (opcional)" class="sm:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
+        <button type="submit" id="exemptBtn" disabled class="px-5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fas fa-ban mr-1"></i>Isentar
+        </button>
+      </form>
+      <p id="exemptUserLabel" class="text-sm text-gray-600 mt-2 hidden"></p>
+
+      <div class="overflow-x-auto mt-4">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-3 text-left">Usuário isento</th>
+              <th class="p-3 text-left">Setor</th>
+              <th class="p-3 text-left">Motivo</th>
+              <th class="p-3 text-left">Isentado por</th>
+              <th class="p-3 text-right"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for ex in exemptions %}
+              <tr class="hover:bg-gray-50">
+                <td class="p-3">
+                  <p class="font-medium text-gray-900">{{ ex.user.get_full_name|default:ex.user.username }}</p>
+                  <p class="text-xs text-gray-500">{{ ex.user.email }}</p>
+                </td>
+                <td class="p-3 text-gray-600">{{ ex.user.sector.name|default:"-" }}</td>
+                <td class="p-3 text-gray-600">{{ ex.reason|default:"-" }}</td>
+                <td class="p-3 text-gray-600">{{ ex.granted_by.get_full_name|default:"-" }}</td>
+                <td class="p-3 text-right">
+                  <form method="post" onsubmit="return confirm('Remover a isenção deste usuário?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="unexempt">
+                    <input type="hidden" name="user_id" value="{{ ex.user.id }}">
+                    <button type="submit" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100"><i class="fas fa-undo mr-1"></i>Reativar</button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="p-6 text-center text-gray-500">Nenhum usuário isento.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Relatório cliente oculto -->
+    <div class="bg-white rounded-xl shadow p-5 mt-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1"><i class="fas fa-user-secret mr-2 text-purple-600"></i>Relatório cliente oculto</h2>
+      <p class="text-xs text-gray-500 mb-3">Este texto aparece para quem for <strong>avaliar</strong> o colaborador, como contexto a levar em consideração. O próprio avaliado nunca vê o conteúdo.</p>
+      <form method="post" id="hiddenReportForm" class="space-y-2">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="set_hidden_report">
+        <input type="hidden" name="user_id" id="hiddenUserId">
+        <div class="relative">
+          <input type="text" id="hiddenSearch" autocomplete="off" placeholder="Buscar colaborador por nome ou e-mail..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+          <div id="hiddenResults" class="absolute z-10 left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg hidden max-h-64 overflow-y-auto"></div>
+        </div>
+        <textarea name="content" id="hiddenContent" rows="4" placeholder="Ex.: Cliente relatou atraso recorrente nos atendimentos de 03/07." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"></textarea>
+        <div class="flex items-center justify-between gap-2">
+          <p id="hiddenUserLabel" class="text-sm text-gray-600 hidden"></p>
+          <button type="submit" id="hiddenBtn" disabled class="ml-auto px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="fas fa-save mr-1"></i>Salvar relatório
+          </button>
+        </div>
+      </form>
+
+      <div class="overflow-x-auto mt-4">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-3 text-left">Colaborador</th>
+              <th class="p-3 text-left">Relatório</th>
+              <th class="p-3 text-left">Registrado por</th>
+              <th class="p-3 text-right"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for rep in hidden_reports %}
+              <tr class="hover:bg-gray-50">
+                <td class="p-3">
+                  <p class="font-medium text-gray-900">{{ rep.user.get_full_name|default:rep.user.username }}</p>
+                  <p class="text-xs text-gray-500">{{ rep.user.sector.name|default:"-" }}</p>
+                </td>
+                <td class="p-3 text-gray-600 max-w-md">
+                  <p class="line-clamp-2">{{ rep.content }}</p>
+                </td>
+                <td class="p-3 text-gray-600">
+                  {{ rep.updated_by.get_full_name|default:"-" }}
+                  <span class="block text-xs text-gray-400">{{ rep.updated_at|date:"d/m/Y" }}</span>
+                </td>
+                <td class="p-3 text-right whitespace-nowrap">
+                  <button type="button"
+                          class="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-xs hover:bg-purple-100 js-edit-hidden-report"
+                          data-user-id="{{ rep.user.id }}"
+                          data-user-name="{{ rep.user.get_full_name|default:rep.user.username }}"
+                          data-content="{{ rep.content }}">
+                    <i class="fas fa-pen mr-1"></i>Editar
+                  </button>
+                  <form method="post" class="inline" onsubmit="return confirm('Remover o relatório deste colaborador?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_hidden_report">
+                    <input type="hidden" name="user_id" value="{{ rep.user.id }}">
+                    <button type="submit" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100"><i class="fas fa-trash mr-1"></i>Remover</button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="p-6 text-center text-gray-500">Nenhum relatório cadastrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
 (function () {
-  const input = document.getElementById('userSearch');
-  const results = document.getElementById('userResults');
-  const hidden = document.getElementById('selectedUserId');
-  const grantBtn = document.getElementById('grantBtn');
-  const selectedLabel = document.getElementById('selectedUserLabel');
-  let timer = null;
+  const SEARCH_URL = '{% url "feedback:api_search_users" %}';
 
-  function clearSelection() {
-    hidden.value = '';
-    grantBtn.disabled = true;
-    selectedLabel.classList.add('hidden');
-  }
+  // Campo de busca de usuário com autocomplete, reutilizado pelos três
+  // formulários da tela (liberar gestor, isentar, relatório oculto).
+  function attachUserPicker({ inputId, resultsId, hiddenId, buttonId, labelId }) {
+    const input = document.getElementById(inputId);
+    const results = document.getElementById(resultsId);
+    const hidden = document.getElementById(hiddenId);
+    const button = document.getElementById(buttonId);
+    const label = labelId ? document.getElementById(labelId) : null;
+    if (!input || !results || !hidden || !button) return null;
 
-  input.addEventListener('input', () => {
-    clearSelection();
-    const q = input.value.trim();
-    clearTimeout(timer);
-    if (q.length < 2) { results.classList.add('hidden'); return; }
-    timer = setTimeout(() => {
-      fetch('{% url "feedback:api_search_users" %}?q=' + encodeURIComponent(q))
-        .then(r => r.json())
-        .then(data => {
-          results.innerHTML = '';
-          if (!data.results || !data.results.length) {
-            results.innerHTML = '<div class="px-4 py-2 text-sm text-gray-500">Nenhum usuário encontrado.</div>';
-          } else {
-            data.results.forEach(u => {
-              const item = document.createElement('button');
-              item.type = 'button';
-              item.className = 'w-full text-left px-4 py-2 text-sm hover:bg-indigo-50 border-b last:border-0';
-              item.innerHTML = `<span class="font-medium text-gray-800">${u.name}</span><br><span class="text-xs text-gray-500">${u.email}${u.sector ? ' · ' + u.sector : ''}</span>`;
-              item.addEventListener('click', () => {
-                hidden.value = u.id;
-                input.value = u.name;
-                grantBtn.disabled = false;
-                selectedLabel.textContent = 'Selecionado: ' + u.name + ' (' + u.email + ')';
-                selectedLabel.classList.remove('hidden');
-                results.classList.add('hidden');
-              });
-              results.appendChild(item);
-            });
-          }
-          results.classList.remove('hidden');
-        })
-        .catch(() => { results.classList.add('hidden'); });
-    }, 250);
-  });
+    let timer = null;
 
-  document.addEventListener('click', (e) => {
-    if (!results.contains(e.target) && e.target !== input) {
+    function clearSelection() {
+      hidden.value = '';
+      button.disabled = true;
+      if (label) label.classList.add('hidden');
+    }
+
+    function select(user) {
+      hidden.value = user.id;
+      input.value = user.name;
+      button.disabled = false;
+      if (label) {
+        label.textContent = 'Selecionado: ' + user.name + (user.email ? ' (' + user.email + ')' : '');
+        label.classList.remove('hidden');
+      }
       results.classList.add('hidden');
     }
+
+    input.addEventListener('input', () => {
+      clearSelection();
+      const q = input.value.trim();
+      clearTimeout(timer);
+      if (q.length < 2) { results.classList.add('hidden'); return; }
+      timer = setTimeout(() => {
+        fetch(SEARCH_URL + '?q=' + encodeURIComponent(q))
+          .then(r => r.json())
+          .then(data => {
+            results.innerHTML = '';
+            if (!data.results || !data.results.length) {
+              results.innerHTML = '<div class="px-4 py-2 text-sm text-gray-500">Nenhum usuário encontrado.</div>';
+            } else {
+              data.results.forEach(u => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'w-full text-left px-4 py-2 text-sm hover:bg-indigo-50 border-b last:border-0';
+                // textContent (não innerHTML): nome/e-mail vêm do banco e podem
+                // conter HTML — evita XSS armazenado na sessão do superadmin.
+                const nameEl = document.createElement('span');
+                nameEl.className = 'font-medium text-gray-800';
+                nameEl.textContent = u.name;
+                const metaEl = document.createElement('span');
+                metaEl.className = 'text-xs text-gray-500';
+                metaEl.textContent = u.email + (u.sector ? ' · ' + u.sector : '');
+                item.appendChild(nameEl);
+                item.appendChild(document.createElement('br'));
+                item.appendChild(metaEl);
+                item.addEventListener('click', () => select(u));
+                results.appendChild(item);
+              });
+            }
+            results.classList.remove('hidden');
+          })
+          .catch(() => { results.classList.add('hidden'); });
+      }, 250);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!results.contains(e.target) && e.target !== input) {
+        results.classList.add('hidden');
+      }
+    });
+
+    return { select };
+  }
+
+  attachUserPicker({
+    inputId: 'userSearch', resultsId: 'userResults',
+    hiddenId: 'selectedUserId', buttonId: 'grantBtn', labelId: 'selectedUserLabel',
+  });
+
+  attachUserPicker({
+    inputId: 'exemptSearch', resultsId: 'exemptResults',
+    hiddenId: 'exemptUserId', buttonId: 'exemptBtn', labelId: 'exemptUserLabel',
+  });
+
+  const hiddenPicker = attachUserPicker({
+    inputId: 'hiddenSearch', resultsId: 'hiddenResults',
+    hiddenId: 'hiddenUserId', buttonId: 'hiddenBtn', labelId: 'hiddenUserLabel',
+  });
+
+  // "Editar" na tabela carrega o relatório existente de volta no formulário.
+  document.querySelectorAll('.js-edit-hidden-report').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!hiddenPicker) return;
+      hiddenPicker.select({ id: btn.dataset.userId, name: btn.dataset.userName, email: '' });
+      document.getElementById('hiddenContent').value = btn.dataset.content;
+      document.getElementById('hiddenReportForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   });
 })();
 </script>

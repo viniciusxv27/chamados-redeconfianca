@@ -156,9 +156,25 @@
                         data-search="{{ user_item.full_name|lower }} {{ user_item.email|lower }} {{ user_item.sector.name|default:''|lower }}">
                         <td class="py-4 px-6">
                             <div class="flex items-center">
-                                <div class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center mr-3">
-                                    <i class="fas fa-user text-white"></i>
-                                </div>
+                                <button type="button"
+                                        onclick="openPhotoModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')"
+                                        title="Alterar foto de {{ user_item.full_name }}"
+                                        class="group relative w-10 h-10 rounded-full mr-3 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary">
+                                    {% if user_item.profile_picture %}
+                                        <img src="{{ user_item.profile_picture.url }}"
+                                             alt="{{ user_item.full_name }}"
+                                             id="userPhoto{{ user_item.id }}"
+                                             class="w-10 h-10 rounded-full object-cover">
+                                    {% else %}
+                                        <span id="userPhoto{{ user_item.id }}"
+                                              class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center">
+                                            <i class="fas fa-user text-white"></i>
+                                        </span>
+                                    {% endif %}
+                                    <span class="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <i class="fas fa-camera text-white text-xs"></i>
+                                    </span>
+                                </button>
                                 <div>
                                     <div class="font-semibold text-gray-900">{{ user_item.full_name }}</div>
                                     <div class="text-sm text-gray-500">{{ user_item.phone|default:"Sem telefone" }}</div>
@@ -229,12 +245,17 @@
                                    title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <button onclick="openChangePasswordModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')" 
+                                <button onclick="openPhotoModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')"
+                                   class="bg-purple-100 text-purple-600 p-2 rounded-lg hover:bg-purple-200 transition-colors"
+                                   title="Alterar Foto de Perfil">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                                <button onclick="openChangePasswordModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')"
                                    class="bg-yellow-100 text-yellow-600 p-2 rounded-lg hover:bg-yellow-200 transition-colors"
                                    title="Alterar Senha">
                                     <i class="fas fa-key"></i>
                                 </button>
-                                <a href="{% url 'add_cs' user_item.id %}" 
+                                <a href="{% url 'add_cs' user_item.id %}"
                                    class="bg-green-100 text-green-600 p-2 rounded-lg hover:bg-green-200 transition-colors"
                                    title="Adicionar C$">
                                     <i class="fas fa-coins"></i>
@@ -367,13 +388,60 @@
                         class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
                     Cancelar
                 </button>
-                <button type="submit" 
+                <button type="submit"
                         class="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors">
                     <i class="fas fa-key mr-2"></i>
                     Alterar Senha
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal de Foto de Perfil -->
+<div id="photoModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Foto de Perfil</h3>
+            <button onclick="closePhotoModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-4">
+            Alterando a foto de: <strong id="photoUserNameDisplay"></strong>
+        </p>
+
+        <div class="flex flex-col items-center mb-4">
+            <div id="photoPreviewWrapper" class="w-32 h-32 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden mb-3">
+                <i id="photoPreviewPlaceholder" class="fas fa-user text-4xl text-gray-400"></i>
+                <img id="photoPreview" src="" alt="Pré-visualização" class="w-32 h-32 object-cover hidden">
+            </div>
+            <label for="photoInput"
+                   class="cursor-pointer px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm">
+                <i class="fas fa-image mr-2"></i>Escolher imagem
+            </label>
+            <input type="file" id="photoInput" accept="image/*" class="hidden">
+            <p class="text-xs text-gray-400 mt-2">JPG, PNG ou WEBP · até 8 MB</p>
+        </div>
+
+        <div id="photoError" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"></div>
+
+        <div class="flex items-center justify-end space-x-3">
+            <button type="button"
+                    onclick="closePhotoModal()"
+                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                Cancelar
+            </button>
+            <button type="button"
+                    id="photoSubmitBtn"
+                    onclick="submitUserPhoto()"
+                    disabled
+                    class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-upload mr-2"></i>
+                Salvar Foto
+            </button>
+        </div>
     </div>
 </div>
 
@@ -440,6 +508,131 @@ function toggleImportModal() {
 function toggleImportColaboradoresModal() {
     const modal = document.getElementById('importColaboradoresModal');
     modal.classList.toggle('hidden');
+}
+
+// --- Foto de perfil (upload pelo gestor) ---
+let photoTargetUserId = null;
+
+function openPhotoModal(userId, userName) {
+    photoTargetUserId = userId;
+    document.getElementById('photoUserNameDisplay').textContent = userName;
+
+    // Reseta o estado do modal a cada abertura.
+    const input = document.getElementById('photoInput');
+    input.value = '';
+    document.getElementById('photoPreview').classList.add('hidden');
+    document.getElementById('photoPreviewPlaceholder').classList.remove('hidden');
+    document.getElementById('photoSubmitBtn').disabled = true;
+    hidePhotoError();
+
+    document.getElementById('photoModal').classList.remove('hidden');
+}
+
+function closePhotoModal() {
+    document.getElementById('photoModal').classList.add('hidden');
+    photoTargetUserId = null;
+}
+
+function showPhotoError(message) {
+    const box = document.getElementById('photoError');
+    box.textContent = message;
+    box.classList.remove('hidden');
+}
+
+function hidePhotoError() {
+    document.getElementById('photoError').classList.add('hidden');
+}
+
+document.getElementById('photoInput').addEventListener('change', function () {
+    const file = this.files[0];
+    const submitBtn = document.getElementById('photoSubmitBtn');
+    hidePhotoError();
+
+    if (!file) {
+        submitBtn.disabled = true;
+        return;
+    }
+
+    // Mesmas regras validadas no servidor.
+    if (!file.type.startsWith('image/')) {
+        showPhotoError('O arquivo enviado não é uma imagem válida.');
+        this.value = '';
+        submitBtn.disabled = true;
+        return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+        showPhotoError('A imagem deve ter no máximo 8 MB.');
+        this.value = '';
+        submitBtn.disabled = true;
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const preview = document.getElementById('photoPreview');
+        preview.src = e.target.result;
+        preview.classList.remove('hidden');
+        document.getElementById('photoPreviewPlaceholder').classList.add('hidden');
+    };
+    reader.readAsDataURL(file);
+    submitBtn.disabled = false;
+});
+
+function submitUserPhoto() {
+    const file = document.getElementById('photoInput').files[0];
+    if (!file || !photoTargetUserId) return;
+
+    const userId = photoTargetUserId;
+    const submitBtn = document.getElementById('photoSubmitBtn');
+    const originalHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Enviando...';
+    hidePhotoError();
+
+    const formData = new FormData();
+    formData.append('profile_picture', file);
+
+    fetch(`/users/manage/users/${userId}/photo/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        },
+        body: formData,
+    })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                throw new Error(data.error || 'Não foi possível enviar a foto.');
+            }
+            updateUserPhotoCell(userId, data.photo_url);
+            closePhotoModal();
+        })
+        .catch(error => {
+            showPhotoError(error.message);
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+        });
+}
+
+// Troca a foto na tabela sem recarregar a página. A célula pode ser um <img>
+// (usuário já tinha foto) ou um <span> com ícone (usuário sem foto).
+function updateUserPhotoCell(userId, photoUrl) {
+    const cell = document.getElementById(`userPhoto${userId}`);
+    if (!cell) return;
+
+    if (cell.tagName === 'IMG') {
+        cell.src = photoUrl;
+        return;
+    }
+
+    const img = document.createElement('img');
+    img.id = cell.id;
+    img.src = photoUrl;
+    img.alt = '';
+    img.className = 'w-10 h-10 rounded-full object-cover';
+    cell.replaceWith(img);
 }
 
 function openChangePasswordModal(userId, userName) {

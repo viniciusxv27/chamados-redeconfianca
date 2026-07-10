@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Popups do Portal{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+    <h2 class="text-2xl font-bold text-gray-900">
+      <i class="fas fa-window-restore text-indigo-600 mr-2"></i> Popups do Portal
+    </h2>
+    <a href="{% url 'portal_popups:create' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+      <i class="fas fa-plus mr-2"></i> Novo popup
+    </a>
+  </div>
+
+  <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-4 text-sm text-blue-800">
+    <i class="fas fa-info-circle mr-1"></i>
+    Os popups são exibidos na ordem da <strong>sequência</strong>. Enquanto podem ser
+    pulados, aparecem só na home; quando configurados para bloquear, travam o portal
+    de quem ainda não concluiu a ação.
+  </div>
+
+  <div class="bg-white shadow rounded-lg overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-sm">
+        <thead class="bg-gray-50 text-gray-600">
+          <tr>
+            <th class="px-4 py-3 text-left">#</th>
+            <th class="px-4 py-3 text-left">Título</th>
+            <th class="px-4 py-3 text-left">Público</th>
+            <th class="px-4 py-3 text-left">Conclusão</th>
+            <th class="px-4 py-3 text-left">Bloqueio</th>
+            <th class="px-4 py-3 text-left">Status</th>
+            <th class="px-4 py-3 text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {% for popup in popups %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-gray-500">{{ popup.order }}</td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <i class="{{ popup.icon|default:'fas fa-bullhorn' }} text-indigo-500"></i>
+                <span class="font-medium text-gray-900">{{ popup.title }}</span>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">
+              {% if popup.target_all %}
+                <span class="px-2 py-0.5 bg-gray-100 rounded-full text-xs">Todos</span>
+              {% else %}
+                {% if popup.target_users.exists %}<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">Usuários</span>{% endif %}
+                {% if popup.target_sectors.exists %}<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Setores</span>{% endif %}
+                {% if popup.target_hierarchies %}<span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">Hierarquia</span>{% endif %}
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-gray-600">{{ popup.get_completion_mode_display }}</td>
+            <td class="px-4 py-3 text-gray-600">
+              {% if popup.blocking_mode == 'ALWAYS' %}
+                <span class="text-red-600 font-medium">Sempre</span>
+              {% elif popup.blocking_mode == 'AFTER' %}
+                <span class="text-amber-600">Após {{ popup.block_after|date:"d/m/Y H:i" }}</span>
+              {% else %}
+                <span class="text-gray-400">Nunca</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              {% if popup.is_active %}
+                <span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Ativo</span>
+              {% else %}
+                <span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">Inativo</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              <a href="{% url 'portal_popups:edit' popup.id %}" class="inline-flex items-center px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs hover:bg-blue-100" title="Editar">
+                <i class="fas fa-edit"></i>
+              </a>
+              <form method="post" action="{% url 'portal_popups:toggle' popup.id %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center px-2.5 py-1.5 bg-gray-50 text-gray-600 rounded-md text-xs hover:bg-gray-100" title="Ativar/Desativar">
+                  <i class="fas {% if popup.is_active %}fa-toggle-on{% else %}fa-toggle-off{% endif %}"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'portal_popups:delete' popup.id %}" class="inline" onsubmit="return confirm('Excluir o popup «{{ popup.title|escapejs }}»?');">
+                {% csrf_token %}
+                <button type="submit" class="inline-flex items-center px-2.5 py-1.5 bg-red-50 text-red-600 rounded-md text-xs hover:bg-red-100" title="Excluir">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Nenhum popup cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

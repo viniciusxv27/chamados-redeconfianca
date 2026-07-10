@@ -15,6 +15,8 @@ from users.models import Sector, User
 from .ai import generate_ai_summary, transcribe_feedback_audio
 from .forms import AssignmentForm, FeedbackForm
 from .models import (
+    CLIMATE_SURVEY_KEY,
+    ClimateSurveyExemption,
     ClimateSurveyParticipation,
     ClimateSurveyResponse,
     ExitInterviewAccessPermission,
@@ -23,8 +25,10 @@ from .models import (
     Feedback,
     FeedbackAssignment,
     FeedbackReminderDismissal,
+    HiddenClientReport,
     SurveyManagerPermission,
     SurveySettings,
+    climate_exempt_user_ids,
 )
 from .reminders import get_pending_reminders
 
@@ -101,7 +105,7 @@ def _can_give_sector_feedback(user, evaluatee) -> bool:
     return _sector_feedback_targets(user).filter(id=evaluatee.id).exists()
 
 
-CLIMATE_SURVEY_KEY = 'clima_organizacional_2026'
+# CLIMATE_SURVEY_KEY é definido em feedback/models.py e importado acima (fonte única).
 
 CLIMATE_LIKERT_OPTIONS = [
     (1, 'Discordo totalmente'),
@@ -482,10 +486,22 @@ def _build_climate_report_context(request):
     sector_filter_id = request.GET.get('sector')
     status_filter = (request.GET.get('status') or '').strip().lower()
 
-    users_qs = User.objects.filter(is_active=True).select_related('sector').prefetch_related('sectors').order_by('first_name', 'last_name')
+    # Usuários isentos saem completamente do relatório: não contam como
+    # "não iniciou" nem entram nas médias das respostas.
+    exempt_ids = climate_exempt_user_ids(CLIMATE_SURVEY_KEY)
+
+    users_qs = (
+        User.objects.filter(is_active=True)
+        .exclude(pk__in=exempt_ids)
+        .select_related('sector').prefetch_related('sectors')
+        .order_by('first_name', 'last_name')
+    )
     participations = {
         item.user_id: item
-        for item in ClimateSurveyParticipation.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('user', 'sector')
+        for item in ClimateSurveyParticipation.objects
+        .filter(survey_key=CLIMATE_SURVEY_KEY)
+        .exclude(user_id__in=exempt_ids)
+        .select_related('user', 'sector')
     }
 
     rows = []
@@ -558,7 +574,12 @@ def _build_climate_report_context(request):
     answer_key = (request.GET.get('q_key') or '').strip()
     answer_val = (request.GET.get('q_val') or '').strip()
 
-    responses = ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).select_related('sector', 'user')
+    responses = (
+        ClimateSurveyResponse.objects
+        .filter(survey_key=CLIMATE_SURVEY_KEY)
+        .exclude(user_id__in=exempt_ids)
+        .select_related('sector', 'user')
+    )
     if selected_sector:
         responses = responses.filter(sector=selected_sector)
     responses = list(responses)
@@ -1458,17 +1479,55 @@ def survey_access(request):
             messages.error(request, 'Usuário não encontrado.')
             return redirect('feedback:survey_access')
 
+        target_name = target.get_full_name() or target.username
+
         if action == 'grant':
             if _is_superadmin(target):
-                messages.info(request, f'{target.get_full_name() or target.username} já é superadmin e tem acesso.')
+                messages.info(request, f'{target_name} já é superadmin e tem acesso.')
             else:
                 SurveyManagerPermission.objects.get_or_create(
                     user=target, defaults={'granted_by': request.user}
                 )
-                messages.success(request, f'Acesso liberado para {target.get_full_name() or target.username}.')
+                messages.success(request, f'Acesso liberado para {target_name}.')
         elif action == 'revoke':
             SurveyManagerPermission.objects.filter(user=target).delete()
-            messages.success(request, f'Acesso removido de {target.get_full_name() or target.username}.')
+            messages.success(request, f'Acesso removido de {target_name}.')
+
+        elif action == 'exempt':
+            ClimateSurveyExemption.objects.get_or_create(
+                survey_key=CLIMATE_SURVEY_KEY,
+                user=target,
+                defaults={
+                    'granted_by': request.user,
+                    'reason': (request.POST.get('reason') or '').strip(),
+                },
+            )
+            messages.success(
+                request,
+                f'{target_name} foi isentado da Pesquisa de Clima e não aparecerá no relatório.',
+            )
+        elif action == 'unexempt':
+            ClimateSurveyExemption.objects.filter(
+                survey_key=CLIMATE_SURVEY_KEY, user=target
+            ).delete()
+            messages.success(request, f'Isenção removida de {target_name}.')
+
+        elif action == 'set_hidden_report':
+            content = (request.POST.get('content') or '').strip()
+            if content:
+                HiddenClientReport.objects.update_or_create(
+                    user=target,
+                    defaults={'content': content, 'updated_by': request.user},
+                )
+                messages.success(request, f'Relatório cliente oculto salvo para {target_name}.')
+            else:
+                # Conteúdo vazio equivale a remover o relatório.
+                HiddenClientReport.objects.filter(user=target).delete()
+                messages.success(request, f'Relatório cliente oculto removido de {target_name}.')
+        elif action == 'clear_hidden_report':
+            HiddenClientReport.objects.filter(user=target).delete()
+            messages.success(request, f'Relatório cliente oculto removido de {target_name}.')
+
         return redirect('feedback:survey_access')
 
     permissions = (
@@ -1476,8 +1535,21 @@ def survey_access(request):
         .select_related('user', 'user__sector', 'granted_by')
         .order_by('user__first_name', 'user__last_name')
     )
+    exemptions = (
+        ClimateSurveyExemption.objects
+        .filter(survey_key=CLIMATE_SURVEY_KEY)
+        .select_related('user', 'user__sector', 'granted_by')
+        .order_by('user__first_name', 'user__last_name')
+    )
+    hidden_reports = (
+        HiddenClientReport.objects
+        .select_related('user', 'user__sector', 'updated_by')
+        .order_by('user__first_name', 'user__last_name')
+    )
     return render(request, 'feedback/survey_access.html', {
         'permissions': permissions,
+        'exemptions': exemptions,
+        'hidden_reports': hidden_reports,
         'climate_menu_visible': SurveySettings.load().climate_menu_visible,
         'climate_response_count': ClimateSurveyResponse.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count(),
         'climate_participation_count': ClimateSurveyParticipation.objects.filter(survey_key=CLIMATE_SURVEY_KEY).count(),
@@ -1555,10 +1627,19 @@ def create_feedback(request, assignment_id=None):
                 initial['setor_area'] = getattr(primary_sector, 'name', '') or ''
         form = FeedbackForm(initial=initial)
 
+    # Relatório cliente oculto do avaliado, exibido só ao avaliador como
+    # contexto. Nunca é mostrado ao próprio avaliado.
+    hidden_client_report = None
+    if evaluatee and evaluatee != request.user:
+        hidden_client_report = (
+            HiddenClientReport.objects.filter(user=evaluatee).first()
+        )
+
     return render(request, 'feedback/create.html', {
         'form': form,
         'assignment': assignment,
         'evaluatee': evaluatee,
+        'hidden_client_report': hidden_client_report,
     })
 
 

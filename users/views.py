@@ -2636,27 +2636,83 @@ def update_profile_view(request):
     return redirect('profile')
 
 
+def _validate_profile_photo(photo):
+    """Valida a imagem de perfil. Retorna a mensagem de erro, ou None se estiver ok."""
+    if not photo:
+        return 'Nenhuma imagem foi enviada.'
+
+    content_type = (getattr(photo, 'content_type', '') or '').lower()
+    if not content_type.startswith('image/'):
+        return 'O arquivo enviado não é uma imagem válida.'
+
+    # SVG é "image/*" mas pode conter script (XSS armazenado ao servir a mídia),
+    # e não é um formato de foto de perfil válido — rejeita explicitamente.
+    name = (getattr(photo, 'name', '') or '').lower()
+    if content_type == 'image/svg+xml' or name.endswith('.svg'):
+        return 'Imagens SVG não são permitidas. Envie JPG, PNG ou WEBP.'
+
+    # Limite de 8 MB para evitar uploads muito grandes.
+    if photo.size > 8 * 1024 * 1024:
+        return 'A imagem deve ter no máximo 8 MB.'
+
+    # Não confia só no content_type (enviado pelo cliente): confirma que o
+    # arquivo é uma imagem raster real. Isso barra SVG/HTML disfarçados.
+    try:
+        from PIL import Image
+        photo.seek(0)
+        Image.open(photo).verify()
+    except Exception:
+        return 'Arquivo de imagem inválido ou corrompido.'
+    finally:
+        try:
+            photo.seek(0)
+        except Exception:
+            pass
+
+    return None
+
+
 @login_required
 @require_POST
 def upload_profile_photo_ajax(request):
     """Upload rápido da foto de perfil via AJAX (usado pelo popup da Home)."""
     photo = request.FILES.get('profile_picture')
-    if not photo:
-        return JsonResponse({'success': False, 'error': 'Nenhuma imagem foi enviada.'}, status=400)
-
-    content_type = (getattr(photo, 'content_type', '') or '').lower()
-    if not content_type.startswith('image/'):
-        return JsonResponse({'success': False, 'error': 'O arquivo enviado não é uma imagem válida.'}, status=400)
-
-    # Limite de 8 MB para evitar uploads muito grandes.
-    if photo.size > 8 * 1024 * 1024:
-        return JsonResponse({'success': False, 'error': 'A imagem deve ter no máximo 8 MB.'}, status=400)
+    error = _validate_profile_photo(photo)
+    if error:
+        return JsonResponse({'success': False, 'error': error}, status=400)
 
     user = request.user
     user.profile_picture = photo
     user.save()
 
     return JsonResponse({'success': True, 'photo_url': user.profile_picture.url})
+
+
+@login_required
+@require_POST
+def admin_upload_user_photo(request, user_id):
+    """Permite que um gestor troque a foto de perfil de outro usuário."""
+    if not request.user.can_manage_users():
+        return JsonResponse(
+            {'success': False, 'error': 'Você não tem permissão para alterar a foto de outros usuários.'},
+            status=403,
+        )
+
+    target = get_object_or_404(User, pk=user_id)
+
+    photo = request.FILES.get('profile_picture')
+    error = _validate_profile_photo(photo)
+    if error:
+        return JsonResponse({'success': False, 'error': error}, status=400)
+
+    target.profile_picture = photo
+    target.save(update_fields=['profile_picture'])
+
+    return JsonResponse({
+        'success': True,
+        'photo_url': target.profile_picture.url,
+        'user_id': target.pk,
+    })
 
 
 @login_required

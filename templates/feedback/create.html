@@ -33,6 +33,17 @@
           <h2 class="text-xl font-semibold">Avaliando: {{ evaluatee.get_full_name|default:evaluatee.username }}</h2>
           <p class="text-indigo-100 text-sm">{{ evaluatee.email }}</p>
         </div>
+        {% if hidden_client_report %}
+          <div class="m-5 mb-0 rounded-lg bg-purple-50 border border-purple-200 p-4">
+            <div class="flex items-start gap-3">
+              <i class="fas fa-user-secret text-purple-600 mt-0.5"></i>
+              <div>
+                <p class="text-sm font-semibold text-purple-800">Relatório cliente oculto — leve em consideração</p>
+                <p class="text-sm text-purple-700 mt-1 whitespace-pre-line">{{ hidden_client_report.content }}</p>
+              </div>
+            </div>
+          </div>
+        {% endif %}
         <form method="post" class="p-6 space-y-8" enctype="multipart/form-data" id="feedback-form">
           {% csrf_token %}
           <input type="hidden" name="evaluatee" value="{{ evaluatee.id }}">

@@ -417,6 +417,48 @@ button:disabled,
     }
 }
 
+/* --- Dropdowns animados (entrada e saída) --- */
+/* Uso: adicione a classe 'rc-dropdown' ao painel do dropdown. O estado fechado
+   continua sendo a classe 'hidden' do Tailwind, então o JS que já existe
+   (classList.toggle('hidden')) não precisa mudar.
+   'hidden' aplicaria display:none, que impede qualquer transição; aqui ele é
+   trocado por visibility + opacity, o que mantém o elemento fora do fluxo de
+   interação (não clicável, ignorado por leitores de tela) e ainda assim
+   permite animar tanto a abertura quanto o fechamento. */
+.rc-dropdown,
+.dropdown-menu {
+    transform-origin: top right;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition: opacity 150ms ease,
+                transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                visibility 0s;
+    will-change: transform, opacity;
+}
+
+.rc-dropdown.hidden,
+.dropdown-menu.hidden {
+    /* Vence o .hidden do Tailwind (display:none) por especificidade. */
+    display: block !important;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-8px) scale(0.97);
+    transition: opacity 130ms ease,
+                transform 150ms cubic-bezier(0.4, 0, 1, 1),
+                visibility 0s linear 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rc-dropdown,
+    .dropdown-menu,
+    .rc-dropdown.hidden,
+    .dropdown-menu.hidden {
+        transition: none;
+        transform: none;
+    }
+}
+
 /* --- Popups mais compactos no mobile (conteúdo menos "grande") ---
    Aplica-se a todos os cards de popup: os que usam .rc-modal-card e os dois
    legados (.experience-window-card / .mandatory-trails-card). */

@@ -112,3 +112,35 @@ class FolhaPonto(models.Model):
     @property
     def period_display(self):
         return f"{self.month_name}/{self.year}"
+
+
+class FolhaPontoManagerPermission(models.Model):
+    """Usuários liberados para gerenciar a Folha de Ponto.
+
+    Superadministradores têm acesso independente desta tabela; este registro
+    serve para liberar usuários que não são superadmin.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='folhaponto_manager_permission',
+        verbose_name='Usuário liberado',
+    )
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='folhaponto_permissions_granted',
+        verbose_name='Liberado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Acesso à gestão da Folha de Ponto'
+        verbose_name_plural = 'Acessos à gestão da Folha de Ponto'
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'Gestão da Folha de Ponto: {self.user}'

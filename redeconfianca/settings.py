@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'feedback',  # Módulo de Feedback Geral (FM-005)
     'fibras',  # Acompanhamento de Fibras
     'validad1',  # Validação D-1
+    'portal_popups',  # Popups configuráveis do portal
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -103,7 +104,7 @@ TEMPLATES = [
                 'assets.context_processors.inventory_context',
                 'contestacao.context_processors.contestacao_menu_context',
                 'feedback.context_processors.survey_menu',
-                'feedback.context_processors.climate_survey_gate',
+                'portal_popups.context_processors.portal_popup_gate',
             ],
         },
     },

@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db.models import Q
 from django.core.files.base import ContentFile
 
-from .models import FolhaPonto
+from .models import FolhaPonto, FolhaPontoManagerPermission
 from .pdf_parser import (
     extract_all_folhas, extract_pages_pdf, normalize_name, clean_cpf,
 )
@@ -27,6 +27,16 @@ HIERARCHY_RANK = {
 
 def is_superadmin(user):
     return HIERARCHY_RANK.get(user.hierarchy, 0) >= HIERARCHY_RANK['SUPERADMIN']
+
+
+def can_manage_folhaponto(user):
+    """Superadmins sempre podem; os demais precisam estar liberados em
+    FolhaPontoManagerPermission (gerenciada em /folha-ponto/admin/acessos/)."""
+    if not user.is_authenticated:
+        return False
+    if is_superadmin(user):
+        return True
+    return FolhaPontoManagerPermission.objects.filter(user=user).exists()
 
 
 def _read_pdf_bytes(field_file):
@@ -151,7 +161,7 @@ def my_folhas(request):
 @login_required
 def folha_detail(request, pk):
     folha = get_object_or_404(FolhaPonto, pk=pk)
-    if folha.user != request.user and not is_superadmin(request.user):
+    if folha.user != request.user and not can_manage_folhaponto(request.user):
         messages.error(request, 'Sem permissão para visualizar esta folha de ponto.')
         return redirect('folhaponto:my_folhas')
 
@@ -162,7 +172,7 @@ def folha_detail(request, pk):
 def folha_pdf(request, pk):
     """Serve o PDF recortado (página do colaborador)."""
     folha = get_object_or_404(FolhaPonto, pk=pk)
-    if folha.user != request.user and not is_superadmin(request.user):
+    if folha.user != request.user and not can_manage_folhaponto(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('folhaponto:my_folhas')
 
@@ -189,7 +199,7 @@ def folha_pdf(request, pk):
 def folha_signed_pdf(request, pk):
     """Serve o PDF do documento + folha de Certificado de Assinatura Digital."""
     folha = get_object_or_404(FolhaPonto, pk=pk)
-    if folha.user != request.user and not is_superadmin(request.user):
+    if folha.user != request.user and not can_manage_folhaponto(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('folhaponto:my_folhas')
 
@@ -285,7 +295,7 @@ def api_sign_folha(request, pk):
 
 @login_required
 def admin_folhas(request):
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('folhaponto:my_folhas')
 
@@ -321,7 +331,7 @@ def admin_folhas(request):
 
 @login_required
 def admin_import(request):
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('folhaponto:my_folhas')
 
@@ -336,10 +346,99 @@ def admin_import(request):
     })
 
 
+@login_required
+def admin_access(request):
+    """Gerencia quem pode administrar a Folha de Ponto além dos superadmins."""
+    if not is_superadmin(request.user):
+        messages.error(request, 'Apenas superadministradores gerenciam os acessos da Folha de Ponto.')
+        return redirect('folhaponto:my_folhas')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        target = User.objects.filter(pk=request.POST.get('user_id')).first()
+        if not target:
+            messages.error(request, 'Usuário não encontrado.')
+            return redirect('folhaponto:admin_access')
+
+        if action == 'grant':
+            if is_superadmin(target):
+                messages.info(request, f'{target.full_name} já é superadmin e tem acesso.')
+            else:
+                FolhaPontoManagerPermission.objects.get_or_create(
+                    user=target, defaults={'granted_by': request.user},
+                )
+                messages.success(request, f'Acesso liberado para {target.full_name}.')
+        elif action == 'revoke':
+            FolhaPontoManagerPermission.objects.filter(user=target).delete()
+            messages.success(request, f'Acesso removido de {target.full_name}.')
+        return redirect('folhaponto:admin_access')
+
+    permissions = (
+        FolhaPontoManagerPermission.objects
+        .select_related('user', 'user__sector', 'granted_by')
+        .order_by('user__first_name', 'user__last_name')
+    )
+    available_users = (
+        User.objects.filter(is_active=True)
+        .exclude(pk__in=permissions.values_list('user_id', flat=True))
+        .exclude(hierarchy='SUPERADMIN')
+        .order_by('first_name', 'last_name')
+    )
+
+    return render(request, 'folhaponto/admin_access.html', {
+        'permissions': permissions,
+        'available_users': available_users,
+    })
+
+
 def _model_fields(record):
     """Filtra apenas as chaves que são campos do modelo (descarta '_key', '_pages', 'error', month/year)."""
     ignore = {'_key', '_pages', 'error', 'month', 'year'}
     return {k: v for k, v in record.items() if k not in ignore and not k.startswith('_')}
+
+
+def _wants_overwrite(request):
+    return str(request.POST.get('overwrite', '')).lower() in ('1', 'true', 'on', 'yes')
+
+
+def _upsert_folha(target_user, month, year, pdf_content, page_number, uploaded_by, fields, overwrite):
+    """Cria a folha do mês; se já existir e `overwrite`, atualiza no lugar.
+
+    Retorna (folha, status), com status em {'created', 'updated', 'exists'}.
+    Ao sobrescrever, a assinatura anterior é invalidada — o documento mudou — e
+    o PDF antigo é removido do storage.
+    """
+    existing = FolhaPonto.objects.filter(user=target_user, month=month, year=year).first()
+
+    if existing and not overwrite:
+        return existing, 'exists'
+
+    if existing:
+        old_file_name = existing.pdf_file.name if existing.pdf_file else None
+        existing.pdf_file = pdf_content
+        existing.pdf_page_number = page_number
+        existing.uploaded_by = uploaded_by
+        for field, value in fields.items():
+            setattr(existing, field, value)
+        existing.signed_at = None
+        existing.signature_image = ''
+        existing.signature_ip = None
+        existing.signature_user_agent = ''
+        existing.signature_hash = ''
+        existing.save()
+        if old_file_name and old_file_name != existing.pdf_file.name:
+            try:
+                existing.pdf_file.storage.delete(old_file_name)
+            except Exception:
+                pass
+        return existing, 'updated'
+
+    folha = FolhaPonto.objects.create(
+        user=target_user, month=month, year=year,
+        pdf_file=pdf_content, pdf_page_number=page_number,
+        uploaded_by=uploaded_by, **fields,
+    )
+    return folha, 'created'
 
 
 @login_required
@@ -347,7 +446,7 @@ def api_import_folha(request):
     """Importação individual: funcionário escolhido manualmente."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     user_id = request.POST.get('user_id')
@@ -365,11 +464,13 @@ def api_import_folha(request):
 
     month = int(month)
     year = int(year)
+    overwrite = _wants_overwrite(request)
 
-    if FolhaPonto.objects.filter(user=target_user, month=month, year=year).exists():
+    if not overwrite and FolhaPonto.objects.filter(user=target_user, month=month, year=year).exists():
         return JsonResponse({
             'error': f'Já existe folha de ponto para {target_user.full_name} em '
-                     f'{dict(FolhaPonto.MONTH_CHOICES)[month]}/{year}.'
+                     f'{dict(FolhaPonto.MONTH_CHOICES)[month]}/{year}. '
+                     f'Marque "Sobrescrever" para substituí-la.'
         }, status=409)
 
     pdf_bytes = pdf_file.read()
@@ -397,20 +498,16 @@ def api_import_folha(request):
     safe_name = f"folha_ponto_{target_user.pk}_{year}_{month:02d}.pdf"
     content_file = ContentFile(pdf_content_to_save, name=safe_name)
 
-    folha = FolhaPonto(
-        user=target_user,
-        month=month,
-        year=year,
-        pdf_file=content_file,
-        pdf_page_number=page_number,
-        uploaded_by=request.user,
-        **fields,
+    folha, status = _upsert_folha(
+        target_user, month, year, content_file, page_number,
+        request.user, fields, overwrite=overwrite,
     )
-    folha.save()
 
+    verb = 'atualizada' if status == 'updated' else 'importada'
     return JsonResponse({
         'success': True,
-        'message': f'Folha de ponto importada para {target_user.full_name} – {folha.period_display}',
+        'status': status,
+        'message': f'Folha de ponto {verb} para {target_user.full_name} – {folha.period_display}',
         'folha_id': folha.pk,
     })
 
@@ -420,7 +517,7 @@ def api_bulk_import(request):
     """Importa vários PDFs (cada um pode conter 1 ou vários colaboradores)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     month = request.POST.get('month')
@@ -432,6 +529,7 @@ def api_bulk_import(request):
 
     month = int(month)
     year = int(year)
+    overwrite = _wants_overwrite(request)
     results = []
     unmatched_names = []
     users_cache = list(User.objects.filter(is_active=True))
@@ -463,11 +561,6 @@ def api_bulk_import(request):
                 unmatched_names.append({'nome_pdf': employee_name or 'Nome não identificado', 'cpf': cpf})
                 continue
 
-            if FolhaPonto.objects.filter(user=target_user, month=month, year=year).exists():
-                results.append({'file': pdf_file.name, 'status': 'skip',
-                                'message': f'Já existe para {target_user.full_name}'})
-                continue
-
             fields = _model_fields(record)
             safe_name = f"folha_ponto_{target_user.pk}_{year}_{month:02d}.pdf"
 
@@ -479,13 +572,21 @@ def api_bulk_import(request):
                 pdf_content = ContentFile(cut or pdf_bytes, name=safe_name)
                 saved_page = pages[0] if pages else 0
 
-            FolhaPonto.objects.create(
-                user=target_user, month=month, year=year,
-                pdf_file=pdf_content, pdf_page_number=saved_page,
-                uploaded_by=request.user, **fields,
+            _, status = _upsert_folha(
+                target_user, month, year, pdf_content, saved_page,
+                request.user, fields, overwrite=overwrite,
             )
-            results.append({'file': pdf_file.name, 'status': 'success',
-                            'message': f'Importado para {target_user.full_name}'})
+
+            if status == 'exists':
+                results.append({'file': pdf_file.name, 'status': 'skip',
+                                'message': f'Já existe para {target_user.full_name} '
+                                           f'(marque "Sobrescrever" para substituir)'})
+            elif status == 'updated':
+                results.append({'file': pdf_file.name, 'status': 'success',
+                                'message': f'Atualizado para {target_user.full_name}'})
+            else:
+                results.append({'file': pdf_file.name, 'status': 'success',
+                                'message': f'Importado para {target_user.full_name}'})
 
     success_count = sum(1 for r in results if r['status'] == 'success')
     return JsonResponse({
@@ -501,7 +602,7 @@ def api_process_full_pdf(request):
     """Processa o PDF completo do mês: recorta por colaborador e cria/atualiza."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     month = request.POST.get('month')
@@ -560,34 +661,16 @@ def api_process_full_pdf(request):
         pdf_content = ContentFile(cut, name=safe_name)
         fields = _model_fields(record)
 
-        existing = FolhaPonto.objects.filter(user=target_user, month=month, year=year).first()
-        if existing:
-            old_file_name = existing.pdf_file.name if existing.pdf_file else None
-            existing.pdf_file = pdf_content
-            existing.pdf_page_number = pages[0]
-            existing.uploaded_by = request.user
-            for field, value in fields.items():
-                setattr(existing, field, value)
-            # Documento mudou → assinatura anterior perde validade
-            existing.signed_at = None
-            existing.signature_image = ''
-            existing.signature_ip = None
-            existing.signature_user_agent = ''
-            existing.signature_hash = ''
-            existing.save()
+        # Este fluxo é sempre idempotente: reprocessar o PDF do mês atualiza o
+        # que já existe, permitindo reimportar a competência quantas vezes for.
+        _, status = _upsert_folha(
+            target_user, month, year, pdf_content, pages[0],
+            request.user, fields, overwrite=True,
+        )
+        if status == 'updated':
             updated_count += 1
-            if old_file_name and old_file_name != existing.pdf_file.name:
-                try:
-                    existing.pdf_file.storage.delete(old_file_name)
-                except Exception:
-                    pass
             results.append({'status': 'updated', 'message': f'Atualizado: {target_user.full_name}'})
         else:
-            FolhaPonto.objects.create(
-                user=target_user, month=month, year=year,
-                pdf_file=pdf_content, pdf_page_number=pages[0],
-                uploaded_by=request.user, **fields,
-            )
             created_count += 1
             results.append({'status': 'created', 'message': f'Criado: {target_user.full_name}'})
 
@@ -606,7 +689,7 @@ def api_process_full_pdf(request):
 def admin_delete_folha(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     folha = get_object_or_404(FolhaPonto, pk=pk)
@@ -624,7 +707,7 @@ def admin_delete_folha(request, pk):
 def admin_reupload_folha_pdf(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     folha = get_object_or_404(FolhaPonto, pk=pk)
@@ -664,7 +747,7 @@ def admin_reupload_folha_pdf(request, pk):
 def api_bulk_delete(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     month = request.POST.get('month')
@@ -698,7 +781,7 @@ def api_bulk_delete(request):
 @login_required
 def export_signature_report(request):
     """Relatório CSV de assinaturas de folha de ponto de um mês/ano."""
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('folhaponto:admin_folhas')
 
@@ -767,7 +850,7 @@ def export_signature_report(request):
 def api_download_unmatched_excel(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
-    if not is_superadmin(request.user):
+    if not can_manage_folhaponto(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     import json

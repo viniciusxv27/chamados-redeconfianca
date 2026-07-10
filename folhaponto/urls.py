@@ -13,6 +13,7 @@ urlpatterns = [
     # Área administrativa
     path('admin/', views.admin_folhas, name='admin_folhas'),
     path('admin/importar/', views.admin_import, name='admin_import'),
+    path('admin/acessos/', views.admin_access, name='admin_access'),
     path('admin/excluir/<int:pk>/', views.admin_delete_folha, name='admin_delete_folha'),
     path('admin/reenviar-pdf/<int:pk>/', views.admin_reupload_folha_pdf, name='admin_reupload_folha_pdf'),
     path('admin/relatorio-assinaturas/', views.export_signature_report, name='export_signature_report'),

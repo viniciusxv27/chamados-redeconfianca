@@ -5,6 +5,24 @@ from django.utils import timezone
 
 SCALE_CHOICES = [(i, str(i)) for i in range(0, 11)]
 
+# Chave da edição corrente da Pesquisa de Clima.
+CLIMATE_SURVEY_KEY = 'clima_organizacional_2026'
+
+
+def climate_exempt_user_ids(survey_key=CLIMATE_SURVEY_KEY):
+    """IDs dos usuários dispensados da Pesquisa de Clima."""
+    return set(
+        ClimateSurveyExemption.objects
+        .filter(survey_key=survey_key)
+        .values_list('user_id', flat=True)
+    )
+
+
+def is_exempt_from_climate_survey(user, survey_key=CLIMATE_SURVEY_KEY):
+    if not user or not user.is_authenticated:
+        return False
+    return ClimateSurveyExemption.objects.filter(survey_key=survey_key, user=user).exists()
+
 
 def _format_duration(seconds):
     """Formata uma duração em segundos de forma legível (ex.: '3min 20s')."""
@@ -403,6 +421,78 @@ class SurveySettings(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class ClimateSurveyExemption(models.Model):
+    """Usuários dispensados de responder a Pesquisa de Clima.
+
+    Quem está isento não recebe o popup obrigatório e é excluído do relatório
+    (não conta como 'não iniciou', nem entra nas médias).
+    """
+
+    survey_key = models.CharField(max_length=80, default='clima_organizacional_2026', db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='climate_survey_exemptions',
+        verbose_name='Usuário isento',
+    )
+    reason = models.CharField(max_length=255, blank=True, verbose_name='Motivo')
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='climate_exemptions_granted',
+        verbose_name='Isentado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Isenção da Pesquisa de Clima'
+        verbose_name_plural = 'Isenções da Pesquisa de Clima'
+        unique_together = ('survey_key', 'user')
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'Isento da Pesquisa de Clima: {self.user}'
+
+
+class HiddenClientReport(models.Model):
+    """Relatório de cliente oculto associado a um colaborador.
+
+    Só é exibido para quem vai *avaliar* essa pessoa, como contexto a levar em
+    consideração no feedback. Nunca é mostrado ao próprio avaliado.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='hidden_client_report',
+        verbose_name='Colaborador',
+    )
+    content = models.TextField(
+        verbose_name='Relatório',
+        help_text='Texto exibido ao avaliador no formulário de feedback deste colaborador.',
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hidden_client_reports_written',
+        verbose_name='Registrado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Relatório cliente oculto'
+        verbose_name_plural = 'Relatórios cliente oculto'
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'Relatório cliente oculto: {self.user}'
 
 
 class ExitInterviewParticipation(models.Model):

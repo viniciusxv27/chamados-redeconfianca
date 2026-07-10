@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    ClimateSurveyExemption,
     ClimateSurveyParticipation,
     ClimateSurveyResponse,
     ExitInterviewAccessPermission,
@@ -8,9 +9,26 @@ from .models import (
     Feedback,
     FeedbackAssignment,
     FeedbackReminderDismissal,
+    HiddenClientReport,
     SurveyManagerPermission,
     SurveySettings,
 )
+
+
+@admin.register(ClimateSurveyExemption)
+class ClimateSurveyExemptionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'survey_key', 'reason', 'granted_by', 'created_at']
+    search_fields = ['user__first_name', 'user__last_name', 'user__email']
+    raw_id_fields = ['user', 'granted_by']
+    readonly_fields = ['created_at']
+
+
+@admin.register(HiddenClientReport)
+class HiddenClientReportAdmin(admin.ModelAdmin):
+    list_display = ['user', 'updated_by', 'updated_at']
+    search_fields = ['user__first_name', 'user__last_name', 'user__email', 'content']
+    raw_id_fields = ['user', 'updated_by']
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(FeedbackAssignment)
