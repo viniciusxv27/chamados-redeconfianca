@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'fibras',  # Acompanhamento de Fibras
     'validad1',  # Validação D-1
     'portal_popups',  # Popups configuráveis do portal
+    'documentos',  # Documentos para assinatura digital
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

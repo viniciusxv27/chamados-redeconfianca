@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block title %}Administrar Documentos{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-folder-tree text-purple-600 mr-2"></i> Documentos
+        </h2>
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'documentos:admin_categories' %}"
+               class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                <i class="fas fa-tags mr-2"></i> Categorias
+            </a>
+            <a href="{% url 'documentos:admin_document_create' %}"
+               class="inline-flex items-center px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
+                <i class="fas fa-plus mr-2"></i> Novo documento
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="flex flex-wrap gap-2 mb-4">
+        <input type="text" name="q" value="{{ search }}" placeholder="Buscar por título..."
+               class="flex-1 min-w-[180px] border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+        <select name="category" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+            <option value="">Todas as categorias</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="px-4 py-2 text-sm bg-gray-800 text-white rounded-md hover:bg-gray-900">
+            <i class="fas fa-search"></i>
+        </button>
+    </form>
+
+    {% if documents %}
+    <div class="bg-white shadow rounded-lg divide-y">
+        {% for doc in documents %}
+        <a href="{% url 'documentos:admin_document_detail' doc.pk %}"
+           class="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition group">
+            <div class="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas {{ doc.category.icon }} text-green-600"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-900 truncate">{{ doc.title }}</p>
+                <p class="text-xs text-gray-500">{{ doc.category.name }} · {{ doc.created_at|date:"d/m/Y" }}</p>
+            </div>
+            <div class="text-right flex-shrink-0">
+                {% if doc.signers_total and doc.signers_signed == doc.signers_total %}
+                <span class="inline-flex items-center text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">
+                    <i class="fas fa-check-circle mr-1"></i> Concluído
+                </span>
+                {% else %}
+                <span class="inline-flex items-center text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded-full">
+                    {{ doc.signers_signed }}/{{ doc.signers_total }} assinados
+                </span>
+                {% endif %}
+            </div>
+            <i class="fas fa-chevron-right text-gray-300 group-hover:translate-x-1 transition-transform"></i>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-10 text-center text-gray-500">
+        <i class="fas fa-folder-open text-4xl text-gray-300 mb-3"></i>
+        <p>Nenhum documento cadastrado ainda.</p>
+        <a href="{% url 'documentos:admin_document_create' %}" class="text-green-600 hover:text-green-800 text-sm font-medium mt-2 inline-block">
+            Criar o primeiro documento
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

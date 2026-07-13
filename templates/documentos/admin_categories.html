@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}Categorias de Documentos{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <a href="{% url 'documentos:admin_documents' %}" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-3">
+        <i class="fas fa-arrow-left mr-2"></i> Voltar aos documentos
+    </a>
+
+    <h2 class="text-2xl font-bold text-gray-900 mb-4">
+        <i class="fas fa-tags text-purple-600 mr-2"></i> Categorias de Documentos
+    </h2>
+
+    <!-- Nova categoria -->
+    <form method="post" class="bg-white shadow rounded-lg p-5 mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {% csrf_token %}
+        <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nome <span class="text-red-500">*</span></label>
+            <input type="text" name="name" required placeholder="Ex.: Contratos, Políticas, Termos de Uso"
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+        </div>
+        <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <input type="text" name="description"
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ícone (Font Awesome)</label>
+            <input type="text" name="icon" value="fa-file-contract"
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cor</label>
+            <select name="color" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+                <option value="green">Verde</option>
+                <option value="blue">Azul</option>
+                <option value="purple">Roxo</option>
+                <option value="amber">Âmbar</option>
+                <option value="red">Vermelho</option>
+                <option value="teal">Teal</option>
+            </select>
+        </div>
+        <div class="sm:col-span-2 flex justify-end">
+            <button type="submit" class="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
+                <i class="fas fa-plus mr-2"></i> Criar categoria
+            </button>
+        </div>
+    </form>
+
+    <!-- Lista de categorias -->
+    {% if categories %}
+    <div class="bg-white shadow rounded-lg divide-y">
+        {% for cat in categories %}
+        <div class="px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                    <i class="fas {{ cat.icon }} text-gray-600"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-800">
+                        {{ cat.name }}
+                        {% if not cat.is_active %}<span class="text-xs text-gray-400 font-normal">(inativa)</span>{% endif %}
+                    </p>
+                    <p class="text-xs text-gray-400">{{ cat.docs_count }} documento(s){% if cat.description %} · {{ cat.description }}{% endif %}</p>
+                </div>
+                <button type="button" onclick="document.getElementById('edit-{{ cat.id }}').classList.toggle('hidden')"
+                        class="text-sm text-gray-400 hover:text-gray-700" title="Editar">
+                    <i class="fas fa-pen"></i>
+                </button>
+                {% if not cat.docs_count %}
+                <form method="post" action="{% url 'documentos:admin_category_delete' cat.pk %}"
+                      onsubmit="return confirm('Excluir a categoria \'{{ cat.name }}\'?');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-sm text-gray-400 hover:text-red-600" title="Excluir">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+            <!-- Formulário de edição -->
+            <form method="post" action="{% url 'documentos:admin_category_edit' cat.pk %}" id="edit-{{ cat.id }}"
+                  class="hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 rounded-md p-3">
+                {% csrf_token %}
+                <input type="text" name="name" value="{{ cat.name }}" required placeholder="Nome"
+                       class="sm:col-span-2 border border-gray-300 rounded-md px-3 py-2 text-sm">
+                <input type="text" name="description" value="{{ cat.description }}" placeholder="Descrição"
+                       class="sm:col-span-2 border border-gray-300 rounded-md px-3 py-2 text-sm">
+                <input type="text" name="icon" value="{{ cat.icon }}" placeholder="Ícone"
+                       class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                <select name="color" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="green" {% if cat.color == 'green' %}selected{% endif %}>Verde</option>
+                    <option value="blue" {% if cat.color == 'blue' %}selected{% endif %}>Azul</option>
+                    <option value="purple" {% if cat.color == 'purple' %}selected{% endif %}>Roxo</option>
+                    <option value="amber" {% if cat.color == 'amber' %}selected{% endif %}>Âmbar</option>
+                    <option value="red" {% if cat.color == 'red' %}selected{% endif %}>Vermelho</option>
+                    <option value="teal" {% if cat.color == 'teal' %}selected{% endif %}>Teal</option>
+                </select>
+                <label class="flex items-center gap-2 text-sm text-gray-600">
+                    <input type="checkbox" name="is_active" {% if cat.is_active %}checked{% endif %}
+                           class="rounded text-green-600 focus:ring-green-500"> Ativa
+                </label>
+                <div class="sm:col-span-2 flex justify-end gap-2">
+                    <button type="button" onclick="document.getElementById('edit-{{ cat.id }}').classList.add('hidden')"
+                            class="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-100">Cancelar</button>
+                    <button type="submit" class="px-3 py-1.5 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">Salvar</button>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+        <i class="fas fa-tags text-3xl text-gray-300 mb-2"></i>
+        <p>Nenhuma categoria criada ainda. Crie a primeira acima.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

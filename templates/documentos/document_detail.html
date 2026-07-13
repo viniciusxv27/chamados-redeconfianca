@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ document.title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <a href="{% url 'documentos:my_documents' %}" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-3">
+        <i class="fas fa-arrow-left mr-2"></i> Voltar aos meus documentos
+    </a>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <!-- Cabeçalho -->
+        <div class="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+                <span class="text-xs font-semibold uppercase tracking-wide text-green-700">
+                    <i class="fas {{ document.category.icon }} mr-1"></i>{{ document.category.name }}
+                </span>
+                <h2 class="text-xl font-bold text-gray-900 mt-1">{{ document.title }}</h2>
+            </div>
+            {% if signature.is_signed %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 self-start">
+                <i class="fas fa-check-circle mr-1"></i> Assinado
+            </span>
+            {% else %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800 self-start">
+                <i class="fas fa-clock mr-1"></i> Pendente de assinatura
+            </span>
+            {% endif %}
+        </div>
+
+        {% if document.description %}
+        <div class="px-5 py-3 bg-gray-50 border-b text-sm text-gray-600">{{ document.description|linebreaksbr }}</div>
+        {% endif %}
+
+        <!-- Visualização do PDF -->
+        <div class="px-5 py-4">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-gray-700"><i class="fas fa-file-pdf text-red-500 mr-1"></i> Documento</h3>
+                <a href="{% url 'documentos:document_pdf' signature.pk %}" target="_blank"
+                   class="text-sm text-blue-600 hover:text-blue-800"><i class="fas fa-external-link-alt mr-1"></i> Abrir em nova aba</a>
+            </div>
+            <iframe src="{% url 'documentos:document_pdf' signature.pk %}" class="w-full rounded-lg border border-gray-200"
+                    style="height: 60vh; min-height: 380px;" title="Documento PDF"></iframe>
+        </div>
+
+        {% if signature.is_signed %}
+        <!-- Dados da assinatura -->
+        <div class="px-5 py-4 border-t bg-emerald-50/50">
+            <h3 class="text-sm font-semibold text-emerald-800 mb-3">
+                <i class="fas fa-shield-alt mr-1"></i> Assinatura Digital Registrada
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700">
+                <p><strong>Assinado em:</strong> {{ signature.signed_at|date:"d/m/Y \à\s H:i" }}</p>
+                <p><strong>IP:</strong> {{ signature.signature_ip|default:"—" }}</p>
+                <p class="sm:col-span-2"><strong>Hash:</strong>
+                    <code class="bg-emerald-100 px-1 rounded text-xs break-all">{{ signature.signature_hash|truncatechars:40 }}</code>
+                </p>
+            </div>
+            {% if signature.signature_image %}
+            <div class="mt-3">
+                <p class="text-xs text-gray-500 mb-1">Assinatura:</p>
+                <img src="{{ signature.signature_image }}" alt="Assinatura" class="max-h-20 bg-white rounded border p-1" />
+            </div>
+            {% endif %}
+            <a href="{% url 'documentos:document_signed_pdf' signature.pk %}"
+               class="mt-4 inline-flex items-center px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700">
+                <i class="fas fa-file-download mr-2"></i> Baixar PDF assinado
+            </a>
+        </div>
+        {% elif can_sign %}
+        <!-- Área de assinatura -->
+        <div class="px-5 py-4 border-t" id="signature-section">
+            <h3 class="text-sm font-semibold text-gray-700 mb-1">
+                <i class="fas fa-signature text-blue-500 mr-1"></i> Assinatura Digital
+            </h3>
+            <p class="text-xs text-gray-500 mb-3">
+                Desenhe sua assinatura no campo abaixo. Ao confirmar, serão registrados data, hora e IP,
+                e um <strong>Certificado de Assinatura Digital</strong> será anexado ao documento.
+            </p>
+
+            <div class="border-2 border-dashed border-gray-300 rounded-lg bg-white relative" id="signature-wrapper">
+                <canvas id="signature-canvas" class="w-full rounded-lg cursor-crosshair" height="180"></canvas>
+                <div id="signature-placeholder" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span class="text-gray-300 text-sm"><i class="fas fa-pen-nib mr-1"></i> Assine aqui</span>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                <button type="button" onclick="clearSignature()"
+                        class="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">
+                    <i class="fas fa-eraser mr-1"></i> Limpar
+                </button>
+                <button type="button" id="btn-sign" onclick="submitSignature()"
+                        class="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
+                    <i class="fas fa-signature mr-2"></i> Assinar Documento
+                </button>
+                <span id="sign-result" class="text-sm"></span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if can_sign %}
+<script>
+(function() {
+    const canvas = document.getElementById('signature-canvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('signature-wrapper');
+    const placeholder = document.getElementById('signature-placeholder');
+    let isDrawing = false;
+    let hasSignature = false;
+
+    function resizeCanvas() {
+        const rect = wrapper.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = 180 * dpr;
+        canvas.style.height = '180px';
+        ctx.scale(dpr, dpr);
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches ? e.touches[0] : e;
+        return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    }
+    function startDraw(e) {
+        e.preventDefault();
+        isDrawing = true;
+        const pos = getPos(e);
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+    }
+    function draw(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pos = getPos(e);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        hasSignature = true;
+        placeholder.classList.add('hidden');
+    }
+    function stopDraw(e) {
+        if (isDrawing) { e.preventDefault(); isDrawing = false; }
+    }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mouseleave', stopDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
+    canvas.addEventListener('touchend', stopDraw, { passive: false });
+
+    window.clearSignature = function() {
+        const dpr = window.devicePixelRatio || 1;
+        ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+        hasSignature = false;
+        placeholder.classList.remove('hidden');
+    };
+
+    window.submitSignature = async function() {
+        if (!hasSignature) {
+            alert('Por favor, desenhe sua assinatura antes de confirmar.');
+            return;
+        }
+        if (!confirm('Tem certeza que deseja assinar este documento? Esta ação não pode ser desfeita.')) {
+            return;
+        }
+        const btn = document.getElementById('btn-sign');
+        const resultEl = document.getElementById('sign-result');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Assinando...';
+        try {
+            const signatureData = canvas.toDataURL('image/png');
+            const resp = await fetch('{% url "documentos:api_sign_document" signature.pk %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({ signature: signatureData }),
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success) {
+                resultEl.className = 'text-sm text-emerald-600';
+                resultEl.innerHTML = '<i class="fas fa-check-circle mr-1"></i> ' + data.message;
+                setTimeout(() => window.location.reload(), 900);
+            } else {
+                throw new Error(data.error || 'Falha ao assinar.');
+            }
+        } catch (err) {
+            resultEl.className = 'text-sm text-red-600';
+            resultEl.textContent = err.message;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-signature mr-2"></i> Assinar Documento';
+        }
+    };
+})();
+</script>
+{% endif %}
+{% endblock %}

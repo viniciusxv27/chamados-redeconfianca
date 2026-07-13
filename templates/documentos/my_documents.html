@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Meus Documentos{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-file-signature text-green-600 mr-2"></i> Meus Documentos
+        </h2>
+        {% if is_admin %}
+        <a href="{% url 'documentos:admin_documents' %}"
+           class="inline-flex items-center px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-md hover:bg-purple-700">
+            <i class="fas fa-cog mr-2"></i> Administrar
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Filtros de status -->
+    <div class="flex flex-wrap gap-2 mb-4">
+        <a href="{% url 'documentos:my_documents' %}"
+           class="px-3 py-1.5 text-sm rounded-full border {% if not status %}bg-green-600 text-white border-green-600{% else %}bg-white text-gray-600 border-gray-300 hover:bg-gray-50{% endif %}">
+            Todos
+        </a>
+        <a href="?status=pending"
+           class="px-3 py-1.5 text-sm rounded-full border {% if status == 'pending' %}bg-amber-500 text-white border-amber-500{% else %}bg-white text-gray-600 border-gray-300 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-clock mr-1"></i> Pendentes ({{ pending_total }})
+        </a>
+        <a href="?status=signed"
+           class="px-3 py-1.5 text-sm rounded-full border {% if status == 'signed' %}bg-emerald-600 text-white border-emerald-600{% else %}bg-white text-gray-600 border-gray-300 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-check-circle mr-1"></i> Assinados ({{ signed_total }})
+        </a>
+    </div>
+
+    {% if signatures %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {% for sig in signatures %}
+        <a href="{% url 'documentos:document_detail' sig.pk %}"
+           class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition group">
+            <div class="px-4 py-3 border-b flex items-center justify-between
+                        {% if sig.is_signed %}bg-emerald-50{% else %}bg-amber-50{% endif %}">
+                <span class="text-xs font-semibold uppercase tracking-wide
+                             {% if sig.is_signed %}text-emerald-700{% else %}text-amber-700{% endif %}">
+                    <i class="fas {{ sig.document.category.icon }} mr-1"></i>
+                    {{ sig.document.category.name }}
+                </span>
+                {% if sig.is_signed %}
+                <span class="text-xs font-medium text-emerald-700"><i class="fas fa-check-circle mr-1"></i>Assinado</span>
+                {% else %}
+                <span class="text-xs font-medium text-amber-700"><i class="fas fa-clock mr-1"></i>Pendente</span>
+                {% endif %}
+            </div>
+            <div class="px-4 py-4">
+                <p class="font-semibold text-gray-900 leading-snug">{{ sig.document.title }}</p>
+                {% if sig.document.description %}
+                <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ sig.document.description|truncatechars:110 }}</p>
+                {% endif %}
+                <div class="flex items-center justify-between mt-3 text-xs text-gray-400">
+                    {% if sig.is_signed %}
+                    <span><i class="fas fa-calendar-check mr-1"></i>{{ sig.signed_at|date:"d/m/Y H:i" }}</span>
+                    {% else %}
+                    <span>Atribuído em {{ sig.created_at|date:"d/m/Y" }}</span>
+                    {% endif %}
+                    <i class="fas fa-chevron-right text-gray-300 group-hover:translate-x-1 transition-transform"></i>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-10 text-center text-gray-500">
+        <i class="fas fa-folder-open text-4xl text-gray-300 mb-3"></i>
+        <p>Nenhum documento {% if status == 'pending' %}pendente{% elif status == 'signed' %}assinado{% endif %} por aqui.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

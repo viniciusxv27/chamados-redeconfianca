@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ document.title }} — Administração{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <a href="{% url 'documentos:admin_documents' %}" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-3">
+        <i class="fas fa-arrow-left mr-2"></i> Voltar aos documentos
+    </a>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden mb-4">
+        <div class="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <span class="text-xs font-semibold uppercase tracking-wide text-green-700">
+                    <i class="fas {{ document.category.icon }} mr-1"></i>{{ document.category.name }}
+                </span>
+                <h2 class="text-xl font-bold text-gray-900 mt-1">{{ document.title }}</h2>
+                <p class="text-xs text-gray-400 mt-1">
+                    Criado por {{ document.created_by.full_name|default:"—" }} em {{ document.created_at|date:"d/m/Y H:i" }}
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <a href="{{ document.pdf_file.url }}" target="_blank"
+                   class="inline-flex items-center px-3 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    <i class="fas fa-file-pdf text-red-500 mr-2"></i> PDF original
+                </a>
+                <form method="post" action="{% url 'documentos:admin_delete_document' document.pk %}"
+                      onsubmit="return confirm('Excluir este documento e todas as assinaturas? Esta ação não pode ser desfeita.');">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center px-3 py-2 text-sm bg-red-50 text-red-600 rounded-md hover:bg-red-100">
+                        <i class="fas fa-trash-alt mr-2"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% if document.description %}
+        <div class="px-5 py-3 bg-gray-50 text-sm text-gray-600">{{ document.description|linebreaksbr }}</div>
+        {% endif %}
+    </div>
+
+    <!-- Signatários -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-5 py-3 border-b flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-700">
+                <i class="fas fa-users mr-1"></i> Signatários
+                <span class="text-gray-400 font-normal">({{ document.signed_count }}/{{ document.total_signers }} assinados)</span>
+            </h3>
+            <button type="button" onclick="document.getElementById('add-signers').classList.toggle('hidden')"
+                    class="text-sm text-green-600 hover:text-green-800 font-medium">
+                <i class="fas fa-user-plus mr-1"></i> Adicionar
+            </button>
+        </div>
+
+        <!-- Adicionar signatários -->
+        <div id="add-signers" class="hidden px-5 py-4 bg-green-50/50 border-b">
+            {% if available_users %}
+            <form method="post" action="{% url 'documentos:admin_add_signers' document.pk %}">
+                {% csrf_token %}
+                <input type="text" id="add-search" placeholder="Buscar colaborador..."
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-2">
+                <div id="add-list" class="border border-gray-200 rounded-md bg-white max-h-48 overflow-y-auto divide-y mb-2">
+                    {% for u in available_users %}
+                    <label class="add-row flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                           data-name="{{ u.full_name|lower }} {{ u.email|lower }}">
+                        <input type="checkbox" name="users" value="{{ u.id }}" class="rounded text-green-600 focus:ring-green-500">
+                        <span class="text-sm text-gray-800">{{ u.full_name }}</span>
+                        <span class="text-xs text-gray-400">{{ u.email }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
+                    Adicionar selecionados
+                </button>
+            </form>
+            {% else %}
+            <p class="text-sm text-gray-500">Todos os colaboradores ativos já são signatários deste documento.</p>
+            {% endif %}
+        </div>
+
+        <div class="divide-y">
+            {% for sig in signatures %}
+            <div class="flex items-center gap-3 px-5 py-3">
+                <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
+                            {% if sig.is_signed %}bg-emerald-100 text-emerald-700{% else %}bg-amber-100 text-amber-700{% endif %}">
+                    <i class="fas {% if sig.is_signed %}fa-check{% else %}fa-clock{% endif %} text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-800 truncate">{{ sig.user.full_name }}</p>
+                    {% if sig.is_signed %}
+                    <p class="text-xs text-gray-400">
+                        Assinado em {{ sig.signed_at|date:"d/m/Y H:i" }} · IP {{ sig.signature_ip|default:"—" }}
+                    </p>
+                    {% else %}
+                    <p class="text-xs text-amber-600">Pendente</p>
+                    {% endif %}
+                </div>
+                {% if sig.is_signed %}
+                <a href="{% url 'documentos:document_signed_pdf' sig.pk %}"
+                   class="text-sm text-emerald-600 hover:text-emerald-800" title="Baixar PDF assinado">
+                    <i class="fas fa-file-download"></i>
+                </a>
+                {% else %}
+                <form method="post" action="{% url 'documentos:admin_remove_signer' sig.pk %}"
+                      onsubmit="return confirm('Remover este signatário?');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-sm text-gray-400 hover:text-red-600" title="Remover signatário">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="px-5 py-6 text-center text-sm text-gray-400">Nenhum signatário atribuído.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const search = document.getElementById('add-search');
+    if (!search) return;
+    const rows = Array.from(document.querySelectorAll('.add-row'));
+    search.addEventListener('input', function() {
+        const q = this.value.trim().toLowerCase();
+        rows.forEach(r => { r.style.display = r.dataset.name.includes(q) ? '' : 'none'; });
+    });
+})();
+</script>
+{% endblock %}

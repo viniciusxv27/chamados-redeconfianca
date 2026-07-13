@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}Novo Documento{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
+    <a href="{% url 'documentos:admin_documents' %}" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-3">
+        <i class="fas fa-arrow-left mr-2"></i> Voltar
+    </a>
+
+    <h2 class="text-2xl font-bold text-gray-900 mb-4">
+        <i class="fas fa-file-circle-plus text-green-600 mr-2"></i> Novo Documento
+    </h2>
+
+    <form method="post" enctype="multipart/form-data" class="bg-white shadow rounded-lg p-5 space-y-5">
+        {% csrf_token %}
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Título <span class="text-red-500">*</span></label>
+            <input type="text" name="title" value="{{ form_data.title|default:'' }}" required
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Categoria <span class="text-red-500">*</span></label>
+            {% if categories %}
+            <select name="category" required
+                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+                <option value="">Selecione...</option>
+                {% for cat in categories %}
+                <option value="{{ cat.id }}" {% if form_data.category == cat.id|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <p class="text-sm text-amber-600 bg-amber-50 rounded-md px-3 py-2">
+                Nenhuma categoria ativa.
+                <a href="{% url 'documentos:admin_categories' %}" class="font-medium underline">Crie uma categoria</a> antes de continuar.
+            </p>
+            {% endif %}
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <textarea name="description" rows="3"
+                      class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">{{ form_data.description|default:'' }}</textarea>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo PDF <span class="text-red-500">*</span></label>
+            <input type="file" name="pdf_file" accept="application/pdf,.pdf" required
+                   class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+        </div>
+
+        <!-- Seleção de signatários -->
+        <div>
+            <div class="flex items-center justify-between mb-1">
+                <label class="block text-sm font-medium text-gray-700">Signatários <span class="text-red-500">*</span></label>
+                <span class="text-xs text-gray-500"><span id="selected-count">0</span> selecionado(s)</span>
+            </div>
+            <input type="text" id="user-search" placeholder="Buscar colaborador..."
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-2 focus:ring-green-500 focus:border-green-500">
+            <div class="flex items-center gap-3 mb-2 text-xs">
+                <button type="button" onclick="toggleAll(true)" class="text-green-600 hover:text-green-800">Selecionar todos (visíveis)</button>
+                <button type="button" onclick="toggleAll(false)" class="text-gray-500 hover:text-gray-700">Limpar seleção</button>
+            </div>
+            <div id="user-list" class="border border-gray-200 rounded-md max-h-64 overflow-y-auto divide-y">
+                {% for u in users %}
+                <label class="user-row flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                       data-name="{{ u.full_name|lower }} {{ u.email|lower }} {{ u.cpf }}">
+                    <input type="checkbox" name="users" value="{{ u.id }}"
+                           class="user-checkbox rounded text-green-600 focus:ring-green-500"
+                           {% if u.id in selected_users %}checked{% endif %}>
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-sm text-gray-800 truncate">{{ u.full_name }}</span>
+                        <span class="block text-xs text-gray-400 truncate">{{ u.email }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+            <a href="{% url 'documentos:admin_documents' %}"
+               class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</a>
+            <button type="submit" {% if not categories %}disabled{% endif %}
+                    class="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-paper-plane mr-2"></i> Criar e atribuir
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    const search = document.getElementById('user-search');
+    const rows = Array.from(document.querySelectorAll('.user-row'));
+    const countEl = document.getElementById('selected-count');
+
+    function updateCount() {
+        countEl.textContent = document.querySelectorAll('.user-checkbox:checked').length;
+    }
+    search.addEventListener('input', function() {
+        const q = this.value.trim().toLowerCase();
+        rows.forEach(r => {
+            r.style.display = r.dataset.name.includes(q) ? '' : 'none';
+        });
+    });
+    window.toggleAll = function(state) {
+        rows.forEach(r => {
+            if (r.style.display !== 'none') {
+                r.querySelector('.user-checkbox').checked = state;
+            }
+        });
+        updateCount();
+    };
+    document.getElementById('user-list').addEventListener('change', updateCount);
+    updateCount();
+})();
+</script>
+{% endblock %}
