@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import User, Sector, UserSession, normalize_cpf
+from .models import User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
 import json
@@ -486,7 +486,13 @@ def import_users_excel(request):
                     name_parts = (full_name or '').strip().split()
                     first_name = name_parts[0] if name_parts else ''
                     last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
-                    
+
+                    # Segurança: o importador não pode atribuir hierarquia acima da sua.
+                    # Ignora o valor da planilha quando não permitido (novo vira PADRAO;
+                    # existente mantém a hierarquia atual).
+                    if hierarchy and not request.user.can_assign_hierarchy(hierarchy):
+                        hierarchy = None
+
                     if not email:  # Email é obrigatório
                         continue
                     
@@ -880,10 +886,15 @@ def create_user_view(request):
         
         context = {
             'sectors': Sector.objects.all(),
-            'hierarchy_choices': User.HIERARCHY_CHOICES,
+            'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
         }
-        
+
+        # Segurança: não permitir criar usuário com hierarquia acima da própria
+        if not request.user.can_assign_hierarchy(hierarchy):
+            messages.error(request, 'Você não pode criar um usuário com hierarquia superior à sua.')
+            return render(request, 'admin/create_user.html', context)
+
         try:
             # Verificar se email já existe
             if User.objects.filter(email=email).exists():
@@ -955,7 +966,7 @@ def create_user_view(request):
     
     context = {
         'sectors': Sector.objects.all(),
-        'hierarchy_choices': User.HIERARCHY_CHOICES,
+        'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
     }
     return render(request, 'admin/create_user.html', context)
@@ -969,8 +980,7 @@ def edit_user_view(request, user_id):
         return redirect('dashboard')
     
     user_to_edit = get_object_or_404(User.objects.prefetch_related('sectors'), id=user_id)
-    hierarchy_levels = {key: index for index, (key, _) in enumerate(User.HIERARCHY_CHOICES)}
-    
+
     if request.method == 'POST':
         email = request.POST.get('email')
         username = request.POST.get('username')
@@ -1016,18 +1026,16 @@ def edit_user_view(request, user_id):
             if User.objects.filter(email=email).exclude(id=user_id).exists():
                 messages.error(request, 'Email já existe.')
             else:
-                # Ao editar outro usuário, não permitir atribuir hierarquia superior à do usuário logado.
-                if user_to_edit.id != request.user.id:
-                    current_user_level = hierarchy_levels.get(request.user.hierarchy, -1)
-                    selected_level = hierarchy_levels.get(hierarchy, -1)
+                # Segurança: não permitir gerenciar usuário de hierarquia superior
+                # à própria, nem atribuir (a si mesmo ou a outro) uma hierarquia
+                # acima da sua — evita autopromoção e escalonamento.
+                if not request.user.can_manage_hierarchy_of(user_to_edit):
+                    messages.error(request, 'Você não pode editar um usuário de hierarquia superior à sua.')
+                    return redirect('edit_user', user_id=user_to_edit.id)
 
-                    if selected_level == -1:
-                        messages.error(request, 'Hierarquia selecionada é inválida.')
-                        return redirect('edit_user', user_id=user_to_edit.id)
-
-                    if selected_level > current_user_level:
-                        messages.error(request, 'Você não pode definir uma hierarquia maior que a sua para outro usuário.')
-                        return redirect('edit_user', user_id=user_to_edit.id)
+                if not request.user.can_assign_hierarchy(hierarchy):
+                    messages.error(request, 'Você não pode definir uma hierarquia maior que a sua.')
+                    return redirect('edit_user', user_id=user_to_edit.id)
 
                 sector = get_object_or_404(Sector, id=sector_id) if sector_id else None
                 
@@ -1096,10 +1104,428 @@ def edit_user_view(request, user_id):
     context = {
         'user_to_edit': user_to_edit,
         'sectors': Sector.objects.all(),
-        'hierarchy_choices': User.HIERARCHY_CHOICES,
+        'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
     }
     return render(request, 'admin/edit_user.html', context)
+
+
+# ==========================================================================
+# Pré-cadastro de colaboradores e documentos
+# ==========================================================================
+
+# Tipos de arquivo aceitos para documentos e limite de tamanho (público/admin)
+DOCUMENT_ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx']
+DOCUMENT_MAX_SIZE = 20 * 1024 * 1024  # 20MB por documento
+
+
+def _document_is_valid(uploaded_file):
+    """Valida extensão e tamanho de um documento enviado. Retorna (ok, erro)."""
+    import os
+    if uploaded_file.size > DOCUMENT_MAX_SIZE:
+        return False, f'O arquivo "{uploaded_file.name}" excede o limite de 20MB.'
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    if ext not in DOCUMENT_ALLOWED_EXTENSIONS:
+        return False, f'O arquivo "{uploaded_file.name}" tem um formato não permitido (use PDF, imagem ou Word).'
+    return True, ''
+
+
+def _store_user_document(target_user, uploaded_file, document_type=None, document_name='', uploaded_by=None):
+    """Cria um UserDocument a partir de um arquivo enviado."""
+    return UserDocument.objects.create(
+        user=target_user,
+        document_type=document_type,
+        document_name=document_name or (document_type.name if document_type else ''),
+        file=uploaded_file,
+        original_filename=uploaded_file.name,
+        file_size=uploaded_file.size,
+        content_type=getattr(uploaded_file, 'content_type', '') or '',
+        uploaded_by=uploaded_by,
+    )
+
+
+@login_required
+def pre_register_user_view(request):
+    """Cria um pré-cadastro (dados básicos) e gera um link para o colaborador concluir."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip().lower()
+        sector_id = request.POST.get('sector')
+        hierarchy = request.POST.get('hierarchy') or 'PADRAO'
+        job_title = request.POST.get('job_title', '').strip()
+        phone = request.POST.get('phone', '').strip()
+
+        context = {
+            'sectors': Sector.objects.all(),
+            'hierarchy_choices': request.user.assignable_hierarchy_choices(),
+            'user': request.user,
+            'form_data': request.POST,
+        }
+
+        if not full_name:
+            messages.error(request, 'Informe o nome completo do colaborador.')
+            return render(request, 'admin/pre_register_user.html', context)
+        if not email:
+            messages.error(request, 'Informe o e-mail do colaborador.')
+            return render(request, 'admin/pre_register_user.html', context)
+        if User.objects.filter(email=email).exists():
+            messages.error(request, 'Já existe um usuário com este e-mail.')
+            return render(request, 'admin/pre_register_user.html', context)
+
+        # Segurança: não permitir hierarquia acima da do próprio usuário
+        if User.hierarchy_rank(hierarchy) == -1:
+            hierarchy = 'PADRAO'
+        if not request.user.can_assign_hierarchy(hierarchy):
+            messages.error(request, 'Você não pode definir uma hierarquia maior que a sua.')
+            return render(request, 'admin/pre_register_user.html', context)
+
+        name_parts = full_name.split()
+        first_name = name_parts[0] if name_parts else ''
+        last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+        from django.utils.crypto import get_random_string
+        # Username único a partir do e-mail
+        base_username = (email.split('@')[0] or 'colaborador')[:120]
+        username = base_username
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"{base_username}{suffix}"
+
+        # Token único para o link de conclusão
+        token = get_random_string(48)
+        while User.objects.filter(pre_registration_token=token).exists():
+            token = get_random_string(48)
+
+        sector = get_object_or_404(Sector, id=sector_id) if sector_id else None
+
+        try:
+            new_user = User(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                sector=sector,
+                hierarchy=hierarchy,
+                job_title=job_title,
+                phone=phone,
+                is_active=False,  # inativo até o colaborador concluir o pré-cadastro
+                pre_registration_status=User.PRE_REG_PENDING,
+                pre_registration_token=token,
+                pre_registration_created_at=timezone.now(),
+            )
+            new_user.set_unusable_password()
+            new_user.save()
+            if sector:
+                new_user.sectors.set([sector])
+
+            log_action(
+                request.user,
+                'USER_CREATE',
+                f'Pré-cadastro criado: {new_user.full_name} ({new_user.email})',
+                request
+            )
+            messages.success(
+                request,
+                f'Pré-cadastro de {new_user.full_name} criado! Envie o link abaixo para o colaborador.'
+            )
+            return redirect('pre_register_link', user_id=new_user.id)
+        except Exception as e:
+            messages.error(request, f'Erro ao criar pré-cadastro: {str(e)}')
+            return render(request, 'admin/pre_register_user.html', context)
+
+    context = {
+        'sectors': Sector.objects.all(),
+        'hierarchy_choices': request.user.assignable_hierarchy_choices(),
+        'user': request.user,
+    }
+    return render(request, 'admin/pre_register_user.html', context)
+
+
+@login_required
+def pre_register_link_view(request, user_id):
+    """Exibe o link de pré-cadastro de um colaborador pendente (para copiar/enviar)."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+
+    from django.urls import reverse
+    target = get_object_or_404(User, id=user_id)
+    if not target.pre_registration_token or target.pre_registration_status != User.PRE_REG_PENDING:
+        messages.info(request, 'Este colaborador não possui um pré-cadastro pendente.')
+        return redirect('view_user_profile', user_id=target.id)
+
+    link = request.build_absolute_uri(
+        reverse('complete_pre_registration', kwargs={'token': target.pre_registration_token})
+    )
+    context = {
+        'user': request.user,
+        'target': target,
+        'link': link,
+    }
+    return render(request, 'admin/pre_register_link.html', context)
+
+
+def complete_pre_registration_view(request, token):
+    """Página PÚBLICA onde o colaborador conclui o cadastro e anexa os documentos."""
+    target = User.objects.filter(pre_registration_token=token).first()
+
+    # Token inválido, expirado ou já utilizado
+    if not target or target.pre_registration_status != User.PRE_REG_PENDING:
+        return render(request, 'users/pre_register_invalid.html', status=404)
+
+    required_documents = list(RequiredDocument.objects.filter(is_active=True))
+
+    if request.method == 'POST':
+        password = request.POST.get('password', '')
+        password_confirm = request.POST.get('password_confirm', '')
+        full_name = request.POST.get('full_name', '').strip()
+        cpf = normalize_cpf(request.POST.get('cpf', ''))
+        pis = request.POST.get('pis', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        birth_date = request.POST.get('birth_date', '').strip()
+        neighborhood = request.POST.get('neighborhood', '').strip()
+        city = request.POST.get('city', '').strip()
+        uniform_size_shirt = request.POST.get('uniform_size_shirt', '').strip()
+        uniform_size_pants = request.POST.get('uniform_size_pants', '').strip()
+
+        errors = []
+        if len(password) < 6:
+            errors.append('A senha deve ter pelo menos 6 caracteres.')
+        if password != password_confirm:
+            errors.append('As senhas não conferem.')
+
+        # Validar documentos (obrigatórios presentes; todos os enviados válidos)
+        docs_to_save = []
+        for doc in required_documents:
+            uploaded = request.FILES.get(f'document_{doc.id}')
+            if not uploaded:
+                if doc.is_required:
+                    errors.append(f'O documento "{doc.name}" é obrigatório.')
+                continue
+            ok, err = _document_is_valid(uploaded)
+            if not ok:
+                errors.append(err)
+            else:
+                docs_to_save.append((doc, uploaded))
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            context = {
+                'target': target,
+                'required_documents': required_documents,
+                'form_data': request.POST,
+            }
+            return render(request, 'users/pre_register_complete.html', context)
+
+        # Atualizar dados do colaborador
+        if full_name:
+            parts = full_name.split()
+            target.first_name = parts[0] if parts else target.first_name
+            target.last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
+        target.cpf = cpf
+        target.pis = pis
+        if phone:
+            target.phone = phone
+        target.birth_date = birth_date if birth_date else None
+        target.neighborhood = neighborhood
+        target.city = city
+        target.uniform_size_shirt = uniform_size_shirt
+        target.uniform_size_pants = uniform_size_pants
+
+        # Auto-ativação: define a senha e ativa a conta
+        target.set_password(password)
+        target.is_active = True
+        target.pre_registration_status = User.PRE_REG_COMPLETED
+        target.pre_registration_completed_at = timezone.now()
+        target.pre_registration_token = None  # invalida o link após a conclusão
+        target.save()
+
+        for doc, uploaded in docs_to_save:
+            _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
+
+        log_action(
+            target,
+            'USER_UPDATE',
+            f'Pré-cadastro concluído: {target.full_name} ({target.email})',
+            request
+        )
+        return redirect('pre_registration_success')
+
+    context = {
+        'target': target,
+        'required_documents': required_documents,
+        'form_data': None,
+    }
+    return render(request, 'users/pre_register_complete.html', context)
+
+
+def pre_registration_success_view(request):
+    """Página pública de confirmação após concluir o pré-cadastro."""
+    return render(request, 'users/pre_register_success.html')
+
+
+@login_required
+def view_user_profile_view(request, user_id):
+    """Exibe o perfil completo do colaborador, com todos os dados e documentos."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+
+    target = get_object_or_404(
+        User.objects.prefetch_related('sectors', 'documents'),
+        id=user_id
+    )
+    documents = target.documents.all().select_related('document_type', 'uploaded_by')
+
+    pre_registration_link = None
+    if target.is_pre_registration_pending() and target.pre_registration_token:
+        from django.urls import reverse
+        pre_registration_link = request.build_absolute_uri(
+            reverse('complete_pre_registration', kwargs={'token': target.pre_registration_token})
+        )
+
+    context = {
+        'user': request.user,
+        'target': target,
+        'documents': documents,
+        'required_documents': RequiredDocument.objects.filter(is_active=True),
+        'pre_registration_link': pre_registration_link,
+    }
+    return render(request, 'admin/user_profile.html', context)
+
+
+@login_required
+@require_POST
+def admin_upload_user_document_view(request, user_id):
+    """Permite ao gestor anexar um documento ao colaborador pela tela de perfil."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+
+    target = get_object_or_404(User, id=user_id)
+    uploaded = request.FILES.get('file')
+    if not uploaded:
+        messages.error(request, 'Selecione um arquivo para enviar.')
+        return redirect('view_user_profile', user_id=target.id)
+
+    ok, err = _document_is_valid(uploaded)
+    if not ok:
+        messages.error(request, err)
+        return redirect('view_user_profile', user_id=target.id)
+
+    doc_type_id = request.POST.get('document_type') or None
+    doc_type = RequiredDocument.objects.filter(id=doc_type_id).first() if doc_type_id else None
+    custom_name = request.POST.get('document_name', '').strip()
+
+    _store_user_document(target, uploaded, document_type=doc_type, document_name=custom_name, uploaded_by=request.user)
+
+    log_action(
+        request.user,
+        'USER_UPDATE',
+        f'Documento adicionado ao colaborador {target.full_name} ({target.email})',
+        request
+    )
+    messages.success(request, 'Documento adicionado com sucesso.')
+    return redirect('view_user_profile', user_id=target.id)
+
+
+@login_required
+@require_POST
+def delete_user_document_view(request, document_id):
+    """Remove um documento de um colaborador."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+        return redirect('dashboard')
+
+    doc = get_object_or_404(UserDocument, id=document_id)
+    target_id = doc.user_id
+    name = doc.display_name
+    try:
+        doc.file.delete(save=False)
+    except Exception:
+        pass
+    doc.delete()
+
+    log_action(request.user, 'USER_UPDATE', f'Documento removido de um colaborador: {name}', request)
+    messages.success(request, 'Documento removido com sucesso.')
+    return redirect('view_user_profile', user_id=target_id)
+
+
+@login_required
+def manage_required_documents_view(request):
+    """Configuração (SUPERADMIN) dos documentos exigidos no pré-cadastro."""
+    if not request.user.can_manage_required_documents():
+        messages.error(request, 'Apenas o SUPERADMIN pode configurar os documentos exigidos.')
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        is_required = request.POST.get('is_required') == 'on'
+        is_active = request.POST.get('is_active') == 'on'
+        order = request.POST.get('order', '0')
+        if not name:
+            messages.error(request, 'Informe o nome do documento.')
+        else:
+            RequiredDocument.objects.create(
+                name=name,
+                description=description,
+                is_required=is_required,
+                is_active=is_active,
+                order=int(order) if str(order).isdigit() else 0,
+            )
+            messages.success(request, f'Documento "{name}" adicionado.')
+        return redirect('manage_required_documents')
+
+    context = {
+        'user': request.user,
+        'documents': RequiredDocument.objects.all(),
+    }
+    return render(request, 'admin/required_documents.html', context)
+
+
+@login_required
+@require_POST
+def edit_required_document_view(request, doc_id):
+    """Edita um documento exigido (SUPERADMIN)."""
+    if not request.user.can_manage_required_documents():
+        messages.error(request, 'Apenas o SUPERADMIN pode configurar os documentos exigidos.')
+        return redirect('dashboard')
+
+    doc = get_object_or_404(RequiredDocument, id=doc_id)
+    name = request.POST.get('name', '').strip()
+    if name:
+        doc.name = name
+    doc.description = request.POST.get('description', '').strip()
+    doc.is_required = request.POST.get('is_required') == 'on'
+    doc.is_active = request.POST.get('is_active') == 'on'
+    order = request.POST.get('order', '')
+    if str(order).isdigit():
+        doc.order = int(order)
+    doc.save()
+    messages.success(request, f'Documento "{doc.name}" atualizado.')
+    return redirect('manage_required_documents')
+
+
+@login_required
+@require_POST
+def delete_required_document_view(request, doc_id):
+    """Remove um documento exigido (SUPERADMIN)."""
+    if not request.user.can_manage_required_documents():
+        messages.error(request, 'Apenas o SUPERADMIN pode configurar os documentos exigidos.')
+        return redirect('dashboard')
+
+    doc = get_object_or_404(RequiredDocument, id=doc_id)
+    name = doc.name
+    doc.delete()
+    messages.success(request, f'Documento "{name}" removido.')
+    return redirect('manage_required_documents')
 
 
 @login_required

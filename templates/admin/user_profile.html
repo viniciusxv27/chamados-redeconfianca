@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}Perfil de {{ target.full_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-6 py-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-id-card text-primary mr-3"></i>
+                        Perfil do Colaborador
+                    </h1>
+                    <p class="text-gray-600 mt-1">Visualização completa dos dados e documentos.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'edit_user' target.id %}" class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors inline-flex items-center">
+                        <i class="fas fa-edit mr-2"></i> Editar
+                    </a>
+                    <a href="{% url 'manage_users' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors inline-flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i> Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-5xl mx-auto space-y-6">
+
+        <!-- Pré-cadastro pendente -->
+        {% if pre_registration_link %}
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-5">
+            <div class="flex items-start">
+                <i class="fas fa-user-clock text-amber-500 text-xl mt-0.5 mr-3"></i>
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-amber-900">Pré-cadastro pendente</p>
+                    <p class="text-sm text-amber-800 mb-3">O colaborador ainda não concluiu o cadastro. Envie o link abaixo:</p>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="preRegLink" type="text" readonly value="{{ pre_registration_link }}"
+                               class="flex-1 px-3 py-2 border border-amber-300 rounded-lg bg-white text-sm text-gray-700 focus:outline-none">
+                        <button type="button" onclick="copyProfileLink()" class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors inline-flex items-center justify-center">
+                            <i class="fas fa-copy mr-2"></i><span id="copyLabel">Copiar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Cabeçalho do perfil -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div class="flex-shrink-0">
+                    {% if target.profile_picture %}
+                        <img src="{{ target.profile_picture.url }}" alt="{{ target.full_name }}" class="w-20 h-20 rounded-full object-cover border border-gray-200">
+                    {% elif target.avatar %}
+                        <img src="{{ target.avatar.url }}" alt="{{ target.full_name }}" class="w-20 h-20 rounded-full object-cover border border-gray-200">
+                    {% else %}
+                        <div class="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center">
+                            <i class="fas fa-user text-gray-400 text-3xl"></i>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h2 class="text-xl font-bold text-gray-900">{{ target.full_name }}</h2>
+                    <p class="text-gray-600">{{ target.email }}</p>
+                    <div class="flex flex-wrap gap-2 mt-2">
+                        <span class="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{{ target.get_hierarchy_display }}</span>
+                        {% if target.pre_registration_status == 'PENDING' %}
+                            <span class="px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800"><i class="fas fa-user-clock mr-1"></i>Pré-cadastro pendente</span>
+                        {% elif target.pre_registration_status == 'COMPLETED' %}
+                            <span class="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><i class="fas fa-user-check mr-1"></i>Pré-cadastro concluído</span>
+                        {% endif %}
+                        {% if target.is_active %}
+                            <span class="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check-circle mr-1"></i>Ativo</span>
+                        {% else %}
+                            <span class="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times-circle mr-1"></i>Inativo</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dados detalhados -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Dados do Colaborador</h3>
+            </div>
+            <div class="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+                {% include 'admin/_profile_field.html' with label='Nome de usuário' value=target.username %}
+                {% include 'admin/_profile_field.html' with label='Telefone' value=target.phone %}
+                {% include 'admin/_profile_field.html' with label='CPF' value=target.cpf %}
+                {% include 'admin/_profile_field.html' with label='PIS' value=target.pis %}
+                {% include 'admin/_profile_field.html' with label='Cargo' value=target.job_title %}
+                {% include 'admin/_profile_field.html' with label='Setor principal' value=target.primary_sector %}
+                {% include 'admin/_profile_field.html' with label='Setores' value=target.sectors_display %}
+                {% include 'admin/_profile_field.html' with label='Situação' value=target.get_status_display %}
+                {% include 'admin/_profile_field.html' with label='Data de nascimento' value=target.birth_date %}
+                {% include 'admin/_profile_field.html' with label='Data de admissão' value=target.admission_date %}
+                {% include 'admin/_profile_field.html' with label='Data de demissão' value=target.demission_date %}
+                {% include 'admin/_profile_field.html' with label='Login/Código' value=target.login_code %}
+                {% include 'admin/_profile_field.html' with label='PDV' value=target.pdv %}
+                {% include 'admin/_profile_field.html' with label='Bairro' value=target.neighborhood %}
+                {% include 'admin/_profile_field.html' with label='Cidade' value=target.city %}
+                {% include 'admin/_profile_field.html' with label='Perfil DISC' value=target.disc_profile %}
+                {% include 'admin/_profile_field.html' with label='Uniforme (Blusa)' value=target.uniform_size_shirt %}
+                {% include 'admin/_profile_field.html' with label='Uniforme (Calça)' value=target.uniform_size_pants %}
+            </div>
+        </div>
+
+        <!-- Documentos -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-folder-open text-gray-500 mr-2"></i>
+                    Documentos
+                    <span class="ml-2 text-sm font-normal text-gray-500">({{ documents|length }})</span>
+                </h3>
+            </div>
+
+            <div class="p-6">
+                {% if documents %}
+                    <div class="space-y-2 mb-6">
+                        {% for doc in documents %}
+                            <div class="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                <div class="flex items-center space-x-3 min-w-0 flex-1">
+                                    <div class="flex-shrink-0">
+                                        {% if doc.is_image %}
+                                            <img src="{{ doc.file.url }}" alt="{{ doc.display_name }}" class="w-10 h-10 object-cover rounded">
+                                        {% elif doc.is_pdf %}
+                                            <i class="fas fa-file-pdf text-red-500 text-xl"></i>
+                                        {% else %}
+                                            <i class="fas fa-file-alt text-gray-500 text-xl"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-sm font-medium text-gray-900 truncate">{{ doc.display_name }}</p>
+                                        <div class="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                                            <span>{{ doc.original_filename }}</span>
+                                            <span>•</span>
+                                            <span>{{ doc.file_size_formatted }}</span>
+                                            <span>•</span>
+                                            <span>{{ doc.uploaded_at|date:"d/m/Y H:i" }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0 ml-2 flex items-center gap-2">
+                                    <a href="{{ doc.file.url }}" target="_blank"
+                                       class="inline-flex items-center px-3 py-1 text-xs sm:text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                                        <i class="fas fa-eye mr-1"></i><span class="hidden sm:inline">Ver</span>
+                                    </a>
+                                    <form method="post" action="{% url 'delete_user_document' doc.id %}" class="inline"
+                                          onsubmit="return confirm('Remover este documento? Esta ação não pode ser desfeita.');">
+                                        {% csrf_token %}
+                                        <button type="submit" title="Remover documento"
+                                                class="inline-flex items-center px-3 py-1 text-xs sm:text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors">
+                                            <i class="fas fa-trash-alt mr-1"></i><span class="hidden sm:inline">Remover</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-folder-open text-4xl mb-3 text-gray-300"></i>
+                        <p class="font-medium">Não possui Documentos</p>
+                    </div>
+                {% endif %}
+
+                <!-- Adicionar documento (gestor) -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 class="font-medium text-blue-900 mb-3 flex items-center text-sm">
+                        <i class="fas fa-plus mr-2"></i> Adicionar documento
+                    </h4>
+                    <form method="post" action="{% url 'admin_upload_user_document' target.id %}" enctype="multipart/form-data"
+                          class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                        {% csrf_token %}
+                        <div>
+                            <label class="block text-xs font-medium text-blue-900 mb-1">Tipo</label>
+                            <select name="document_type" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                                <option value="">Outro (livre)</option>
+                                {% for rd in required_documents %}
+                                    <option value="{{ rd.id }}">{{ rd.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-blue-900 mb-1">Nome (se "Outro")</label>
+                            <input type="text" name="document_name" placeholder="Ex: Contrato"
+                                   class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-blue-900 mb-1">Arquivo</label>
+                            <input type="file" name="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                                   class="w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600">
+                        </div>
+                        <div class="sm:col-span-3 flex justify-end">
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center">
+                                <i class="fas fa-upload mr-2"></i> Enviar documento
+                            </button>
+                        </div>
+                    </form>
+                    <p class="text-xs text-blue-600 mt-2">Formatos aceitos: PDF, imagem ou Word (máx. 20MB).</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if pre_registration_link %}
+<script>
+    function copyProfileLink() {
+        var input = document.getElementById('preRegLink');
+        input.select();
+        input.setSelectionRange(0, 99999);
+        var label = document.getElementById('copyLabel');
+        function done() { label.textContent = 'Copiado!'; setTimeout(function () { label.textContent = 'Copiar'; }, 2000); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(input.value).then(done).catch(function () { document.execCommand('copy'); done(); });
+        } else {
+            document.execCommand('copy'); done();
+        }
+    }
+</script>
+{% endif %}
+{% endblock %}

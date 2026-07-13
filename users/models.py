@@ -409,6 +409,15 @@ def upload_sector_team_logo(instance, filename):
     return os.path.join('sectors', 'team_logos', new_filename)
 
 
+def upload_user_document(instance, filename):
+    """Define o caminho de upload para documentos de colaboradores (pré-cadastro)."""
+    import os
+    from django.utils import timezone
+    ext = filename.split('.')[-1] if '.' in filename else 'bin'
+    new_filename = f"doc_{timezone.now().strftime('%Y%m%d_%H%M%S_%f')}.{ext}"
+    return os.path.join('user_documents', str(instance.user_id or 'new'), new_filename)
+
+
 class Sector(models.Model):
     name = models.CharField(max_length=100, verbose_name="Nome")
     description = models.TextField(blank=True, verbose_name="Descrição")
@@ -501,6 +510,40 @@ class User(AbstractUser):
         blank=True,
         null=True,
         verbose_name="Anexo do Afastamento"
+    )
+
+    # Pré-cadastro (onboarding via link enviado ao novo colaborador)
+    PRE_REG_NONE = 'NONE'
+    PRE_REG_PENDING = 'PENDING'
+    PRE_REG_COMPLETED = 'COMPLETED'
+    PRE_REGISTRATION_CHOICES = [
+        (PRE_REG_NONE, 'Cadastro normal'),
+        (PRE_REG_PENDING, 'Pré-cadastro pendente'),
+        (PRE_REG_COMPLETED, 'Pré-cadastro concluído'),
+    ]
+    pre_registration_status = models.CharField(
+        max_length=20,
+        choices=PRE_REGISTRATION_CHOICES,
+        default=PRE_REG_NONE,
+        db_index=True,
+        verbose_name="Situação do Pré-cadastro"
+    )
+    pre_registration_token = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        unique=True,
+        verbose_name="Token de Pré-cadastro"
+    )
+    pre_registration_created_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Data do Pré-cadastro"
+    )
+    pre_registration_completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Data de Conclusão do Pré-cadastro"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -645,6 +688,145 @@ class User(AbstractUser):
     def can_delete_ticket_attachments(self):
         """Permite remover anexos de chamados para SUPERVISOR e hierarquias acima."""
         return self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+
+    def is_pre_registration_pending(self):
+        """Colaborador criado via pré-cadastro que ainda não concluiu o preenchimento."""
+        return self.pre_registration_status == self.PRE_REG_PENDING
+
+    def can_manage_required_documents(self):
+        """Somente SUPERADMIN configura quais documentos são exigidos no pré-cadastro."""
+        return self.hierarchy == 'SUPERADMIN'
+
+    @classmethod
+    def hierarchy_rank(cls, hierarchy):
+        """Índice da hierarquia (0 = mais baixo). Retorna -1 se for inválida."""
+        for index, (key, _label) in enumerate(cls.HIERARCHY_CHOICES):
+            if key == hierarchy:
+                return index
+        return -1
+
+    @property
+    def hierarchy_level(self):
+        """Nível numérico da hierarquia do próprio usuário."""
+        return self.hierarchy_rank(self.hierarchy)
+
+    def assignable_hierarchy_choices(self):
+        """Hierarquias que este usuário pode atribuir (somente até o seu próprio nível)."""
+        if self.is_superuser:
+            return list(self.HIERARCHY_CHOICES)
+        max_rank = self.hierarchy_level
+        return [choice for index, choice in enumerate(self.HIERARCHY_CHOICES) if index <= max_rank]
+
+    def can_assign_hierarchy(self, hierarchy):
+        """Impede atribuir hierarquia acima da própria (evita autopromoção/escalonamento)."""
+        if self.is_superuser:
+            return True
+        rank = self.hierarchy_rank(hierarchy)
+        return rank != -1 and rank <= self.hierarchy_level
+
+    def can_manage_hierarchy_of(self, other):
+        """Não permite editar/gerenciar usuários de hierarquia superior à própria."""
+        if self.is_superuser or not other or self.pk == other.pk:
+            return True
+        return self.hierarchy_level >= self.hierarchy_rank(other.hierarchy)
+
+
+class RequiredDocument(models.Model):
+    """Documento exigido no pré-cadastro. Lista global configurável pelo SUPERADMIN."""
+    name = models.CharField(max_length=150, verbose_name="Nome do Documento")
+    description = models.CharField(max_length=255, blank=True, default='', verbose_name="Descrição")
+    is_required = models.BooleanField(default=True, verbose_name="Obrigatório")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    order = models.PositiveIntegerField(default=0, verbose_name="Ordem de Exibição")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Documento Exigido"
+        verbose_name_plural = "Documentos Exigidos"
+        ordering = ['order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class UserDocument(models.Model):
+    """Documento enviado por um colaborador (no pré-cadastro ou pelo gestor)."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='documents',
+        verbose_name="Colaborador"
+    )
+    document_type = models.ForeignKey(
+        RequiredDocument,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploads',
+        verbose_name="Tipo de Documento"
+    )
+    document_name = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        verbose_name="Nome do Documento"
+    )
+    file = models.FileField(
+        upload_to=upload_user_document,
+        storage=get_media_storage(),
+        verbose_name="Arquivo"
+    )
+    original_filename = models.CharField(max_length=255, blank=True, default='')
+    file_size = models.PositiveIntegerField(default=0)
+    content_type = models.CharField(max_length=255, blank=True, default='')
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_user_documents',
+        verbose_name="Enviado por"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Documento do Colaborador"
+        verbose_name_plural = "Documentos dos Colaboradores"
+        ordering = ['document_name', '-uploaded_at']
+
+    def __str__(self):
+        return f"{self.user} - {self.display_name}"
+
+    @property
+    def display_name(self):
+        if self.document_name:
+            return self.document_name
+        if self.document_type_id and self.document_type:
+            return self.document_type.name
+        return self.original_filename or 'Documento'
+
+    @property
+    def file_extension(self):
+        import os
+        source = self.original_filename or (self.file.name if self.file else '')
+        return os.path.splitext(source)[1].lower()
+
+    @property
+    def is_image(self):
+        return self.file_extension in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+
+    @property
+    def is_pdf(self):
+        return self.file_extension == '.pdf'
+
+    @property
+    def file_size_formatted(self):
+        size = self.file_size or 0
+        if size < 1024:
+            return f"{size} bytes"
+        elif size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        return f"{size / (1024 * 1024):.1f} MB"
 
 
 class UserSession(models.Model):

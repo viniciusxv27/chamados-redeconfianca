@@ -8,6 +8,10 @@ urlpatterns = [
     path('forgot-password/', views.forgot_password_view, name='forgot_password'),
     path('reset-password/<uidb64>/<token>/', views.reset_password_view, name='reset_password'),
     path('logout/', views.logout_view, name='logout'),
+
+    # Pré-cadastro público (link enviado ao novo colaborador, sem login)
+    path('pre-cadastro/concluido/', views.pre_registration_success_view, name='pre_registration_success'),
+    path('pre-cadastro/<str:token>/', views.complete_pre_registration_view, name='complete_pre_registration'),
     
     # Profile URLs
     path('profile/', views.profile_view, name='profile'),
@@ -32,7 +36,15 @@ urlpatterns = [
     path('manage/', views.admin_panel_view, name='admin_panel'),
     path('manage/users/', views.manage_users_view, name='manage_users'),
     path('manage/users/create/', views.create_user_view, name='create_user'),
+    path('manage/users/pre-register/', views.pre_register_user_view, name='pre_register_user'),
     path('manage/users/<int:user_id>/edit/', views.edit_user_view, name='edit_user'),
+    path('manage/users/<int:user_id>/profile/', views.view_user_profile_view, name='view_user_profile'),
+    path('manage/users/<int:user_id>/pre-register-link/', views.pre_register_link_view, name='pre_register_link'),
+    path('manage/users/<int:user_id>/documents/upload/', views.admin_upload_user_document_view, name='admin_upload_user_document'),
+    path('manage/user-documents/<int:document_id>/delete/', views.delete_user_document_view, name='delete_user_document'),
+    path('manage/required-documents/', views.manage_required_documents_view, name='manage_required_documents'),
+    path('manage/required-documents/<int:doc_id>/edit/', views.edit_required_document_view, name='edit_required_document'),
+    path('manage/required-documents/<int:doc_id>/delete/', views.delete_required_document_view, name='delete_required_document'),
     path('manage/users/<int:user_id>/change-password/', views.admin_change_user_password, name='admin_change_user_password'),
     path('manage/users/<int:user_id>/photo/', views.admin_upload_user_photo, name='admin_upload_user_photo'),
     path('manage/sessions/', views.manage_sessions_view, name='manage_sessions'),
