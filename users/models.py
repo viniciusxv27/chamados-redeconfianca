@@ -642,6 +642,10 @@ class User(AbstractUser):
     def can_delete_tickets(self):
         return self.hierarchy in ['SUPERADMIN']
 
+    def can_delete_ticket_attachments(self):
+        """Permite remover anexos de chamados para SUPERVISOR e hierarquias acima."""
+        return self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+
 
 class UserSession(models.Model):
     """Rastreia as sessões ativas de cada usuário (IP, localização e dispositivo).

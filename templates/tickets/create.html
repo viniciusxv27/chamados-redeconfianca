@@ -167,13 +167,18 @@
                         <i class="fas fa-store mr-1 text-gray-400"></i>
                         Loja/Local <span id="store_location_required_label" class="text-xs text-gray-400">(opcional)</span>
                     </label>
-                    <input 
-                        type="text" 
-                        name="store_location" 
-                        id="store_location" 
+                    <select
+                        name="store_location"
+                        id="store_location"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        placeholder="Ex: Loja Centro, Depósito 01..."
                     >
+                        <option value="">Selecione a loja...</option>
+                        {% for sector in sectors %}
+                            {% if 'Loja' in sector.name %}
+                                <option value="{{ sector.name }}" {% if sector.name == store_location %}selected{% endif %}>{{ sector.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
                 </div>
                 
                 <div>
@@ -328,13 +333,13 @@
                                 <span class="font-semibold">Clique para selecionar arquivos</span> ou arraste e solte aqui
                             </p>
                             <p class="text-xs text-gray-500">
-                                Tipos permitidos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF (máx. 10MB por arquivo)
+                                Tipos permitidos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, MP4, MOV, AVI, MKV, WEBM (imagens e documentos máx. 10MB, vídeos máx. 100MB)
                             </p>
                         </div>
                         
                         <!-- Input oculto para arquivos -->
-                        <input type="file" id="file-input" name="attachments" multiple 
-                               class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif">
+                        <input type="file" id="file-input" name="attachments" multiple
+                               class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.mp4,.mov,.avi,.mkv,.webm,.mpeg,.mpg,.3gp,.m4v,video/*">
                     </div>
                     
                     <!-- Lista de arquivos selecionados -->
@@ -520,8 +525,22 @@ function updateCategoryDefaults() {
 }
 
 // Função para validar arquivo
+// Extensões de vídeo aceitas (usado como fallback, pois alguns navegadores
+// não informam o MIME type de certos formatos, ex: .mkv)
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.mpeg', '.mpg', '.3gp', '.m4v'];
+
+function isVideoFile(file) {
+    if (file.type && file.type.startsWith('video/')) {
+        return true;
+    }
+    const name = file.name || '';
+    const ext = name.includes('.') ? '.' + name.split('.').pop().toLowerCase() : '';
+    return VIDEO_EXTENSIONS.includes(ext);
+}
+
 function validateFile(file) {
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const isVideo = isVideoFile(file);
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024; // 100MB vídeo, 10MB demais
     const allowedTypes = [
         'application/pdf',
         'application/msword',
@@ -531,17 +550,25 @@ function validateFile(file) {
         'image/jpeg',
         'image/jpg',
         'image/png',
-        'image/gif'
+        'image/gif',
+        'video/mp4',
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/x-matroska',
+        'video/webm',
+        'video/mpeg',
+        'video/3gpp'
     ];
-    
+
     if (file.size > maxSize) {
-        return { valid: false, error: `Arquivo "${file.name}" é muito grande (máx. 10MB)` };
+        const limitLabel = isVideo ? '100MB' : '10MB';
+        return { valid: false, error: `Arquivo "${file.name}" é muito grande (máx. ${limitLabel})` };
     }
-    
-    if (!allowedTypes.includes(file.type)) {
+
+    if (!isVideo && !allowedTypes.includes(file.type)) {
         return { valid: false, error: `Tipo de arquivo "${file.name}" não permitido` };
     }
-    
+
     return { valid: true };
 }
 
@@ -588,7 +615,9 @@ function updateFilesList() {
         
         // Ícone do arquivo
         const icon = document.createElement('i');
-        if (file.type.startsWith('image/')) {
+        if (isVideoFile(file)) {
+            icon.className = 'fas fa-file-video text-purple-500';
+        } else if (file.type.startsWith('image/')) {
             icon.className = 'fas fa-image text-blue-500';
         } else if (file.type.includes('pdf')) {
             icon.className = 'fas fa-file-pdf text-red-500';

@@ -871,12 +871,58 @@ def ticket_detail_view(request, ticket_id):
         'can_assume': can_assume,
         'can_assign': can_assign,
         'can_upload': can_upload,
+        'can_delete_attachments': user.can_delete_ticket_attachments(),
         'assigned_users': ticket.get_all_assigned_users(),
         'additional_assignments': ticket.additional_assignments.filter(is_active=True).select_related('user', 'assigned_by'),
         'sector_users': sector_users,
         'next_url': next_url,
     }
     return render(request, 'tickets/detail.html', context)
+
+
+@login_required
+def delete_attachment_view(request, ticket_id, attachment_id):
+    """Remove um anexo de um chamado. Permitido para SUPERVISOR e hierarquias acima."""
+    user = request.user
+
+    # Verificar permissão: hierarquia supervisor para cima
+    if not user.can_delete_ticket_attachments():
+        messages.error(request, 'Você não tem permissão para remover anexos deste chamado.')
+        return redirect('ticket_detail', ticket_id=ticket_id)
+
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+
+    if request.method != 'POST':
+        return redirect('ticket_detail', ticket_id=ticket.id)
+
+    from .models import TicketAttachment
+    attachment = get_object_or_404(TicketAttachment, id=attachment_id, ticket=ticket)
+    filename = attachment.original_filename
+
+    # Remover o arquivo do storage e o registro
+    try:
+        attachment.file.delete(save=False)
+    except Exception:
+        pass
+    attachment.delete()
+
+    # Registrar comentário informativo e log
+    TicketComment.objects.create(
+        ticket=ticket,
+        user=user,
+        comment=f'Anexo removido: {filename}',
+        comment_type='COMMENT'
+    )
+
+    log_action(
+        user,
+        'TICKET_ATTACHMENT',
+        f'Anexo removido do chamado #{ticket.id}: {filename}',
+        request
+    )
+
+    messages.success(request, f'Anexo "{filename}" removido com sucesso.')
+    return redirect('ticket_detail', ticket_id=ticket.id)
 
 
 @login_required

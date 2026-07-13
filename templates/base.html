@@ -101,13 +101,13 @@
         
         /* Main content when sidebar is collapsed */
         .main-content-collapsed {
-            margin-left: 0;
+            margin-left: 0 !important;
             transition: margin-left 0.3s ease-in-out;
         }
-        
+
         @media (min-width: 1024px) {
             .main-content-collapsed {
-                margin-left: 4.5rem; /* sidebar collapsed width */
+                margin-left: 4.5rem !important; /* sidebar collapsed width */
             }
         }
         
@@ -1153,12 +1153,12 @@
                 if (shouldCollapse) {
                     // Collapse sidebar
                     sidebar.classList.add('sidebar-collapsed');
-                    mainContent.classList.remove('lg:ml-64');
+                    mainContent.classList.remove('lg:ml-64', 'ml-0');
                     mainContent.classList.add('main-content-collapsed');
                 } else {
                     // Expand sidebar
                     sidebar.classList.remove('sidebar-collapsed');
-                    mainContent.classList.remove('main-content-collapsed');
+                    mainContent.classList.remove('main-content-collapsed', 'ml-0');
                     mainContent.classList.add('lg:ml-64');
                 }
                 
