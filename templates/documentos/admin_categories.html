@@ -26,11 +26,6 @@
                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
         </div>
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ícone (Font Awesome)</label>
-            <input type="text" name="icon" value="fa-file-contract"
-                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
-        </div>
-        <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Cor</label>
             <select name="color" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
                 <option value="green">Verde</option>
@@ -40,6 +35,10 @@
                 <option value="red">Vermelho</option>
                 <option value="teal">Teal</option>
             </select>
+        </div>
+        <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ícone</label>
+            {% include 'documentos/_icon_picker.html' with value='fa-file-contract' %}
         </div>
         <div class="sm:col-span-2 flex justify-end">
             <button type="submit" class="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
@@ -87,8 +86,6 @@
                        class="sm:col-span-2 border border-gray-300 rounded-md px-3 py-2 text-sm">
                 <input type="text" name="description" value="{{ cat.description }}" placeholder="Descrição"
                        class="sm:col-span-2 border border-gray-300 rounded-md px-3 py-2 text-sm">
-                <input type="text" name="icon" value="{{ cat.icon }}" placeholder="Ícone"
-                       class="border border-gray-300 rounded-md px-3 py-2 text-sm">
                 <select name="color" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
                     <option value="green" {% if cat.color == 'green' %}selected{% endif %}>Verde</option>
                     <option value="blue" {% if cat.color == 'blue' %}selected{% endif %}>Azul</option>
@@ -101,6 +98,10 @@
                     <input type="checkbox" name="is_active" {% if cat.is_active %}checked{% endif %}
                            class="rounded text-green-600 focus:ring-green-500"> Ativa
                 </label>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Ícone</label>
+                    {% include 'documentos/_icon_picker.html' with value=cat.icon %}
+                </div>
                 <div class="sm:col-span-2 flex justify-end gap-2">
                     <button type="button" onclick="document.getElementById('edit-{{ cat.id }}').classList.add('hidden')"
                             class="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-100">Cancelar</button>
@@ -117,4 +118,75 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+(function() {
+    // Ícones Font Awesome 6 (solid) selecionáveis para categorias de documentos.
+    const ICONS = [
+        'fa-file-contract', 'fa-file-signature', 'fa-file-invoice', 'fa-file-invoice-dollar',
+        'fa-file-pdf', 'fa-file-lines', 'fa-file', 'fa-folder-open',
+        'fa-scroll', 'fa-gavel', 'fa-scale-balanced', 'fa-stamp',
+        'fa-certificate', 'fa-award', 'fa-landmark', 'fa-handshake',
+        'fa-user-tie', 'fa-users', 'fa-id-card', 'fa-id-badge',
+        'fa-briefcase', 'fa-user-shield', 'fa-user-lock', 'fa-shield-halved',
+        'fa-lock', 'fa-key', 'fa-building', 'fa-money-bill-wave',
+        'fa-dollar-sign', 'fa-receipt', 'fa-coins', 'fa-wallet',
+        'fa-hand-holding-dollar', 'fa-clipboard-check', 'fa-clipboard-list', 'fa-book-open',
+        'fa-graduation-cap', 'fa-heart-pulse', 'fa-notes-medical', 'fa-umbrella',
+        'fa-bell', 'fa-envelope', 'fa-bullhorn', 'fa-calendar-check',
+        'fa-circle-check', 'fa-star', 'fa-flag', 'fa-globe', 'fa-gear'
+    ];
+
+    function initPicker(picker) {
+        const hidden = picker.querySelector('.icon-picker-value');
+        const preview = picker.querySelector('.icon-preview');
+        const nameEl = picker.querySelector('.icon-name');
+        const grid = picker.querySelector('.icon-grid');
+        if (!hidden || !grid || grid.dataset.ready) return;
+        grid.dataset.ready = '1';
+
+        let current = hidden.value || 'fa-file-contract';
+        // Preserva um ícone salvo que não esteja na lista curada.
+        const list = ICONS.slice();
+        if (current && list.indexOf(current) === -1) list.unshift(current);
+
+        function apply(icon) {
+            hidden.value = icon;
+            preview.className = 'icon-preview fas ' + icon + ' text-green-600';
+            if (nameEl) nameEl.textContent = icon;
+            grid.querySelectorAll('.icon-option').forEach(function(o) {
+                const on = o.dataset.icon === icon;
+                o.classList.toggle('bg-white', on);
+                o.classList.toggle('text-green-600', on);
+                o.classList.toggle('ring-1', on);
+                o.classList.toggle('ring-green-500', on);
+                o.classList.toggle('shadow-sm', on);
+            });
+        }
+
+        list.forEach(function(icon) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'icon-option h-8 rounded flex items-center justify-center text-gray-500 hover:bg-white hover:text-gray-800 transition';
+            btn.dataset.icon = icon;
+            btn.title = icon;
+            btn.innerHTML = '<i class="fas ' + icon + '"></i>';
+            btn.addEventListener('click', function() { apply(icon); });
+            grid.appendChild(btn);
+        });
+
+        apply(current);
+    }
+
+    function initAll() {
+        document.querySelectorAll('.icon-picker').forEach(initPicker);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAll);
+    } else {
+        initAll();
+    }
+})();
+</script>
 {% endblock %}
