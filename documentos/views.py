@@ -8,6 +8,7 @@ from django.http import JsonResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db.models import Q, Count
 from django.core.files.base import ContentFile
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from .models import DocumentCategory, Document, DocumentSignature
 from users.models import User
@@ -119,8 +120,14 @@ def document_detail(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
 def document_pdf(request, pk):
-    """Serve o PDF original (inline)."""
+    """Serve o PDF original (inline).
+
+    O portal roda com X_FRAME_OPTIONS no padrão do Django (DENY), então sem este
+    decorator o navegador recusa a renderização dentro do <iframe> da tela de
+    detalhe — mesmo sendo a mesma origem.
+    """
     signature = get_object_or_404(DocumentSignature.objects.select_related('document'), pk=pk)
 
     if signature.user != request.user and not is_superadmin(request.user):

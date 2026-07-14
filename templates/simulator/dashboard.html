@@ -170,8 +170,10 @@
         <input type="hidden" name="view" value="{{ view_mode }}">
 
         {% if view_mode == 'simulador' %}
-          {% for pilar_key, pilar_label in simulator_input_pillars %}
-          <input type="hidden" name="sim__{{ pilar_key }}__real" value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}">
+          {# Repassa todos os valores já digitados (meta/real/realpdv/qty/receita) para
+             que recalcular os níveis Hunter não apague a simulação. #}
+          {% for sim_key, sim_value in simulator_inputs.items %}
+          <input type="hidden" name="sim__{{ sim_key }}" value="{{ sim_value }}">
           {% endfor %}
         {% endif %}
 
@@ -276,11 +278,12 @@
                 </td>
                 {% endif %}
                 {% else %}
+                {% with meta_key=pilar_key|add:'__meta' real_key=pilar_key|add:'__real' realpdv_key=pilar_key|add:'__realpdv' %}
                 <td class="px-3 py-2 text-right">
                   <div class="relative inline-block w-36">
                     <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
                     <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__meta"
-                           value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                           value="{{ simulator_inputs|get_dict_item:meta_key|default:'' }}"
                            placeholder="0,00"
                            class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
                   </div>
@@ -289,7 +292,7 @@
                   <div class="relative inline-block w-36">
                     <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
                     <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__real"
-                           value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                           value="{{ simulator_inputs|get_dict_item:real_key|default:'' }}"
                            placeholder="0,00"
                            class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
                   </div>
@@ -299,12 +302,13 @@
                   <div class="relative inline-block w-36">
                     <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
                     <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__realpdv"
-                           value="{{ simulator_inputs|get_dict_item:pilar_key|default:'' }}"
+                           value="{{ simulator_inputs|get_dict_item:realpdv_key|default:'' }}"
                            placeholder="0,00"
                            class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
                   </div>
                 </td>
                 {% endif %}
+                {% endwith %}
                 {% endif %}
               </tr>
               {% endfor %}

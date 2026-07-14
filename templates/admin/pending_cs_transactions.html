@@ -4,119 +4,212 @@
 
 {% block content %}
 {% csrf_token %}
-<div class="max-w-6xl mx-auto px-4 py-8">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8">
-        <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Transações C$ Pendentes</h1>
-            <p class="text-gray-600 mt-2">Aprovar ou rejeitar solicitações de crédito C$</p>
+<div class="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+
+    <!-- ══ Header ══ -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div class="min-w-0">
+            <nav class="text-xs text-gray-400 mb-1">
+                <a href="{% url 'manage_cs' %}" class="hover:text-primary transition-colors">Gestão de C$</a>
+                <span class="mx-1">/</span>
+                <span class="text-gray-500">Pendentes</span>
+            </nav>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+                <i class="fas fa-hourglass-half text-primary"></i>
+                Transações C$ Pendentes
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">Aprove ou rejeite as solicitações de crédito C$.</p>
         </div>
-        <div class="flex flex-wrap gap-3">
-            <a href="{% url 'manage_cs' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
-                <i class="fas fa-arrow-left mr-2"></i>Voltar
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="location.reload()"
+                    class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <i class="fas fa-rotate-right"></i><span class="hidden sm:inline">Atualizar</span>
+            </button>
+            <a href="{% url 'manage_cs' %}"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-700 rounded-lg hover:bg-gray-800 transition-colors">
+                <i class="fas fa-arrow-left"></i><span class="hidden sm:inline">Voltar</span>
             </a>
         </div>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-clock text-yellow-600 text-2xl"></i>
-                </div>
-                <div class="ml-4">
-                    <h3 class="text-lg font-medium text-yellow-800">Pendentes</h3>
-                    <p class="text-2xl font-bold text-yellow-900">{{ pending_transactions.count }}</p>
-                </div>
+    <!-- ══ Stat cards ══ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <div class="w-11 h-11 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-clock text-amber-500 text-lg"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Pendentes</p>
+                <p class="text-xl sm:text-2xl font-bold text-gray-900 leading-tight" id="stat-pending">{{ pending_count }}</p>
             </div>
         </div>
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-dollar-sign text-blue-600 text-2xl"></i>
-                </div>
-                <div class="ml-4">
-                    <h3 class="text-lg font-medium text-blue-800">Total Pendente</h3>
-                    <p class="text-2xl font-bold text-blue-900">
-                        C$ {{ total_pending_amount|default:"0.00" }}
-                    </p>
-                </div>
+
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <div class="w-11 h-11 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-coins text-blue-500 text-lg"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total pendente</p>
+                <p class="text-xl sm:text-2xl font-bold text-gray-900 leading-tight truncate">
+                    <span class="text-sm font-semibold text-gray-400">C$</span>
+                    <span id="stat-amount" data-cs="{{ total_pending_amount|floatformat:'2u' }}">—</span>
+                </p>
             </div>
         </div>
-        <div class="bg-green-50 border border-green-200 rounded-lg p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-check text-green-600 text-2xl"></i>
-                </div>
-                <div class="ml-4">
-                    <h3 class="text-lg font-medium text-green-800">Hoje</h3>
-                    <p class="text-2xl font-bold text-green-900">0</p>
-                    <p class="text-sm text-green-600">Aprovadas hoje</p>
-                </div>
+
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <div class="w-11 h-11 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-circle-check text-emerald-500 text-lg"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Aprovadas hoje</p>
+                <p class="text-xl sm:text-2xl font-bold text-gray-900 leading-tight" id="stat-approved">{{ approved_today_count }}</p>
+                <p class="text-[11px] text-emerald-600 truncate">
+                    + C$ <span data-cs="{{ approved_today_amount|floatformat:'2u' }}">—</span>
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <div class="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-circle-xmark text-rose-500 text-lg"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Rejeitadas hoje</p>
+                <p class="text-xl sm:text-2xl font-bold text-gray-900 leading-tight" id="stat-rejected">{{ rejected_today_count }}</p>
+                <p class="text-[11px] text-gray-400 truncate">{{ pending_users_count }} colaborador(es) na fila</p>
             </div>
         </div>
     </div>
 
-    <!-- Transactions Table -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">Solicitações de Crédito C$</h3>
+    <!-- ══ Painel ══ -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" id="panel">
+
+        <!-- Toolbar: busca + ordenação + ações em massa -->
+        <div id="toolbar" class="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center gap-3">
+            <div class="relative flex-1 min-w-0">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm pointer-events-none"></i>
+                <input type="search" id="search" autocomplete="off"
+                       placeholder="Buscar por colaborador, e-mail, loja, descrição ou solicitante..."
+                       class="w-full pl-9 pr-9 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                <button type="button" id="search-clear"
+                        class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-xmark text-xs"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <label for="sort" class="text-xs font-medium text-gray-500 hidden sm:block">Ordenar</label>
+                <select id="sort"
+                        class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                    <option value="date-desc">Mais recentes</option>
+                    <option value="date-asc">Mais antigas</option>
+                    <option value="amount-desc">Maior valor</option>
+                    <option value="amount-asc">Menor valor</option>
+                    <option value="name-asc">Colaborador (A–Z)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Barra de seleção em massa -->
+        <div id="bulk-bar" class="hidden px-4 sm:px-5 py-3 bg-primary/5 border-b border-primary/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p class="text-sm font-medium text-gray-700">
+                <span id="bulk-count">0</span> selecionada(s) · total
+                <span class="font-bold text-gray-900">C$ <span id="bulk-amount">0,00</span></span>
+            </p>
+            <div class="flex items-center gap-2">
+                <button type="button" id="bulk-clear"
+                        class="px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    Limpar
+                </button>
+                <button type="button" id="bulk-approve"
+                        class="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors">
+                    <i class="fas fa-check"></i> Aprovar selecionadas
+                </button>
+            </div>
+        </div>
+
+        <!-- Contador de resultados -->
+        <div id="count-bar" class="px-4 sm:px-5 py-2 bg-gray-50/70 border-b border-gray-100">
+            <p class="text-xs text-gray-500" id="result-count"></p>
         </div>
 
         {% if pending_transactions %}
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+
+        <!-- ─── Desktop: tabela ─── -->
+        <div id="tx-table-wrap" class="hidden md:block overflow-x-auto">
+            <table class="min-w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Solicitado por</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        <th class="pl-5 pr-2 py-3 w-10">
+                            <input type="checkbox" id="check-all"
+                                   class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer">
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Colaborador</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Solicitado por</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="divide-y divide-gray-100" id="tx-tbody">
                     {% for transaction in pending_transactions %}
-                    <tr class="hover:bg-gray-50" id="transaction-row-{{ transaction.id }}">
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="flex items-center">
+                    <tr class="tx-row hover:bg-gray-50/80 transition-colors"
+                        data-id="{{ transaction.id }}"
+                        data-amount="{{ transaction.amount|floatformat:'2u' }}"
+                        data-date="{{ transaction.created_at|date:'c' }}"
+                        data-name="{{ transaction.user.full_name|lower }}"
+                        data-search="{{ transaction.user.full_name|lower }} {{ transaction.user.email|lower }} {{ transaction.user.sector.name|default:''|lower }} {{ transaction.description|lower }} {{ transaction.created_by.full_name|lower }}">
+                        <td class="pl-5 pr-2 py-4">
+                            <input type="checkbox" class="tx-check w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                                   value="{{ transaction.id }}" data-amount="{{ transaction.amount|floatformat:'2u' }}">
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-3">
                                 {% if transaction.user.profile_picture %}
-                                    <img src="{{ transaction.user.profile_picture.url }}" alt="{{ transaction.user.full_name }}" class="w-10 h-10 rounded-full object-cover mr-3">
+                                <img src="{{ transaction.user.profile_picture.url }}" alt=""
+                                     class="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-white shadow-sm">
                                 {% else %}
-                                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center mr-3">
-                                        <span class="text-white font-medium text-sm">{{ transaction.user.first_name.0 }}{{ transaction.user.last_name.0 }}</span>
-                                    </div>
+                                <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center flex-shrink-0 ring-2 ring-white shadow-sm">
+                                    <span class="text-white font-semibold text-xs">{{ transaction.user.first_name.0 }}{{ transaction.user.last_name.0 }}</span>
+                                </div>
                                 {% endif %}
-                                <div>
-                                    <div class="text-sm font-medium text-gray-900">{{ transaction.user.full_name }}</div>
-                                    <div class="text-sm text-gray-500">{{ transaction.user.email }}</div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-gray-900 truncate">{{ transaction.user.full_name }}</p>
+                                    <p class="text-xs text-gray-400 truncate">
+                                        {% if transaction.user.sector %}
+                                        <i class="fas fa-store text-[9px] mr-0.5"></i>{{ transaction.user.sector.name }}
+                                        {% else %}{{ transaction.user.email }}{% endif %}
+                                    </p>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="text-lg font-bold text-green-600">+C$ {{ transaction.amount }}</span>
+                        <td class="px-4 py-4 text-right whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm">
+                                +C$ <span class="ml-1" data-cs="{{ transaction.amount|floatformat:'2u' }}">—</span>
+                            </span>
                         </td>
-                        <td class="px-6 py-4">
-                            <div class="text-sm text-gray-900">{{ transaction.description }}</div>
+                        <td class="px-4 py-4">
+                            <p class="text-sm text-gray-700 max-w-xs" title="{{ transaction.description }}">{{ transaction.description }}</p>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm text-gray-900">{{ transaction.created_by.full_name }}</div>
-                            <div class="text-sm text-gray-500">{{ transaction.created_by.hierarchy }}</div>
+                        <td class="px-4 py-4 whitespace-nowrap">
+                            <p class="text-sm text-gray-700">{{ transaction.created_by.full_name }}</p>
+                            <span class="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500">{{ transaction.created_by.hierarchy }}</span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ transaction.created_at|date:"d/m/Y H:i" }}
+                        <td class="px-4 py-4 whitespace-nowrap">
+                            <p class="text-sm text-gray-600">{{ transaction.created_at|date:"d/m/Y" }}</p>
+                            <p class="text-xs text-gray-400">{{ transaction.created_at|date:"H:i" }}</p>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div class="flex space-x-2">
-                                <button onclick="approveTransaction({{ transaction.id }})" 
-                                        class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors">
-                                    <i class="fas fa-check mr-1"></i>Aprovar
+                        <td class="px-4 py-4 text-right whitespace-nowrap">
+                            <div class="inline-flex items-center gap-1.5">
+                                <button type="button" onclick="approveTransaction({{ transaction.id }})"
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors">
+                                    <i class="fas fa-check"></i> Aprovar
                                 </button>
-                                <button onclick="rejectTransaction({{ transaction.id }})" 
-                                        class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors">
-                                    <i class="fas fa-times mr-1"></i>Rejeitar
+                                <button type="button" onclick="openRejectModal({{ transaction.id }})"
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg hover:bg-rose-100 transition-colors">
+                                    <i class="fas fa-xmark"></i> Rejeitar
                                 </button>
                             </div>
                         </td>
@@ -125,112 +218,396 @@
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <div class="text-center py-12">
-            <i class="fas fa-check-circle text-6xl text-green-300 mb-4"></i>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma transação pendente</h3>
-            <p class="text-gray-500">Todas as solicitações de C$ foram processadas.</p>
+
+        <!-- ─── Mobile: cards ─── -->
+        <div class="md:hidden divide-y divide-gray-100" id="tx-cards">
+            {% for transaction in pending_transactions %}
+            <div class="tx-row p-4"
+                 data-id="{{ transaction.id }}"
+                 data-amount="{{ transaction.amount|floatformat:'2u' }}"
+                 data-date="{{ transaction.created_at|date:'c' }}"
+                 data-name="{{ transaction.user.full_name|lower }}"
+                 data-search="{{ transaction.user.full_name|lower }} {{ transaction.user.email|lower }} {{ transaction.user.sector.name|default:''|lower }} {{ transaction.description|lower }} {{ transaction.created_by.full_name|lower }}">
+                <div class="flex items-start justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                        {% if transaction.user.profile_picture %}
+                        <img src="{{ transaction.user.profile_picture.url }}" alt=""
+                             class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                        {% else %}
+                        <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                            <span class="text-white font-semibold text-xs">{{ transaction.user.first_name.0 }}{{ transaction.user.last_name.0 }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-gray-900 truncate">{{ transaction.user.full_name }}</p>
+                            <p class="text-xs text-gray-400 truncate">
+                                {% if transaction.user.sector %}{{ transaction.user.sector.name }}{% else %}{{ transaction.user.email }}{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm whitespace-nowrap flex-shrink-0">
+                        +C$ <span class="ml-1" data-cs="{{ transaction.amount|floatformat:'2u' }}">—</span>
+                    </span>
+                </div>
+
+                <p class="text-sm text-gray-700 mb-2">{{ transaction.description }}</p>
+
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400 mb-3">
+                    <span><i class="fas fa-user-pen mr-1"></i>{{ transaction.created_by.full_name }}</span>
+                    <span><i class="fas fa-calendar mr-1"></i>{{ transaction.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="approveTransaction({{ transaction.id }})"
+                            class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors">
+                        <i class="fas fa-check"></i> Aprovar
+                    </button>
+                    <button type="button" onclick="openRejectModal({{ transaction.id }})"
+                            class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg hover:bg-rose-100 transition-colors">
+                        <i class="fas fa-xmark"></i> Rejeitar
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
         </div>
+
+        <!-- Nenhum resultado para o filtro -->
+        <div id="no-results" class="hidden text-center py-14 px-4">
+            <i class="fas fa-magnifying-glass text-4xl text-gray-200 mb-3"></i>
+            <h3 class="text-base font-semibold text-gray-800">Nenhuma transação encontrada</h3>
+            <p class="text-sm text-gray-500 mt-1">Tente ajustar a busca.</p>
+        </div>
+
         {% endif %}
+
+        <!-- Fila vazia (nada pendente) -->
+        <div id="empty-state" class="{% if pending_transactions %}hidden {% endif %}text-center py-16 px-4">
+            <div class="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                <i class="fas fa-check-circle text-3xl text-emerald-400"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-1">Tudo em dia!</h3>
+            <p class="text-sm text-gray-500">Não há solicitações de C$ aguardando aprovação.</p>
+        </div>
     </div>
 </div>
 
-<script>
-async function approveTransaction(transactionId) {
-    if (!confirm('Aprovar esta solicitação de C$?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/users/manage/cs-transactions/${transactionId}/approve/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Remove a linha da tabela
-            const row = document.getElementById(`transaction-row-${transactionId}`);
-            row.remove();
-            
-            // Mostra mensagem de sucesso
-            showMessage(data.message, 'success');
-            
-            // Se não há mais transações, atualiza a página
-            if (document.querySelectorAll('tbody tr').length === 0) {
-                setTimeout(() => location.reload(), 1500);
-            }
-        } else {
-            showMessage(data.error, 'error');
-        }
-    } catch (error) {
-        showMessage('Erro ao aprovar transação', 'error');
-        console.error(error);
-    }
-}
-
-async function rejectTransaction(transactionId) {
-    if (!confirm('Rejeitar esta solicitação de C$?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/users/manage/cs-transactions/${transactionId}/reject/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Remove a linha da tabela
-            const row = document.getElementById(`transaction-row-${transactionId}`);
-            row.remove();
-            
-            // Mostra mensagem
-            showMessage(data.message, 'info');
-            
-            // Se não há mais transações, atualiza a página
-            if (document.querySelectorAll('tbody tr').length === 0) {
-                setTimeout(() => location.reload(), 1500);
-            }
-        } else {
-            showMessage(data.error, 'error');
-        }
-    } catch (error) {
-        showMessage('Erro ao rejeitar transação', 'error');
-        console.error(error);
-    }
-}
-
-function showMessage(message, type) {
-    // Criar elemento de notificação
-    const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
-        type === 'success' ? 'bg-green-600 text-white' :
-        type === 'error' ? 'bg-red-600 text-white' :
-        'bg-blue-600 text-white'
-    }`;
-    notification.innerHTML = `
-        <div class="flex items-center">
-            <i class="fas ${type === 'success' ? 'fa-check' : type === 'error' ? 'fa-times' : 'fa-info'} mr-2"></i>
-            ${message}
+<!-- ══ Modal de rejeição ══ -->
+<div id="reject-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <div class="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center">
+                <i class="fas fa-circle-xmark text-rose-500"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-semibold text-gray-900">Rejeitar solicitação</h3>
+                <p class="text-xs text-gray-500" id="reject-subtitle"></p>
+            </div>
         </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Remover após 3 segundos
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
-}
+        <div class="px-5 py-4">
+            <label for="reject-reason" class="block text-sm font-medium text-gray-700 mb-1.5">
+                Motivo <span class="font-normal text-gray-400">(opcional, fica registrado)</span>
+            </label>
+            <textarea id="reject-reason" rows="3" maxlength="200"
+                      placeholder="Ex.: valor divergente do combinado."
+                      class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400"></textarea>
+        </div>
+        <div class="px-5 py-4 bg-gray-50 flex items-center justify-end gap-2">
+            <button type="button" onclick="closeRejectModal()"
+                    class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">
+                Cancelar
+            </button>
+            <button type="button" id="reject-confirm"
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-rose-600 rounded-lg hover:bg-rose-700 transition-colors">
+                <i class="fas fa-xmark"></i> Confirmar rejeição
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Toasts ══ -->
+<div id="toasts" class="fixed top-4 right-4 z-[60] space-y-2 w-[calc(100%-2rem)] max-w-sm"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const fmt = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Valores C$ renderizados no padrão brasileiro (1.234,56).
+    document.querySelectorAll('[data-cs]').forEach(function (el) {
+        el.textContent = fmt.format(parseFloat(el.dataset.cs) || 0);
+    });
+
+    const search = document.getElementById('search');
+    const searchClear = document.getElementById('search-clear');
+    const sort = document.getElementById('sort');
+    const tbody = document.getElementById('tx-tbody');
+    const cards = document.getElementById('tx-cards');
+    const tableWrap = document.getElementById('tx-table-wrap');
+    const toolbar = document.getElementById('toolbar');
+    const countBar = document.getElementById('count-bar');
+    const noResults = document.getElementById('no-results');
+    const emptyState = document.getElementById('empty-state');
+    const resultCount = document.getElementById('result-count');
+    const checkAll = document.getElementById('check-all');
+    const bulkBar = document.getElementById('bulk-bar');
+
+    const rowsOf = (c) => c ? Array.from(c.querySelectorAll('.tx-row')) : [];
+    const allRows = () => rowsOf(tbody).concat(rowsOf(cards));
+
+    // display inline vence as classes responsivas (hidden md:block / md:hidden)
+    const setShown = (el, shown) => { if (el) el.style.display = shown ? '' : 'none'; };
+
+    // ── Busca + ordenação ────────────────────────────────────────────────
+    function apply() {
+        const term = (search.value || '').trim().toLowerCase();
+
+        allRows().forEach(function (row) {
+            const match = !term || (row.dataset.search || '').includes(term);
+            row.classList.toggle('hidden', !match);
+        });
+
+        // A tabela e os cards espelham as mesmas transações: conta só uma vez.
+        const source = rowsOf(tbody).length ? rowsOf(tbody) : rowsOf(cards);
+        const total = source.length;
+        const visible = source.filter((r) => !r.classList.contains('hidden')).length;
+
+        const queueEmpty = total === 0;             // nada pendente
+        const filterEmpty = !queueEmpty && visible === 0;  // busca sem resultado
+
+        setShown(tableWrap, !queueEmpty && !filterEmpty);
+        setShown(cards, !queueEmpty && !filterEmpty);
+        setShown(toolbar, !queueEmpty);
+        setShown(countBar, !queueEmpty);
+        if (noResults) noResults.classList.toggle('hidden', !filterEmpty);
+        emptyState.classList.toggle('hidden', !queueEmpty);
+        searchClear.classList.toggle('hidden', !term);
+
+        resultCount.textContent = term
+            ? `Mostrando ${visible} de ${total} transação(ões)`
+            : `${total} transação(ões) aguardando aprovação`;
+
+        syncBulk();
+    }
+
+    function sortRows() {
+        const mode = sort.value;
+        const cmp = {
+            'date-desc':   (a, b) => new Date(b.dataset.date) - new Date(a.dataset.date),
+            'date-asc':    (a, b) => new Date(a.dataset.date) - new Date(b.dataset.date),
+            'amount-desc': (a, b) => parseFloat(b.dataset.amount) - parseFloat(a.dataset.amount),
+            'amount-asc':  (a, b) => parseFloat(a.dataset.amount) - parseFloat(b.dataset.amount),
+            'name-asc':    (a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || '', 'pt-BR'),
+        }[mode];
+        if (!cmp) return;
+        [tbody, cards].forEach(function (c) {
+            if (!c) return;
+            rowsOf(c).sort(cmp).forEach((row) => c.appendChild(row));
+        });
+    }
+
+    let debounce;
+    search.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(apply, 120);
+    });
+    searchClear.addEventListener('click', function () {
+        search.value = '';
+        search.focus();
+        apply();
+    });
+    sort.addEventListener('change', function () { sortRows(); apply(); });
+
+    // ── Seleção em massa (apenas desktop/tabela) ─────────────────────────
+    const checksVisible = () => Array.from(document.querySelectorAll('.tx-check'))
+        .filter((c) => !c.closest('.tx-row').classList.contains('hidden'));
+
+    function syncBulk() {
+        const selected = checksVisible().filter((c) => c.checked);
+        const count = selected.length;
+        const total = selected.reduce((s, c) => s + (parseFloat(c.dataset.amount) || 0), 0);
+
+        bulkBar.classList.toggle('hidden', count === 0);
+        bulkBar.classList.toggle('flex', count > 0);
+        document.getElementById('bulk-count').textContent = count;
+        document.getElementById('bulk-amount').textContent = fmt.format(total);
+
+        if (checkAll) {
+            const vis = checksVisible();
+            checkAll.checked = vis.length > 0 && count === vis.length;
+            checkAll.indeterminate = count > 0 && count < vis.length;
+        }
+    }
+
+    document.addEventListener('change', function (e) {
+        if (e.target.classList.contains('tx-check')) syncBulk();
+    });
+    if (checkAll) {
+        checkAll.addEventListener('change', function () {
+            checksVisible().forEach((c) => { c.checked = checkAll.checked; });
+            syncBulk();
+        });
+    }
+    document.getElementById('bulk-clear').addEventListener('click', function () {
+        document.querySelectorAll('.tx-check').forEach((c) => { c.checked = false; });
+        syncBulk();
+    });
+    document.getElementById('bulk-approve').addEventListener('click', async function () {
+        const ids = checksVisible().filter((c) => c.checked).map((c) => c.value);
+        if (!ids.length) return;
+        if (!confirm(`Aprovar ${ids.length} solicitação(ões) de C$?`)) return;
+
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aprovando...';
+
+        let ok = 0;
+        const errors = [];
+        for (const id of ids) {
+            const res = await sendAction(id, 'approve');
+            if (res.ok) { ok++; removeRows(id); } else { errors.push(res.error); }
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Aprovar selecionadas';
+
+        if (ok) {
+            bumpStat('stat-approved', ok);
+            toast(`${ok} transação(ões) aprovada(s) com sucesso.`, 'success');
+        }
+        if (errors.length) toast(`${errors.length} falha(s): ${errors[0]}`, 'error');
+        apply();
+    });
+
+    // ── Ações ────────────────────────────────────────────────────────────
+    async function sendAction(id, action, reason) {
+        try {
+            const body = new URLSearchParams();
+            if (reason) body.append('reason', reason);
+
+            const resp = await fetch(`/users/manage/cs-transactions/${id}/${action}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrf,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok && data.success) return { ok: true, message: data.message };
+            return { ok: false, error: data.error || `Erro ${resp.status}` };
+        } catch (err) {
+            return { ok: false, error: 'Falha de conexão.' };
+        }
+    }
+
+    function removeRows(id) {
+        allRows().filter((r) => r.dataset.id === String(id)).forEach(function (row) {
+            row.style.transition = 'opacity .2s ease';
+            row.style.opacity = '0';
+            setTimeout(() => row.remove(), 200);
+        });
+        setTimeout(function () {
+            bumpStat('stat-pending', -1);
+            apply();
+        }, 220);
+    }
+
+    function bumpStat(elId, delta) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.textContent = Math.max(0, (parseInt(el.textContent, 10) || 0) + delta);
+    }
+
+    window.approveTransaction = async function (id) {
+        if (!confirm('Aprovar esta solicitação de C$?')) return;
+        const res = await sendAction(id, 'approve');
+        if (res.ok) {
+            removeRows(id);
+            bumpStat('stat-approved', 1);
+            toast(res.message, 'success');
+        } else {
+            toast(res.error, 'error');
+        }
+    };
+
+    // ── Modal de rejeição ────────────────────────────────────────────────
+    const modal = document.getElementById('reject-modal');
+    const reasonEl = document.getElementById('reject-reason');
+    let rejectingId = null;
+
+    window.openRejectModal = function (id) {
+        rejectingId = id;
+        reasonEl.value = '';
+        const row = allRows().find((r) => r.dataset.id === String(id));
+        document.getElementById('reject-subtitle').textContent =
+            row ? `${row.dataset.name.replace(/\b\w/g, (c) => c.toUpperCase())} · C$ ${fmt.format(parseFloat(row.dataset.amount) || 0)}` : '';
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => reasonEl.focus(), 50);
+    };
+
+    window.closeRejectModal = function () {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        rejectingId = null;
+    };
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeRejectModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeRejectModal();
+    });
+
+    document.getElementById('reject-confirm').addEventListener('click', async function () {
+        if (!rejectingId) return;
+        const id = rejectingId;
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rejeitando...';
+
+        const res = await sendAction(id, 'reject', reasonEl.value.trim());
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-xmark"></i> Confirmar rejeição';
+        closeRejectModal();
+
+        if (res.ok) {
+            removeRows(id);
+            bumpStat('stat-rejected', 1);
+            toast(res.message, 'info');
+        } else {
+            toast(res.error, 'error');
+        }
+    });
+
+    // ── Toasts ───────────────────────────────────────────────────────────
+    function toast(message, type) {
+        const styles = {
+            success: ['bg-emerald-600', 'fa-circle-check'],
+            error:   ['bg-rose-600', 'fa-circle-exclamation'],
+            info:    ['bg-gray-800', 'fa-circle-info'],
+        };
+        const [bg, icon] = styles[type] || styles.info;
+
+        const el = document.createElement('div');
+        el.className = `${bg} text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-2 text-sm transition-all duration-300 translate-x-4 opacity-0`;
+        el.innerHTML = `<i class="fas ${icon} mt-0.5 flex-shrink-0"></i><span class="flex-1"></span>`;
+        el.querySelector('span').textContent = message || '';
+
+        document.getElementById('toasts').appendChild(el);
+        requestAnimationFrame(() => el.classList.remove('translate-x-4', 'opacity-0'));
+        setTimeout(function () {
+            el.classList.add('translate-x-4', 'opacity-0');
+            setTimeout(() => el.remove(), 300);
+        }, 4000);
+    }
+
+    // Estado inicial
+    sortRows();
+    apply();
+})();
 </script>
 {% endblock %}

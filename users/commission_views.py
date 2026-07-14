@@ -3108,6 +3108,41 @@ def commission_superadmin_view(request):
         is_active=True,
     ).exclude(id__in=excluded_ids).order_by('first_name', 'last_name')
 
+    # Diretório único e pesquisável: um card por usuário, com o papel anotado.
+    # Evita que o superadmin precise caçar a pessoa em 5 listas separadas.
+    role_catalog = [
+        ('coordenador', 'Coordenador', list(coordenadores.select_related('sector'))),
+        ('gerente', 'Gerente', list(gerentes.select_related('sector'))),
+        ('cn', 'CN', list(cns.select_related('sector'))),
+        ('recepcionista', 'Recepcionista', list(recepcionistas.select_related('sector'))),
+        ('aparte', 'A parte', list(aparte_users)),
+    ]
+
+    people = []
+    sector_names = set()
+    for role_key, role_label, members in role_catalog:
+        for member in members:
+            sector_name = member.sector.name if member.sector else ''
+            if sector_name:
+                sector_names.add(sector_name)
+            initials = f"{(member.first_name or '')[:1]}{(member.last_name or '')[:1]}".strip().upper()
+            people.append({
+                'id': member.id,
+                'name': member.get_full_name() or member.email,
+                'email': member.email or '',
+                'sector': sector_name,
+                'role_key': role_key,
+                'role_label': role_label,
+                'initials': initials or (member.email or '?')[:1].upper(),
+            })
+
+    people.sort(key=lambda p: p['name'].lower())
+
+    role_filters = [
+        {'key': key, 'label': label, 'count': len(members)}
+        for key, label, members in role_catalog
+    ]
+
     phase_labels = {'antes': 'Antes da Contestação', 'pos': 'Pós Contestação'}
     available_versions = []
     for version in CommissionSpreadsheetVersion.objects.filter(
@@ -3125,11 +3160,10 @@ def commission_superadmin_view(request):
 
     context = {
         'user': user,
-        'gerentes': gerentes,
-        'coordenadores': coordenadores,
-        'recepcionistas': recepcionistas,
-        'cns': cns,
-        'aparte_users': aparte_users,
+        'people': people,
+        'people_total': len(people),
+        'role_filters': role_filters,
+        'sector_options': sorted(sector_names),
         'available_versions': available_versions,
         'reference_year_options': reference['year_options'],
         'reference_month_options': reference['month_options'],

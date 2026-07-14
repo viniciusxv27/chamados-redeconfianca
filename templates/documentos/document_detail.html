@@ -36,11 +36,26 @@
         <div class="px-5 py-4">
             <div class="flex items-center justify-between mb-2">
                 <h3 class="text-sm font-semibold text-gray-700"><i class="fas fa-file-pdf text-red-500 mr-1"></i> Documento</h3>
-                <a href="{% url 'documentos:document_pdf' signature.pk %}" target="_blank"
+                <a href="{% url 'documentos:document_pdf' signature.pk %}" target="_blank" rel="noopener"
                    class="text-sm text-blue-600 hover:text-blue-800"><i class="fas fa-external-link-alt mr-1"></i> Abrir em nova aba</a>
             </div>
-            <iframe src="{% url 'documentos:document_pdf' signature.pk %}" class="w-full rounded-lg border border-gray-200"
-                    style="height: 60vh; min-height: 380px;" title="Documento PDF"></iframe>
+
+            <div id="pdf-viewer" class="relative w-full rounded-lg border border-gray-200 bg-gray-50 overflow-hidden"
+                 style="height: 70vh; min-height: 420px;">
+                <object id="pdf-object" data="{% url 'documentos:document_pdf' signature.pk %}#view=FitH"
+                        type="application/pdf" class="w-full h-full">
+                    <!-- Fallback: navegadores (sobretudo mobile) que não renderizam PDF embutido -->
+                    <div class="h-full flex flex-col items-center justify-center text-center px-6 py-10">
+                        <i class="fas fa-file-pdf text-5xl text-red-400 mb-3"></i>
+                        <p class="text-sm font-medium text-gray-700">Seu navegador não exibe PDFs embutidos.</p>
+                        <p class="text-xs text-gray-500 mt-1 mb-4">Abra o documento em uma nova aba para lê-lo antes de assinar.</p>
+                        <a href="{% url 'documentos:document_pdf' signature.pk %}" target="_blank" rel="noopener"
+                           class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
+                            <i class="fas fa-external-link-alt mr-2"></i> Abrir documento
+                        </a>
+                    </div>
+                </object>
+            </div>
         </div>
 
         {% if signature.is_signed %}

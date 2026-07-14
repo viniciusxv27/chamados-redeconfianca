@@ -4296,23 +4296,40 @@ def pending_cs_transactions_view(request):
     if not request.user.can_manage_users():
         messages.error(request, 'Acesso negado.')
         return redirect('dashboard')
-    
+
     from prizes.models import CSTransaction
-    from django.db.models import Sum
-    
+    from django.db.models import Sum, Count, Q
+
     pending_transactions = CSTransaction.objects.filter(
         status='PENDING',
         transaction_type='CREDIT'
-    ).select_related('user', 'created_by').order_by('-created_at')
-    
-    # Calcular total pendente
-    total_pending = pending_transactions.aggregate(
-        total=Sum('amount')
-    )['total'] or 0
-    
+    ).select_related('user', 'user__sector', 'created_by').order_by('-created_at')
+
+    pending_stats = pending_transactions.aggregate(
+        total=Sum('amount'),
+        quantidade=Count('id'),
+        solicitantes=Count('user', distinct=True),
+    )
+
+    # Movimentações resolvidas hoje (para o admin ter noção do ritmo de aprovação).
+    today = timezone.localdate()
+    resolved_today = CSTransaction.objects.filter(
+        transaction_type='CREDIT',
+        approved_at__date=today,
+    ).aggregate(
+        aprovadas=Count('id', filter=Q(status='APPROVED')),
+        aprovadas_valor=Sum('amount', filter=Q(status='APPROVED')),
+        rejeitadas=Count('id', filter=Q(status='REJECTED')),
+    )
+
     context = {
         'pending_transactions': pending_transactions,
-        'total_pending_amount': total_pending,
+        'total_pending_amount': pending_stats['total'] or 0,
+        'pending_count': pending_stats['quantidade'] or 0,
+        'pending_users_count': pending_stats['solicitantes'] or 0,
+        'approved_today_count': resolved_today['aprovadas'] or 0,
+        'approved_today_amount': resolved_today['aprovadas_valor'] or 0,
+        'rejected_today_count': resolved_today['rejeitadas'] or 0,
         'user': request.user,
     }
     return render(request, 'admin/pending_cs_transactions.html', context)

@@ -916,6 +916,24 @@ def _get_sim_input_optional(simulator_inputs: Optional[Dict[str, Any]], pillar: 
     return to_float(raw)
 
 
+# O formulário exibe Eletrônicos/Essenciais unificados, mas envia os valores na
+# chave "_a" (ver SIMULATOR_INPUT_PILLARS_DISPLAY). Os cálculos, por outro lado,
+# guardam a meta na chave unificada. O alias abaixo liga os dois lados.
+SIMULATOR_META_INPUT_ALIASES = {
+    'eletronicos': ('eletronicos', 'eletronicos_a'),
+    'essenciais': ('essenciais', 'essenciais_a'),
+}
+
+
+def _get_sim_meta_override(simulator_inputs: Optional[Dict[str, Any]], pillar: str) -> Optional[float]:
+    """Meta digitada no simulador, aceitando a chave unificada e a variante "_a"."""
+    for key in SIMULATOR_META_INPUT_ALIASES.get(pillar, (pillar,)):
+        value = _get_sim_input_optional(simulator_inputs, key, 'meta')
+        if value is not None:
+            return value
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Metas vindas do módulo Power BI (/power-bi/metas/)
 # ---------------------------------------------------------------------------
@@ -1238,7 +1256,7 @@ def compute_consultor_simulation(
         ind_values = {p: _get_sim_input(simulator_inputs, p, 'real') for p, _ in SIMULATOR_INPUT_PILLARS}
         # Permite sobrescrever metas individuais
         for key in base_meta:
-            override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            override = _get_sim_meta_override(simulator_inputs, key)
             if override is not None:
                 base_meta[key] = override
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
@@ -1664,7 +1682,7 @@ def compute_gerente_simulation(
         proj_map['fixa'] = fixa_revenue
         # Permite sobrescrever metas
         for key in list(meta_map.keys()):
-            override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            override = _get_sim_meta_override(simulator_inputs, key)
             if override is not None:
                 meta_map[key] = override
     else:
@@ -1988,7 +2006,7 @@ def compute_coordenador_simulation(
             fixa_revenue = _fixa_receita_input
         proj_map['fixa'] = fixa_revenue
         for key in list(meta_map.keys()):
-            override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            override = _get_sim_meta_override(simulator_inputs, key)
             if override is not None:
                 meta_map[key] = override
     else:
@@ -2254,10 +2272,7 @@ def compute_aparte_simulation(
         # Permite sobrescrever a meta da rede por pilar.
         metas = dict(metas or {})
         for key in APARTE_PILLAR_ORDER:
-            sim_key = _APARTE_SIM_INPUT_KEY.get(key, key)
-            override = _get_sim_input_optional(simulator_inputs, sim_key, 'meta')
-            if override is None and sim_key != key:
-                override = _get_sim_input_optional(simulator_inputs, key, 'meta')
+            override = _get_sim_meta_override(simulator_inputs, key)
             if override is not None:
                 metas[key] = override
     else:  # VIEW_PROJECAO
