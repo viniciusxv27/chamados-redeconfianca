@@ -504,6 +504,12 @@ class User(AbstractUser):
         default='',
         verbose_name="Motivo do Afastamento"
     )
+    leave_return_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Data de Retorno do Afastamento",
+        help_text="Data prevista de retorno do colaborador afastado"
+    )
     leave_attachment = models.FileField(
         upload_to='afastamentos/%Y/%m/',
         storage=get_media_storage(),

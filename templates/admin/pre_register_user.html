@@ -100,6 +100,62 @@
                 </div>
             </form>
         </div>
+
+        <!-- Mini relatório de pré-cadastros -->
+        <div class="grid grid-cols-3 gap-3 mt-6">
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+                <p class="text-2xl font-bold text-gray-900">{{ pre_reg_stats.total }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Total</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+                <p class="text-2xl font-bold text-amber-600">{{ pre_reg_stats.pending }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Pendentes</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+                <p class="text-2xl font-bold text-emerald-600">{{ pre_reg_stats.completed }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Concluídos</p>
+            </div>
+        </div>
+
+        <!-- Pré-cadastros pendentes -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-user-clock text-amber-500 mr-2"></i> Pré-cadastros pendentes
+                    <span class="ml-2 px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs">{{ pre_reg_stats.pending }}</span>
+                </h3>
+            </div>
+            {% if pre_reg_pending %}
+            <div class="divide-y divide-gray-100">
+                {% for u in pre_reg_pending %}
+                <div class="px-6 py-3 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ u.full_name }}</p>
+                        <div class="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                            <span class="truncate">{{ u.email }}</span>
+                            {% if u.sector %}<span>•</span><span>{{ u.sector.name }}</span>{% endif %}
+                            <span>•</span>
+                            <span>Criado em {{ u.pre_registration_created_at|date:"d/m/Y" }}</span>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <a href="{% url 'pre_register_link' u.id %}" class="inline-flex items-center px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors">
+                            <i class="fas fa-link mr-1"></i><span class="hidden sm:inline">Link</span>
+                        </a>
+                        <a href="{% url 'view_user_profile' u.id %}" class="inline-flex items-center px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                            <i class="fas fa-eye mr-1"></i><span class="hidden sm:inline">Perfil</span>
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="px-6 py-8 text-center text-gray-500">
+                <i class="fas fa-check-circle text-3xl mb-2 text-emerald-300"></i>
+                <p class="text-sm">Nenhum pré-cadastro pendente.</p>
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}

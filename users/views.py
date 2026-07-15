@@ -1005,6 +1005,7 @@ def edit_user_view(request, user_id):
             status = User.STATUS_ATIVO
         inactivation_reason = request.POST.get('inactivation_reason', '').strip()
         leave_reason = request.POST.get('leave_reason', '').strip()
+        leave_return_date = request.POST.get('leave_return_date', '').strip()
         leave_attachment = request.FILES.get('leave_attachment')
         remove_leave_attachment = request.POST.get('remove_leave_attachment') == 'on'
 
@@ -1056,12 +1057,14 @@ def edit_user_view(request, user_id):
                 user_to_edit.inactivation_reason = inactivation_reason if status == User.STATUS_INATIVO else ''
                 user_to_edit.leave_reason = leave_reason if status == User.STATUS_AFASTADO else ''
                 if status == User.STATUS_AFASTADO:
+                    user_to_edit.leave_return_date = leave_return_date or None
                     if leave_attachment:
                         user_to_edit.leave_attachment = leave_attachment
                     elif remove_leave_attachment:
                         user_to_edit.leave_attachment = None
                 else:
-                    # Ao sair do afastamento, descarta o anexo vinculado
+                    # Ao sair do afastamento, descarta o retorno e o anexo vinculado
+                    user_to_edit.leave_return_date = None
                     user_to_edit.leave_attachment = None
 
                 # Salvar novos campos de RH
@@ -1151,6 +1154,18 @@ def pre_register_user_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('dashboard')
 
+    # Mini relatório dos pré-cadastros + lista de pendentes (mostrado na página).
+    pre_reg_pending = list(
+        User.objects.filter(pre_registration_status=User.PRE_REG_PENDING)
+        .select_related('sector')
+        .order_by('-pre_registration_created_at')
+    )
+    pre_reg_stats = {
+        'pending': len(pre_reg_pending),
+        'completed': User.objects.filter(pre_registration_status=User.PRE_REG_COMPLETED).count(),
+    }
+    pre_reg_stats['total'] = pre_reg_stats['pending'] + pre_reg_stats['completed']
+
     if request.method == 'POST':
         full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip().lower()
@@ -1164,6 +1179,8 @@ def pre_register_user_view(request):
             'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
             'form_data': request.POST,
+            'pre_reg_pending': pre_reg_pending,
+            'pre_reg_stats': pre_reg_stats,
         }
 
         if not full_name:
@@ -1242,6 +1259,8 @@ def pre_register_user_view(request):
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
+        'pre_reg_pending': pre_reg_pending,
+        'pre_reg_stats': pre_reg_stats,
     }
     return render(request, 'admin/pre_register_user.html', context)
 
@@ -1383,6 +1402,17 @@ def view_user_profile_view(request, user_id):
     )
     documents = target.documents.all().select_related('document_type', 'uploaded_by')
 
+    # Documentos de assinatura eletrônica (app documentos): assinados e pendentes.
+    from documentos.models import DocumentSignature
+    signatures = (
+        DocumentSignature.objects
+        .filter(user=target)
+        .select_related('document', 'document__category')
+        .order_by('-created_at')
+    )
+    signed_documents = signatures.filter(signed_at__isnull=False)
+    pending_documents = signatures.filter(signed_at__isnull=True)
+
     pre_registration_link = None
     if target.is_pre_registration_pending() and target.pre_registration_token:
         from django.urls import reverse
@@ -1394,6 +1424,8 @@ def view_user_profile_view(request, user_id):
         'user': request.user,
         'target': target,
         'documents': documents,
+        'signed_documents': signed_documents,
+        'pending_documents': pending_documents,
         'required_documents': RequiredDocument.objects.filter(is_active=True),
         'pre_registration_link': pre_registration_link,
     }
