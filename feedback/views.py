@@ -1399,7 +1399,9 @@ def exit_interview_reset(request, user_id):
 
 
 # ---------------------------------------------------------------------------
-# Gestão de acessos às pesquisas (somente superadmin)
+# Gestão de acessos às pesquisas
+# (Entrevista de Desligamento: somente superadmin;
+#  Pesquisa de Clima/`survey_access`: superadmin + gestores das pesquisas)
 # ---------------------------------------------------------------------------
 
 @superadmin_required
@@ -1445,7 +1447,7 @@ def exit_interview_access(request):
     })
 
 
-@superadmin_required
+@survey_manager_required
 @require_http_methods(['GET', 'POST'])
 def survey_access(request):
     if request.method == 'POST':
