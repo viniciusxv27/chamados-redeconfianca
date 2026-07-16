@@ -40,21 +40,24 @@
                    class="text-sm text-blue-600 hover:text-blue-800"><i class="fas fa-external-link-alt mr-1"></i> Abrir em nova aba</a>
             </div>
 
-            <div id="pdf-viewer" class="relative w-full rounded-lg border border-gray-200 bg-gray-50 overflow-hidden"
-                 style="height: 70vh; min-height: 420px;">
-                <object id="pdf-object" data="{% url 'documentos:document_pdf' signature.pk %}#view=FitH"
-                        type="application/pdf" class="w-full h-full">
-                    <!-- Fallback: navegadores (sobretudo mobile) que não renderizam PDF embutido -->
-                    <div class="h-full flex flex-col items-center justify-center text-center px-6 py-10">
-                        <i class="fas fa-file-pdf text-5xl text-red-400 mb-3"></i>
-                        <p class="text-sm font-medium text-gray-700">Seu navegador não exibe PDFs embutidos.</p>
-                        <p class="text-xs text-gray-500 mt-1 mb-4">Abra o documento em uma nova aba para lê-lo antes de assinar.</p>
-                        <a href="{% url 'documentos:document_pdf' signature.pk %}" target="_blank" rel="noopener"
-                           class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
-                            <i class="fas fa-external-link-alt mr-2"></i> Abrir documento
-                        </a>
-                    </div>
-                </object>
+            <div id="pdf-viewer" class="relative w-full rounded-lg border border-gray-200 bg-gray-100 overflow-auto"
+                 style="height: 70vh; min-height: 420px; -webkit-overflow-scrolling: touch;">
+                <div id="pdf-pages" class="flex flex-col items-center gap-3 py-3 px-2"></div>
+                <!-- Estado de carregamento -->
+                <div id="pdf-loading" class="absolute inset-0 flex flex-col items-center justify-center text-center px-6 pointer-events-none">
+                    <i class="fas fa-spinner fa-spin text-3xl text-gray-400 mb-2"></i>
+                    <p class="text-sm text-gray-500">Carregando documento…</p>
+                </div>
+                <!-- Fallback: se não for possível renderizar embutido (mostrado via JS) -->
+                <div id="pdf-fallback" class="hidden absolute inset-0 flex-col items-center justify-center text-center px-6 py-10 bg-gray-50">
+                    <i class="fas fa-file-pdf text-5xl text-red-400 mb-3"></i>
+                    <p class="text-sm font-medium text-gray-700">Não foi possível exibir o PDF aqui.</p>
+                    <p class="text-xs text-gray-500 mt-1 mb-4">Toque no botão abaixo para abrir o documento em uma nova aba e lê-lo antes de assinar.</p>
+                    <a href="{% url 'documentos:document_pdf' signature.pk %}" target="_blank" rel="noopener"
+                       class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
+                        <i class="fas fa-external-link-alt mr-2"></i> Abrir documento
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -94,7 +97,7 @@
             </p>
 
             <div class="border-2 border-dashed border-gray-300 rounded-lg bg-white relative" id="signature-wrapper">
-                <canvas id="signature-canvas" class="w-full rounded-lg cursor-crosshair" height="180"></canvas>
+                <canvas id="signature-canvas" class="w-full rounded-lg cursor-crosshair" height="180" style="touch-action: none;"></canvas>
                 <div id="signature-placeholder" class="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span class="text-gray-300 text-sm"><i class="fas fa-pen-nib mr-1"></i> Assine aqui</span>
                 </div>
@@ -116,6 +119,59 @@
     </div>
 </div>
 
+<!-- Renderização do PDF via PDF.js (funciona no mobile, ao contrário de <object>) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(function() {
+    const viewer = document.getElementById('pdf-viewer');
+    const pagesEl = document.getElementById('pdf-pages');
+    const loadingEl = document.getElementById('pdf-loading');
+    const fallbackEl = document.getElementById('pdf-fallback');
+    const pdfUrl = "{% url 'documentos:document_pdf' signature.pk %}";
+
+    function showFallback() {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (fallbackEl) { fallbackEl.classList.remove('hidden'); fallbackEl.style.display = 'flex'; }
+    }
+
+    // Se a biblioteca não carregou (CDN bloqueada, offline), oferece abrir em nova aba.
+    if (!window['pdfjsLib']) { showFallback(); return; }
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const dpr = window.devicePixelRatio || 1;
+    const targetWidth = Math.max((viewer.clientWidth || 600) - 24, 280);
+
+    pdfjsLib.getDocument({ url: pdfUrl, withCredentials: true }).promise.then(function(pdf) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        let chain = Promise.resolve();
+        for (let n = 1; n <= pdf.numPages; n++) {
+            chain = chain.then(function() {
+                return pdf.getPage(n).then(function(page) {
+                    const base = page.getViewport({ scale: 1 });
+                    const scale = Math.min(targetWidth / base.width, 2.5);
+                    const viewport = page.getViewport({ scale: scale });
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'shadow-sm bg-white';
+                    canvas.style.width = viewport.width + 'px';
+                    canvas.style.height = viewport.height + 'px';
+                    canvas.width = Math.floor(viewport.width * dpr);
+                    canvas.height = Math.floor(viewport.height * dpr);
+                    const c = canvas.getContext('2d');
+                    c.scale(dpr, dpr);
+                    pagesEl.appendChild(canvas);
+                    return page.render({ canvasContext: c, viewport: viewport }).promise;
+                });
+            });
+        }
+        return chain;
+    }).catch(function(err) {
+        console.error('Falha ao renderizar PDF:', err);
+        showFallback();
+    });
+})();
+</script>
+
 {% if can_sign %}
 <script>
 (function() {
@@ -125,54 +181,81 @@
     const placeholder = document.getElementById('signature-placeholder');
     let isDrawing = false;
     let hasSignature = false;
+    let lastWidth = 0;
 
     function resizeCanvas() {
         const rect = wrapper.getBoundingClientRect();
+        const cssWidth = Math.round(rect.width);
+        // Só reinicializa quando a LARGURA muda de fato. No mobile, rolar a página
+        // dispara "resize" (barra de endereço aparece/some) mudando só a ALTURA —
+        // reinicializar aqui apagaria a assinatura em andamento.
+        if (cssWidth === lastWidth) return;
+        lastWidth = cssWidth;
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = rect.width * dpr;
+        canvas.width = cssWidth * dpr;
         canvas.height = 180 * dpr;
         canvas.style.height = '180px';
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
         ctx.strokeStyle = '#1a1a2e';
         ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        // Redimensionar o canvas limpa o conteúdo; refletir no estado.
+        hasSignature = false;
+        placeholder.classList.remove('hidden');
     }
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    function getPos(e) {
+    function pointFromEvent(e) {
         const rect = canvas.getBoundingClientRect();
-        const touch = e.touches ? e.touches[0] : e;
-        return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+        const src = (e.touches && e.touches[0]) ||
+                    (e.changedTouches && e.changedTouches[0]) || e;
+        return { x: src.clientX - rect.left, y: src.clientY - rect.top };
     }
-    function startDraw(e) {
-        e.preventDefault();
+    function beginStroke(pt) {
         isDrawing = true;
-        const pos = getPos(e);
         ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y);
+        ctx.moveTo(pt.x, pt.y);
     }
-    function draw(e) {
+    function extendStroke(pt) {
         if (!isDrawing) return;
-        e.preventDefault();
-        const pos = getPos(e);
-        ctx.lineTo(pos.x, pos.y);
+        ctx.lineTo(pt.x, pt.y);
         ctx.stroke();
-        hasSignature = true;
-        placeholder.classList.add('hidden');
+        if (!hasSignature) { hasSignature = true; placeholder.classList.add('hidden'); }
     }
-    function stopDraw(e) {
-        if (isDrawing) { e.preventDefault(); isDrawing = false; }
-    }
+    function endStroke() { isDrawing = false; }
 
-    canvas.addEventListener('mousedown', startDraw);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDraw);
-    canvas.addEventListener('mouseleave', stopDraw);
-    canvas.addEventListener('touchstart', startDraw, { passive: false });
-    canvas.addEventListener('touchmove', draw, { passive: false });
-    canvas.addEventListener('touchend', stopDraw, { passive: false });
+    if (window.PointerEvent) {
+        // Pointer Events unificam mouse, toque e caneta — o caminho mais confiável no mobile.
+        canvas.addEventListener('pointerdown', function(e) {
+            e.preventDefault();
+            try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+            beginStroke(pointFromEvent(e));
+        });
+        canvas.addEventListener('pointermove', function(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            extendStroke(pointFromEvent(e));
+        });
+        const finish = function(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+            endStroke();
+        };
+        canvas.addEventListener('pointerup', finish);
+        canvas.addEventListener('pointercancel', finish);
+    } else {
+        // Fallback para navegadores sem Pointer Events.
+        canvas.addEventListener('mousedown', function(e) { e.preventDefault(); beginStroke(pointFromEvent(e)); });
+        canvas.addEventListener('mousemove', function(e) { if (!isDrawing) return; e.preventDefault(); extendStroke(pointFromEvent(e)); });
+        window.addEventListener('mouseup', endStroke);
+        canvas.addEventListener('touchstart', function(e) { e.preventDefault(); beginStroke(pointFromEvent(e)); }, { passive: false });
+        canvas.addEventListener('touchmove', function(e) { e.preventDefault(); extendStroke(pointFromEvent(e)); }, { passive: false });
+        canvas.addEventListener('touchend', function(e) { e.preventDefault(); endStroke(); }, { passive: false });
+    }
 
     window.clearSignature = function() {
         const dpr = window.devicePixelRatio || 1;

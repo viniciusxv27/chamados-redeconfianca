@@ -238,6 +238,11 @@
                                 <span class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium" title="{{ user_item.leave_reason }}">
                                     <i class="fas fa-user-clock mr-1"></i>Afastado
                                 </span>
+                                {% if user_item.leave_return_date %}
+                                    <div class="text-xs text-amber-700 mt-1">
+                                        <i class="fas fa-calendar-day mr-1"></i>Retorno: {{ user_item.leave_return_date|date:"d/m/Y" }}
+                                    </div>
+                                {% endif %}
                             {% elif user_item.status == 'INATIVO' %}
                                 <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium" title="{{ user_item.inactivation_reason }}">
                                     <i class="fas fa-times-circle mr-1"></i>Inativo

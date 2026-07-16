@@ -2588,34 +2588,9 @@
             container.appendChild(messageDiv);
         }
         
-        // Função para verificar se está dentro do horário de atendimento
+        // Suporte disponível 24h: sem restrição de horário de atendimento.
         window.isSupportChatOpen = function() {
-            const now = new Date();
-            const dayOfWeek = now.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
-            const hours = now.getHours();
-            const minutes = now.getMinutes();
-            const currentTime = hours * 60 + minutes; // Converter para minutos desde meia-noite
-            
-            const openTime = 9 * 60; // 09:00 = 540 minutos
-            const closeTimeWeekday = 18 * 60; // 18:00 = 1080 minutos
-            const closeTimeSaturday = 13 * 60; // 13:00 = 780 minutos
-            
-            // Domingo (0) - Fechado
-            if (dayOfWeek === 0) {
-                return false;
-            }
-            
-            // Sábado (6) - 09:00 às 13:00
-            if (dayOfWeek === 6) {
-                return currentTime >= openTime && currentTime < closeTimeSaturday;
-            }
-            
-            // Segunda a Sexta (1-5) - 09:00 às 18:00
-            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-                return currentTime >= openTime && currentTime < closeTimeWeekday;
-            }
-            
-            return false;
+            return true;
         };
         
         window.showOutsideHoursMessage = function() {
