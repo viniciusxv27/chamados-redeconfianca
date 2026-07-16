@@ -16,6 +16,9 @@
                     <p class="text-gray-600 mt-1">Visualização completa dos dados e documentos.</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'print_user_profile' target.id %}" target="_blank" class="bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90 transition-colors inline-flex items-center">
+                        <i class="fas fa-print mr-2"></i> Imprimir ficha
+                    </a>
                     <a href="{% url 'edit_user' target.id %}" class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors inline-flex items-center">
                         <i class="fas fa-edit mr-2"></i> Editar
                     </a>

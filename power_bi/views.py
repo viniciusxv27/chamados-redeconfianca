@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 import os
+import re
 import unicodedata
 from collections import defaultdict
 from urllib.parse import unquote, urlparse
@@ -136,6 +137,45 @@ def _normalize_sheet_name(value):
 
 def _is_fixa_pilar(pilar):
     return _normalize_text(pilar) == 'FIXA'
+
+
+def _store_key(value):
+    """Chave de comparacao entre o setor do gerente e o PDV da planilha.
+
+    Alem de caixa/acentos (via _normalize_text), remove a palavra LOJA e os
+    separadores que sobram, para que "Loja - Jardim Camburi" e o PDV
+    "JARDIM CAMBURI" resultem na mesma chave.
+    """
+    text = re.sub(r'\bLOJA\b', ' ', _normalize_text(value))
+    return ' '.join(text.strip(' -–—:').split())
+
+
+def _gerente_names_by_store():
+    """Mapeia cada loja para os nomes dos gerentes do grupo GERENTES.
+
+    O vinculo gerente -> PDV vem do setor principal do gerente. Retorna
+    tambem se o grupo existe, para diferenciar "grupo ausente" de
+    "grupo sem membros com setor".
+    """
+    from communications.models import CommunicationGroup
+
+    group = CommunicationGroup.objects.filter(name__iexact='GERENTES').first()
+    if group is None:
+        return {}, False
+
+    names_by_store = defaultdict(list)
+    members = group.members.filter(is_active=True).select_related('sector').prefetch_related('sectors')
+    for member in members:
+        sector = member.primary_sector
+        if sector is None:
+            continue
+        store = _store_key(sector.name)
+        name = (member.full_name or '').strip()
+        if not store or not name:
+            continue
+        names_by_store[store].append(name)
+
+    return names_by_store, True
 
 
 def _get_goals_mysql_config():
@@ -1305,6 +1345,29 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
         for row in cn_grouped_rows.values()
     ]
 
+    # Metas por gerente: as mesmas linhas de loja, replicadas para cada gerente
+    # do grupo GERENTES cujo setor principal aponte para aquele PDV.
+    gerentes_by_store, gerente_group_found = _gerente_names_by_store()
+
+    gerente_rows = []
+    pdvs_sem_gerente = set()
+    for row in grouped_rows.values():
+        gerente_names = gerentes_by_store.get(_store_key(row['pdv']), [])
+        if not gerente_names:
+            pdvs_sem_gerente.add(row['pdv'])
+            continue
+        for gerente_name in gerente_names:
+            gerente_rows.append((
+                row['valor'],
+                row['pdv'],
+                gerente_name,
+                upload.month,
+                upload.year,
+                row['unidade'],
+                row['pilar'],
+                row['hc'],
+            ))
+
     try:
         import pymysql
     except Exception:
@@ -1316,15 +1379,8 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
         connection = pymysql.connect(**mysql_config)
         try:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    'DELETE FROM metas WHERE mes_ref = %s AND ano_ref = %s',
-                    (upload.month, upload.year),
-                )
-                cursor.executemany(
-                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade, pilar, hc) VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                    rows,
-                )
-
+                # DDL primeiro: no MySQL, CREATE TABLE faz commit implicito e
+                # encerraria a transacao no meio dos DELETE/INSERT abaixo.
                 cursor.execute(
                     'CREATE TABLE IF NOT EXISTS metas_cn ('
                     '  id INT AUTO_INCREMENT PRIMARY KEY,'
@@ -1339,6 +1395,29 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
                     ') DEFAULT CHARSET=utf8mb4'
                 )
                 cursor.execute(
+                    'CREATE TABLE IF NOT EXISTS metas_gerente ('
+                    '  id INT AUTO_INCREMENT PRIMARY KEY,'
+                    '  valor DECIMAL(14,2),'
+                    '  pdv VARCHAR(255),'
+                    '  nome_gerente VARCHAR(255),'
+                    '  mes_ref INT,'
+                    '  ano_ref INT,'
+                    '  unidade VARCHAR(20),'
+                    '  pilar VARCHAR(100),'
+                    '  hc INT'
+                    ') DEFAULT CHARSET=utf8mb4'
+                )
+
+                cursor.execute(
+                    'DELETE FROM metas WHERE mes_ref = %s AND ano_ref = %s',
+                    (upload.month, upload.year),
+                )
+                cursor.executemany(
+                    'INSERT INTO metas (valor, pdv, mes_ref, ano_ref, unidade, pilar, hc) VALUES (%s, %s, %s, %s, %s, %s, %s)',
+                    rows,
+                )
+
+                cursor.execute(
                     'DELETE FROM metas_cn WHERE mes_ref = %s AND ano_ref = %s',
                     (upload.month, upload.year),
                 )
@@ -1347,6 +1426,17 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
                         'INSERT INTO metas_cn (valor, pdv, cn, mes_ref, ano_ref, unidade, pilar, pcn) '
                         'VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
                         cn_rows,
+                    )
+
+                cursor.execute(
+                    'DELETE FROM metas_gerente WHERE mes_ref = %s AND ano_ref = %s',
+                    (upload.month, upload.year),
+                )
+                if gerente_rows:
+                    cursor.executemany(
+                        'INSERT INTO metas_gerente (valor, pdv, nome_gerente, mes_ref, ano_ref, unidade, pilar, hc) '
+                        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+                        gerente_rows,
                     )
             connection.commit()
         finally:
@@ -1358,6 +1448,22 @@ def sync_goals_upload_to_mysql_view(request, upload_id):
     messages.success(
         request,
         f'Metas de {upload.month:02d}/{upload.year} sincronizadas com sucesso no banco MySQL '
-        f'({len(rows)} linhas de loja, {len(cn_rows)} linhas de CN).',
+        f'({len(rows)} linhas de loja, {len(cn_rows)} linhas de CN, {len(gerente_rows)} linhas de gerente).',
     )
+
+    if not gerente_group_found:
+        messages.warning(
+            request,
+            'Grupo GERENTES nao encontrado em /users/manage/groups/: a tabela metas_gerente ficou sem linhas.',
+        )
+    elif pdvs_sem_gerente:
+        amostra = ', '.join(sorted(pdvs_sem_gerente)[:8])
+        restantes = len(pdvs_sem_gerente) - 8
+        if restantes > 0:
+            amostra += f' e mais {restantes}'
+        messages.warning(
+            request,
+            f'{len(pdvs_sem_gerente)} PDV(s) sem gerente vinculado ficaram fora de metas_gerente: {amostra}.',
+        )
+
     return redirect('power_bi:manage_goals')

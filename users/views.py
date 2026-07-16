@@ -1158,6 +1158,7 @@ def pre_register_user_view(request):
         hierarchy = request.POST.get('hierarchy') or 'PADRAO'
         job_title = request.POST.get('job_title', '').strip()
         phone = request.POST.get('phone', '').strip()
+        admission_date = request.POST.get('admission_date', '').strip()
 
         context = {
             'sectors': Sector.objects.all(),
@@ -1213,6 +1214,7 @@ def pre_register_user_view(request):
                 hierarchy=hierarchy,
                 job_title=job_title,
                 phone=phone,
+                admission_date=admission_date if admission_date else None,
                 is_active=False,  # inativo até o colaborador concluir o pré-cadastro
                 pre_registration_status=User.PRE_REG_PENDING,
                 pre_registration_token=token,
@@ -1398,6 +1400,27 @@ def view_user_profile_view(request, user_id):
         'pre_registration_link': pre_registration_link,
     }
     return render(request, 'admin/user_profile.html', context)
+
+
+@login_required
+def print_user_profile_view(request, user_id):
+    """Ficha cadastral do colaborador em layout A4, pronta para impressão."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+
+    target = get_object_or_404(
+        User.objects.prefetch_related('sectors', 'documents'),
+        id=user_id
+    )
+
+    context = {
+        'user': request.user,
+        'target': target,
+        'documents': target.documents.all().select_related('document_type'),
+        'printed_at': timezone.now(),
+    }
+    return render(request, 'admin/user_registration_form.html', context)
 
 
 @login_required

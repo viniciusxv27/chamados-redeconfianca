@@ -1,0 +1,472 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ficha Cadastral — {{ target.full_name }}</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm 14mm;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #1f2937;
+            background: #e5e7eb;
+            padding: 24px 12px;
+        }
+
+        /* Barra de ações — não sai na impressão */
+        .toolbar {
+            max-width: 210mm;
+            margin: 0 auto 16px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 16px;
+            border: 0;
+            border-radius: 8px;
+            font-size: 10pt;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .btn-print { background: #2563eb; color: #fff; }
+        .btn-print:hover { background: #1d4ed8; }
+        .btn-back { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+        .btn-back:hover { background: #f9fafb; }
+
+        /* Folha A4 */
+        .sheet {
+            max-width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            background: #fff;
+            padding: 14mm;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .15);
+        }
+
+        /* Cabeçalho — tarja escura: a logo do portal é branca e só tem
+           contraste sobre fundo escuro (mesmo tratamento do menu lateral). */
+        .doc-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            background: #111827;
+            border-radius: 4px;
+            padding: 8px 16px;
+        }
+
+        .doc-header img { height: 54px; width: auto; }
+
+        .doc-title {
+            text-align: right;
+        }
+
+        .doc-title h1 {
+            font-size: 15pt;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+        }
+
+        .doc-title p {
+            font-size: 8pt;
+            color: #9ca3af;
+            margin-top: 2px;
+        }
+
+        /* Identificação: foto + nome */
+        .identity {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .photo {
+            width: 30mm;
+            height: 38mm;
+            flex-shrink: 0;
+            border: 1px solid #d1d5db;
+            border-radius: 3px;
+            object-fit: cover;
+            background: #f3f4f6;
+        }
+
+        .photo-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 7.5pt;
+            color: #9ca3af;
+            padding: 4px;
+        }
+
+        .identity-name {
+            font-size: 14pt;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .identity-role {
+            font-size: 10pt;
+            color: #4b5563;
+            margin-top: 2px;
+        }
+
+        .tags { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 9px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            font-size: 8pt;
+            font-weight: 600;
+            color: #374151;
+            background: #f9fafb;
+        }
+
+        .tag-ok { border-color: #86efac; background: #f0fdf4; color: #166534; }
+        .tag-off { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+
+        /* Seções */
+        .section { margin-top: 14px; page-break-inside: avoid; }
+
+        .section h2 {
+            font-size: 9pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            color: #1e3a8a;
+            background: #eff6ff;
+            border-left: 3px solid #1e3a8a;
+            padding: 5px 8px;
+            margin-bottom: 8px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px 14px;
+        }
+
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .span-2 { grid-column: span 2; }
+        .span-3 { grid-column: span 3; }
+
+        .field { min-width: 0; }
+
+        .field .label {
+            display: block;
+            font-size: 7.5pt;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: #6b7280;
+        }
+
+        .field .value {
+            display: block;
+            font-size: 10pt;
+            font-weight: 600;
+            color: #111827;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 2px;
+            min-height: 16px;
+            word-break: break-word;
+        }
+
+        .field .value.empty { color: #d1d5db; font-weight: 400; }
+
+        /* Documentos */
+        table.docs {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+        }
+
+        table.docs th {
+            background: #f3f4f6;
+            text-align: left;
+            font-size: 7.5pt;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: #4b5563;
+            padding: 5px 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        table.docs td {
+            padding: 5px 8px;
+            border: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+
+        .docs-empty {
+            font-size: 9pt;
+            color: #9ca3af;
+            font-style: italic;
+            padding: 8px;
+            border: 1px dashed #e5e7eb;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        /* Declaração + assinaturas */
+        .statement {
+            margin-top: 16px;
+            font-size: 8.5pt;
+            color: #4b5563;
+            text-align: justify;
+            line-height: 1.5;
+        }
+
+        .signatures {
+            margin-top: 22mm;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            page-break-inside: avoid;
+        }
+
+        .signature { text-align: center; }
+
+        .signature .line {
+            border-top: 1px solid #6b7280;
+            margin-bottom: 4px;
+        }
+
+        .signature .who { font-size: 8.5pt; font-weight: 600; color: #374151; }
+        .signature .sub { font-size: 7.5pt; color: #9ca3af; }
+
+        .doc-footer {
+            margin-top: 14px;
+            padding-top: 6px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            font-size: 7.5pt;
+            color: #9ca3af;
+        }
+
+        @media print {
+            body { background: #fff; padding: 0; }
+            .no-print { display: none !important; }
+            .sheet {
+                box-shadow: none;
+                margin: 0;
+                padding: 0;
+                max-width: none;
+                min-height: 0;
+            }
+            /* Mantém as tarjas e o sombreado das seções na impressão */
+            * {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="toolbar no-print">
+    <a href="{% url 'view_user_profile' target.id %}" class="btn btn-back">&larr; Voltar ao perfil</a>
+    <button type="button" class="btn btn-print" onclick="window.print()">Imprimir ficha</button>
+</div>
+
+<div class="sheet">
+
+    <div class="doc-header">
+        <img src="{% static 'images/logo.png' %}" alt="Rede Confiança">
+        <div class="doc-title">
+            <h1>Ficha Cadastral</h1>
+            <p>Registro de colaborador</p>
+        </div>
+    </div>
+
+    <div class="identity">
+        {% if target.profile_picture %}
+            <img src="{{ target.profile_picture.url }}" alt="{{ target.full_name }}" class="photo">
+        {% elif target.avatar %}
+            <img src="{{ target.avatar.url }}" alt="{{ target.full_name }}" class="photo">
+        {% else %}
+            <div class="photo photo-empty">Foto 3x4</div>
+        {% endif %}
+        <div>
+            <div class="identity-name">{{ target.full_name }}</div>
+            <div class="identity-role">{{ target.job_title|default:"Cargo não informado" }}{% if target.primary_sector %} &middot; {{ target.primary_sector }}{% endif %}</div>
+            <div class="tags">
+                <span class="tag">{{ target.get_hierarchy_display }}</span>
+                <span class="tag">Matrícula: {{ target.login_code|default:target.id }}</span>
+                {% if target.is_active %}
+                    <span class="tag tag-ok">{{ target.get_status_display }}</span>
+                {% else %}
+                    <span class="tag tag-off">Inativo</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Dados Pessoais</h2>
+        <div class="grid">
+            <div class="field span-2">
+                <span class="label">Nome completo</span>
+                <span class="value">{{ target.full_name }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Data de nascimento</span>
+                <span class="value {% if not target.birth_date %}empty{% endif %}">{{ target.birth_date|date:"d/m/Y"|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">CPF</span>
+                <span class="value {% if not target.cpf %}empty{% endif %}">{{ target.cpf|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">PIS</span>
+                <span class="value {% if not target.pis %}empty{% endif %}">{{ target.pis|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Telefone</span>
+                <span class="value {% if not target.phone %}empty{% endif %}">{{ target.phone|default:"—" }}</span>
+            </div>
+            <div class="field span-2">
+                <span class="label">E-mail</span>
+                <span class="value">{{ target.email }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Bairro</span>
+                <span class="value {% if not target.neighborhood %}empty{% endif %}">{{ target.neighborhood|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Cidade</span>
+                <span class="value {% if not target.city %}empty{% endif %}">{{ target.city|default:"—" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Dados Funcionais</h2>
+        <div class="grid">
+            <div class="field">
+                <span class="label">Cargo</span>
+                <span class="value {% if not target.job_title %}empty{% endif %}">{{ target.job_title|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Data de admissão</span>
+                <span class="value {% if not target.admission_date %}empty{% endif %}">{{ target.admission_date|date:"d/m/Y"|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Data de demissão</span>
+                <span class="value {% if not target.demission_date %}empty{% endif %}">{{ target.demission_date|date:"d/m/Y"|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Setor principal</span>
+                <span class="value {% if not target.primary_sector %}empty{% endif %}">{{ target.primary_sector|default:"—" }}</span>
+            </div>
+            <div class="field span-2">
+                <span class="label">Setores</span>
+                <span class="value {% if not target.sectors_display %}empty{% endif %}">{{ target.sectors_display|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Hierarquia</span>
+                <span class="value">{{ target.get_hierarchy_display }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Situação</span>
+                <span class="value">{{ target.get_status_display }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Login/Código</span>
+                <span class="value {% if not target.login_code %}empty{% endif %}">{{ target.login_code|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">PDV</span>
+                <span class="value {% if not target.pdv %}empty{% endif %}">{{ target.pdv|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Perfil DISC</span>
+                <span class="value {% if not target.disc_profile %}empty{% endif %}">{{ target.disc_profile|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Uniforme (blusa)</span>
+                <span class="value {% if not target.uniform_size_shirt %}empty{% endif %}">{{ target.uniform_size_shirt|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Uniforme (calça)</span>
+                <span class="value {% if not target.uniform_size_pants %}empty{% endif %}">{{ target.uniform_size_pants|default:"—" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Documentos Entregues</h2>
+        {% if documents %}
+            <table class="docs">
+                <thead>
+                    <tr>
+                        <th style="width: 45%;">Documento</th>
+                        <th style="width: 35%;">Arquivo</th>
+                        <th style="width: 20%;">Recebido em</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                        <tr>
+                            <td>{{ doc.display_name }}</td>
+                            <td>{{ doc.original_filename }}</td>
+                            <td>{{ doc.uploaded_at|date:"d/m/Y" }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="docs-empty">Nenhum documento anexado ao cadastro.</div>
+        {% endif %}
+    </div>
+
+    <p class="statement">
+        Declaro que as informações prestadas nesta ficha são verdadeiras e me responsabilizo pela sua exatidão,
+        comprometendo-me a comunicar ao setor responsável qualquer alteração dos dados aqui registrados.
+    </p>
+
+    <div class="signatures">
+        <div class="signature">
+            <div class="line"></div>
+            <div class="who">{{ target.full_name }}</div>
+            <div class="sub">Assinatura do colaborador</div>
+        </div>
+        <div class="signature">
+            <div class="line"></div>
+            <div class="who">Responsável pelo cadastro</div>
+            <div class="sub">Assinatura e carimbo</div>
+        </div>
+    </div>
+
+    <div class="doc-footer">
+        <span>Emitido por {{ user.full_name }} em {{ printed_at|date:"d/m/Y H:i" }}</span>
+        <span>Portal Rede Confiança</span>
+    </div>
+
+</div>
+
+</body>
+</html>
