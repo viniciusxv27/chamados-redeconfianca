@@ -2139,9 +2139,8 @@ def bulk_mark_paid(request):
 
 @login_required
 def contestation_history(request):
-    """Histórico de todas as ações em contestações (apenas SUPERADMIN)."""
-    rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
-    if rank < HIERARCHY_RANK['SUPERADMIN']:
+    """Histórico de ações em contestações (gestores de contestação)."""
+    if not _can_manage_contestations(request.user):
         messages.error(request, 'Sem permissão para ver o histórico.')
         return redirect('contestacao:exclusion_list')
 
@@ -2150,6 +2149,22 @@ def contestation_history(request):
     action_filter = request.GET.get('action', '').strip()
     if action_filter:
         qs = qs.filter(action=action_filter)
+
+    # Filtro por número da contestação (aceita "#123" ou "123").
+    contestation_number = request.GET.get('contestation', '').strip()
+    if contestation_number:
+        digits = contestation_number.lstrip('#').strip()
+        qs = qs.filter(contestation__pk=int(digits)) if digits.isdigit() else qs.none()
+
+    # Filtro por número da venda (registro de exclusão vinculado).
+    numero_venda = request.GET.get('numero_venda', '').strip()
+    if numero_venda:
+        qs = qs.filter(contestation__exclusion__numero_venda__icontains=numero_venda)
+
+    # Filtro por vendedor.
+    vendedor = request.GET.get('vendedor', '').strip()
+    if vendedor:
+        qs = qs.filter(contestation__exclusion__vendedor__icontains=vendedor)
 
     search = request.GET.get('q', '').strip()
     if search:
@@ -2160,10 +2175,30 @@ def contestation_history(request):
             Q(notes__icontains=search)
         )
 
+    # Escopo por setor: gestores sem visão global veem apenas o histórico das
+    # contestações das suas filiais (mesma regra do "Gerenciar Contestações").
+    if not _can_view_all_contestation_scope(request.user):
+        user_sectors = list(request.user.sectors.values_list('name', flat=True))
+        if request.user.sector:
+            user_sectors.append(request.user.sector.name)
+        if user_sectors:
+            matching_ids = [
+                record.id
+                for record in qs
+                if record.contestation and record.contestation.exclusion
+                and _match_sector_to_filial(user_sectors, record.contestation.exclusion.filial)
+            ]
+            qs = qs.filter(id__in=matching_ids) if matching_ids else qs.none()
+        else:
+            qs = qs.none()
+
     context = {
         'history': qs[:200],
         'action_filter': action_filter,
         'search': search,
+        'contestation_number': contestation_number,
+        'numero_venda': numero_venda,
+        'vendedor': vendedor,
         'action_choices': ContestationHistory.ACTION_CHOICES,
     }
     return render(request, 'contestacao/contestation_history.html', context)

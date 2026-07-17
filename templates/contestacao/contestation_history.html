@@ -21,9 +21,24 @@
 
     <!-- Filtros -->
     <form method="get" class="bg-white border rounded-lg p-3 mb-4 flex flex-wrap gap-3 items-end">
-        <div class="flex-1 min-w-[200px]">
+        <div class="w-40">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Nº Contestação</label>
+            <input type="text" name="contestation" value="{{ contestation_number }}" placeholder="Ex: 123"
+                   class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
+        </div>
+        <div class="w-44">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Nº Venda</label>
+            <input type="text" name="numero_venda" value="{{ numero_venda }}" placeholder="Nº da venda"
+                   class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
+        </div>
+        <div class="w-48">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Vendedor</label>
+            <input type="text" name="vendedor" value="{{ vendedor }}" placeholder="Nome do vendedor"
+                   class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
+        </div>
+        <div class="flex-1 min-w-[180px]">
             <label class="block text-xs font-medium text-gray-500 mb-1">Buscar</label>
-            <input type="text" name="q" value="{{ search }}" placeholder="Usuário, vendedor..."
+            <input type="text" name="q" value="{{ search }}" placeholder="Usuário, observações..."
                    class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
         </div>
         <div class="w-48">
@@ -38,7 +53,7 @@
         <button type="submit" class="px-4 py-1.5 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700">
             <i class="fas fa-search mr-1"></i> Filtrar
         </button>
-        {% if search or action_filter %}
+        {% if search or action_filter or contestation_number or numero_venda or vendedor %}
         <a href="{% url 'contestacao:contestation_history' %}" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Limpar</a>
         {% endif %}
     </form>
