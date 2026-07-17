@@ -11,6 +11,7 @@ urlpatterns = [
 
     # Pré-cadastro público (link enviado ao novo colaborador, sem login)
     path('pre-cadastro/concluido/', views.pre_registration_success_view, name='pre_registration_success'),
+    path('pre-cadastro/ajustar/', views.adjust_pre_registration_view, name='adjust_pre_registration'),
     path('pre-cadastro/<str:token>/', views.complete_pre_registration_view, name='complete_pre_registration'),
     
     # Profile URLs
@@ -41,7 +42,10 @@ urlpatterns = [
     path('manage/users/<int:user_id>/profile/', views.view_user_profile_view, name='view_user_profile'),
     path('manage/users/<int:user_id>/profile/print/', views.print_user_profile_view, name='print_user_profile'),
     path('manage/users/<int:user_id>/pre-register-link/', views.pre_register_link_view, name='pre_register_link'),
+    path('manage/users/<int:user_id>/pre-register/approve/', views.approve_pre_registration_view, name='approve_pre_registration'),
+    path('manage/users/<int:user_id>/pre-register/reject/', views.reject_pre_registration_view, name='reject_pre_registration'),
     path('manage/users/<int:user_id>/documents/upload/', views.admin_upload_user_document_view, name='admin_upload_user_document'),
+    path('manage/users/<int:user_id>/documents/download-all/', views.download_user_documents_zip, name='download_user_documents_zip'),
     path('manage/user-documents/<int:document_id>/delete/', views.delete_user_document_view, name='delete_user_document'),
     path('manage/required-documents/', views.manage_required_documents_view, name='manage_required_documents'),
     path('manage/required-documents/<int:doc_id>/edit/', views.edit_required_document_view, name='edit_required_document'),

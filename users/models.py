@@ -472,7 +472,38 @@ class User(AbstractUser):
     pdv = models.CharField(max_length=100, blank=True, verbose_name="PDV")
     neighborhood = models.CharField(max_length=100, blank=True, verbose_name="Bairro")
     city = models.CharField(max_length=100, blank=True, verbose_name="Cidade")
-    
+    cep = models.CharField(max_length=9, blank=True, default='', verbose_name="CEP")
+
+    # Documento de identidade (RG)
+    rg = models.CharField(max_length=20, blank=True, default='', verbose_name="RG")
+    rg_issue_date = models.DateField(null=True, blank=True, verbose_name="Data de Emissão do RG")
+    rg_issuer = models.CharField(max_length=50, blank=True, default='', verbose_name="Órgão Emissor do RG")
+
+    # Título de eleitor
+    voter_title = models.CharField(max_length=20, blank=True, default='', verbose_name="Título de Eleitor")
+    voter_zone = models.CharField(max_length=10, blank=True, default='', verbose_name="Zona Eleitoral")
+    voter_section = models.CharField(max_length=10, blank=True, default='', verbose_name="Seção Eleitoral")
+
+    # Filiação
+    father_name = models.CharField(max_length=150, blank=True, default='', verbose_name="Nome do Pai")
+    mother_name = models.CharField(max_length=150, blank=True, default='', verbose_name="Nome da Mãe")
+
+    # Cor/raça (classificação IBGE)
+    SKIN_COLOR_CHOICES = [
+        ('BRANCA', 'Branca'),
+        ('PRETA', 'Preta'),
+        ('PARDA', 'Parda'),
+        ('AMARELA', 'Amarela'),
+        ('INDIGENA', 'Indígena'),
+    ]
+    skin_color = models.CharField(
+        max_length=10,
+        choices=SKIN_COLOR_CHOICES,
+        blank=True,
+        default='',
+        verbose_name="Cor/Raça"
+    )
+
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
@@ -522,10 +553,14 @@ class User(AbstractUser):
     PRE_REG_NONE = 'NONE'
     PRE_REG_PENDING = 'PENDING'
     PRE_REG_COMPLETED = 'COMPLETED'
+    PRE_REG_APPROVED = 'APPROVED'
+    PRE_REG_REJECTED = 'REJECTED'
     PRE_REGISTRATION_CHOICES = [
         (PRE_REG_NONE, 'Cadastro normal'),
         (PRE_REG_PENDING, 'Pré-cadastro pendente'),
         (PRE_REG_COMPLETED, 'Pré-cadastro concluído'),
+        (PRE_REG_APPROVED, 'Pré-cadastro aprovado'),
+        (PRE_REG_REJECTED, 'Pré-cadastro reprovado'),
     ]
     pre_registration_status = models.CharField(
         max_length=20,
@@ -550,6 +585,30 @@ class User(AbstractUser):
         null=True,
         blank=True,
         verbose_name="Data de Conclusão do Pré-cadastro"
+    )
+    pre_registration_rejection_reason = models.TextField(
+        blank=True,
+        default='',
+        verbose_name="Motivo da Reprovação do Pré-cadastro"
+    )
+    pre_registration_extra_documents = models.ManyToManyField(
+        'RequiredDocument',
+        blank=True,
+        related_name='adjustment_requests',
+        verbose_name="Documentos Adicionais Solicitados"
+    )
+    pre_registration_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Data da Análise do Pré-cadastro"
+    )
+    pre_registration_reviewed_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_pre_registrations',
+        verbose_name="Analisado por"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -698,6 +757,18 @@ class User(AbstractUser):
     def is_pre_registration_pending(self):
         """Colaborador criado via pré-cadastro que ainda não concluiu o preenchimento."""
         return self.pre_registration_status == self.PRE_REG_PENDING
+
+    def needs_pre_registration_adjustment(self):
+        """Pré-cadastro reprovado: o colaborador precisa corrigir e reenviar."""
+        return self.pre_registration_status == self.PRE_REG_REJECTED
+
+    def is_pre_registration_awaiting_review(self):
+        """Pré-cadastro concluído e ainda sem análise do gestor."""
+        return self.pre_registration_status == self.PRE_REG_COMPLETED
+
+    def can_review_pre_registrations(self):
+        """Quem pode aprovar/reprovar um pré-cadastro concluído."""
+        return self.can_manage_users()
 
     def can_manage_required_documents(self):
         """Somente SUPERADMIN configura quais documentos são exigidos no pré-cadastro."""

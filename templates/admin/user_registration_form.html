@@ -337,6 +337,18 @@
                 <span class="value {% if not target.birth_date %}empty{% endif %}">{{ target.birth_date|date:"d/m/Y"|default:"—" }}</span>
             </div>
             <div class="field">
+                <span class="label">Nome do pai</span>
+                <span class="value {% if not target.father_name %}empty{% endif %}">{{ target.father_name|default:"—" }}</span>
+            </div>
+            <div class="field span-2">
+                <span class="label">Nome da mãe</span>
+                <span class="value {% if not target.mother_name %}empty{% endif %}">{{ target.mother_name|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Cor/Raça</span>
+                <span class="value {% if not target.skin_color %}empty{% endif %}">{{ target.get_skin_color_display|default:"—" }}</span>
+            </div>
+            <div class="field">
                 <span class="label">CPF</span>
                 <span class="value {% if not target.cpf %}empty{% endif %}">{{ target.cpf|default:"—" }}</span>
             </div>
@@ -353,12 +365,46 @@
                 <span class="value">{{ target.email }}</span>
             </div>
             <div class="field">
+                <span class="label">CEP</span>
+                <span class="value {% if not target.cep %}empty{% endif %}">{{ target.cep|default:"—" }}</span>
+            </div>
+            <div class="field">
                 <span class="label">Bairro</span>
                 <span class="value {% if not target.neighborhood %}empty{% endif %}">{{ target.neighborhood|default:"—" }}</span>
             </div>
             <div class="field">
                 <span class="label">Cidade</span>
                 <span class="value {% if not target.city %}empty{% endif %}">{{ target.city|default:"—" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Documentos e Filiação</h2>
+        <div class="grid">
+            <div class="field">
+                <span class="label">RG</span>
+                <span class="value {% if not target.rg %}empty{% endif %}">{{ target.rg|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Data de emissão do RG</span>
+                <span class="value {% if not target.rg_issue_date %}empty{% endif %}">{{ target.rg_issue_date|date:"d/m/Y"|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Órgão emissor</span>
+                <span class="value {% if not target.rg_issuer %}empty{% endif %}">{{ target.rg_issuer|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Título de eleitor</span>
+                <span class="value {% if not target.voter_title %}empty{% endif %}">{{ target.voter_title|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Zona eleitoral</span>
+                <span class="value {% if not target.voter_zone %}empty{% endif %}">{{ target.voter_zone|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Seção eleitoral</span>
+                <span class="value {% if not target.voter_section %}empty{% endif %}">{{ target.voter_section|default:"—" }}</span>
             </div>
         </div>
     </div>

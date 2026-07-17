@@ -86,6 +86,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.LoggingMiddleware',
     'users.session_tracking.ActiveSessionMiddleware',
+    'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
 ]
 
 ROOT_URLCONF = 'redeconfianca.urls'

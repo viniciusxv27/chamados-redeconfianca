@@ -108,7 +108,7 @@
         </div>
 
         <!-- Mini relatório de pré-cadastros -->
-        <div class="grid grid-cols-3 gap-3 mt-6">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6">
             <div class="bg-white rounded-xl shadow-sm p-4 text-center">
                 <p class="text-2xl font-bold text-gray-900">{{ pre_reg_stats.total }}</p>
                 <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Total</p>
@@ -118,10 +118,122 @@
                 <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Pendentes</p>
             </div>
             <div class="bg-white rounded-xl shadow-sm p-4 text-center">
-                <p class="text-2xl font-bold text-emerald-600">{{ pre_reg_stats.completed }}</p>
-                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Concluídos</p>
+                <p class="text-2xl font-bold text-blue-600">{{ pre_reg_stats.completed }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">P/ analisar</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+                <p class="text-2xl font-bold text-emerald-600">{{ pre_reg_stats.approved }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Aprovados</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+                <p class="text-2xl font-bold text-red-600">{{ pre_reg_stats.rejected }}</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Reprovados</p>
             </div>
         </div>
+
+        <!-- Concluídos aguardando análise -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-user-check text-blue-500 mr-2"></i> Concluídos aguardando análise
+                    <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">{{ pre_reg_stats.completed }}</span>
+                </h3>
+                <p class="text-sm text-gray-500 mt-1">Confira os dados e documentos no perfil antes de aprovar ou reprovar.</p>
+            </div>
+            {% if pre_reg_completed %}
+            <div class="divide-y divide-gray-100">
+                {% for u in pre_reg_completed %}
+                <div class="px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ u.full_name }}</p>
+                        <div class="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                            <span class="truncate">{{ u.email }}</span>
+                            {% if u.sector %}<span>•</span><span>{{ u.sector.name }}</span>{% endif %}
+                            <span>•</span>
+                            <span>Concluído em {{ u.pre_registration_completed_at|date:"d/m/Y H:i" }}</span>
+                            <span>•</span>
+                            <span><i class="fas fa-paperclip mr-1"></i>{{ u.documents.all|length }} documento(s)</span>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <a href="{% url 'view_user_profile' u.id %}" class="inline-flex items-center px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                            <i class="fas fa-eye mr-1"></i> Perfil
+                        </a>
+                        <form method="post" action="{% url 'approve_pre_registration' u.id %}" class="inline"
+                              onsubmit="return confirm('Aprovar o pré-cadastro de {{ u.full_name|escapejs }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="inline-flex items-center px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 transition-colors">
+                                <i class="fas fa-check mr-1"></i> Aprovar
+                            </button>
+                        </form>
+                        <button type="button"
+                                data-action="{% url 'reject_pre_registration' u.id %}"
+                                data-name="{{ u.full_name }}"
+                                onclick="openRejectModal(this)"
+                                class="inline-flex items-center px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
+                            <i class="fas fa-times mr-1"></i> Reprovar
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="px-6 py-8 text-center text-gray-500">
+                <i class="fas fa-inbox text-3xl mb-2 text-gray-300"></i>
+                <p class="text-sm">Nenhum pré-cadastro aguardando análise.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Reprovados: aguardando ajuste do colaborador -->
+        {% if pre_reg_rejected %}
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-user-times text-red-500 mr-2"></i> Reprovados aguardando ajuste
+                    <span class="ml-2 px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs">{{ pre_reg_stats.rejected }}</span>
+                </h3>
+                <p class="text-sm text-gray-500 mt-1">O colaborador vê o motivo ao entrar no portal e reenvia o cadastro para análise.</p>
+            </div>
+            <div class="divide-y divide-gray-100">
+                {% for u in pre_reg_rejected %}
+                <div class="px-6 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ u.full_name }}</p>
+                        <div class="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                            <span class="truncate">{{ u.email }}</span>
+                            <span>•</span>
+                            <span>Reprovado em {{ u.pre_registration_reviewed_at|date:"d/m/Y H:i" }}</span>
+                            {% if u.pre_registration_reviewed_by %}<span>•</span><span>por {{ u.pre_registration_reviewed_by.full_name }}</span>{% endif %}
+                        </div>
+                        <p class="text-xs text-red-700 bg-red-50 border border-red-100 rounded px-2 py-1 mt-2">
+                            <i class="fas fa-comment-dots mr-1"></i>{{ u.pre_registration_rejection_reason }}
+                        </p>
+                        {% if u.pre_registration_extra_documents.all %}
+                        <p class="text-xs text-gray-600 mt-1">
+                            <i class="fas fa-paperclip mr-1"></i>Documentos pedidos:
+                            {% for d in u.pre_registration_extra_documents.all %}<span class="font-medium">{{ d.name }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <a href="{% url 'view_user_profile' u.id %}" class="inline-flex items-center px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                            <i class="fas fa-eye mr-1"></i> Perfil
+                        </a>
+                        <form method="post" action="{% url 'approve_pre_registration' u.id %}" class="inline"
+                              onsubmit="return confirm('Aprovar o pré-cadastro de {{ u.full_name|escapejs }} e liberar o acesso?');">
+                            {% csrf_token %}
+                            <button type="submit" title="Reverter a reprovação e aprovar"
+                                    class="inline-flex items-center px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 transition-colors">
+                                <i class="fas fa-check mr-1"></i> Aprovar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Pré-cadastros pendentes -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
@@ -164,4 +276,101 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: reprovar pré-cadastro -->
+<div id="rejectModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-user-times text-red-500 mr-2"></i> Reprovar pré-cadastro
+            </h3>
+            <button type="button" onclick="closeRejectModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form id="rejectForm" method="post" class="flex-1 overflow-y-auto">
+            {% csrf_token %}
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600">
+                    Colaborador: <span id="rejectUserName" class="font-semibold text-gray-900"></span>
+                </p>
+
+                <div>
+                    <label for="rejection_reason" class="block text-sm font-medium text-gray-700 mb-2">Motivo da reprovação *</label>
+                    <textarea id="rejection_reason" name="rejection_reason" rows="4" required
+                              placeholder="Ex: A foto do RG está ilegível. Reenvie uma imagem nítida e confira o CPF informado."
+                              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Este texto aparece para o colaborador na tela de ajuste do cadastro.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Precisa de algum documento a mais? <span class="text-xs text-gray-400">(opcional)</span>
+                    </label>
+                    {% if required_documents %}
+                        <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                            {% for rd in required_documents %}
+                            <label class="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" name="extra_documents" value="{{ rd.id }}"
+                                       class="mt-1 rounded border-gray-300 text-red-600 focus:ring-red-500">
+                                <span class="min-w-0">
+                                    <span class="block text-sm text-gray-900">{{ rd.name }}</span>
+                                    {% if rd.description %}<span class="block text-xs text-gray-500">{{ rd.description }}</span>{% endif %}
+                                </span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Os documentos marcados serão obrigatórios no reenvio do colaborador.</p>
+                    {% else %}
+                        <p class="text-sm text-gray-500">Nenhum documento configurado na lista de documentos exigidos.</p>
+                    {% endif %}
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start">
+                    <i class="fas fa-info-circle mt-0.5 mr-2"></i>
+                    <span>Ao reprovar, o colaborador é direcionado para a tela de ajuste assim que entrar no portal e só volta a navegar depois de reenviar o cadastro.</span>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" onclick="closeRejectModal()"
+                        class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-sm">
+                    Cancelar
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm inline-flex items-center">
+                    <i class="fas fa-times mr-2"></i> Reprovar pré-cadastro
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openRejectModal(button) {
+        var modal = document.getElementById('rejectModal');
+        var form = document.getElementById('rejectForm');
+        form.action = button.dataset.action;
+        form.reset();
+        document.getElementById('rejectUserName').textContent = button.dataset.name;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.getElementById('rejection_reason').focus();
+    }
+
+    function closeRejectModal() {
+        var modal = document.getElementById('rejectModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    document.getElementById('rejectModal').addEventListener('click', function (event) {
+        if (event.target === this) { closeRejectModal(); }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { closeRejectModal(); }
+    });
+</script>
 {% endblock %}

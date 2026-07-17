@@ -1154,17 +1154,42 @@ def pre_register_user_view(request):
         messages.error(request, 'Você não tem permissão para acessar esta área.')
         return redirect('dashboard')
 
-    # Mini relatório dos pré-cadastros + lista de pendentes (mostrado na página).
+    # Mini relatório dos pré-cadastros + listas mostradas na página.
     pre_reg_pending = list(
         User.objects.filter(pre_registration_status=User.PRE_REG_PENDING)
         .select_related('sector')
         .order_by('-pre_registration_created_at')
     )
+    # Concluídos aguardando análise: o gestor aprova ou reprova a partir daqui.
+    pre_reg_completed = list(
+        User.objects.filter(pre_registration_status=User.PRE_REG_COMPLETED)
+        .select_related('sector')
+        .prefetch_related('documents')
+        .order_by('-pre_registration_completed_at')
+    )
+    pre_reg_rejected = list(
+        User.objects.filter(pre_registration_status=User.PRE_REG_REJECTED)
+        .select_related('sector', 'pre_registration_reviewed_by')
+        .prefetch_related('pre_registration_extra_documents')
+        .order_by('-pre_registration_reviewed_at')
+    )
     pre_reg_stats = {
         'pending': len(pre_reg_pending),
-        'completed': User.objects.filter(pre_registration_status=User.PRE_REG_COMPLETED).count(),
+        'completed': len(pre_reg_completed),
+        'rejected': len(pre_reg_rejected),
+        'approved': User.objects.filter(pre_registration_status=User.PRE_REG_APPROVED).count(),
     }
-    pre_reg_stats['total'] = pre_reg_stats['pending'] + pre_reg_stats['completed']
+    pre_reg_stats['total'] = (
+        pre_reg_stats['pending'] + pre_reg_stats['completed']
+        + pre_reg_stats['rejected'] + pre_reg_stats['approved']
+    )
+    pre_reg_lists = {
+        'pre_reg_pending': pre_reg_pending,
+        'pre_reg_completed': pre_reg_completed,
+        'pre_reg_rejected': pre_reg_rejected,
+        'pre_reg_stats': pre_reg_stats,
+        'required_documents': RequiredDocument.objects.filter(is_active=True),
+    }
 
     if request.method == 'POST':
         full_name = request.POST.get('full_name', '').strip()
@@ -1180,8 +1205,7 @@ def pre_register_user_view(request):
             'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
             'form_data': request.POST,
-            'pre_reg_pending': pre_reg_pending,
-            'pre_reg_stats': pre_reg_stats,
+            **pre_reg_lists,
         }
 
         if not full_name:
@@ -1261,8 +1285,7 @@ def pre_register_user_view(request):
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
-        'pre_reg_pending': pre_reg_pending,
-        'pre_reg_stats': pre_reg_stats,
+        **pre_reg_lists,
     }
     return render(request, 'admin/pre_register_user.html', context)
 
@@ -1291,6 +1314,82 @@ def pre_register_link_view(request, user_id):
     return render(request, 'admin/pre_register_link.html', context)
 
 
+def _read_pre_registration_personal_data(request):
+    """Lê e valida os dados pessoais do formulário de pré-cadastro/ajuste.
+
+    Retorna (valores, erros). Os campos obrigatórios seguem a ficha cadastral:
+    RG (número, emissão e órgão), CEP, filiação (pai e mãe) e cor/raça.
+    """
+    data = request.POST
+    values = {
+        'full_name': data.get('full_name', '').strip(),
+        'cpf': normalize_cpf(data.get('cpf', '')),
+        'pis': data.get('pis', '').strip(),
+        'phone': data.get('phone', '').strip(),
+        'birth_date': data.get('birth_date', '').strip(),
+        'neighborhood': data.get('neighborhood', '').strip(),
+        'city': data.get('city', '').strip(),
+        'cep': data.get('cep', '').strip(),
+        'uniform_size_shirt': data.get('uniform_size_shirt', '').strip(),
+        'uniform_size_pants': data.get('uniform_size_pants', '').strip(),
+        'rg': data.get('rg', '').strip(),
+        'rg_issue_date': data.get('rg_issue_date', '').strip(),
+        'rg_issuer': data.get('rg_issuer', '').strip(),
+        'voter_title': data.get('voter_title', '').strip(),
+        'voter_zone': data.get('voter_zone', '').strip(),
+        'voter_section': data.get('voter_section', '').strip(),
+        'father_name': data.get('father_name', '').strip(),
+        'mother_name': data.get('mother_name', '').strip(),
+        'skin_color': data.get('skin_color', '').strip(),
+    }
+
+    errors = []
+    if not values['rg']:
+        errors.append('Informe o número do RG.')
+    if not values['rg_issue_date']:
+        errors.append('Informe a data de emissão do RG.')
+    if not values['rg_issuer']:
+        errors.append('Informe o órgão emissor do RG.')
+    if not values['cep']:
+        errors.append('Informe o CEP.')
+    if not values['father_name']:
+        errors.append('Informe o nome completo do pai.')
+    if not values['mother_name']:
+        errors.append('Informe o nome completo da mãe.')
+    if values['skin_color'] not in {c[0] for c in User.SKIN_COLOR_CHOICES}:
+        errors.append('Selecione a cor/raça.')
+
+    return values, errors
+
+
+def _apply_pre_registration_personal_data(target, values):
+    """Aplica no usuário os dados pessoais já lidos/validados do formulário."""
+    full_name = values['full_name']
+    if full_name:
+        parts = full_name.split()
+        target.first_name = parts[0] if parts else target.first_name
+        target.last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
+    target.cpf = values['cpf']
+    target.pis = values['pis']
+    if values['phone']:
+        target.phone = values['phone']
+    target.birth_date = values['birth_date'] or None
+    target.neighborhood = values['neighborhood']
+    target.city = values['city']
+    target.cep = values['cep']
+    target.uniform_size_shirt = values['uniform_size_shirt']
+    target.uniform_size_pants = values['uniform_size_pants']
+    target.rg = values['rg']
+    target.rg_issue_date = values['rg_issue_date'] or None
+    target.rg_issuer = values['rg_issuer']
+    target.voter_title = values['voter_title']
+    target.voter_zone = values['voter_zone']
+    target.voter_section = values['voter_section']
+    target.father_name = values['father_name']
+    target.mother_name = values['mother_name']
+    target.skin_color = values['skin_color']
+
+
 def complete_pre_registration_view(request, token):
     """Página PÚBLICA onde o colaborador conclui o cadastro e anexa os documentos."""
     target = User.objects.filter(pre_registration_token=token).first()
@@ -1304,17 +1403,8 @@ def complete_pre_registration_view(request, token):
     if request.method == 'POST':
         password = request.POST.get('password', '')
         password_confirm = request.POST.get('password_confirm', '')
-        full_name = request.POST.get('full_name', '').strip()
-        cpf = normalize_cpf(request.POST.get('cpf', ''))
-        pis = request.POST.get('pis', '').strip()
-        phone = request.POST.get('phone', '').strip()
-        birth_date = request.POST.get('birth_date', '').strip()
-        neighborhood = request.POST.get('neighborhood', '').strip()
-        city = request.POST.get('city', '').strip()
-        uniform_size_shirt = request.POST.get('uniform_size_shirt', '').strip()
-        uniform_size_pants = request.POST.get('uniform_size_pants', '').strip()
 
-        errors = []
+        values, errors = _read_pre_registration_personal_data(request)
         if len(password) < 6:
             errors.append('A senha deve ter pelo menos 6 caracteres.')
         if password != password_confirm:
@@ -1340,24 +1430,13 @@ def complete_pre_registration_view(request, token):
             context = {
                 'target': target,
                 'required_documents': required_documents,
+                'skin_color_choices': User.SKIN_COLOR_CHOICES,
                 'form_data': request.POST,
             }
             return render(request, 'users/pre_register_complete.html', context)
 
         # Atualizar dados do colaborador
-        if full_name:
-            parts = full_name.split()
-            target.first_name = parts[0] if parts else target.first_name
-            target.last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
-        target.cpf = cpf
-        target.pis = pis
-        if phone:
-            target.phone = phone
-        target.birth_date = birth_date if birth_date else None
-        target.neighborhood = neighborhood
-        target.city = city
-        target.uniform_size_shirt = uniform_size_shirt
-        target.uniform_size_pants = uniform_size_pants
+        _apply_pre_registration_personal_data(target, values)
 
         # Auto-ativação: define a senha e ativa a conta
         target.set_password(password)
@@ -1381,6 +1460,7 @@ def complete_pre_registration_view(request, token):
     context = {
         'target': target,
         'required_documents': required_documents,
+        'skin_color_choices': User.SKIN_COLOR_CHOICES,
         'form_data': None,
     }
     return render(request, 'users/pre_register_complete.html', context)
@@ -1389,6 +1469,206 @@ def complete_pre_registration_view(request, token):
 def pre_registration_success_view(request):
     """Página pública de confirmação após concluir o pré-cadastro."""
     return render(request, 'users/pre_register_success.html')
+
+
+# Situações em que o gestor ainda pode aprovar/reprovar. APPROVED e REJECTED
+# continuam na lista para permitir corrigir uma análise feita por engano — sem
+# isso, um colaborador reprovado sem querer ficaria travado fora do portal.
+PRE_REG_REVIEWABLE_STATUSES = (
+    User.PRE_REG_COMPLETED,
+    User.PRE_REG_APPROVED,
+    User.PRE_REG_REJECTED,
+)
+
+
+def _safe_next_url(request, fallback='pre_register_user'):
+    """Destino pós-ação vindo do formulário, recusando redirect para fora do site."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    next_url = request.POST.get('next')
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+    return fallback
+
+
+@login_required
+@require_POST
+def approve_pre_registration_view(request, user_id):
+    """Aprova um pré-cadastro já preenchido pelo colaborador."""
+    if not request.user.can_review_pre_registrations():
+        messages.error(request, 'Você não tem permissão para analisar pré-cadastros.')
+        return redirect('dashboard')
+
+    target = get_object_or_404(User, id=user_id)
+    if target.pre_registration_status not in PRE_REG_REVIEWABLE_STATUSES:
+        messages.error(request, 'Este pré-cadastro ainda não foi preenchido pelo colaborador.')
+        return redirect('pre_register_user')
+
+    target.pre_registration_status = User.PRE_REG_APPROVED
+    target.pre_registration_rejection_reason = ''
+    target.pre_registration_reviewed_at = timezone.now()
+    target.pre_registration_reviewed_by = request.user
+    target.save(update_fields=[
+        'pre_registration_status',
+        'pre_registration_rejection_reason',
+        'pre_registration_reviewed_at',
+        'pre_registration_reviewed_by',
+        'updated_at',
+    ])
+    target.pre_registration_extra_documents.clear()
+
+    log_action(
+        request.user,
+        'USER_UPDATE',
+        f'Pré-cadastro aprovado: {target.full_name} ({target.email})',
+        request
+    )
+    messages.success(request, f'Pré-cadastro de {target.full_name} aprovado.')
+    return redirect(_safe_next_url(request))
+
+
+@login_required
+@require_POST
+def reject_pre_registration_view(request, user_id):
+    """Reprova um pré-cadastro, registrando o motivo e os documentos a reenviar."""
+    if not request.user.can_review_pre_registrations():
+        messages.error(request, 'Você não tem permissão para analisar pré-cadastros.')
+        return redirect('dashboard')
+
+    target = get_object_or_404(User, id=user_id)
+    redirect_to = _safe_next_url(request)
+
+    if target.pre_registration_status not in PRE_REG_REVIEWABLE_STATUSES:
+        messages.error(request, 'Este pré-cadastro ainda não foi preenchido pelo colaborador.')
+        return redirect('pre_register_user')
+
+    reason = request.POST.get('rejection_reason', '').strip()
+    if not reason:
+        messages.error(request, 'Informe o motivo da reprovação para o colaborador saber o que ajustar.')
+        return redirect(redirect_to)
+
+    extra_document_ids = request.POST.getlist('extra_documents')
+    extra_documents = list(
+        RequiredDocument.objects.filter(id__in=extra_document_ids, is_active=True)
+    ) if extra_document_ids else []
+
+    target.pre_registration_status = User.PRE_REG_REJECTED
+    target.pre_registration_rejection_reason = reason
+    target.pre_registration_reviewed_at = timezone.now()
+    target.pre_registration_reviewed_by = request.user
+    target.save(update_fields=[
+        'pre_registration_status',
+        'pre_registration_rejection_reason',
+        'pre_registration_reviewed_at',
+        'pre_registration_reviewed_by',
+        'updated_at',
+    ])
+    target.pre_registration_extra_documents.set(extra_documents)
+
+    docs_info = f' | Documentos solicitados: {", ".join(d.name for d in extra_documents)}' if extra_documents else ''
+    log_action(
+        request.user,
+        'USER_UPDATE',
+        f'Pré-cadastro reprovado: {target.full_name} ({target.email}) | Motivo: {reason}{docs_info}',
+        request
+    )
+    messages.success(
+        request,
+        f'Pré-cadastro de {target.full_name} reprovado. O colaborador verá o motivo ao acessar o portal.'
+    )
+    return redirect(redirect_to)
+
+
+@login_required
+def adjust_pre_registration_view(request):
+    """Tela do colaborador cujo pré-cadastro foi reprovado: mostra o motivo e
+    permite corrigir os dados/documentos e reenviar para análise."""
+    target = request.user
+
+    if not target.needs_pre_registration_adjustment():
+        return redirect('home')
+
+    requested_documents = list(target.pre_registration_extra_documents.all())
+    requested_ids = {d.id for d in requested_documents}
+    other_documents = [
+        d for d in RequiredDocument.objects.filter(is_active=True)
+        if d.id not in requested_ids
+    ]
+
+    if request.method == 'POST':
+        values, errors = _read_pre_registration_personal_data(request)
+        docs_to_save = []
+
+        # Documentos pedidos pelo gestor são obrigatórios no reenvio.
+        for doc in requested_documents:
+            uploaded = request.FILES.get(f'document_{doc.id}')
+            if not uploaded:
+                errors.append(f'O documento "{doc.name}" foi solicitado e precisa ser anexado.')
+                continue
+            ok, err = _document_is_valid(uploaded)
+            if not ok:
+                errors.append(err)
+            else:
+                docs_to_save.append((doc, uploaded))
+
+        # Os demais são opcionais (reenvio por iniciativa do colaborador).
+        for doc in other_documents:
+            uploaded = request.FILES.get(f'document_{doc.id}')
+            if not uploaded:
+                continue
+            ok, err = _document_is_valid(uploaded)
+            if not ok:
+                errors.append(err)
+            else:
+                docs_to_save.append((doc, uploaded))
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            context = {
+                'target': target,
+                'requested_documents': requested_documents,
+                'other_documents': other_documents,
+                'skin_color_choices': User.SKIN_COLOR_CHOICES,
+                'form_data': request.POST,
+            }
+            return render(request, 'users/pre_register_adjust.html', context)
+
+        _apply_pre_registration_personal_data(target, values)
+
+        # Volta para a fila de análise e libera o acesso ao portal.
+        target.pre_registration_status = User.PRE_REG_COMPLETED
+        target.pre_registration_rejection_reason = ''
+        target.pre_registration_completed_at = timezone.now()
+        target.pre_registration_reviewed_at = None
+        target.pre_registration_reviewed_by = None
+        target.save()
+        target.pre_registration_extra_documents.clear()
+
+        for doc, uploaded in docs_to_save:
+            _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
+
+        log_action(
+            target,
+            'USER_UPDATE',
+            f'Pré-cadastro reenviado após ajuste: {target.full_name} ({target.email})',
+            request
+        )
+        messages.success(request, 'Cadastro reenviado para análise. Obrigado!')
+        return redirect('home')
+
+    context = {
+        'target': target,
+        'requested_documents': requested_documents,
+        'other_documents': other_documents,
+        'skin_color_choices': User.SKIN_COLOR_CHOICES,
+        'form_data': None,
+    }
+    return render(request, 'users/pre_register_adjust.html', context)
 
 
 @login_required
@@ -1510,6 +1790,84 @@ def delete_user_document_view(request, document_id):
     log_action(request.user, 'USER_UPDATE', f'Documento removido de um colaborador: {name}', request)
     messages.success(request, 'Documento removido com sucesso.')
     return redirect('view_user_profile', user_id=target_id)
+
+
+def _zip_entry_name(doc, used_names):
+    """Nome de arquivo seguro e único (dentro do zip) para um documento."""
+    import os
+    import re
+
+    ext = doc.file_extension or os.path.splitext(doc.file.name or '')[1].lower()
+    base = doc.display_name or 'documento'
+    # Remove o que não é seguro em nome de arquivo, preservando acentos.
+    base = re.sub(r'[^\w\s.-]', '', base, flags=re.UNICODE).strip()
+    base = re.sub(r'\s+', '_', base) or 'documento'
+    if ext and base.lower().endswith(ext):
+        base = base[:-len(ext)] or 'documento'
+
+    name = f'{base}{ext}'
+    counter = 1
+    while name.lower() in used_names:
+        counter += 1
+        name = f'{base}_{counter}{ext}'
+    used_names.add(name.lower())
+    return name
+
+
+@login_required
+def download_user_documents_zip(request, user_id):
+    """Baixa todos os documentos do colaborador compactados em um único .zip."""
+    if not request.user.can_manage_users():
+        messages.error(request, 'Você não tem permissão para acessar esta área.')
+        return redirect('dashboard')
+
+    target = get_object_or_404(User, id=user_id)
+    documents = list(target.documents.all().select_related('document_type'))
+    if not documents:
+        messages.info(request, 'Este colaborador não possui documentos para baixar.')
+        return redirect('view_user_profile', user_id=target.id)
+
+    import io
+    import zipfile
+    from django.utils.text import slugify
+
+    buffer = io.BytesIO()
+    used_names = set()
+    missing = []
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for doc in documents:
+            try:
+                doc.file.open('rb')
+                try:
+                    content = doc.file.read()
+                finally:
+                    doc.file.close()
+            except Exception:
+                # Arquivo ausente/ilegível no storage: não impede o download dos demais.
+                missing.append(doc.display_name)
+                continue
+            zip_file.writestr(_zip_entry_name(doc, used_names), content)
+
+    if len(missing) == len(documents):
+        messages.error(request, 'Não foi possível ler os arquivos deste colaborador.')
+        return redirect('view_user_profile', user_id=target.id)
+    if missing:
+        messages.warning(
+            request,
+            f'{len(missing)} documento(s) não puderam ser lidos e ficaram de fora do zip: {", ".join(missing)}.'
+        )
+
+    log_action(
+        request.user,
+        'USER_UPDATE',
+        f'Download de todos os documentos de {target.full_name} ({target.email})',
+        request
+    )
+
+    filename = f'documentos_{slugify(target.full_name) or target.id}.zip'
+    response = HttpResponse(buffer.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required

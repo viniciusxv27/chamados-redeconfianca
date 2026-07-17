@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Concluir Cadastro - Rede Confiança</title>
+    <title>Ajustar Cadastro - Rede Confiança</title>
     <link rel="icon" type="image/png" href="{% static 'images/logo3.png' %}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -16,9 +16,33 @@
         <!-- Cabeçalho -->
         <div class="text-center mb-6">
             <img src="{% static 'images/logo3.png' %}" alt="Rede Confiança" class="h-14 mx-auto mb-3">
-            <h1 class="text-2xl font-bold text-gray-900">Conclua seu cadastro</h1>
-            <p class="text-gray-600">Olá, <strong>{{ target.full_name }}</strong>! Preencha seus dados e envie os documentos solicitados.</p>
+            <h1 class="text-2xl font-bold text-gray-900">Ajuste seu cadastro</h1>
+            <p class="text-gray-600">Olá, <strong>{{ target.full_name }}</strong>! Seu cadastro precisa de algumas correções antes de ser aprovado.</p>
         </div>
+
+        <!-- Motivo do ajuste -->
+        <div class="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-5 mb-4">
+            <h2 class="font-semibold text-red-800 flex items-center mb-2">
+                <i class="fas fa-exclamation-circle mr-2"></i> Motivo do ajuste
+            </h2>
+            <p class="text-gray-800 whitespace-pre-line">{{ target.pre_registration_rejection_reason }}</p>
+            <p class="text-xs text-gray-500 mt-3">
+                Analisado em {{ target.pre_registration_reviewed_at|date:"d/m/Y à\s H:i" }}{% if target.pre_registration_reviewed_by %} por {{ target.pre_registration_reviewed_by.full_name }}{% endif %}.
+            </p>
+        </div>
+
+        {% if requested_documents %}
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+            <p class="text-sm text-amber-900 font-medium flex items-center mb-2">
+                <i class="fas fa-paperclip mr-2"></i> Documentos que você precisa anexar
+            </p>
+            <ul class="list-disc list-inside text-sm text-amber-800 space-y-1">
+                {% for doc in requested_documents %}
+                    <li>{{ doc.name }}{% if doc.description %} <span class="text-amber-600">— {{ doc.description }}</span>{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
 
         {% if messages %}
             <div class="mb-4 space-y-2">
@@ -69,13 +93,13 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">CPF</label>
                         <input type="text" name="cpf" placeholder="000.000.000-00"
-                               value="{{ form_data.cpf|default:'' }}"
+                               value="{% if form_data %}{{ form_data.cpf }}{% else %}{{ target.cpf }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">PIS</label>
                         <input type="text" name="pis"
-                               value="{{ form_data.pis|default:'' }}"
+                               value="{% if form_data %}{{ form_data.pis }}{% else %}{{ target.pis }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
@@ -109,7 +133,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Data de Nascimento</label>
                         <input type="date" name="birth_date"
-                               value="{{ form_data.birth_date|default:'' }}"
+                               value="{% if form_data %}{{ form_data.birth_date }}{% else %}{{ target.birth_date|date:'Y-m-d' }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
@@ -121,13 +145,13 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
                         <input type="text" name="neighborhood"
-                               value="{{ form_data.neighborhood|default:'' }}"
+                               value="{% if form_data %}{{ form_data.neighborhood }}{% else %}{{ target.neighborhood }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
                         <input type="text" name="city"
-                               value="{{ form_data.city|default:'' }}"
+                               value="{% if form_data %}{{ form_data.city }}{% else %}{{ target.city }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
@@ -153,66 +177,78 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tamanho Uniforme (Blusa)</label>
                         <input type="text" name="uniform_size_shirt" placeholder="P, M, G, GG"
-                               value="{{ form_data.uniform_size_shirt|default:'' }}"
+                               value="{% if form_data %}{{ form_data.uniform_size_shirt }}{% else %}{{ target.uniform_size_shirt }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tamanho Uniforme (Calça)</label>
                         <input type="text" name="uniform_size_pants" placeholder="P, M, G, GG, 38, 40"
-                               value="{{ form_data.uniform_size_pants|default:'' }}"
+                               value="{% if form_data %}{{ form_data.uniform_size_pants }}{% else %}{{ target.uniform_size_pants }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                 </div>
             </div>
 
-            <!-- Senha de acesso -->
+            <!-- Documentos solicitados -->
+            {% if requested_documents %}
             <div>
-                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center"><i class="fas fa-lock mr-2 text-primary"></i>Senha de Acesso</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Senha *</label>
-                        <input type="password" name="password" required minlength="6" placeholder="Mínimo 6 caracteres"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Confirmar Senha *</label>
-                        <input type="password" name="password_confirm" required minlength="6"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                    </div>
-                </div>
-                <p class="text-xs text-gray-500 mt-2">Você usará seu e-mail e esta senha para acessar o portal.</p>
-            </div>
-
-            <!-- Documentos -->
-            {% if required_documents %}
-            <div>
-                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center"><i class="fas fa-folder-open mr-2 text-primary"></i>Documentos</h2>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <i class="fas fa-file-upload mr-2 text-red-500"></i>Documentos solicitados
+                </h2>
                 <div class="space-y-4">
-                    {% for doc in required_documents %}
-                        <div class="border border-gray-200 rounded-lg p-4">
+                    {% for doc in requested_documents %}
+                        <div class="border border-red-200 bg-red-50/50 rounded-lg p-4">
                             <label class="block text-sm font-medium text-gray-800 mb-1">
-                                {{ doc.name }}
-                                {% if doc.is_required %}<span class="text-red-500">*</span>{% else %}<span class="text-xs text-gray-400">(opcional)</span>{% endif %}
+                                {{ doc.name }} <span class="text-red-500">*</span>
                             </label>
                             {% if doc.description %}<p class="text-xs text-gray-500 mb-2">{{ doc.description }}</p>{% endif %}
-                            <input type="file" name="document_{{ doc.id }}" {% if doc.is_required %}required{% endif %}
+                            <input type="file" name="document_{{ doc.id }}" required
+                                   accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                                   class="w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-sm file:bg-red-500 file:text-white hover:file:bg-red-600">
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Reenvio opcional -->
+            {% if other_documents %}
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center">
+                    <i class="fas fa-folder-open mr-2 text-primary"></i>Reenviar outro documento
+                </h2>
+                <p class="text-sm text-gray-500 mb-4">Opcional. Use apenas se precisar substituir algum documento já enviado.</p>
+                <div class="space-y-4">
+                    {% for doc in other_documents %}
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <label class="block text-sm font-medium text-gray-800 mb-1">
+                                {{ doc.name }} <span class="text-xs text-gray-400">(opcional)</span>
+                            </label>
+                            {% if doc.description %}<p class="text-xs text-gray-500 mb-2">{{ doc.description }}</p>{% endif %}
+                            <input type="file" name="document_{{ doc.id }}"
                                    accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
                                    class="w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-sm file:bg-primary file:text-white hover:file:bg-orange-600">
                         </div>
                     {% endfor %}
                 </div>
-                <p class="text-xs text-gray-500 mt-3">Formatos aceitos: PDF, imagem (JPG/PNG) ou Word. Máximo de 20MB por arquivo.</p>
             </div>
             {% endif %}
 
+            <p class="text-xs text-gray-500">Formatos aceitos: PDF, imagem (JPG/PNG) ou Word. Máximo de 20MB por arquivo.</p>
+
             <div class="pt-2">
                 <button type="submit" class="w-full bg-primary text-white py-3 rounded-lg hover:bg-orange-600 transition-colors font-medium inline-flex items-center justify-center">
-                    <i class="fas fa-check-circle mr-2"></i> Concluir cadastro
+                    <i class="fas fa-paper-plane mr-2"></i> Reenviar cadastro para análise
                 </button>
             </div>
         </form>
 
-        <p class="text-center text-xs text-gray-400 mt-6">Rede Confiança &copy; {% now "Y" %}</p>
+        <div class="text-center mt-6">
+            <a href="{% url 'logout' %}" class="text-sm text-gray-500 hover:text-gray-700">
+                <i class="fas fa-sign-out-alt mr-1"></i> Sair
+            </a>
+            <p class="text-xs text-gray-400 mt-3">Rede Confiança &copy; {% now "Y" %}</p>
+        </div>
     </div>
 </body>
 </html>
