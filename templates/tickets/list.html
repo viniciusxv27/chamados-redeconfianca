@@ -144,7 +144,7 @@
                     </label>
                     <select id="categoria" name="categoria" class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                         <option value="">Todas as Categorias</option>
-                        {% if user.hierarchy == 'SUPERADMIN' %}
+                        {% if can_filter_all_sectors %}
                             {% for category in all_categories %}
                                 <option value="{{ category.id }}" {% if categoria == category.id|stringformat:"s" %}selected{% endif %}>
                                     {{ category.name }} ({{ category.sector.name }})
@@ -170,7 +170,7 @@
                     </label>
                     <select id="setor" name="setor" class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
                         <option value="">Todos os Setores</option>
-                        {% if user.hierarchy == 'SUPERADMIN' %}
+                        {% if can_filter_all_sectors %}
                             {% for sector in all_sectors %}
                                 <option value="{{ sector.id }}" {% if setor == sector.id|stringformat:"s" %}selected{% endif %}>
                                     {{ sector.name }}
@@ -215,7 +215,40 @@
                     </select>
                 </div>
                 {% endif %}
-                
+
+                <!-- Filtro por Loja (múltipla seleção) - disponível apenas para SUPERVISOR e acima -->
+                {% if can_use_advanced_filters and loja_sectors %}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-store mr-1 text-orange-600"></i>
+                        Loja
+                    </label>
+                    <div class="relative">
+                        <button type="button" id="lojaDropdownBtn"
+                                class="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-left flex justify-between items-center">
+                            <span id="lojaSelectedText">
+                                {% if loja %}
+                                    {{ loja|length }} selecionada(s)
+                                {% else %}
+                                    Todas as Lojas
+                                {% endif %}
+                            </span>
+                            <i class="fas fa-chevron-down text-gray-400"></i>
+                        </button>
+                        <div id="lojaDropdownMenu" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {% for sector in loja_sectors %}
+                            <label class="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" name="loja" value="{{ sector.id }}"
+                                       {% if sector.id|stringformat:"s" in loja %}checked{% endif %}
+                                       class="loja-checkbox mr-2 rounded text-primary focus:ring-primary">
+                                <span class="text-sm">{{ sector.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Filtro por carteira -->
                 {% if carteira_groups.count > 0 %}
                 <div>
@@ -258,19 +291,21 @@
                 </div>
             </div>
             
-            <!-- Filtros Avançados para Superadmin -->
-            {% if user.hierarchy == 'SUPERADMIN' %}
+            <!-- Filtros Avançados - SUPERVISOR, ADMIN e SUPERADMIN -->
+            {% if can_use_advanced_filters %}
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div class="flex items-center justify-between mb-3">
                     <h4 class="text-sm font-semibold text-blue-800 flex items-center">
-                        <i class="fas fa-crown mr-2"></i>
-                        Filtros Avançados (Superadmin)
+                        <i class="fas fa-sliders-h mr-2"></i>
+                        Filtros Avançados{% if user.hierarchy == 'SUPERADMIN' %} (Superadmin){% endif %}
                     </h4>
                     <div class="flex items-center space-x-3">
+                        {% if user.hierarchy == 'SUPERADMIN' %}
                         <button type="button" onclick="toggleQuickFiltersFromAdvanced()" class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
                             <i class="fas fa-filter mr-1"></i>
                             <span id="quickFiltersToggleText">Mostrar Filtros Rápidos</span>
                         </button>
+                        {% endif %}
                         <button type="button" id="toggleAdvancedFilters" class="text-blue-600 hover:text-blue-800 text-sm">
                             <i class="fas fa-chevron-down"></i>
                             <span>Mostrar</span>
@@ -988,6 +1023,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusSelectedText.textContent = checkedBoxes[0].nextElementSibling.textContent;
             } else {
                 statusSelectedText.textContent = checkedBoxes.length + ' selecionado(s)';
+            }
+        }
+    }
+
+    // Loja dropdown com múltipla seleção (mesmo padrão do Status)
+    const lojaDropdownBtn = document.getElementById('lojaDropdownBtn');
+    const lojaDropdownMenu = document.getElementById('lojaDropdownMenu');
+    const lojaCheckboxes = document.querySelectorAll('.loja-checkbox');
+    const lojaSelectedText = document.getElementById('lojaSelectedText');
+
+    if (lojaDropdownBtn && lojaDropdownMenu) {
+        // Toggle dropdown
+        lojaDropdownBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            lojaDropdownMenu.classList.toggle('hidden');
+        });
+
+        // Fechar dropdown ao clicar fora
+        document.addEventListener('click', function(e) {
+            if (!lojaDropdownMenu.contains(e.target) && e.target !== lojaDropdownBtn) {
+                lojaDropdownMenu.classList.add('hidden');
+            }
+        });
+
+        // Atualizar texto quando selecionar checkboxes
+        lojaCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateLojaText);
+        });
+
+        function updateLojaText() {
+            const checkedBoxes = document.querySelectorAll('.loja-checkbox:checked');
+            if (checkedBoxes.length === 0) {
+                lojaSelectedText.textContent = 'Todas as Lojas';
+            } else if (checkedBoxes.length === 1) {
+                lojaSelectedText.textContent = checkedBoxes[0].nextElementSibling.textContent;
+            } else {
+                lojaSelectedText.textContent = checkedBoxes.length + ' selecionada(s)';
             }
         }
     }

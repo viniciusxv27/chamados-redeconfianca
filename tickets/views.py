@@ -46,7 +46,30 @@ def tickets_list_view(request):
     has_comments_filter = request.GET.get('has_comments', '')
     overdue_filter = request.GET.get('overdue', '')
     duplicates_filter = request.GET.get('duplicates', '')
-    
+
+    # Filtro "Loja" (múltipla seleção) - setores cujo nome contém "Loja"
+    loja_filter = request.GET.getlist('loja')
+
+    # Capacidade de usar os filtros avançados (antes restritos ao SUPERADMIN).
+    # SUPERVISOR e ADMIN passam a ter os mesmos filtros do SUPERADMIN.
+    can_use_advanced_filters = user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+
+    # Para SUPERVISOR: quando um filtro que "aponta" para setor/loja/usuário está ativo,
+    # a busca deve mostrar os chamados correspondentes MESMO que o supervisor não tenha
+    # acesso àquele setor. Nesse caso, a base de chamados é expandida para todos.
+    # (ADMIN/SUPERADMIN já enxergam todos os chamados por padrão.)
+    supervisor_cross_sector_active = (
+        user.hierarchy == 'SUPERVISOR' and any([
+            setor_filter,
+            loja_filter,
+            created_by_sector_filter,
+            categoria_filter,
+            created_by_filter,
+            assigned_to_filter,
+            user_hierarchy_filter,
+        ])
+    )
+
     # Filtro base: TODOS os usuários sempre veem seus próprios chamados
     base_filter = models.Q(created_by=user)
     
@@ -59,13 +82,18 @@ def tickets_list_view(request):
         user_sectors = list(user.sectors.all())
         if user.sector:
             user_sectors.append(user.sector)
-        
-        tickets = Ticket.objects.filter(
-            base_filter |  # Sempre inclui próprios tickets
-            models.Q(sector__in=user_sectors) |  # TODOS os tickets dos setores
-            models.Q(assigned_to=user) |  # Tickets atribuídos diretamente a mim
-            models.Q(additional_assignments__user=user, additional_assignments__is_active=True)  # Atribuições adicionais
-        ).distinct()
+
+        if supervisor_cross_sector_active:
+            # Supervisor filtrando por setor/loja/solicitante/responsável: liberar todos os
+            # chamados para que o resultado do filtro apareça mesmo em setores sem acesso direto.
+            tickets = Ticket.objects.all()
+        else:
+            tickets = Ticket.objects.filter(
+                base_filter |  # Sempre inclui próprios tickets
+                models.Q(sector__in=user_sectors) |  # TODOS os tickets dos setores
+                models.Q(assigned_to=user) |  # Tickets atribuídos diretamente a mim
+                models.Q(additional_assignments__user=user, additional_assignments__is_active=True)  # Atribuições adicionais
+            ).distinct()
     else:
         # Usuários comuns veem: seus próprios tickets + tickets do setor (sem atribuição específica) + tickets atribuídos
         # Excluindo tickets fechados
@@ -116,10 +144,10 @@ def tickets_list_view(request):
             # Outros usuários só podem filtrar pelas categorias que têm acesso
             tickets = tickets.filter(category_id=categoria_filter)
     
-    # Filtro por setor - SUPERADMINs podem filtrar por qualquer setor
+    # Filtro por setor - SUPERVISOR e acima podem filtrar por qualquer setor
     if setor_filter:
-        if user.hierarchy == 'SUPERADMIN' or user.can_view_all_tickets():
-            # SUPERADMIN pode filtrar por qualquer setor
+        if user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN'] or user.can_view_all_tickets():
+            # SUPERVISOR/ADMIN/SUPERADMIN podem filtrar por qualquer setor
             tickets = tickets.filter(sector_id=setor_filter)
         else:
             # Outros usuários só podem filtrar pelos setores que têm acesso
@@ -129,7 +157,13 @@ def tickets_list_view(request):
             sector_ids = [s.id for s in user_sectors] if user_sectors else []
             if int(setor_filter) in sector_ids:
                 tickets = tickets.filter(sector_id=setor_filter)
-    
+
+    # Filtro por Loja (múltipla seleção) - SUPERVISOR e acima
+    if loja_filter and can_use_advanced_filters:
+        loja_ids = [int(x) for x in loja_filter if str(x).isdigit()]
+        if loja_ids:
+            tickets = tickets.filter(sector_id__in=loja_ids)
+
     # Filtro por prioridade
     if prioridade_filter:
         tickets = tickets.filter(priority=prioridade_filter)
@@ -207,8 +241,8 @@ def tickets_list_view(request):
             models.Q(id__icontains=search)
         )
     
-    # Aplicar filtros avançados apenas para SUPERADMIN (antes da paginação)
-    if user.hierarchy == 'SUPERADMIN':
+    # Aplicar filtros avançados para SUPERVISOR/ADMIN/SUPERADMIN (antes da paginação)
+    if can_use_advanced_filters:
         # Filtro por usuário que criou
         if created_by_filter:
             tickets = tickets.filter(created_by_id=created_by_filter)
@@ -307,7 +341,10 @@ def tickets_list_view(request):
         filter_params['carteira'] = carteira_filter
     if atribuidos_filter:
         filter_params['atribuidos'] = atribuidos_filter
-    
+    if loja_filter:
+        for loja_id in loja_filter:
+            filter_params.setdefault('loja', []).append(loja_id)
+
     # Filtros de data disponíveis para TODOS os usuários
     if date_from_filter:
         filter_params['date_from'] = date_from_filter
@@ -318,8 +355,8 @@ def tickets_list_view(request):
     if created_by_sector_filter and user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
         filter_params['created_by_sector'] = created_by_sector_filter
     
-    # Filtros avançados apenas para SUPERADMIN
-    if user.hierarchy == 'SUPERADMIN':
+    # Filtros avançados para SUPERVISOR/ADMIN/SUPERADMIN
+    if can_use_advanced_filters:
         if created_by_filter:
             filter_params['created_by'] = created_by_filter
         if assigned_to_filter:
@@ -359,13 +396,19 @@ def tickets_list_view(request):
     # Obter categorias e setores baseado na hierarquia do usuário
     try:
         # Todos os setores para filtro de setor solicitante (disponível para SUPERVISOR e acima)
-        if user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']:
+        if can_use_advanced_filters:
             all_sectors_for_filter = Sector.objects.all().order_by('name')
         else:
             all_sectors_for_filter = []
-        
-        if user.hierarchy == 'SUPERADMIN':
-            # SUPERADMIN pode ver todas as categorias e setores
+
+        # Setores "Loja" para o filtro de loja (múltipla seleção) - SUPERVISOR e acima
+        if can_use_advanced_filters:
+            loja_sectors = Sector.objects.filter(name__icontains='Loja').order_by('name')
+        else:
+            loja_sectors = []
+
+        if can_use_advanced_filters:
+            # SUPERVISOR/ADMIN/SUPERADMIN podem ver e filtrar por todas as categorias e setores
             user_categories = Category.objects.all().order_by('sector__name', 'name')
             all_categories = Category.objects.all().order_by('sector__name', 'name')
             all_sectors = Sector.objects.all().order_by('name')
@@ -376,11 +419,11 @@ def tickets_list_view(request):
             all_categories = user_categories  # Mesma coisa para usuários normais
             all_sectors = user_sectors
             all_users = []  # Usuários normais não precisam desta lista
-        
+
         # Obter grupos de carteira para todos os usuários (busca case-insensitive)
         from communications.models import CommunicationGroup
         carteira_groups = CommunicationGroup.objects.filter(name__icontains='carteira').order_by('name')
-        
+
     except Exception as e:
         # Em caso de erro, usar valores padrão vazios
         print(f"Erro ao carregar categorias e setores: {str(e)}")
@@ -390,6 +433,7 @@ def tickets_list_view(request):
         all_users = []
         carteira_groups = []
         all_sectors_for_filter = []
+        loja_sectors = []
     
     # Obter nomes para exibição dos filtros aplicados
     categoria_name = ''
@@ -448,6 +492,8 @@ def tickets_list_view(request):
         'prioridade': prioridade_filter,
         'carteira': carteira_filter,
         'atribuidos': atribuidos_filter,
+        'loja': loja_filter,
+        'loja_sectors': loja_sectors,
         'categoria_name': categoria_name,
         'setor_name': setor_name,
         'user_categories': user_categories,
@@ -472,10 +518,13 @@ def tickets_list_view(request):
         'duplicates': duplicates_filter,
         'created_by_name': created_by_name,
         'assigned_to_name': assigned_to_name,
-        # Dados completos para SUPERADMIN
-        'all_categories': all_categories if user.hierarchy == 'SUPERADMIN' else user_categories,
-        'all_sectors': all_sectors if user.hierarchy == 'SUPERADMIN' else user_sectors,
-        'all_users': all_users if user.hierarchy == 'SUPERADMIN' else [],
+        # Capacidades de filtro (SUPERVISOR/ADMIN/SUPERADMIN têm os filtros avançados)
+        'can_use_advanced_filters': can_use_advanced_filters,
+        'can_filter_all_sectors': can_use_advanced_filters,
+        # Dados completos para SUPERVISOR/ADMIN/SUPERADMIN
+        'all_categories': all_categories if can_use_advanced_filters else user_categories,
+        'all_sectors': all_sectors if can_use_advanced_filters else user_sectors,
+        'all_users': all_users if can_use_advanced_filters else [],
         # Parâmetros de filtro para preservar na paginação
         'filter_query_string': filter_query_string,
         'filter_params': filter_params,
