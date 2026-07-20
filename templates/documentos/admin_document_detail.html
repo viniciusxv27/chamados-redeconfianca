@@ -100,13 +100,24 @@
                     <i class="fas fa-file-download"></i>
                 </a>
                 {% else %}
-                <form method="post" action="{% url 'documentos:admin_remove_signer' sig.pk %}"
-                      onsubmit="return confirm('Remover este signatário?');">
-                    {% csrf_token %}
-                    <button type="submit" class="text-sm text-gray-400 hover:text-red-600" title="Remover signatário">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </form>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <form method="post" action="{% url 'documentos:admin_remind_signer' sig.pk %}"
+                          onsubmit="return confirm('Enviar lembrete de assinatura via WhatsApp para {{ sig.user.full_name|escapejs }}?');">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium bg-green-50 text-green-700 rounded-md hover:bg-green-100"
+                                title="Enviar lembrete via WhatsApp">
+                            <i class="fab fa-whatsapp mr-1.5"></i> Lembrar
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'documentos:admin_remove_signer' sig.pk %}"
+                          onsubmit="return confirm('Remover este signatário?');">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-gray-400 hover:text-red-600" title="Remover signatário">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </form>
+                </div>
                 {% endif %}
             </div>
             {% empty %}

@@ -18,6 +18,7 @@ urlpatterns = [
     path('admin/<int:pk>/excluir/', views.admin_delete_document, name='admin_delete_document'),
     path('admin/<int:pk>/adicionar-signatarios/', views.admin_add_signers, name='admin_add_signers'),
     path('admin/signatario/<int:pk>/remover/', views.admin_remove_signer, name='admin_remove_signer'),
+    path('admin/signatario/<int:pk>/lembrar/', views.admin_remind_signer, name='admin_remind_signer'),
 
     # Categorias (SUPERADMIN)
     path('admin/categorias/', views.admin_categories, name='admin_categories'),

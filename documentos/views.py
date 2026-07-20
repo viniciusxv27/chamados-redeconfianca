@@ -455,6 +455,64 @@ def admin_remove_signer(request, pk):
 
 
 @login_required
+def admin_remind_signer(request, pk):
+    """Envia um lembrete de assinatura via WhatsApp (Z-API) ao signatário (SUPERADMIN)."""
+    if not _require_admin(request):
+        return redirect('documentos:my_documents')
+
+    signature = get_object_or_404(
+        DocumentSignature.objects.select_related('document', 'user'), pk=pk)
+    document_pk = signature.document_id
+
+    if request.method != 'POST':
+        return redirect('documentos:admin_document_detail', pk=document_pk)
+
+    if signature.is_signed:
+        messages.info(request, 'Este signatário já assinou o documento.')
+        return redirect('documentos:admin_document_detail', pk=document_pk)
+
+    user = signature.user
+    phone = (getattr(user, 'phone', '') or '').strip()
+    if not phone:
+        messages.error(
+            request,
+            f'{user.full_name} não possui um número de WhatsApp cadastrado.',
+        )
+        return redirect('documentos:admin_document_detail', pk=document_pk)
+
+    from django.urls import reverse
+    sign_link = request.build_absolute_uri(
+        reverse('documentos:document_detail', kwargs={'pk': signature.pk}))
+
+    wa_message = (
+        f"Olá, {user.first_name or user.username}! 👋\n\n"
+        "Este é um lembrete: você tem um documento pendente de assinatura no "
+        "Sistema Rede Confiança.\n\n"
+        f"📄 *{signature.document.title}*\n\n"
+        f"Acesse o link abaixo para revisar e assinar:\n{sign_link}\n\n"
+        "Obrigado!"
+    )
+
+    try:
+        from core.zapi import send_whatsapp_message
+        ok, detail = send_whatsapp_message(phone, wa_message)
+    except Exception:  # noqa: BLE001
+        ok, detail = False, 'falha inesperada'
+
+    if ok:
+        messages.success(
+            request, f'Lembrete enviado para {user.full_name} via WhatsApp.')
+    else:
+        messages.error(
+            request,
+            'Não foi possível enviar o lembrete via WhatsApp agora. '
+            'Tente novamente em instantes.',
+        )
+
+    return redirect('documentos:admin_document_detail', pk=document_pk)
+
+
+@login_required
 def admin_delete_document(request, pk):
     """Exclui um documento e todas as suas atribuições (SUPERADMIN)."""
     if not _require_admin(request):
