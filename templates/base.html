@@ -545,6 +545,7 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% if user.hierarchy == 'SUPERADMIN' or user.is_superuser %}
                                 <li>
                                     <a href="{% url 'commission_projection' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Médias de Comissão (Projeção)">
                                         <i class="fas fa-chart-line text-green-400 flex-shrink-0"></i>
@@ -552,6 +553,7 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% endif %}
                                 {% if user.is_authenticated %}
                                 <li>
                                     <a href="{% url 'simulator:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Simulador de Comissão">

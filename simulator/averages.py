@@ -63,10 +63,14 @@ ROLE_LABELS = {
 ROLE_ORDER = [ROLE_COORDENADOR, ROLE_GERENTE, ROLE_CONSULTOR, ROLE_APART]
 
 DATASET_KEY = 'simulator_projection_dataset'
-FRESH_KEY = 'simulator_projection_fresh'
+ERROR_KEY = 'simulator_projection_last_error'
 
-FRESH_TTL = 900      # 15 min: depois disso o dataset é servido, mas recalculado atrás
-DATASET_TTL = 86400  # 24 h: só some se ninguém abrir a tela por um dia inteiro
+# O realizado vem do MySQL com corte D-1 (só vendas até ontem), então o número
+# projetado não muda ao longo do dia: recalcular de hora em hora só gastaria
+# ~1 min de CPU para chegar ao mesmo resultado. O dataset vale o dia inteiro e
+# é refeito na primeira visita do dia seguinte (ou no botão "Recalcular").
+DATASET_TTL = 7 * 86400  # sobrevive a fins de semana sem acesso
+ERROR_BACKOFF = 300      # após falha, espera antes de tentar de novo
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +238,10 @@ _building = False
 
 def _build_dataset(force_refresh: bool = False) -> Dict[str, Any]:
     rows = build_projection_rows(build_roster(), force_refresh=force_refresh)
-    dataset = {'rows': rows, 'generated_at': timezone.now()}
+    now = timezone.now()
+    dataset = {'rows': rows, 'generated_at': now, 'built_on': timezone.localdate()}
     cache.set(DATASET_KEY, dataset, DATASET_TTL)
-    cache.set(FRESH_KEY, True, FRESH_TTL)
+    cache.delete(ERROR_KEY)
     return dataset
 
 
@@ -254,8 +259,8 @@ def _refresh_in_background(force_refresh: bool = False) -> bool:
             _build_dataset(force_refresh=force_refresh)
         except Exception:
             logger.exception('Falha ao recalcular as médias de comissão projetada')
-            # Evita thread nova a cada request enquanto o erro persistir.
-            cache.set(FRESH_KEY, True, 120)
+            # Evita abrir thread nova a cada request enquanto o erro persistir.
+            cache.set(ERROR_KEY, True, ERROR_BACKOFF)
         finally:
             # Thread própria abre suas conexões de banco; precisa devolvê-las.
             from django.db import connections
@@ -268,23 +273,28 @@ def _refresh_in_background(force_refresh: bool = False) -> bool:
 
 
 def get_projection_dataset(force_refresh: bool = False) -> Dict[str, Any]:
-    """Dataset da rede, servido do cache mesmo vencido.
+    """Dataset da rede, calculado uma vez por dia e servido do cache.
 
     - Cache vazio: devolve ``status='building'`` (a tela mostra "calculando").
-    - Cache vencido: devolve os dados antigos e recalcula em segundo plano.
+    - Cache de um dia anterior: devolve os dados de ontem imediatamente e
+      recalcula em segundo plano — ninguém espera pelo cálculo.
+    - Mesmo dia: devolve do cache, sem recalcular.
     """
     dataset = cache.get(DATASET_KEY)
-    is_stale = cache.get(FRESH_KEY) is None
+    is_stale = dataset is not None and dataset.get('built_on') != timezone.localdate()
+    backing_off = cache.get(ERROR_KEY) is not None
 
-    if force_refresh or dataset is None or is_stale:
+    if force_refresh or ((dataset is None or is_stale) and not backing_off):
         _refresh_in_background(force_refresh=force_refresh)
 
     if dataset is None:
-        return {'rows': [], 'generated_at': None, 'status': 'building', 'is_stale': True}
+        return {'rows': [], 'generated_at': None, 'built_on': None,
+                'status': 'building', 'is_stale': True}
 
     return {
         'rows': dataset['rows'],
         'generated_at': dataset['generated_at'],
+        'built_on': dataset.get('built_on'),
         'status': 'ready',
         'is_stale': is_stale or force_refresh,
     }
