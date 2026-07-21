@@ -7,11 +7,14 @@ returns aggregated values per simulator pillar key.
 from __future__ import annotations
 
 import os
+import threading
 import unicodedata
+from contextlib import contextmanager
 from decimal import Decimal
 from typing import Dict, Iterable, Optional
 from urllib.parse import unquote, urlparse
 
+from django.core.cache import cache
 from django.utils import timezone
 
 
@@ -113,6 +116,208 @@ def _coordinator_pdvs(cursor, coord_name: str) -> list[str]:
     return [p for p in pdvs if p]
 
 
+# ---------------------------------------------------------------------------
+# Prefetch em lote
+#
+# ``get_realized_sales_from_mysql`` abre uma conexão por chamada, e o simulador
+# faz 3 chamadas por usuário (individual + PDV + coordenação). Para telas que
+# calculam a rede inteira isso vira centenas de conexões. O prefetch resolve o
+# mês inteiro em 6 consultas agrupadas e deixa os mapas num contexto de thread;
+# enquanto ele estiver ativo, as consultas individuais são servidas de memória.
+# ---------------------------------------------------------------------------
+
+_STATE = threading.local()
+
+
+def _fetch_grouped(cur, group_col_produto: str, group_col_servico: str,
+                   year: int, month: int, yesterday) -> Dict[str, Dict[str, float]]:
+    """Roda as 3 consultas do mês agrupadas por vendedor OU por PDV.
+
+    Espelha exatamente os filtros de ``get_realized_sales_from_mysql`` (corte
+    D-1, venda ativa/confirmada, Fixa vinda só do Serviço Técnico).
+    """
+    data: Dict[str, Dict[str, float]] = {}
+
+    def bucket(name) -> Optional[Dict[str, float]]:
+        key = _normalize(name)
+        if not key:
+            return None
+        return data.setdefault(key, dict(EMPTY_RESULT))
+
+    base_where = (
+        'YEAR(data_da_venda) = %s AND MONTH(data_da_venda) = %s '
+        'AND data_da_venda <= %s'
+    )
+    params = (year, month, yesterday)
+
+    # ---------- vendas_produto (Smartphone / Eletronicos / Essenciais) ----------
+    cur.execute(
+        f"""
+        SELECT `{group_col_produto}`, pilar, SUM(`valor_líquido_de_venda_do_produto`)
+        FROM vendas_produto
+        WHERE {base_where}
+        GROUP BY `{group_col_produto}`, pilar
+        """,
+        params,
+    )
+    for name, pilar, total in cur.fetchall():
+        key = PILAR_TO_KEY.get(_normalize(pilar))
+        row = bucket(name)
+        if key and row is not None:
+            row[key] = row.get(key, 0.0) + _to_float(total)
+
+    # ---------- vendas_servicos (Movel / SVA / Seguros) ----------
+    cur.execute(
+        f"""
+        SELECT `{group_col_servico}`, pilar, SUM(COALESCE(receita_calculada, Receita, 0))
+        FROM vendas_servicos
+        WHERE {base_where}
+          AND Venda_ativa = '1' AND `Status_do_Serviço` = 'Confirmado'
+        GROUP BY `{group_col_servico}`, pilar
+        """,
+        params,
+    )
+    for name, pilar, total in cur.fetchall():
+        key = PILAR_TO_KEY.get(_normalize(pilar))
+        # Fixa é definida exclusivamente pelo Serviço Técnico (consulta abaixo).
+        if not key or key == 'fixa':
+            continue
+        row = bucket(name)
+        if row is not None:
+            row[key] = row.get(key, 0.0) + _to_float(total)
+
+    # ---------- Pilar Fixa = Serviço Técnico 'Alta Banda Larga' / 'Alta TV' ----------
+    cur.execute(
+        f"""
+        SELECT `{group_col_servico}`,
+               SUM(COALESCE(receita_calculada, Receita, 0)) AS total_valor,
+               COUNT(*) AS qtd
+        FROM vendas_servicos
+        WHERE {base_where}
+          AND Venda_ativa = '1' AND `Status_do_Serviço` = 'Confirmado'
+          AND UPPER(`Serviço_Técnico`) IN ('ALTA BANDA LARGA', 'ALTA TV')
+        GROUP BY `{group_col_servico}`
+        """,
+        params,
+    )
+    for name, total_valor, qtd in cur.fetchall():
+        row = bucket(name)
+        if row is not None:
+            row['fixa'] = row.get('fixa', 0.0) + _to_float(total_valor)
+            row['fixa_qty'] = row.get('fixa_qty', 0.0) + float(qtd or 0)
+
+    return data
+
+
+def build_realized_maps(year: Optional[int] = None, month: Optional[int] = None) -> Dict:
+    """Lê o mês inteiro em 6 consultas e devolve mapas por vendedor e por PDV.
+
+    Chaves dos mapas já vêm normalizadas (upper, sem acento), iguais às usadas
+    em ``get_realized_sales_from_mysql``.
+    """
+    from datetime import timedelta
+
+    now = timezone.now()
+    year = year or now.year
+    month = month or now.month
+    yesterday = timezone.localdate() - timedelta(days=1)
+
+    empty = {'year': year, 'month': month, 'vendors': {}, 'pdvs': {}, 'ok': False}
+
+    try:
+        import pymysql
+    except ImportError:
+        return empty
+
+    try:
+        conn = pymysql.connect(**_mysql_config())
+    except Exception:
+        return empty
+
+    try:
+        with conn.cursor() as cur:
+            vendors = _fetch_grouped(cur, 'nome_do_vendedor', 'Nome_do_vendedor', year, month, yesterday)
+            pdvs = _fetch_grouped(cur, 'pdv', 'PDV', year, month, yesterday)
+    except Exception:
+        return empty
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return {'year': year, 'month': month, 'vendors': vendors, 'pdvs': pdvs, 'ok': True}
+
+
+def get_realized_maps(year: Optional[int] = None, month: Optional[int] = None,
+                      force_refresh: bool = False, ttl: int = 900) -> Dict:
+    """``build_realized_maps`` com cache (15 min por padrão)."""
+    now = timezone.now()
+    year = year or now.year
+    month = month or now.month
+    cache_key = f'simulator_realized_maps_{year}_{month:02d}'
+
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    maps = build_realized_maps(year, month)
+    # Falha de conexão não é cacheada: a próxima requisição tenta de novo.
+    if maps.get('ok'):
+        cache.set(cache_key, maps, ttl)
+    return maps
+
+
+@contextmanager
+def realized_prefetch(year: Optional[int] = None, month: Optional[int] = None,
+                      force_refresh: bool = False):
+    """Serve as consultas de realizado a partir de mapas pré-carregados.
+
+    Dentro do bloco, ``get_realized_sales_from_mysql`` não abre conexão para
+    filtros por vendedor/PDV — responde do mapa. Filtro por ``coord_name``
+    (sem lista de PDVs) continua indo ao banco.
+    """
+    maps = get_realized_maps(year, month, force_refresh=force_refresh)
+    previous = getattr(_STATE, 'maps', None)
+    _STATE.maps = maps if maps.get('ok') else None
+    try:
+        yield maps
+    finally:
+        _STATE.maps = previous
+
+
+def _lookup_prefetched(year: int, month: int, vendor: str, pdv: str,
+                       pdvs: Optional[Iterable[str]], coord_name: str) -> Optional[Dict[str, float]]:
+    """Resposta a partir do prefetch ativo, ou ``None`` para ir ao banco."""
+    maps = getattr(_STATE, 'maps', None)
+    if not maps or maps.get('year') != year or maps.get('month') != month:
+        return None
+    # Resolver PDVs pelo nome do coordenador depende de tabelas que não existem
+    # no banco `vivogo`; mantém o caminho original nesse caso.
+    if coord_name and not pdvs:
+        return None
+
+    if vendor:
+        found = maps['vendors'].get(_normalize(vendor))
+        return dict(found) if found else dict(EMPTY_RESULT)
+
+    targets = [_normalize(p) for p in (pdvs or [])] if pdvs else ([_normalize(pdv)] if pdv else [])
+    targets = [t for t in targets if t]
+    if not targets:
+        # Sem filtro = não retornar todas as vendas da rede.
+        return dict(EMPTY_RESULT)
+
+    total = dict(EMPTY_RESULT)
+    for target in targets:
+        found = maps['pdvs'].get(target)
+        if not found:
+            continue
+        for key, value in found.items():
+            total[key] = total.get(key, 0.0) + value
+    return total
+
+
 def get_realized_sales_from_mysql(
     *,
     vendor: str = '',
@@ -133,11 +338,6 @@ def get_realized_sales_from_mysql(
     Retorna ``{pilar: valor_em_reais, 'fixa_qty': contagem_de_vendas_fixa}``.
     Em caso de erro de conexão, devolve zeros (não bloqueia o simulador).
     """
-    try:
-        import pymysql
-    except ImportError:
-        return dict(EMPTY_RESULT)
-
     from datetime import timedelta
     now = timezone.now()
     year = year or now.year
@@ -146,6 +346,16 @@ def get_realized_sales_from_mysql(
     # ainda não estão fechados/consolidados na origem).
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
+
+    # Dentro de um `realized_prefetch`, responde sem abrir conexão.
+    prefetched = _lookup_prefetched(year, month, vendor, pdv, pdvs, coord_name)
+    if prefetched is not None:
+        return prefetched
+
+    try:
+        import pymysql
+    except ImportError:
+        return dict(EMPTY_RESULT)
 
     try:
         conn = pymysql.connect(**_mysql_config())

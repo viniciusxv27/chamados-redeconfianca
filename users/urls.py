@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import commission_views
+from . import commission_projection_views
 
 urlpatterns = [
     path('', views.dashboard_view, name='dashboard'),
@@ -27,6 +28,7 @@ urlpatterns = [
     
     # Comissionamento
     path('commission/', commission_views.commission_view, name='commission'),
+    path('commission/projecao/', commission_projection_views.commission_projection_view, name='commission_projection'),
     path('commission/refresh/', commission_views.commission_refresh, name='commission_refresh'),
     path('commission/export/', commission_views.export_commission_excel, name='commission_export'),
     path('api/commission/', commission_views.commission_api, name='commission_api'),

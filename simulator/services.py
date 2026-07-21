@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 import calendar
 import logging
+import os
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -447,8 +448,30 @@ def load_default_factor_data(role: str) -> Dict[str, Any]:
     }
 
 
+def get_default_factor_data(role: str) -> Dict[str, Any]:
+    """``load_default_factor_data`` com cache invalidado pelo mtime do arquivo.
+
+    Abrir o XLSX com openpyxl custa ~2,5s e o resultado só muda quando a
+    planilha é substituída. Sem cache, esse custo era pago em toda chamada de
+    ``get_factor_set`` — inclusive uma vez por usuário nas telas que calculam
+    várias pessoas de uma vez.
+    """
+    path = get_workbook_path(role)
+    try:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        stamp = 0
+    cache_key = f'simulator_default_factors_{role}_{stamp}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    data = load_default_factor_data(role)
+    cache.set(cache_key, data, 3600)
+    return data
+
+
 def get_factor_set(role: str, updated_by: Optional[User] = None) -> SimulatorFactorSet:
-    defaults = load_default_factor_data(role)
+    defaults = get_default_factor_data(role)
     factor_set, created = SimulatorFactorSet.objects.get_or_create(
         role=role,
         defaults={
@@ -983,6 +1006,49 @@ def _latest_goal_upload():
     return GoalUpload.objects.order_by('-year', '-month').first()
 
 
+def _power_bi_goal_maps() -> Dict[str, Dict[str, Dict[str, float]]]:
+    """Índices ``{nome_normalizado: {pilar: meta}}`` da carga mais recente.
+
+    Evita uma varredura de GoalEntry por usuário: telas que calculam muita
+    gente (ex.: médias da rede) fariam centenas de consultas idênticas.
+    A chave inclui ``updated_at``, então reimportar a carga invalida o cache.
+    """
+    from power_bi.models import GoalEntry
+
+    upload = _latest_goal_upload()
+    if not upload:
+        return {'cn': {}, 'pdv': {}}
+
+    cache_key = f'simulator_pb_goal_maps_{upload.id}_{upload.updated_at.timestamp()}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    cn: Dict[str, Dict[str, float]] = {}
+    pdv: Dict[str, Dict[str, float]] = {}
+    for entry in GoalEntry.objects.filter(upload=upload).only(
+        'sheet_type', 'user_name', 'store_name', 'pilar', 'goal_value'
+    ):
+        pilar_key = POWER_BI_PILAR_MAP.get((entry.pilar or '').upper().strip())
+        if not pilar_key:
+            continue
+        if entry.sheet_type == 'METAS_CN_REAL':
+            bucket = cn.setdefault(normalize_text(entry.user_name), {})
+        elif entry.sheet_type == 'META_PDV_REAL':
+            bucket = pdv.setdefault(normalize_text(entry.store_name), {})
+        else:
+            continue
+        try:
+            value = float(entry.goal_value or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        bucket[pilar_key] = bucket.get(pilar_key, 0.0) + value
+
+    maps = {'cn': cn, 'pdv': pdv}
+    cache.set(cache_key, maps, 300)
+    return maps
+
+
 def get_metas_from_power_bi(user_name: str = '', store_name: str = '') -> Dict[str, float]:
     """Devolve metas (chave: pilar do simulador) para o consultor ou para o PDV.
 
@@ -990,35 +1056,12 @@ def get_metas_from_power_bi(user_name: str = '', store_name: str = '') -> Dict[s
     - Se ``store_name`` for fornecido, busca em META_PDV_REAL.
     - Pilares ausentes ficam em 0.0.
     """
-    from power_bi.models import GoalEntry
-
-    upload = _latest_goal_upload()
-    if not upload:
-        return {}
-
-    qs = GoalEntry.objects.filter(upload=upload)
+    maps = _power_bi_goal_maps()
     if user_name:
-        qs = qs.filter(sheet_type='METAS_CN_REAL')
-        target = normalize_text(user_name)
-        rows = [g for g in qs if normalize_text(g.user_name) == target]
-    elif store_name:
-        qs = qs.filter(sheet_type='META_PDV_REAL')
-        target = normalize_text(store_name)
-        rows = [g for g in qs if normalize_text(g.store_name) == target]
-    else:
-        return {}
-
-    result: Dict[str, float] = {}
-    for entry in rows:
-        pilar_key = POWER_BI_PILAR_MAP.get((entry.pilar or '').upper().strip())
-        if not pilar_key:
-            continue
-        try:
-            value = float(entry.goal_value or 0)
-        except (TypeError, ValueError):
-            value = 0.0
-        result[pilar_key] = result.get(pilar_key, 0.0) + value
-    return result
+        return dict(maps['cn'].get(normalize_text(user_name), {}))
+    if store_name:
+        return dict(maps['pdv'].get(normalize_text(store_name), {}))
+    return {}
 
 
 def get_pdv_metas_for_coordinator(coord_name: str) -> Dict[str, float]:

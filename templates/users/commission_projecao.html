@@ -1,0 +1,419 @@
+{% extends 'base.html' %}
+
+{% block title %}Médias de Comissão - Projeção{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 sm:px-4 py-6 max-w-7xl">
+
+    <!-- ══ Header ══ -->
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+        <div class="min-w-0">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+                <i class="fas fa-chart-line text-primary"></i>
+                Médias de Comissão
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                Projeção do simulador para o mês corrente · a média se ajusta conforme os filtros.
+            </p>
+            {% if generated_at %}
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg text-xs font-medium text-gray-700">
+                    <i class="fas fa-calendar-day text-primary text-[11px]"></i>
+                    {{ reference_label }}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-500">
+                    <i class="fas fa-clock text-[11px]"></i>
+                    Calculado às {{ generated_at|date:"H:i" }}
+                </span>
+                {% if is_stale %}
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-medium text-blue-700">
+                    <i class="fas fa-arrows-rotate fa-spin text-[11px]"></i>
+                    Atualizando em segundo plano
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'commission' %}"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <i class="fas fa-sack-dollar"></i> Ver realizado
+            </a>
+            <a href="?refresh=1"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-orange-600 transition-colors">
+                <i class="fas fa-rotate"></i> Recalcular
+            </a>
+        </div>
+    </div>
+
+    {% if status == 'building' %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-arrows-rotate fa-spin text-2xl text-primary"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-800">Calculando as projeções da rede…</h3>
+        <p class="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            O primeiro cálculo roda o simulador para todos os colaboradores e leva cerca de um minuto.
+            Esta página se atualiza sozinha assim que terminar.
+        </p>
+        <p class="text-xs text-gray-400 mt-4"><span id="countdown">15</span>s para a próxima verificação</p>
+    </div>
+    <script>
+    (function () {
+        let left = 15;
+        const el = document.getElementById('countdown');
+        setInterval(function () {
+            left -= 1;
+            if (left <= 0) { window.location.href = window.location.pathname; return; }
+            if (el) el.textContent = String(left);
+        }, 1000);
+    })();
+    </script>
+    {% elif not rows %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+        <i class="fas fa-users-slash text-4xl text-gray-200 mb-3"></i>
+        <h3 class="text-lg font-semibold text-gray-800">Nenhum colaborador no seu escopo</h3>
+        <p class="text-sm text-gray-500 mt-1">Verifique os grupos de comissionamento e as lojas vinculadas.</p>
+    </div>
+    {% else %}
+
+    <!-- ══ Destaque: média ══ -->
+    <div class="bg-gradient-to-br from-primary to-orange-500 rounded-2xl p-6 md:p-8 text-white mb-4 shadow-lg shadow-primary/20">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <p class="text-white/80 text-sm font-medium mb-1">Média de comissão projetada</p>
+                <p class="text-4xl md:text-5xl font-bold" id="kpi-average">—</p>
+                <p class="text-white/70 text-sm mt-2" id="kpi-scope">—</p>
+            </div>
+            <div class="md:text-right">
+                <p class="text-white/80 text-sm font-medium mb-1">Total projetado</p>
+                <p class="text-2xl md:text-3xl font-bold" id="kpi-total">—</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ Cards secundários ══ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div class="bg-white rounded-xl p-4 border border-gray-100">
+            <p class="text-gray-500 text-xs font-medium mb-1">Pessoas</p>
+            <p class="text-lg font-semibold text-gray-800" id="kpi-count">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-100">
+            <p class="text-gray-500 text-xs font-medium mb-1">Maior projeção</p>
+            <p class="text-lg font-semibold text-green-600" id="kpi-max">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-100">
+            <p class="text-gray-500 text-xs font-medium mb-1">Menor projeção</p>
+            <p class="text-lg font-semibold text-blue-600" id="kpi-min">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 border border-gray-100">
+            {% if store_summary %}
+            <p class="text-gray-500 text-xs font-medium mb-1">Média da sua loja</p>
+            <p class="text-lg font-semibold text-gray-800 js-money"
+               data-value="{{ store_summary.average|stringformat:'f' }}">R$ {{ store_summary.average|floatformat:2 }}</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">{{ store_summary.count }} consultor(es)</p>
+            {% else %}
+            <p class="text-gray-500 text-xs font-medium mb-1">Acima da média</p>
+            <p class="text-lg font-semibold text-gray-800" id="kpi-above">—</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if no_data_count %}
+    <div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-700">
+        <i class="fas fa-triangle-exclamation mt-0.5"></i>
+        <div class="text-sm">
+            <strong>{{ no_data_count }} colaborador(es) sem dados de projeção.</strong>
+            <p class="mt-0.5">Entram na lista com R$ 0,00 e puxam a média para baixo — use o filtro de papel ou a busca para isolá-los.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ══ Lista + filtros ══ -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+        <div class="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-100">
+            <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+                <div class="relative flex-1 min-w-0">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm pointer-events-none"></i>
+                    <input type="search" id="search" autocomplete="off"
+                           placeholder="Buscar por nome, loja ou coordenador...   (atalho: /)"
+                           class="w-full pl-9 pr-9 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <button type="button" id="search-clear"
+                            class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors">
+                        <i class="fas fa-xmark text-xs"></i>
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 flex-shrink-0">
+                    <select id="coordinator-filter"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Todos os coordenadores</option>
+                        {% for name in coordinator_options %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="sector-filter"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Todas as lojas</option>
+                        {% for name in sector_options %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" id="reset-filters"
+                            class="px-3 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap">
+                        <i class="fas fa-rotate-left mr-1"></i>Limpar
+                    </button>
+                </div>
+            </div>
+
+            {% if role_filters|length > 1 %}
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                <button type="button" data-role="" class="role-chip is-active">
+                    Todos <span class="chip-count">{{ rows|length }}</span>
+                </button>
+                {% for rf in role_filters %}
+                <button type="button" data-role="{{ rf.key }}" class="role-chip">
+                    {{ rf.label }} <span class="chip-count">{{ rf.count }}</span>
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="px-4 sm:px-6 py-2 bg-gray-50/70 border-b border-gray-100">
+            <p class="text-xs text-gray-500" id="result-count"></p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 bg-gray-50/70 border-b border-gray-100">
+                        <th class="py-3 px-4 sm:px-6 font-medium">Colaborador</th>
+                        <th class="py-3 px-4 font-medium hidden sm:table-cell">Loja</th>
+                        <th class="py-3 px-4 font-medium hidden lg:table-cell">Coordenador</th>
+                        <th class="py-3 px-4 sm:px-6 font-medium text-right">Comissão projetada</th>
+                    </tr>
+                </thead>
+                <tbody id="rows-body">
+                    {% for row in rows %}
+                    <tr class="person-row border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                        data-role="{{ row.role_key }}"
+                        data-sector="{{ row.sector }}"
+                        data-coordinator="{{ row.coordinator }}"
+                        data-gain="{{ row.gain|stringformat:'f' }}"
+                        data-search="{{ row.name|lower }} {{ row.sector|lower }} {{ row.coordinator|lower }} {{ row.role_label|lower }}">
+
+                        <td class="py-3 px-4 sm:px-6">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold
+                                            {% if row.role_key == 'coordenador' %}bg-violet-500
+                                            {% elif row.role_key == 'gerente' %}bg-blue-500
+                                            {% elif row.role_key == 'aparte' %}bg-indigo-500
+                                            {% else %}bg-primary{% endif %}">
+                                    {{ row.initials }}
+                                </div>
+                                <div class="min-w-0">
+                                    <a href="{% url 'simulator:dashboard' %}?user_id={{ row.id }}&view=projecao"
+                                       class="text-sm font-semibold text-gray-800 hover:text-primary transition-colors truncate block">{{ row.name }}</a>
+                                    <div class="flex items-center gap-1.5 mt-0.5">
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium
+                                                     {% if row.role_key == 'coordenador' %}bg-violet-50 text-violet-600
+                                                     {% elif row.role_key == 'gerente' %}bg-blue-50 text-blue-600
+                                                     {% elif row.role_key == 'aparte' %}bg-indigo-50 text-indigo-600
+                                                     {% else %}bg-orange-50 text-orange-600{% endif %}">{{ row.role_label }}</span>
+                                        <span class="text-[11px] text-gray-400 sm:hidden truncate">{{ row.sector }}</span>
+                                        {% if not row.has_data %}
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">sem dados</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4 text-gray-600 hidden sm:table-cell">{{ row.sector|default:"—" }}</td>
+                        <td class="py-3 px-4 text-gray-600 hidden lg:table-cell">{{ row.coordinator|default:"—" }}</td>
+                        <td class="py-3 px-4 sm:px-6 text-right">
+                            <span class="font-semibold text-gray-900 whitespace-nowrap row-amount">R$ {{ row.gain|floatformat:2 }}</span>
+                            <span class="block text-[11px] text-gray-400 row-delta"></span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div id="no-results" class="hidden text-center py-14">
+            <i class="fas fa-magnifying-glass-chart text-4xl text-gray-200 mb-3"></i>
+            <h3 class="text-base font-semibold text-gray-800">Nenhum colaborador encontrado</h3>
+            <p class="text-sm text-gray-500 mt-1">Ajuste a busca ou limpe os filtros.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .role-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .375rem;
+        padding: .375rem .75rem;
+        border-radius: 9999px;
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        color: #4b5563;
+        font-size: .8125rem;
+        font-weight: 500;
+        transition: all .15s ease;
+        white-space: nowrap;
+    }
+    .role-chip:hover { background: #f9fafb; border-color: #d1d5db; }
+    .role-chip.is-active { background: #FF6B35; border-color: #FF6B35; color: #fff; }
+    .role-chip .chip-count {
+        padding: 0 .375rem;
+        border-radius: 9999px;
+        background: #f3f4f6;
+        color: #6b7280;
+        font-size: .6875rem;
+        font-weight: 600;
+    }
+    .role-chip.is-active .chip-count { background: rgba(255,255,255,.25); color: #fff; }
+</style>
+
+<script>
+(function () {
+    'use strict';
+
+    const body = document.getElementById('rows-body');
+    if (!body) return;
+
+    const search = document.getElementById('search');
+    const searchClear = document.getElementById('search-clear');
+    const coordinatorFilter = document.getElementById('coordinator-filter');
+    const sectorFilter = document.getElementById('sector-filter');
+    const resetBtn = document.getElementById('reset-filters');
+    const noResults = document.getElementById('no-results');
+    const resultCount = document.getElementById('result-count');
+    const chips = Array.from(document.querySelectorAll('.role-chip'));
+
+    const rows = Array.from(body.querySelectorAll('.person-row'));
+    let activeRole = '';
+
+    const money = new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: 'BRL', minimumFractionDigits: 2,
+    });
+
+    function setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function apply() {
+        const term = (search.value || '').trim().toLowerCase();
+        const coordinator = coordinatorFilter.value;
+        const sector = sectorFilter.value;
+
+        const visible = [];
+        rows.forEach(function (row) {
+            const show = (!term || (row.dataset.search || '').includes(term))
+                && (!activeRole || row.dataset.role === activeRole)
+                && (!coordinator || row.dataset.coordinator === coordinator)
+                && (!sector || row.dataset.sector === sector);
+            row.classList.toggle('hidden', !show);
+            if (show) visible.push(row);
+        });
+
+        const gains = visible.map((row) => parseFloat(row.dataset.gain) || 0);
+        const total = gains.reduce((sum, value) => sum + value, 0);
+        const count = gains.length;
+        const average = count ? total / count : 0;
+
+        setText('kpi-average', money.format(average));
+        setText('kpi-total', money.format(total));
+        setText('kpi-count', String(count));
+        setText('kpi-max', count ? money.format(Math.max.apply(null, gains)) : '—');
+        setText('kpi-min', count ? money.format(Math.min.apply(null, gains)) : '—');
+        setText('kpi-above', count ? String(gains.filter((g) => g > average).length) : '—');
+
+        // Distância de cada linha para a média do recorte atual.
+        visible.forEach(function (row) {
+            const gain = parseFloat(row.dataset.gain) || 0;
+            const amount = row.querySelector('.row-amount');
+            if (amount) amount.textContent = money.format(gain);
+
+            const delta = gain - average;
+            const el = row.querySelector('.row-delta');
+            if (!el) return;
+            if (!count || Math.abs(delta) < 0.005) {
+                el.textContent = 'na média';
+                el.className = 'block text-[11px] text-gray-400 row-delta';
+            } else {
+                const sign = delta > 0 ? '+' : '−';
+                el.textContent = sign + money.format(Math.abs(delta)) + ' vs. média';
+                el.className = 'block text-[11px] row-delta ' + (delta > 0 ? 'text-green-600' : 'text-gray-400');
+            }
+        });
+
+        const filtered = term || activeRole || coordinator || sector;
+        setText('kpi-scope', filtered
+            ? count + ' de ' + rows.length + ' colaborador(es) no filtro'
+            : count + ' colaborador(es) no seu escopo');
+
+        body.parentElement.classList.toggle('hidden', count === 0);
+        noResults.classList.toggle('hidden', count !== 0);
+        searchClear.classList.toggle('hidden', !term);
+
+        resultCount.textContent = filtered
+            ? 'Mostrando ' + count + ' de ' + rows.length + ' colaborador(es)'
+            : rows.length + ' colaborador(es) · ordenados pela projeção';
+    }
+
+    let debounce;
+    search.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(apply, 120);
+    });
+
+    searchClear.addEventListener('click', function () {
+        search.value = '';
+        search.focus();
+        apply();
+    });
+
+    coordinatorFilter.addEventListener('change', apply);
+    sectorFilter.addEventListener('change', apply);
+
+    chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            activeRole = chip.dataset.role || '';
+            chips.forEach((c) => c.classList.toggle('is-active', c === chip));
+            apply();
+        });
+    });
+
+    resetBtn.addEventListener('click', function () {
+        search.value = '';
+        coordinatorFilter.value = '';
+        sectorFilter.value = '';
+        activeRole = '';
+        chips.forEach((c) => c.classList.toggle('is-active', !c.dataset.role));
+        apply();
+    });
+
+    // Valores renderizados pelo servidor usam o mesmo formato dos calculados aqui.
+    document.querySelectorAll('.js-money').forEach(function (el) {
+        el.textContent = money.format(parseFloat(el.dataset.value) || 0);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+        const tag = (document.activeElement.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        e.preventDefault();
+        search.focus();
+    });
+
+    apply();
+})();
+</script>
+{% endblock %}
