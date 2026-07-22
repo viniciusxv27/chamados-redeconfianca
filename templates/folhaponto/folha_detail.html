@@ -13,9 +13,14 @@
 
     <div class="bg-white shadow rounded-lg overflow-hidden mb-4">
         <!-- Header -->
-        <div class="px-5 py-4 border-b bg-teal-50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+        <div class="px-5 py-4 border-b {% if folha.is_semanal %}bg-sky-50{% else %}bg-teal-50{% endif %} flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
-                <h1 class="text-lg font-bold text-gray-900">Folha de Ponto – {{ folha.period_display }}</h1>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <h1 class="text-lg font-bold text-gray-900">Folha de Ponto – {{ folha.period_display }}</h1>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold {% if folha.is_semanal %}bg-sky-100 text-sky-800{% else %}bg-teal-100 text-teal-800{% endif %}">
+                        <i class="fas {% if folha.is_semanal %}fa-calendar-week{% else %}fa-calendar-check{% endif %} mr-1"></i>{{ folha.periodicity_label }}
+                    </span>
+                </div>
                 {% if folha.period_start %}<p class="text-sm text-gray-500">Período: {{ folha.period_start }} a {{ folha.period_end }}</p>{% endif %}
                 {% if folha.user != request.user %}<p class="text-sm text-gray-500">{{ folha.user.full_name }}</p>{% endif %}
             </div>
@@ -135,6 +140,24 @@
                     </div>
                 </div>
             </div>
+            {% elif folha.is_semanal %}
+            <div class="bg-sky-50 border border-sky-200 rounded-lg p-4">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0">
+                        <div class="w-10 h-10 bg-sky-100 rounded-full flex items-center justify-center"><i class="fas fa-calendar-week text-sky-600 text-lg"></i></div>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-sm font-bold text-sky-800 mb-1">Folha semanal — período em aberto</h3>
+                        <p class="text-sm text-sky-700">
+                            Esta folha é atualizada semanalmente pelo gestor enquanto o período não fecha,
+                            então <strong>não requer assinatura</strong>. Os valores acima podem mudar até o fechamento.
+                        </p>
+                        <p class="text-xs text-sky-600 mt-1">
+                            Quando o período for fechado, ela passa a ser a folha mensal e a assinatura fica disponível aqui.
+                        </p>
+                    </div>
+                </div>
+            </div>
             {% else %}
             <div id="signature-section">
                 <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3"><i class="fas fa-signature text-blue-400 mr-1"></i> Assinatura Digital</h3>
@@ -162,7 +185,7 @@
     </div>
 </div>
 
-{% if not folha.is_signed and folha.user == request.user %}
+{% if not folha.is_signed and not folha.is_semanal and folha.user == request.user %}
 <script>
 (function() {
     const canvas = document.getElementById('signature-canvas');

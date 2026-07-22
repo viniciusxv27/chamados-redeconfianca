@@ -44,8 +44,21 @@
                     {% for m_val, m_name in month_choices %}<option value="{{ m_val }}" {% if selected_month == m_val|stringformat:"d" %}selected{% endif %}>{{ m_name }}</option>{% endfor %}
                 </select>
             </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Periodicidade</label>
+                <select name="periodicity" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
+                    <option value="">Todas</option>
+                    <option value="semanal" {% if selected_periodicity == 'semanal' %}selected{% endif %}>Semanal (em aberto)</option>
+                    <option value="mensal" {% if selected_periodicity == 'mensal' %}selected{% endif %}>Mensal (assinável)</option>
+                </select>
+            </div>
             <button type="submit" class="px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700"><i class="fas fa-search mr-1"></i> Filtrar</button>
         </form>
+        <p class="text-xs text-gray-500 mt-3">
+            <i class="fas fa-circle-info mr-1"></i>
+            <strong>{{ semanal_count }}</strong> semanal(is) — período em aberto, reimportado toda semana e sem assinatura ·
+            <strong>{{ mensal_count }}</strong> mensal(is) — período fechado, sujeito a assinatura.
+        </p>
     </div>
 
     <!-- Ações em lote -->
@@ -119,6 +132,7 @@
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Funcionário</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Período</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Periodicidade</th>
                         <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Assinatura</th>
                         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Trabalhadas</th>
                         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
@@ -135,8 +149,17 @@
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-700">{{ f.period_display }}</td>
                         <td class="px-4 py-3 text-center">
+                            {% if f.is_semanal %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-800" title="Período em aberto, reimportado toda semana"><i class="fas fa-calendar-week mr-1"></i> Semanal</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-800" title="Período fechado, sujeito a assinatura"><i class="fas fa-calendar-check mr-1"></i> Mensal</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-center">
                             {% if f.is_signed %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i> Assinado</span>
+                            {% elif f.is_semanal %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500" title="Folha semanal não requer assinatura">—</span>
                             {% else %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-clock mr-1"></i> Pendente</span>
                             {% endif %}

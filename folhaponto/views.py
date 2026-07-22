@@ -14,6 +14,7 @@ from .models import FolhaPonto, FolhaPontoManagerPermission
 from .pdf_parser import (
     extract_all_folhas, extract_pages_pdf, normalize_name, clean_cpf,
 )
+from .periodicity import MENSAL, SEMANAL, annotate_periodicity, is_semanal
 from users.models import User
 
 HIERARCHY_RANK = {
@@ -151,10 +152,13 @@ def my_folhas(request):
         .values_list('year', flat=True).distinct().order_by('-year')
     )
 
+    folhas = annotate_periodicity(folhas)
+
     return render(request, 'folhaponto/my_folhas.html', {
         'folhas': folhas,
         'years': years,
         'selected_year': year_filter,
+        'pending_signature': sum(1 for f in folhas if f.can_sign),
     })
 
 
@@ -164,6 +168,8 @@ def folha_detail(request, pk):
     if folha.user != request.user and not can_manage_folhaponto(request.user):
         messages.error(request, 'Sem permissão para visualizar esta folha de ponto.')
         return redirect('folhaponto:my_folhas')
+
+    annotate_periodicity([folha])
 
     return render(request, 'folhaponto/folha_detail.html', {'folha': folha})
 
@@ -255,6 +261,14 @@ def api_sign_folha(request, pk):
         return JsonResponse({'error': 'Sem permissão para assinar esta folha de ponto.'}, status=403)
     if folha.is_signed:
         return JsonResponse({'error': 'Esta folha de ponto já foi assinada.'}, status=409)
+    # Folha semanal é prévia do período em aberto (reimportada toda semana):
+    # só o fechamento mensal é assinado. Bloqueio no servidor, porque esconder
+    # o botão no template não impede um POST direto.
+    if is_semanal(folha):
+        return JsonResponse({
+            'error': 'Esta folha é semanal (período em aberto) e não deve ser assinada. '
+                     'A assinatura fica disponível quando o período for fechado.',
+        }, status=409)
 
     import json
     import hashlib
@@ -319,13 +333,24 @@ def admin_folhas(request):
 
     years = FolhaPonto.objects.values_list('year', flat=True).distinct().order_by('-year')
 
+    # Periodicidade é derivada da competência mais recente de cada colaborador,
+    # então precisa ser calculada antes de aplicar o filtro de periodicidade.
+    folhas = annotate_periodicity(folhas)
+
+    periodicity_filter = request.GET.get('periodicity')
+    if periodicity_filter in (SEMANAL, MENSAL):
+        folhas = [f for f in folhas if f.periodicity == periodicity_filter]
+
     return render(request, 'folhaponto/admin_folhas.html', {
         'folhas': folhas,
         'years': years,
         'search': search,
         'selected_year': year_filter,
         'selected_month': month_filter,
+        'selected_periodicity': periodicity_filter,
         'month_choices': FolhaPonto.MONTH_CHOICES,
+        'semanal_count': sum(1 for f in folhas if f.is_semanal),
+        'mensal_count': sum(1 for f in folhas if not f.is_semanal),
     })
 
 
@@ -810,28 +835,41 @@ def export_signature_report(request):
     response.write('﻿')
     writer = csv.writer(response, delimiter=';')
 
-    total = folhas.count()
-    signed_count = folhas.filter(signed_at__isnull=False).count()
+    # Folha semanal (período em aberto do colaborador) não é assinável, então
+    # não pode entrar na conta de "não assinadas" — senão o relatório acusaria
+    # pendência de quem não tem o que assinar.
+    folhas = annotate_periodicity(folhas.order_by('user__first_name', 'user__last_name'))
+
+    total = len(folhas)
+    signed_count = sum(1 for f in folhas if f.is_signed)
+    semanal_count = sum(1 for f in folhas if f.is_semanal and not f.is_signed)
+    pending_count = sum(1 for f in folhas if f.can_sign)
 
     writer.writerow([f'Relatório de Assinaturas – Folha de Ponto {month_name}/{year}'])
     writer.writerow([])
     writer.writerow(['Total de folhas', total])
     writer.writerow(['Assinadas', signed_count])
-    writer.writerow(['Não assinadas', total - signed_count])
+    writer.writerow(['Pendentes de assinatura', pending_count])
+    writer.writerow(['Semanais (período em aberto, não assinável)', semanal_count])
     writer.writerow(['Usuários sem folha', all_users.count() - len(users_with)])
     writer.writerow([])
-    writer.writerow(['Funcionário', 'CPF', 'Setor', 'Status', 'Data Assinatura', 'IP', 'Hash'])
+    writer.writerow(['Funcionário', 'CPF', 'Setor', 'Periodicidade', 'Status',
+                     'Data Assinatura', 'IP', 'Hash'])
 
-    for f in folhas.order_by('user__first_name', 'user__last_name'):
+    for f in folhas:
         sector_name = f.user.sector.name if f.user.sector else ''
         if f.is_signed:
             status = 'Assinado'
             signed_date = timezone.localtime(f.signed_at).strftime('%d/%m/%Y %H:%M') if f.signed_at else ''
+        elif f.is_semanal:
+            status = 'Não se aplica (semanal)'
+            signed_date = ''
         else:
             status = 'Não assinado'
             signed_date = ''
         writer.writerow([
-            f.user.full_name, f.user.cpf or f.cpf, sector_name, status, signed_date,
+            f.user.full_name, f.user.cpf or f.cpf, sector_name, f.periodicity_label,
+            status, signed_date,
             f.signature_ip or '', f.signature_hash[:16] if f.signature_hash else '',
         ])
 
