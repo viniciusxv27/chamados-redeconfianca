@@ -870,6 +870,8 @@ def create_user_view(request):
         inactivation_reason = request.POST.get('inactivation_reason', '').strip()
         leave_reason = request.POST.get('leave_reason', '').strip()
         leave_attachment = request.FILES.get('leave_attachment')
+        vacation_start_date = request.POST.get('vacation_start_date', '').strip()
+        vacation_end_date = request.POST.get('vacation_end_date', '').strip()
 
         # Campos de RH
         cpf = normalize_cpf(request.POST.get('cpf', ''))
@@ -893,6 +895,11 @@ def create_user_view(request):
         # Segurança: não permitir criar usuário com hierarquia acima da própria
         if not request.user.can_assign_hierarchy(hierarchy):
             messages.error(request, 'Você não pode criar um usuário com hierarquia superior à sua.')
+            return render(request, 'admin/create_user.html', context)
+
+        if (status == User.STATUS_FERIAS and vacation_start_date and vacation_end_date
+                and vacation_end_date < vacation_start_date):
+            messages.error(request, 'O fim das férias não pode ser anterior ao início.')
             return render(request, 'admin/create_user.html', context)
 
         try:
@@ -924,6 +931,8 @@ def create_user_view(request):
                 status=status,
                 inactivation_reason=inactivation_reason if status == User.STATUS_INATIVO else '',
                 leave_reason=leave_reason if status == User.STATUS_AFASTADO else '',
+                vacation_start_date=(vacation_start_date or None) if status == User.STATUS_FERIAS else None,
+                vacation_end_date=(vacation_end_date or None) if status == User.STATUS_FERIAS else None,
                 cpf=cpf,
                 pis=pis,
                 job_title=job_title,
@@ -1008,6 +1017,8 @@ def edit_user_view(request, user_id):
         leave_return_date = request.POST.get('leave_return_date', '').strip()
         leave_attachment = request.FILES.get('leave_attachment')
         remove_leave_attachment = request.POST.get('remove_leave_attachment') == 'on'
+        vacation_start_date = request.POST.get('vacation_start_date', '').strip()
+        vacation_end_date = request.POST.get('vacation_end_date', '').strip()
 
         # Novos campos de RH
         cpf = normalize_cpf(request.POST.get('cpf', ''))
@@ -1066,6 +1077,17 @@ def edit_user_view(request, user_id):
                     # Ao sair do afastamento, descarta o retorno e o anexo vinculado
                     user_to_edit.leave_return_date = None
                     user_to_edit.leave_attachment = None
+
+                if status == User.STATUS_FERIAS:
+                    if vacation_start_date and vacation_end_date and vacation_end_date < vacation_start_date:
+                        messages.error(request, 'O fim das férias não pode ser anterior ao início.')
+                        return redirect('edit_user', user_id=user_to_edit.id)
+                    user_to_edit.vacation_start_date = vacation_start_date or None
+                    user_to_edit.vacation_end_date = vacation_end_date or None
+                else:
+                    # Ao sair das férias, limpa o período para não sobrar data solta
+                    user_to_edit.vacation_start_date = None
+                    user_to_edit.vacation_end_date = None
 
                 # Salvar novos campos de RH
                 user_to_edit.cpf = cpf

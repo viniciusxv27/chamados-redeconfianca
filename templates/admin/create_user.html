@@ -360,8 +360,9 @@
                                 <option value="ATIVO">Ativo</option>
                                 <option value="INATIVO">Inativo</option>
                                 <option value="AFASTADO">Afastado</option>
+                                <option value="FERIAS">Férias</option>
                             </select>
-                            <p class="text-xs text-gray-500 mt-1">Ativo, Inativo ou Afastado.</p>
+                            <p class="text-xs text-gray-500 mt-1">Ativo, Inativo, Afastado ou Férias.</p>
                         </div>
                     </div>
 
@@ -393,6 +394,27 @@
                                    accept="image/*,.pdf,.doc,.docx"
                                    class="w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-orange-600">
                             <p class="text-xs text-gray-500 mt-1">Anexe o atestado/documento do afastamento (PDF, imagem ou Word).</p>
+                        </div>
+                    </div>
+
+                    <!-- Período de férias (visível quando Férias) -->
+                    <div id="vacationWrap" class="mt-4 hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="vacation_start_date" class="block text-sm font-medium text-gray-700 mb-2">Início das Férias</label>
+                                <input type="date"
+                                       id="vacation_start_date"
+                                       name="vacation_start_date"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="vacation_end_date" class="block text-sm font-medium text-gray-700 mb-2">Fim das Férias</label>
+                                <input type="date"
+                                       id="vacation_end_date"
+                                       name="vacation_end_date"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <p id="vacationDateError" class="text-xs text-red-600 mt-1 hidden">O fim não pode ser anterior ao início.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -463,15 +485,35 @@ document.addEventListener('DOMContentLoaded', function() {
     const statusSelect = document.getElementById('status');
     const inactivationWrap = document.getElementById('inactivationReasonWrap');
     const leaveWrap = document.getElementById('leaveWrap');
+    const vacationWrap = document.getElementById('vacationWrap');
     function toggleStatusFields() {
         if (!statusSelect) return;
         const value = statusSelect.value;
         if (inactivationWrap) inactivationWrap.classList.toggle('hidden', value !== 'INATIVO');
         if (leaveWrap) leaveWrap.classList.toggle('hidden', value !== 'AFASTADO');
+        if (vacationWrap) vacationWrap.classList.toggle('hidden', value !== 'FERIAS');
     }
     if (statusSelect) {
         statusSelect.addEventListener('change', toggleStatusFields);
         toggleStatusFields();
+    }
+
+    // Impede enviar um período de férias invertido (o servidor também valida).
+    const vacationStart = document.getElementById('vacation_start_date');
+    const vacationEnd = document.getElementById('vacation_end_date');
+    const vacationError = document.getElementById('vacationDateError');
+    function validateVacationRange() {
+        if (!vacationStart || !vacationEnd) return;
+        const isVacation = statusSelect && statusSelect.value === 'FERIAS';
+        const invalid = isVacation && vacationStart.value && vacationEnd.value
+            && vacationEnd.value < vacationStart.value;
+        if (vacationError) vacationError.classList.toggle('hidden', !invalid);
+        vacationEnd.setCustomValidity(invalid ? 'O fim não pode ser anterior ao início.' : '');
+    }
+    if (vacationStart && vacationEnd) {
+        vacationStart.addEventListener('change', validateVacationRange);
+        vacationEnd.addEventListener('change', validateVacationRange);
+        if (statusSelect) statusSelect.addEventListener('change', validateVacationRange);
     }
 
     const cpfInput = document.getElementById('cpf');

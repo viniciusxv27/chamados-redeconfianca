@@ -138,6 +138,7 @@
                 <option value="ativo">Ativos</option>
                 <option value="inativo">Inativos</option>
                 <option value="afastado">Afastados</option>
+                <option value="ferias">Férias</option>
             </select>
         </div>
     </div>
@@ -241,6 +242,15 @@
                                 {% if user_item.leave_return_date %}
                                     <div class="text-xs text-amber-700 mt-1">
                                         <i class="fas fa-calendar-day mr-1"></i>Retorno: {{ user_item.leave_return_date|date:"d/m/Y" }}
+                                    </div>
+                                {% endif %}
+                            {% elif user_item.status == 'FERIAS' %}
+                                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                                    <i class="fas fa-umbrella-beach mr-1"></i>Férias
+                                </span>
+                                {% if user_item.vacation_start_date or user_item.vacation_end_date %}
+                                    <div class="text-xs text-blue-700 mt-1">
+                                        <i class="fas fa-calendar-day mr-1"></i>{{ user_item.vacation_start_date|date:"d/m/Y"|default:"?" }} a {{ user_item.vacation_end_date|date:"d/m/Y"|default:"?" }}
                                     </div>
                                 {% endif %}
                             {% elif user_item.status == 'INATIVO' %}

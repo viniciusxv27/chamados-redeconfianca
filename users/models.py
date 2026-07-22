@@ -512,10 +512,12 @@ class User(AbstractUser):
     STATUS_ATIVO = 'ATIVO'
     STATUS_INATIVO = 'INATIVO'
     STATUS_AFASTADO = 'AFASTADO'
+    STATUS_FERIAS = 'FERIAS'
     STATUS_CHOICES = [
         (STATUS_ATIVO, 'Ativo'),
         (STATUS_INATIVO, 'Inativo'),
         (STATUS_AFASTADO, 'Afastado'),
+        (STATUS_FERIAS, 'Férias'),
     ]
     status = models.CharField(
         max_length=20,
@@ -523,7 +525,7 @@ class User(AbstractUser):
         default=STATUS_ATIVO,
         db_index=True,
         verbose_name="Situação",
-        help_text="Situação do colaborador: ativo, inativo ou afastado"
+        help_text="Situação do colaborador: ativo, inativo, afastado ou de férias"
     )
     inactivation_reason = models.TextField(
         blank=True,
@@ -548,6 +550,36 @@ class User(AbstractUser):
         null=True,
         verbose_name="Anexo do Afastamento"
     )
+    vacation_start_date = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Início das Férias"
+    )
+    vacation_end_date = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Fim das Férias"
+    )
+
+    @property
+    def is_on_vacation(self):
+        """Está de férias hoje (status Férias e data de hoje dentro do período)."""
+        if self.status != self.STATUS_FERIAS:
+            return False
+        if not self.vacation_start_date or not self.vacation_end_date:
+            # Marcado como férias sem período definido: considera em andamento.
+            return True
+        today = timezone.localdate()
+        return self.vacation_start_date <= today <= self.vacation_end_date
+
+    @property
+    def vacation_days_remaining(self):
+        """Dias restantes de férias (None quando não há período definido)."""
+        if self.status != self.STATUS_FERIAS or not self.vacation_end_date:
+            return None
+        return (self.vacation_end_date - timezone.localdate()).days
 
     # Pré-cadastro (onboarding via link enviado ao novo colaborador)
     PRE_REG_NONE = 'NONE'

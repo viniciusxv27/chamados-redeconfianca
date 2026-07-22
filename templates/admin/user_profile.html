@@ -145,6 +145,11 @@
                             {% if target.leave_return_date %}
                                 <span class="px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700"><i class="fas fa-calendar-day mr-1"></i>Retorno: {{ target.leave_return_date|date:"d/m/Y" }}</span>
                             {% endif %}
+                        {% elif target.status == 'FERIAS' %}
+                            <span class="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><i class="fas fa-umbrella-beach mr-1"></i>Férias</span>
+                            {% if target.vacation_start_date or target.vacation_end_date %}
+                                <span class="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700"><i class="fas fa-calendar-day mr-1"></i>{{ target.vacation_start_date|date:"d/m/Y"|default:"?" }} a {{ target.vacation_end_date|date:"d/m/Y"|default:"?" }}</span>
+                            {% endif %}
                         {% elif target.status == 'INATIVO' or not target.is_active %}
                             <span class="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times-circle mr-1"></i>Inativo</span>
                         {% else %}
@@ -182,6 +187,9 @@
                 {% if target.status == 'AFASTADO' %}
                     {% include 'admin/_profile_field.html' with label='Motivo do afastamento' value=target.leave_reason %}
                     {% include 'admin/_profile_field.html' with label='Data de retorno' value=target.leave_return_date|date:"d/m/Y" %}
+                {% elif target.status == 'FERIAS' %}
+                    {% include 'admin/_profile_field.html' with label='Início das férias' value=target.vacation_start_date|date:"d/m/Y" %}
+                    {% include 'admin/_profile_field.html' with label='Fim das férias' value=target.vacation_end_date|date:"d/m/Y" %}
                 {% endif %}
                 {% include 'admin/_profile_field.html' with label='Data de nascimento' value=target.birth_date %}
                 {% include 'admin/_profile_field.html' with label='Data de admissão' value=target.admission_date %}

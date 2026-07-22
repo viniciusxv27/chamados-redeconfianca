@@ -49,7 +49,8 @@ class CustomUserAdmin(UserAdmin):
             'fields': ('sector', 'sectors', 'hierarchy', 'balance_cs', 'phone', 'disc_profile', 'uniform_size_shirt', 'uniform_size_pants', 'profile_picture')
         }),
         ('Situação do Colaborador', {
-            'fields': ('status', 'inactivation_reason', 'leave_reason', 'leave_attachment')
+            'fields': ('status', 'inactivation_reason', 'leave_reason', 'leave_return_date',
+                       'leave_attachment', 'vacation_start_date', 'vacation_end_date')
         }),
     )
     
