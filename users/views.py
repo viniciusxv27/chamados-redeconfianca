@@ -3477,8 +3477,9 @@ def update_profile_view(request):
     """Atualizar perfil do usuário"""
     if request.method == 'POST':
         user = request.user
-        user.first_name = request.POST.get('first_name', user.first_name)
-        user.last_name = request.POST.get('last_name', user.last_name)
+        # Nome e sobrenome são somente leitura aqui: só o RH altera, pela tela
+        # de gestão de usuários. Ignorar o POST é o que de fato garante isso —
+        # o `disabled` do formulário sozinho é contornável.
         user.email = request.POST.get('email', user.email)
         user.phone = request.POST.get('phone', user.phone)
         user.disc_profile = request.POST.get('disc_profile', user.disc_profile)
