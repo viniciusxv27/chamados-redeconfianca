@@ -662,7 +662,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function formatDateToBr(dateValue) {
         if (!dateValue) return '';
-        const date = new Date(dateValue);
+        // "2026-07-21" (data pura) é interpretada como UTC pelo new Date(), e
+        // getDate() devolve em horário local — em UTC-3 isso mostrava o dia
+        // anterior. Monta a data no fuso local para bater com o popup, que é
+        // formatado pelo Django.
+        const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue).trim());
+        const date = isoDate
+            ? new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]))
+            : new Date(dateValue);
         if (Number.isNaN(date.getTime())) return '';
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
