@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'validad1',  # Validação D-1
     'portal_popups',  # Popups configuráveis do portal
     'documentos',  # Documentos para assinatura digital
+    'impulso',  # Impulso ADM (metas, conexão, inovação, faixas)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -108,6 +109,7 @@ TEMPLATES = [
                 'contestacao.context_processors.contestacao_menu_context',
                 'feedback.context_processors.survey_menu',
                 'portal_popups.context_processors.portal_popup_gate',
+                'impulso.context_processors.impulso_menu',
             ],
         },
     },

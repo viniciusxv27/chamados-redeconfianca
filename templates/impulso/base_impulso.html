@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Impulso{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-2 sm:px-4 py-4">
+
+    <!-- Cabeçalho do módulo -->
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center">
+                <i class="fas fa-bolt text-amber-500 text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 leading-tight">Impulso</h1>
+                <p class="text-sm text-gray-500">Confiar · Conectar · Inovar · Acompanhar</p>
+            </div>
+        </div>
+        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold
+            {% if is_impulso_gestor %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-700{% endif %}">
+            <i class="fas {% if is_impulso_gestor %}fa-user-tie{% else %}fa-user{% endif %}"></i>
+            {% if is_impulso_gestor %}Gestor{% else %}Equipe{% endif %}
+        </span>
+    </div>
+
+    <!-- Abas principais -->
+    <nav class="flex flex-wrap gap-1 border-b border-gray-200 mb-4">
+        {% with tab=active_tab %}
+        <a href="{% url 'impulso:dashboard' %}"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'dashboard' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+            <i class="fas fa-gauge-high mr-1"></i>Visão Geral
+        </a>
+        <a href="{% url 'impulso:metas_kanban' %}"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'confiar' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+            <i class="fas fa-bullseye mr-1"></i>Confiar
+        </a>
+        <a href="{% url 'impulso:conectar_list' %}"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'conectar' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+            <i class="fas fa-graduation-cap mr-1"></i>Conectar
+        </a>
+        <a href="{% url 'impulso:inovar_list' %}"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'inovar' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+            <i class="fas fa-lightbulb mr-1"></i>Inovar
+        </a>
+        <a href="{% url 'impulso:acompanhamento' %}"
+           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'acompanhamento' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
+            <i class="fas fa-ranking-star mr-1"></i>Acompanhamento
+        </a>
+        {% endwith %}
+    </nav>
+
+    <!-- Sub-navegação contextual -->
+    {% with un=request.resolver_match.url_name %}
+    {% if active_tab == 'confiar' %}
+    <div class="flex flex-wrap gap-2 mb-4 text-sm">
+        <a href="{% url 'impulso:metas_kanban' %}" class="px-3 py-1 rounded-full {% if un == 'metas_kanban' or un == 'meta_detail' or un == 'meta_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Kanban de Metas</a>
+        <a href="{% url 'impulso:minhas_atividades' %}" class="px-3 py-1 rounded-full {% if un == 'minhas_atividades' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Próximas Atividades</a>
+        <a href="{% url 'impulso:feedback_list' %}" class="px-3 py-1 rounded-full {% if un == 'feedback_list' or un == 'feedback_detail' or un == 'feedback_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Feedbacks</a>
+    </div>
+    {% elif active_tab == 'conectar' %}
+    <div class="flex flex-wrap gap-2 mb-4 text-sm">
+        <a href="{% url 'impulso:conectar_list' %}" class="px-3 py-1 rounded-full {% if un == 'conectar_list' or un == 'conteudo_detail' or un == 'conteudo_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Cursos, Vídeos e POPs</a>
+        <a href="{% url 'impulso:projeto_foco_list' %}" class="px-3 py-1 rounded-full {% if un == 'projeto_foco_list' or un == 'projeto_foco_detail' or un == 'projeto_foco_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Projetos Foco</a>
+        <a href="{% url 'impulso:minhas_tarefas' %}" class="px-3 py-1 rounded-full {% if un == 'minhas_tarefas' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Minhas Tarefas</a>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block impulso_content %}{% endblock %}
+</div>
+{% endblock %}

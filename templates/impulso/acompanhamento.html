@@ -1,0 +1,74 @@
+{% extends 'impulso/base_impulso.html' %}
+{% load impulso_tags %}
+
+{% block impulso_content %}
+
+<!-- Minha faixa -->
+<div class="rounded-xl border border-gray-200 p-5 mb-4 flex items-center gap-5 {{ minha_faixa_info.bg }}">
+    <div class="w-16 h-16 rounded-full bg-white/70 flex items-center justify-center">
+        <i class="{{ minha_faixa_info.icon }} text-3xl" style="color: {{ minha_faixa_info.cor }}"></i>
+    </div>
+    <div class="flex-1">
+        <p class="text-xs uppercase tracking-wide {{ minha_faixa_info.text }}">Sua faixa atual</p>
+        <p class="text-3xl font-bold {{ minha_faixa_info.text }}">{{ minha_faixa_info.label }}</p>
+        <p class="text-sm {{ minha_faixa_info.text }}">Pontuação {{ minha_faixa.score }}/100 · {{ minha_faixa.avaliadas }} meta(s) avaliada(s) · {{ minha_faixa.concluidas }} concluída(s)</p>
+    </div>
+</div>
+
+<!-- Legenda de faixas -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+    {% for f in faixas %}
+    <div class="rounded-xl border border-gray-200 p-3 flex items-center gap-3">
+        <i class="{{ f.icon }} text-xl" style="color: {{ f.cor }}"></i>
+        <div>
+            <p class="text-sm font-semibold text-gray-800">{{ f.label }}</p>
+            <p class="text-xs text-gray-500">
+                {% if f.nome == 'IMPULSO' %}Abaixo de 60 pts{% else %}A partir de {{ f.min }} pts{% endif %}
+            </p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Ranking -->
+<div class="rounded-xl border border-gray-200 overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800"><i class="fas fa-ranking-star text-amber-500 mr-2"></i>Ranking da equipe</h2>
+    </div>
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>
+                <th class="text-left px-4 py-2">#</th>
+                <th class="text-left px-4 py-2">Colaborador</th>
+                <th class="text-left px-4 py-2">Faixa</th>
+                <th class="text-right px-4 py-2">Pontuação</th>
+                <th class="text-right px-4 py-2">Qualidade</th>
+                <th class="text-right px-4 py-2">Prazo</th>
+                <th class="text-right px-4 py-2">Avaliadas</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for r in ranking %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-gray-400 font-semibold">{{ forloop.counter }}</td>
+                <td class="px-4 py-2 text-gray-800">{{ r.user.get_full_name|default:r.user.email }}</td>
+                <td class="px-4 py-2">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold {{ r.faixa.bg }} {{ r.faixa.text }}">
+                        <i class="{{ r.faixa.icon }}"></i>{{ r.faixa.label }}
+                    </span>
+                </td>
+                <td class="px-4 py-2 text-right font-semibold text-gray-800">{{ r.dados.score }}</td>
+                <td class="px-4 py-2 text-right text-gray-600">{{ r.dados.media_qualidade|default:"—" }}</td>
+                <td class="px-4 py-2 text-right text-gray-600">{{ r.dados.media_prazo|default:"—" }}</td>
+                <td class="px-4 py-2 text-right text-gray-600">{{ r.dados.avaliadas }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Nenhum colaborador no Escritório (ADM) ainda.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="text-xs text-gray-400 mt-3"><i class="fas fa-circle-info mr-1"></i>A pontuação é a média das notas do gestor (qualidade + prazo, 0-5 cada) nas metas avaliadas, em escala de 0 a 100.</p>
+
+{% endblock %}

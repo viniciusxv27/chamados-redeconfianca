@@ -1,0 +1,35 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="flex items-center justify-between mb-4">
+    <h2 class="font-semibold text-gray-800"><i class="fas fa-comment-dots text-indigo-500 mr-2"></i>{% if is_gestor %}Feedbacks aplicados{% else %}Meus feedbacks{% endif %}</h2>
+    {% if is_gestor %}
+    <a href="{% url 'impulso:feedback_create' %}" class="px-3 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600"><i class="fas fa-plus mr-1"></i>Novo feedback</a>
+    {% endif %}
+</div>
+
+<div class="rounded-xl border border-gray-200 overflow-hidden">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>
+                <th class="text-left px-4 py-2">Mês</th>
+                <th class="text-left px-4 py-2">{% if is_gestor %}Colaborador{% else %}Gestor{% endif %}</th>
+                <th class="text-left px-4 py-2">Resumo IA</th>
+                <th class="px-4 py-2"></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for fb in feedbacks %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-gray-700">{{ fb.referencia_mes|date:"m/Y" }}</td>
+                <td class="px-4 py-2 text-gray-700">{% if is_gestor %}{{ fb.colaborador.get_full_name|default:fb.colaborador.email }}{% else %}{{ fb.gestor.get_full_name|default:fb.gestor.email }}{% endif %}</td>
+                <td class="px-4 py-2">{% if fb.ai_summary %}<span class="text-xs text-emerald-600"><i class="fas fa-check mr-1"></i>disponível</span>{% else %}<span class="text-xs text-gray-400">—</span>{% endif %}</td>
+                <td class="px-4 py-2 text-right"><a href="{% url 'impulso:feedback_detail' fb.id %}" class="text-indigo-600 hover:underline text-sm">Ver</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Nenhum feedback ainda.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

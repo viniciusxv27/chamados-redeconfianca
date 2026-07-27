@@ -1,0 +1,28 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="flex items-center justify-between mb-4">
+    <h2 class="font-semibold text-gray-800"><i class="fas fa-diagram-project text-emerald-500 mr-2"></i>Projetos foco</h2>
+    {% if is_gestor %}
+    <a href="{% url 'impulso:projeto_foco_create' %}" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-plus mr-1"></i>Novo projeto</a>
+    {% endif %}
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    {% for p in projetos %}
+    <a href="{% url 'impulso:projeto_foco_detail' p.id %}" class="rounded-xl border border-gray-200 p-4 hover:border-emerald-300 hover:shadow-sm transition block">
+        <div class="flex items-start justify-between gap-2">
+            <span class="font-medium text-gray-800">{{ p.nome }}</span>
+            {% if not p.ativo %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Inativo</span>{% endif %}
+        </div>
+        {% if p.descricao %}<p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ p.descricao }}</p>{% endif %}
+        <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+            <span><i class="fas fa-users mr-1"></i>{{ p.membros.count }} membro(s)</span>
+            <span><i class="fas fa-list-check mr-1"></i>{{ p.tarefas.count }} tarefa(s)</span>
+        </div>
+    </a>
+    {% empty %}
+    <p class="text-sm text-gray-400">Nenhum projeto foco.</p>
+    {% endfor %}
+</div>
+{% endblock %}

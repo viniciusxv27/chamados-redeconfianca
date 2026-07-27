@@ -1,0 +1,8 @@
+{# Cartão de indicador. Params: icon, cor, label, valor #}
+<div class="rounded-xl border border-gray-200 p-3 flex flex-col">
+    <div class="flex items-center gap-2">
+        <i class="fas {{ icon }} {{ cor }}"></i>
+        <span class="text-2xl font-bold text-gray-900">{{ valor|default:0 }}</span>
+    </div>
+    <span class="text-xs text-gray-500 mt-1">{{ label }}</span>
+</div>

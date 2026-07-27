@@ -467,7 +467,23 @@ def create_communication_view(request):
                 f'Comunicado criado: {communication.title}',
                 request
             )
-            
+
+            # Avisar os destinatários no WhatsApp com link direto para o comunicado.
+            try:
+                from django.urls import reverse
+                from .whatsapp import enviar_whatsapp_comunicado
+                link = request.build_absolute_uri(
+                    reverse('communications:communication_detail',
+                            kwargs={'communication_id': communication.id})
+                )
+                if communication.send_to_all:
+                    audiencia = User.objects.filter(is_active=True).exclude(id=request.user.id)
+                else:
+                    audiencia = communication.recipients.exclude(id=request.user.id)
+                enviar_whatsapp_comunicado(communication.title, audiencia, link)
+            except Exception:
+                pass
+
             messages.success(request, f'Comunicado "{communication.title}" criado com sucesso!')
             return redirect('communications:communications_list')
             

@@ -1,0 +1,79 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="mb-4">
+    <a href="{% url 'impulso:projeto_foco_list' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar aos projetos</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2 space-y-4">
+        <div class="rounded-xl border border-gray-200 p-5">
+            <h2 class="text-xl font-bold text-gray-900">{{ projeto.nome }}</h2>
+            {% if projeto.descricao %}<p class="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{{ projeto.descricao }}</p>{% endif %}
+        </div>
+
+        <!-- Tarefas -->
+        <div class="rounded-xl border border-gray-200 p-5">
+            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-list-check text-emerald-500 mr-2"></i>{% if is_gestor %}Tarefas{% else %}Minhas tarefas neste projeto{% endif %}</h3>
+            <div class="space-y-2">
+                {% for t in tarefas %}
+                <div class="border border-gray-100 rounded-lg p-3">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <p class="text-sm font-medium text-gray-800">{{ t.titulo }}</p>
+                            {% if t.descricao %}<p class="text-xs text-gray-500 mt-0.5">{{ t.descricao }}</p>{% endif %}
+                            <p class="text-xs text-gray-400 mt-1">
+                                {% if t.responsavel %}<i class="fas fa-user mr-1"></i>{{ t.responsavel.get_full_name|default:t.responsavel.email }}{% endif %}
+                                {% if t.prazo %} · <i class="fas fa-clock mr-1"></i>{{ t.prazo|date:"d/m/Y" }}{% endif %}
+                            </p>
+                        </div>
+                        <form method="post" action="{% url 'impulso:tarefa_update_status' t.id %}" class="flex items-center gap-1">
+                            {% csrf_token %}
+                            <select name="status" onchange="this.form.submit()" class="text-xs border border-gray-300 rounded px-2 py-1">
+                                {% for value, label in status_choices %}<option value="{{ value }}" {% if t.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                            </select>
+                        </form>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-sm text-gray-400">Nenhuma tarefa.</p>
+                {% endfor %}
+            </div>
+
+            {% if is_gestor %}
+            <form method="post" action="{% url 'impulso:tarefa_create' projeto.id %}" class="border-t border-gray-100 mt-4 pt-4 space-y-2">
+                {% csrf_token %}
+                <p class="text-sm font-medium text-gray-700">Adicionar tarefa</p>
+                <input type="text" name="titulo" required placeholder="Título da tarefa" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <textarea name="descricao" rows="2" placeholder="Descrição (opcional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                <div class="grid grid-cols-2 gap-2">
+                    <select name="responsavel" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Responsável…</option>
+                        {% for m in membros %}<option value="{{ m.id }}">{{ m.get_full_name|default:m.email }}</option>{% endfor %}
+                    </select>
+                    <input type="date" name="prazo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">Adicionar</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Membros -->
+    <div class="rounded-xl border border-gray-200 p-5 h-fit">
+        <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-users mr-2"></i>Equipe</h3>
+        <ul class="space-y-2">
+            {% for m in membros %}
+            <li class="flex items-center gap-2 text-sm text-gray-700">
+                <div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-semibold">{{ m.get_full_name|default:m.email|slice:":1"|upper }}</div>
+                {{ m.get_full_name|default:m.email }}
+            </li>
+            {% empty %}
+            <li class="text-sm text-gray-400">Sem membros.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

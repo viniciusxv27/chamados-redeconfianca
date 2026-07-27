@@ -122,6 +122,7 @@ urlpatterns = [
     path('validad1/', include('validad1.urls')),  # Validação D-1
     path('popups/', include('portal_popups.urls')),  # Popups configuráveis do portal
     path('documentos/', include('documentos.urls')),  # Documentos para assinatura digital
+    path('impulso/', include('impulso.urls')),  # Impulso ADM (metas, conexão, inovação, faixas)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training

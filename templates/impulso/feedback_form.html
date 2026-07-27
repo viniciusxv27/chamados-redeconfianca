@@ -1,0 +1,45 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="max-w-2xl">
+    <div class="mb-4">
+        <a href="{% url 'impulso:feedback_list' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar</a>
+    </div>
+    <div class="rounded-xl border border-gray-200 p-5">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4"><i class="fas fa-comment-dots text-indigo-500 mr-2"></i>Aplicar feedback mensal</h2>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Colaborador *</label>
+                    <select name="colaborador" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Selecione…</option>
+                        {% for c in colaboradores %}<option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mês de referência *</label>
+                    <input type="month" name="referencia_mes" value="{{ mes_atual }}" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Pontos fortes *</label>
+                <textarea name="pontos_fortes" required rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Pontos a melhorar *</label>
+                <textarea name="pontos_melhoria" required rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Comentário geral</label>
+                <textarea name="comentario" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+            <p class="text-xs text-gray-400"><i class="fas fa-robot mr-1"></i>Ao salvar, um resumo com pontos a melhorar é gerado automaticamente pela IA.</p>
+            <div class="flex justify-end gap-2">
+                <a href="{% url 'impulso:feedback_list' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600">Salvar feedback</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="flex items-center justify-between mb-4">
+    <h2 class="font-semibold text-gray-800"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i>{% if is_gestor %}Ideias da equipe{% else %}Minhas ideias{% endif %}</h2>
+    <a href="{% url 'impulso:ideia_create' %}" class="px-3 py-2 rounded-lg bg-yellow-500 text-white text-sm hover:bg-yellow-600"><i class="fas fa-plus mr-1"></i>Nova ideia</a>
+</div>
+
+<div class="space-y-3">
+    {% for ideia in ideias %}
+    <div class="rounded-xl border border-gray-200 p-4">
+        <div class="flex items-start justify-between gap-2">
+            <div>
+                <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ ideia.descricao }}</p>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">
+                    <span><i class="fas fa-bullseye mr-1"></i>Impacto: {{ ideia.setor_impacto }}</span>
+                    {% if is_gestor %}<span><i class="fas fa-user mr-1"></i>{{ ideia.autor.get_full_name|default:ideia.autor.email }}</span>{% endif %}
+                    <span><i class="fas fa-calendar mr-1"></i>{{ ideia.criado_em|date:"d/m/Y" }}</span>
+                </div>
+                <p class="text-xs text-gray-600 mt-2"><span class="font-medium">Motivo:</span> {{ ideia.motivo }}</p>
+            </div>
+            <span class="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0
+                {% if ideia.status == 'NOVA' %}bg-blue-100 text-blue-700
+                {% elif ideia.status == 'EM_ANALISE' %}bg-amber-100 text-amber-700
+                {% elif ideia.status == 'APROVADA' %}bg-emerald-100 text-emerald-700
+                {% else %}bg-gray-100 text-gray-500{% endif %}">{{ ideia.get_status_display }}</span>
+        </div>
+
+        {% if ideia.resposta_gestor %}
+        <div class="mt-3 text-xs bg-gray-50 rounded-lg p-2 text-gray-600"><i class="fas fa-reply mr-1"></i>{{ ideia.resposta_gestor }}</div>
+        {% endif %}
+
+        {% if is_gestor %}
+        <form method="post" action="{% url 'impulso:ideia_update_status' ideia.id %}" class="mt-3 flex flex-col sm:flex-row gap-2 border-t border-gray-100 pt-3">
+            {% csrf_token %}
+            <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                {% for value, label in status_choices %}<option value="{{ value }}" {% if ideia.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <input type="text" name="resposta_gestor" value="{{ ideia.resposta_gestor }}" placeholder="Retorno ao autor (opcional)" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">Atualizar</button>
+        </form>
+        {% endif %}
+    </div>
+    {% empty %}
+    <p class="text-sm text-gray-400">{% if is_gestor %}Nenhuma ideia enviada ainda.{% else %}Você ainda não enviou ideias. Que tal começar?{% endif %}</p>
+    {% endfor %}
+</div>
+{% endblock %}

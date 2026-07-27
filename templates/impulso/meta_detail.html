@@ -1,0 +1,152 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+{% with s=meta.status %}
+<div class="mb-4">
+    <a href="{% url 'impulso:metas_kanban' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar ao Kanban</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Coluna principal -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="rounded-xl border border-gray-200 p-5">
+            <div class="flex items-start justify-between gap-3">
+                <h2 class="text-xl font-bold text-gray-900">{{ meta.titulo }}</h2>
+                <span class="px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0
+                    {% if s == 'A_FAZER' %}bg-gray-100 text-gray-600
+                    {% elif s == 'EM_ANDAMENTO' %}bg-blue-100 text-blue-700
+                    {% elif s == 'ENTREGUE' %}bg-amber-100 text-amber-700
+                    {% else %}bg-emerald-100 text-emerald-700{% endif %}">{{ meta.get_status_display }}</span>
+            </div>
+            <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 mt-2">
+                <span><i class="fas fa-repeat mr-1"></i>{{ meta.get_periodicidade_display }}</span>
+                <span class="{% if meta.is_overdue %}text-red-600 font-semibold{% endif %}"><i class="fas fa-clock mr-1"></i>Prazo: {{ meta.prazo|date:"d/m/Y" }}</span>
+                <span><i class="fas fa-user-tie mr-1"></i>Gestor: {{ meta.gestor.get_full_name|default:meta.gestor.email }}</span>
+                <span><i class="fas fa-user mr-1"></i>Colaborador: {{ meta.colaborador.get_full_name|default:meta.colaborador.email }}</span>
+            </div>
+            <div class="mt-4 text-sm text-gray-700 whitespace-pre-wrap">{{ meta.descricao }}</div>
+
+            {% if meta.entrega_link %}
+            <div class="mt-4 text-sm">
+                <span class="text-gray-500">Entrega: </span>
+                <a href="{{ meta.entrega_link }}" target="_blank" rel="noopener" class="text-amber-600 hover:underline break-all"><i class="fas fa-link mr-1"></i>{{ meta.entrega_link }}</a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Entrega (colaborador) -->
+        {% if is_colaborador_da_meta and s != 'CONCLUIDA' %}
+        <div class="rounded-xl border border-gray-200 p-5">
+            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-paper-plane text-amber-500 mr-2"></i>Registrar entrega</h3>
+            <form method="post" action="{% url 'impulso:meta_entregar' meta.id %}" class="flex flex-col sm:flex-row gap-2">
+                {% csrf_token %}
+                <input type="url" name="entrega_link" value="{{ meta.entrega_link }}" placeholder="Link da tarefa/projeto entregue (opcional)" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <button type="submit" class="px-4 py-2 rounded-lg bg-amber-500 text-white text-sm hover:bg-amber-600 whitespace-nowrap">Marcar como entregue</button>
+            </form>
+            <p class="text-xs text-gray-400 mt-2">Você também pode anexar arquivos abaixo.</p>
+        </div>
+        {% endif %}
+
+        <!-- Avaliação / check (gestor) -->
+        <div class="rounded-xl border border-gray-200 p-5">
+            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-clipboard-check text-emerald-500 mr-2"></i>Avaliação do gestor</h3>
+            {% if meta.is_avaliada %}
+            <div class="grid grid-cols-2 gap-4">
+                <div class="rounded-lg bg-gray-50 p-3 text-center">
+                    <p class="text-xs text-gray-500">Qualidade de entrega</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ meta.nota_qualidade }}<span class="text-sm text-gray-400">/5</span></p>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-center">
+                    <p class="text-xs text-gray-500">Cumprimento de prazo</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ meta.nota_prazo }}<span class="text-sm text-gray-400">/5</span></p>
+                </div>
+            </div>
+            {% if meta.avaliacao_comentario %}<p class="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{{ meta.avaliacao_comentario }}</p>{% endif %}
+            <p class="text-xs text-gray-400 mt-2">Avaliado por {{ meta.avaliado_por.get_full_name|default:meta.avaliado_por.email }} em {{ meta.avaliado_em|date:"d/m/Y H:i" }}</p>
+            {% endif %}
+
+            {% if is_gestor_da_meta and not meta.is_avaliada %}
+            <form method="post" action="{% url 'impulso:meta_avaliar' meta.id %}" class="space-y-3 {% if meta.is_avaliada %}mt-4{% endif %}">
+                {% csrf_token %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Qualidade de entrega (0-5) *</label>
+                        <select name="nota_qualidade" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="">—</option>
+                            {% for n in notas_range %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Cumprimento de prazo (0-5) *</label>
+                        <select name="nota_prazo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="">—</option>
+                            {% for n in notas_range %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <textarea name="avaliacao_comentario" rows="2" placeholder="Comentário (opcional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">Dar o check e concluir</button>
+                </div>
+            </form>
+            {% elif not meta.is_avaliada %}
+            <p class="text-sm text-gray-400">Aguardando avaliação do gestor.</p>
+            {% endif %}
+        </div>
+
+        <!-- Comentários / chat -->
+        <div class="rounded-xl border border-gray-200 p-5">
+            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-comments text-indigo-500 mr-2"></i>Comentários</h3>
+            <div class="space-y-3 mb-4 max-h-96 overflow-y-auto">
+                {% for c in comentarios %}
+                <div class="flex gap-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-semibold flex-shrink-0">{{ c.autor.get_full_name|default:c.autor.email|slice:":1"|upper }}</div>
+                    <div class="flex-1">
+                        <p class="text-xs text-gray-500"><span class="font-medium text-gray-700">{{ c.autor.get_full_name|default:c.autor.email }}</span> · {{ c.criado_em|date:"d/m H:i" }}</p>
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ c.mensagem }}</p>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-sm text-gray-400">Nenhum comentário ainda.</p>
+                {% endfor %}
+            </div>
+            <form method="post" action="{% url 'impulso:meta_add_comentario' meta.id %}" class="flex gap-2">
+                {% csrf_token %}
+                <input type="text" name="mensagem" required placeholder="Escreva um comentário…" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600">Enviar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Coluna lateral: anexos -->
+    <div class="space-y-4">
+        <div class="rounded-xl border border-gray-200 p-5">
+            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-paperclip text-gray-500 mr-2"></i>Anexos</h3>
+            <ul class="space-y-2 mb-4">
+                {% for a in anexos %}
+                <li class="flex items-center gap-2 text-sm">
+                    {% if a.tipo == 'LINK' %}
+                    <i class="fas fa-link text-amber-500"></i>
+                    <a href="{{ a.url }}" target="_blank" rel="noopener" class="text-amber-600 hover:underline break-all">{{ a.nome_exibicao }}</a>
+                    {% else %}
+                    <i class="fas fa-file text-gray-400"></i>
+                    <a href="{{ a.arquivo.url }}" target="_blank" rel="noopener" class="text-gray-700 hover:underline break-all">{{ a.nome_exibicao }}</a>
+                    {% endif %}
+                </li>
+                {% empty %}
+                <li class="text-sm text-gray-400">Nenhum anexo.</li>
+                {% endfor %}
+            </ul>
+            <form method="post" action="{% url 'impulso:meta_add_anexo' meta.id %}" enctype="multipart/form-data" class="space-y-2 border-t border-gray-100 pt-3">
+                {% csrf_token %}
+                <input type="text" name="titulo" placeholder="Título (opcional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <input type="url" name="url" placeholder="Cole um link…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <div class="text-center text-xs text-gray-400">ou</div>
+                <input type="file" name="arquivo" class="w-full text-sm">
+                <button type="submit" class="w-full px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">Anexar</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endwith %}
+{% endblock %}

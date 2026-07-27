@@ -885,12 +885,22 @@ def create_user_view(request):
         pdv = request.POST.get('pdv', '')
         neighborhood = request.POST.get('neighborhood', '')
         city = request.POST.get('city', '')
-        
+        cep = request.POST.get('cep', '').strip()
+        rg = request.POST.get('rg', '').strip()
+
         context = {
             'sectors': Sector.objects.all(),
             'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
         }
+
+        # CEP e RG são obrigatórios no cadastro.
+        if not cep:
+            messages.error(request, 'Informe o CEP.')
+            return render(request, 'admin/create_user.html', context)
+        if not rg:
+            messages.error(request, 'Informe o RG.')
+            return render(request, 'admin/create_user.html', context)
 
         # Segurança: não permitir criar usuário com hierarquia acima da própria
         if not request.user.can_assign_hierarchy(hierarchy):
@@ -944,6 +954,8 @@ def create_user_view(request):
                 pdv=pdv,
                 neighborhood=neighborhood,
                 city=city,
+                cep=cep,
+                rg=rg,
             )
             
             # Anexo de afastamento (somente quando a situação é "Afastado")

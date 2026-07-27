@@ -1,0 +1,33 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="rounded-xl border border-gray-200 overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800"><i class="fas fa-calendar-day text-amber-500 mr-2"></i>Próximas atividades e prazos</h2>
+    </div>
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>
+                <th class="text-left px-4 py-2">Meta</th>
+                <th class="text-left px-4 py-2">Gestor</th>
+                <th class="text-left px-4 py-2">Periodicidade</th>
+                <th class="text-left px-4 py-2">Status</th>
+                <th class="text-left px-4 py-2">Prazo</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for m in metas %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2"><a href="{% url 'impulso:meta_detail' m.id %}" class="font-medium text-gray-800 hover:text-amber-600">{{ m.titulo }}</a></td>
+                <td class="px-4 py-2 text-gray-600">{{ m.gestor.get_full_name|default:m.gestor.email }}</td>
+                <td class="px-4 py-2 text-gray-600">{{ m.get_periodicidade_display }}</td>
+                <td class="px-4 py-2 text-gray-600">{{ m.get_status_display }}</td>
+                <td class="px-4 py-2 {% if m.is_overdue %}text-red-600 font-semibold{% else %}text-gray-600{% endif %}">{{ m.prazo|date:"d/m/Y" }}{% if m.is_overdue %} <span class="text-xs">(atrasada)</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Nenhuma atividade pendente. 🎉</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

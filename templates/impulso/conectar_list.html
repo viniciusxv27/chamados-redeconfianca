@@ -1,0 +1,12 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="flex items-center justify-between mb-4">
+    <h2 class="font-semibold text-gray-800"><i class="fas fa-graduation-cap text-emerald-500 mr-2"></i>Cursos, vídeos e POPs</h2>
+    <a href="{% url 'impulso:conteudo_create' %}" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-plus mr-1"></i>{% if is_gestor %}Adicionar conteúdo{% else %}Subir POP{% endif %}</a>
+</div>
+
+{% include 'impulso/_conteudo_secao.html' with titulo='Cursos' icone='fa-book' itens=cursos %}
+{% include 'impulso/_conteudo_secao.html' with titulo='Vídeos' icone='fa-video' itens=videos %}
+{% include 'impulso/_conteudo_secao.html' with titulo='POPs' icone='fa-file-lines' itens=pops %}
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="max-w-3xl">
+    <div class="mb-4">
+        <a href="{% url 'impulso:conectar_list' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar</a>
+    </div>
+
+    <div class="rounded-xl border border-gray-200 p-5 mb-4">
+        <div class="flex items-start justify-between gap-2">
+            <h2 class="text-xl font-bold text-gray-900">{{ conteudo.titulo }}</h2>
+            <span class="text-xs uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{{ conteudo.get_tipo_display }}</span>
+        </div>
+        {% if conteudo.descricao %}<p class="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{{ conteudo.descricao }}</p>{% endif %}
+        <div class="flex flex-wrap gap-3 mt-4">
+            {% if conteudo.url %}<a href="{{ conteudo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-external-link mr-1"></i>Acessar link</a>{% endif %}
+            {% if conteudo.arquivo %}<a href="{{ conteudo.arquivo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"><i class="fas fa-download mr-1"></i>Baixar arquivo</a>{% endif %}
+        </div>
+    </div>
+
+    <!-- Conclusão do usuário -->
+    <div class="rounded-xl border border-gray-200 p-5 mb-4">
+        <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-circle-check text-emerald-500 mr-2"></i>Minha conclusão</h3>
+        {% if conclusao and conclusao.concluido %}
+        <p class="text-sm text-emerald-600 mb-2"><i class="fas fa-check mr-1"></i>Concluído em {{ conclusao.concluido_em|date:"d/m/Y" }}</p>
+        {% if conclusao.certificado %}<a href="{{ conclusao.certificado.url }}" target="_blank" rel="noopener" class="text-sm text-emerald-600 hover:underline"><i class="fas fa-certificate mr-1"></i>Ver certificado</a>{% endif %}
+        {% endif %}
+        <form method="post" action="{% url 'impulso:conteudo_concluir' conteudo.id %}" enctype="multipart/form-data" class="space-y-2 mt-2">
+            {% csrf_token %}
+            <label class="block text-sm font-medium text-gray-700">Anexar certificado (opcional)</label>
+            <input type="file" name="certificado" class="w-full text-sm">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">{% if conclusao and conclusao.concluido %}Atualizar{% else %}Marcar como concluído{% endif %}</button>
+        </form>
+    </div>
+
+    <!-- Visão do gestor -->
+    {% if is_gestor and conclusoes is not None %}
+    <div class="rounded-xl border border-gray-200 p-5">
+        <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-users mr-2"></i>Conclusões da equipe</h3>
+        <ul class="divide-y divide-gray-100">
+            {% for cc in conclusoes %}
+            <li class="py-2 flex items-center justify-between text-sm">
+                <span class="text-gray-700">{{ cc.user.get_full_name|default:cc.user.email }}</span>
+                <span class="flex items-center gap-3">
+                    {% if cc.concluido %}<span class="text-emerald-600 text-xs"><i class="fas fa-check mr-1"></i>{{ cc.concluido_em|date:"d/m/Y" }}</span>{% else %}<span class="text-gray-400 text-xs">pendente</span>{% endif %}
+                    {% if cc.certificado %}<a href="{{ cc.certificado.url }}" target="_blank" rel="noopener" class="text-emerald-600 text-xs hover:underline"><i class="fas fa-certificate"></i></a>{% endif %}
+                </span>
+            </li>
+            {% empty %}
+            <li class="py-2 text-sm text-gray-400">Nenhuma conclusão registrada.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

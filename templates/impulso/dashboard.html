@@ -1,0 +1,89 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+
+<!-- Faixa atual + ações rápidas -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <div class="lg:col-span-1 rounded-xl border border-gray-200 p-5 flex items-center gap-4 {{ faixa_info.bg }}">
+        <div class="w-14 h-14 rounded-full bg-white/70 flex items-center justify-center">
+            <i class="{{ faixa_info.icon }} text-2xl" style="color: {{ faixa_info.cor }}"></i>
+        </div>
+        <div>
+            <p class="text-xs uppercase tracking-wide {{ faixa_info.text }}">Sua faixa</p>
+            <p class="text-2xl font-bold {{ faixa_info.text }}">{{ faixa_info.label }}</p>
+            <p class="text-xs {{ faixa_info.text }}">Pontuação: {{ minha_faixa.score }}/100 · {{ minha_faixa.avaliadas }} meta(s) avaliada(s)</p>
+        </div>
+    </div>
+
+    <div class="lg:col-span-2 rounded-xl border border-gray-200 p-5">
+        <p class="text-sm font-semibold text-gray-700 mb-3">Ações rápidas</p>
+        <div class="flex flex-wrap gap-2">
+            {% if is_gestor %}
+            <a href="{% url 'impulso:meta_create' %}" class="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm hover:bg-amber-600"><i class="fas fa-plus mr-1"></i>Nova meta</a>
+            <a href="{% url 'impulso:feedback_create' %}" class="px-3 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600"><i class="fas fa-comment-dots mr-1"></i>Novo feedback</a>
+            <a href="{% url 'impulso:projeto_foco_create' %}" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-diagram-project mr-1"></i>Novo projeto foco</a>
+            {% endif %}
+            <a href="{% url 'impulso:metas_kanban' %}" class="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"><i class="fas fa-bullseye mr-1"></i>Kanban</a>
+            <a href="{% url 'impulso:ideia_create' %}" class="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"><i class="fas fa-lightbulb mr-1"></i>Enviar ideia</a>
+        </div>
+    </div>
+</div>
+
+<!-- Indicadores -->
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+    {% include 'impulso/_stat.html' with icon='fa-list-check' cor='text-gray-500' label='Metas (total)' valor=total_metas %}
+    {% include 'impulso/_stat.html' with icon='fa-hourglass-half' cor='text-blue-500' label='Pendentes' valor=metas_pendentes %}
+    {% include 'impulso/_stat.html' with icon='fa-circle-check' cor='text-emerald-500' label='Concluídas' valor=metas_concluidas %}
+    {% if is_gestor %}
+    {% include 'impulso/_stat.html' with icon='fa-clipboard-check' cor='text-amber-500' label='Aguardando avaliação' valor=metas_aguardando_avaliacao %}
+    {% include 'impulso/_stat.html' with icon='fa-lightbulb' cor='text-yellow-500' label='Ideias novas' valor=ideias_novas %}
+    {% else %}
+    {% include 'impulso/_stat.html' with icon='fa-comment-dots' cor='text-indigo-500' label='Feedbacks' valor=feedbacks_recebidos %}
+    {% include 'impulso/_stat.html' with icon='fa-lightbulb' cor='text-yellow-500' label='Minhas ideias' valor=minhas_ideias %}
+    {% endif %}
+    {% include 'impulso/_stat.html' with icon='fa-diagram-project' cor='text-emerald-500' label='Tarefas abertas' valor=minhas_tarefas_abertas %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Próximas atividades -->
+    <div class="rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-800"><i class="fas fa-calendar-day text-amber-500 mr-2"></i>Próximas atividades</h2>
+            <a href="{% url 'impulso:minhas_atividades' %}" class="text-xs text-amber-600 hover:underline">Ver todas</a>
+        </div>
+        <ul class="divide-y divide-gray-100">
+            {% for m in proximas_atividades %}
+            <li class="px-4 py-3 flex items-center justify-between">
+                <div>
+                    <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-medium text-gray-800 hover:text-amber-600">{{ m.titulo }}</a>
+                    <p class="text-xs text-gray-500">{{ m.get_status_display }}</p>
+                </div>
+                <span class="text-xs {% if m.is_overdue %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">
+                    <i class="fas fa-clock mr-1"></i>{{ m.prazo|date:"d/m/Y" }}
+                </span>
+            </li>
+            {% empty %}
+            <li class="px-4 py-6 text-center text-sm text-gray-400">Nenhuma atividade pendente. 🎉</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Atrasadas -->
+    <div class="rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800"><i class="fas fa-triangle-exclamation text-red-500 mr-2"></i>Metas atrasadas</h2>
+        </div>
+        <ul class="divide-y divide-gray-100">
+            {% for m in atrasadas %}
+            <li class="px-4 py-3 flex items-center justify-between">
+                <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-medium text-gray-800 hover:text-amber-600">{{ m.titulo }}</a>
+                <span class="text-xs text-red-600 font-semibold"><i class="fas fa-clock mr-1"></i>{{ m.prazo|date:"d/m/Y" }}</span>
+            </li>
+            {% empty %}
+            <li class="px-4 py-6 text-center text-sm text-gray-400">Nenhuma meta atrasada.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="rounded-xl border border-gray-200 overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800"><i class="fas fa-diagram-project text-emerald-500 mr-2"></i>Minhas tarefas em projetos foco</h2>
+    </div>
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>
+                <th class="text-left px-4 py-2">Tarefa</th>
+                <th class="text-left px-4 py-2">Projeto</th>
+                <th class="text-left px-4 py-2">Prazo</th>
+                <th class="text-left px-4 py-2">Status</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for t in tarefas %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-gray-800">{{ t.titulo }}</td>
+                <td class="px-4 py-2"><a href="{% url 'impulso:projeto_foco_detail' t.projeto_id %}" class="text-emerald-600 hover:underline">{{ t.projeto.nome }}</a></td>
+                <td class="px-4 py-2 text-gray-600">{{ t.prazo|date:"d/m/Y"|default:"—" }}</td>
+                <td class="px-4 py-2">
+                    <form method="post" action="{% url 'impulso:tarefa_update_status' t.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="minhas">
+                        <select name="status" onchange="this.form.submit()" class="text-xs border border-gray-300 rounded px-2 py-1">
+                            <option value="A_FAZER" {% if t.status == 'A_FAZER' %}selected{% endif %}>A Fazer</option>
+                            <option value="EM_ANDAMENTO" {% if t.status == 'EM_ANDAMENTO' %}selected{% endif %}>Em Andamento</option>
+                            <option value="CONCLUIDA" {% if t.status == 'CONCLUIDA' %}selected{% endif %}>Concluída</option>
+                        </select>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Você não tem tarefas atribuídas em projetos foco.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
