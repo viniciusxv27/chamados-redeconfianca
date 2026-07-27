@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+
+{% block title %}Avaliar To-Do - {{ todo.sector.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-check-double text-yellow-500 mr-2"></i>Avaliar To-Do
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                {{ todo.sector.name }} - {{ todo.month_year_display }} - {{ todo.template.name }}
+            </p>
+        </div>
+        <a href="{% url 'limpeza:dashboard' %}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
+    </div>
+
+    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+        <div class="text-sm text-yellow-700">
+            <i class="fas fa-info-circle mr-1"></i>
+            Total de pontos do template: <strong>{{ total_points }}</strong>. 
+            Para cada item, aprove ou recuse. Itens recusados voltarão para o setor refazer.
+        </div>
+    </div>
+
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+
+        {% for answer in answers %}
+        <div class="bg-white rounded-xl shadow p-5" id="answer-{{ answer.id }}">
+            <div class="flex items-start justify-between mb-3">
+                <h3 class="font-medium text-gray-900 flex-1">
+                    <span class="text-purple-600 font-bold mr-2">#{{ forloop.counter }}</span>
+                    {{ answer.question.text }}
+                </h3>
+                <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ml-2">
+                    {{ answer.question.points }} pts
+                </span>
+            </div>
+
+            {% if answer.question.pilar or answer.question.gravidade %}
+            <div class="flex flex-wrap gap-2 mb-2">
+                {% if answer.question.pilar %}
+                <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ answer.question.pilar }}</span>
+                {% endif %}
+                {% if answer.question.item %}
+                <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{{ answer.question.item }}</span>
+                {% endif %}
+                {% if answer.question.gravidade == 'grave' %}
+                <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Grave</span>
+                {% elif answer.question.gravidade == 'media' %}
+                <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">Média</span>
+                {% elif answer.question.gravidade == 'leve' %}
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">Leve</span>
+                {% elif answer.question.gravidade == 'inegociavel' %}
+                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-medium">Inegociável</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if answer.question.detalhamento %}
+            <div class="bg-blue-50 border border-blue-100 rounded-lg p-2.5 mb-3">
+                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1"></i>{{ answer.question.detalhamento }}</p>
+            </div>
+            {% endif %}
+
+            {% if answer.observation %}
+            <div class="bg-gray-50 rounded-lg p-3 mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Resposta do setor:</span>
+                <div class="mb-2">
+                    {% if answer.response == 'sim' %}
+                        <span class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+                            <i class="fas fa-check-circle"></i> Sim
+                        </span>
+                    {% elif answer.response == 'nao' %}
+                        <span class="inline-flex items-center gap-1.5 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+                            <i class="fas fa-times-circle"></i> Não
+                        </span>
+                    {% elif answer.response == 'nao_se_aplica' %}
+                        <span class="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium">
+                            <i class="fas fa-minus-circle"></i> Não se aplica
+                        </span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-700">{{ answer.observation }}</p>
+            </div>
+            {% else %}
+            <div class="mb-3">
+                {% if answer.response == 'sim' %}
+                    <span class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+                        <i class="fas fa-check-circle"></i> Sim
+                    </span>
+                {% elif answer.response == 'nao' %}
+                    <span class="inline-flex items-center gap-1.5 bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+                        <i class="fas fa-times-circle"></i> Não
+                    </span>
+                {% elif answer.response == 'nao_se_aplica' %}
+                    <span class="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium">
+                        <i class="fas fa-minus-circle"></i> Não se aplica
+                    </span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if answer.response == 'nao' and answer.ticket_number %}
+            <div class="bg-red-50 border border-red-100 rounded-lg p-3 mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Número do Chamado:</span>
+                <p class="text-sm font-medium text-red-700"><i class="fas fa-hashtag mr-1"></i>{{ answer.ticket_number }}</p>
+            </div>
+            {% endif %}
+
+            {% if answer.photo %}
+            <div class="mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Fotos enviadas:</span>
+                <div class="flex flex-wrap gap-2">
+                    <img src="{{ answer.photo.url }}" alt="Evidência" 
+                         class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% for photo in answer.photos.all %}
+                    <img src="{{ photo.photo.url }}" alt="Evidência" 
+                         class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% endfor %}
+                </div>
+            </div>
+            {% elif answer.photos.all %}
+            <div class="mb-3">
+                <span class="text-xs text-gray-500 block mb-1">Fotos enviadas:</span>
+                <div class="flex flex-wrap gap-2">
+                    {% for photo in answer.photos.all %}
+                    <img src="{{ photo.photo.url }}" alt="Evidência" 
+                         class="w-40 h-40 object-cover rounded-lg border cursor-pointer"
+                         onclick="openImageModal(this.src)">
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if answer.answered_by %}
+            <div class="text-xs text-gray-400 mb-3">
+                Respondido por {{ answer.answered_by.get_full_name }} em {{ answer.answered_at|date:"d/m/Y H:i" }}
+            </div>
+            {% endif %}
+
+            <!-- Ação de avaliação -->
+            <div class="border-t border-gray-200 pt-3">
+                <div class="flex items-center gap-4 mb-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="action_{{ answer.id }}" value="aprovar" required
+                               onclick="toggleRejection({{ answer.id }}, false)"
+                               class="text-green-600 focus:ring-green-500">
+                        <span class="text-sm text-green-700 font-medium"><i class="fas fa-check mr-1"></i>Aprovar</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="action_{{ answer.id }}" value="recusar"
+                               onclick="toggleRejection({{ answer.id }}, true)"
+                               class="text-red-600 focus:ring-red-500">
+                        <span class="text-sm text-red-700 font-medium"><i class="fas fa-times mr-1"></i>Recusar</span>
+                    </label>
+                </div>
+                <div id="rejection_{{ answer.id }}" class="hidden">
+                    <textarea name="rejection_reason_{{ answer.id }}" rows="2"
+                              class="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500"
+                              placeholder="Motivo da recusa..."></textarea>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="flex justify-end gap-3 pt-4">
+            <a href="{% url 'limpeza:dashboard' %}" class="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg hover:bg-gray-300 transition">Cancelar</a>
+            <button type="submit" class="bg-yellow-500 text-white px-6 py-2.5 rounded-lg hover:bg-yellow-600 transition font-medium"
+                    onclick="return confirm('Confirmar avaliação? Itens recusados serão devolvidos ao setor.')">
+                <i class="fas fa-check-double mr-1"></i>Finalizar Avaliação
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Imagem -->
+<div id="imageModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" onclick="closeImageModal()">
+    <img id="modalImage" class="max-w-full max-h-full rounded-lg">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleRejection(answerId, show) {
+    const el = document.getElementById('rejection_' + answerId);
+    if (show) {
+        el.classList.remove('hidden');
+    } else {
+        el.classList.add('hidden');
+    }
+}
+
+function openImageModal(src) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('imageModal').classList.remove('hidden');
+}
+function closeImageModal() {
+    document.getElementById('imageModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

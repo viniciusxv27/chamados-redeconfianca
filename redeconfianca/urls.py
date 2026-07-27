@@ -114,6 +114,7 @@ urlpatterns = [
     path('contracheque/', include('contracheque.urls')),  # Contracheques
     path('folha-ponto/', include('folhaponto.urls')),  # Folha de Ponto
     path('experiencia/', include('experiencia.urls')),  # Experiência Vivo
+    path('limpeza/', include('limpeza.urls')),  # Checklist de Limpeza
     path('power-bi/', include('power_bi.urls')),  # Dashboards Power BI
     path('simulator/', include('simulator.urls')),  # Simulador
     path('feedback/', include('feedback.urls')),  # Módulo de Feedback Geral

@@ -613,6 +613,16 @@
                             </a>
                         </li>
 
+                        <!-- Menu Limpeza -->
+                        <li>
+                            <a href="{% url 'limpeza:dashboard' %}" class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group" title="Limpeza">
+                                <i class="fas fa-broom text-cyan-400 flex-shrink-0"></i>
+                                <span class="text-sm flex-1 sidebar-text">Limpeza</span>
+                                <div class="tooltip-collapsed">Limpeza</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+
                         <!-- Menu Administrativo - Para usuários autorizados -->
                         {% if user.can_manage_users or user.groups.all %}
                         <li class="border-t border-gray-800 pt-2 mt-2">

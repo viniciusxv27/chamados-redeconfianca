@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'contracheque',  # Contracheques / Recibos de Pagamento
     'folhaponto',  # Folha de Ponto / Cartão de Ponto
     'experiencia',  # Experiência Vivo
+    'limpeza',  # Checklist de Limpeza
     'power_bi',  # Dashboards Power BI
     'simulator',  # Simulador de comissionamento
     'feedback',  # Módulo de Feedback Geral (FM-005)
