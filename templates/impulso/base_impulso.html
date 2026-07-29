@@ -1,68 +1,119 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static impulso_tags %}
 
 {% block title %}Impulso{% endblock %}
+
+{% block extra_css %}
+<style>
+    .imp-card {
+        background: #fff;
+        border: 1px solid #EDEDF0;
+        border-radius: 1rem;
+        box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+        transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+    }
+    .imp-card-hover:hover {
+        box-shadow: 0 8px 24px rgba(16,24,40,.08);
+        border-color: #E0E0E6;
+        transform: translateY(-2px);
+    }
+    .imp-hero {
+        background:
+            radial-gradient(1200px 200px at 0% 0%, rgba(234,88,12,.10), transparent 60%),
+            radial-gradient(900px 200px at 100% 0%, rgba(124,58,237,.10), transparent 60%),
+            linear-gradient(180deg, #FFFFFF 0%, #FBFBFC 100%);
+    }
+    .imp-tab {
+        position: relative;
+        white-space: nowrap;
+        transition: color .15s ease, background-color .15s ease;
+    }
+    .imp-tab-active { color: #C2410C; background: #FFF7ED; }
+    .imp-tab-active::after {
+        content: ''; position: absolute; left: .75rem; right: .75rem; bottom: -1px;
+        height: 2px; background: #EA580C; border-radius: 2px;
+    }
+    /* Barras de progresso: extremidade arredondada, fundo recessivo */
+    .imp-bar-track { background: #F1F1F4; border-radius: 9999px; overflow: hidden; }
+    .imp-bar-fill { border-radius: 9999px; transition: width .7s cubic-bezier(.22,1,.36,1); }
+    @media (max-width: 640px) {
+        .imp-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-2 sm:px-4 py-4">
 
-    <!-- Cabeçalho do módulo -->
-    <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <div class="flex items-center gap-3">
-            <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center">
-                <i class="fas fa-bolt text-amber-500 text-xl"></i>
+    <!-- Cabeçalho -->
+    <div class="imp-hero imp-card p-5 mb-4">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm"
+                     style="background: linear-gradient(135deg, #F97316, #EA580C);">
+                    <i class="fas fa-bolt text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 leading-tight">Impulso</h1>
+                    <p class="text-sm text-gray-500">Confiar · Conectar · Inovar · Acompanhar</p>
+                </div>
             </div>
-            <div>
-                <h1 class="text-2xl font-bold text-gray-900 leading-tight">Impulso</h1>
-                <p class="text-sm text-gray-500">Confiar · Conectar · Inovar · Acompanhar</p>
+
+            <div class="flex items-center gap-2 flex-wrap">
+                {% if ciclo_ativo %}
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Ciclo: {{ ciclo_ativo.nome }}
+                </span>
+                {% endif %}
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+                    {% if is_impulso_gestor %}bg-orange-50 text-orange-700 border border-orange-200{% else %}bg-gray-100 text-gray-600 border border-gray-200{% endif %}">
+                    <i class="fas {% if is_impulso_gestor %}fa-user-tie{% else %}fa-user{% endif %}"></i>
+                    {% if is_impulso_gestor %}Gestor{% else %}Equipe{% endif %}
+                </span>
             </div>
         </div>
-        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold
-            {% if is_impulso_gestor %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-700{% endif %}">
-            <i class="fas {% if is_impulso_gestor %}fa-user-tie{% else %}fa-user{% endif %}"></i>
-            {% if is_impulso_gestor %}Gestor{% else %}Equipe{% endif %}
-        </span>
-    </div>
 
-    <!-- Abas principais -->
-    <nav class="flex flex-wrap gap-1 border-b border-gray-200 mb-4">
-        {% with tab=active_tab %}
-        <a href="{% url 'impulso:dashboard' %}"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'dashboard' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-            <i class="fas fa-gauge-high mr-1"></i>Visão Geral
-        </a>
-        <a href="{% url 'impulso:metas_kanban' %}"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'confiar' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-            <i class="fas fa-bullseye mr-1"></i>Confiar
-        </a>
-        <a href="{% url 'impulso:conectar_list' %}"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'conectar' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-            <i class="fas fa-graduation-cap mr-1"></i>Conectar
-        </a>
-        <a href="{% url 'impulso:inovar_list' %}"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'inovar' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-            <i class="fas fa-lightbulb mr-1"></i>Inovar
-        </a>
-        <a href="{% url 'impulso:acompanhamento' %}"
-           class="px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 {% if tab == 'acompanhamento' %}border-amber-500 text-amber-600{% else %}border-transparent text-gray-500 hover:text-gray-800{% endif %}">
-            <i class="fas fa-ranking-star mr-1"></i>Acompanhamento
-        </a>
-        {% endwith %}
-    </nav>
+        <!-- Abas -->
+        <nav class="flex gap-1 mt-5 -mb-5 border-b border-gray-100 imp-scroll-x">
+            {% with tab=active_tab %}
+            <a href="{% url 'impulso:dashboard' %}" class="imp-tab px-4 py-2.5 text-sm font-medium rounded-t-lg {% if tab == 'dashboard' %}imp-tab-active{% else %}text-gray-500 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-gauge-high mr-1.5"></i>Visão Geral
+            </a>
+            <a href="{% url 'impulso:metas_kanban' %}" class="imp-tab px-4 py-2.5 text-sm font-medium rounded-t-lg {% if tab == 'confiar' %}imp-tab-active{% else %}text-gray-500 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-handshake mr-1.5"></i>Confiar
+            </a>
+            <a href="{% url 'impulso:conectar_list' %}" class="imp-tab px-4 py-2.5 text-sm font-medium rounded-t-lg {% if tab == 'conectar' %}imp-tab-active{% else %}text-gray-500 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-graduation-cap mr-1.5"></i>Conectar
+            </a>
+            <a href="{% url 'impulso:inovar_list' %}" class="imp-tab px-4 py-2.5 text-sm font-medium rounded-t-lg {% if tab == 'inovar' %}imp-tab-active{% else %}text-gray-500 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-lightbulb mr-1.5"></i>Inovar
+            </a>
+            <a href="{% url 'impulso:acompanhamento' %}" class="imp-tab px-4 py-2.5 text-sm font-medium rounded-t-lg {% if tab == 'acompanhamento' %}imp-tab-active{% else %}text-gray-500 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-ranking-star mr-1.5"></i>Acompanhamento
+            </a>
+            {% endwith %}
+        </nav>
+    </div>
 
     <!-- Sub-navegação contextual -->
     {% with un=request.resolver_match.url_name %}
     {% if active_tab == 'confiar' %}
     <div class="flex flex-wrap gap-2 mb-4 text-sm">
-        <a href="{% url 'impulso:metas_kanban' %}" class="px-3 py-1 rounded-full {% if un == 'metas_kanban' or un == 'meta_detail' or un == 'meta_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Kanban de Metas</a>
-        <a href="{% url 'impulso:minhas_atividades' %}" class="px-3 py-1 rounded-full {% if un == 'minhas_atividades' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Próximas Atividades</a>
-        <a href="{% url 'impulso:feedback_list' %}" class="px-3 py-1 rounded-full {% if un == 'feedback_list' or un == 'feedback_detail' or un == 'feedback_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Feedbacks</a>
+        {% include 'impulso/_subnav.html' with url='impulso:metas_kanban' rotulo='Kanban de Metas' ativos='metas_kanban,meta_detail,meta_create' un=un %}
+        {% include 'impulso/_subnav.html' with url='impulso:minhas_atividades' rotulo='Próximas Atividades' ativos='minhas_atividades' un=un %}
+        {% include 'impulso/_subnav.html' with url='impulso:feedback_list' rotulo='Feedbacks' ativos='feedback_list,feedback_detail,feedback_create' un=un %}
     </div>
     {% elif active_tab == 'conectar' %}
     <div class="flex flex-wrap gap-2 mb-4 text-sm">
-        <a href="{% url 'impulso:conectar_list' %}" class="px-3 py-1 rounded-full {% if un == 'conectar_list' or un == 'conteudo_detail' or un == 'conteudo_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Cursos, Vídeos e POPs</a>
-        <a href="{% url 'impulso:projeto_foco_list' %}" class="px-3 py-1 rounded-full {% if un == 'projeto_foco_list' or un == 'projeto_foco_detail' or un == 'projeto_foco_create' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Projetos Foco</a>
-        <a href="{% url 'impulso:minhas_tarefas' %}" class="px-3 py-1 rounded-full {% if un == 'minhas_tarefas' %}bg-amber-500 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Minhas Tarefas</a>
+        {% include 'impulso/_subnav.html' with url='impulso:conectar_list' rotulo='Cursos, Vídeos e POPs' ativos='conectar_list,conteudo_detail,conteudo_create' un=un %}
+        {% include 'impulso/_subnav.html' with url='impulso:projeto_foco_list' rotulo='Projetos Foco' ativos='projeto_foco_list,projeto_foco_detail,projeto_foco_create' un=un %}
+        {% include 'impulso/_subnav.html' with url='impulso:minhas_tarefas' rotulo='Minhas Tarefas' ativos='minhas_tarefas' un=un %}
+    </div>
+    {% elif active_tab == 'acompanhamento' %}
+    <div class="flex flex-wrap gap-2 mb-4 text-sm">
+        {% include 'impulso/_subnav.html' with url='impulso:acompanhamento' rotulo='Ranking do mês' ativos='acompanhamento,detalhe_colaborador' un=un %}
+        {% include 'impulso/_subnav.html' with url='impulso:ciclo_list' rotulo='Ciclos' ativos='ciclo_list,ciclo_detail,ciclo_create,mes_detail' un=un %}
     </div>
     {% endif %}
     {% endwith %}

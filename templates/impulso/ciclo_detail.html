@@ -1,0 +1,128 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="mb-4">
+    <a href="{% url 'impulso:ciclo_list' %}" class="text-sm text-gray-500 hover:text-gray-900"><i class="fas fa-arrow-left mr-1"></i>Voltar aos ciclos</a>
+</div>
+
+<!-- Cabeçalho do ciclo -->
+<div class="imp-card p-5 mb-4">
+    <div class="flex items-start justify-between flex-wrap gap-3">
+        <div>
+            <div class="flex items-center gap-2">
+                <h2 class="text-xl font-bold text-gray-900">{{ ciclo.nome }}</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                    {% if ciclo.is_aberto %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ ciclo.get_status_display }}</span>
+            </div>
+            <p class="text-sm text-gray-500 mt-1"><i class="far fa-calendar mr-1"></i>{{ ciclo.inicio|date:"d/m/Y" }} — {{ ciclo.fim|date:"d/m/Y" }}</p>
+            {% if ciclo.encerrado_em %}
+            <p class="text-xs text-gray-400 mt-1">Encerrado em {{ ciclo.encerrado_em|date:"d/m/Y H:i" }}{% if ciclo.encerrado_por %} por {{ ciclo.encerrado_por.get_full_name|default:ciclo.encerrado_por.email }}{% endif %}</p>
+            {% endif %}
+        </div>
+
+        {% if is_gestor and ciclo.is_aberto %}
+        <form method="post" action="{% url 'impulso:ciclo_encerrar' ciclo.id %}"
+              onsubmit="return confirm('Encerrar o ciclo? As confianças acumuladas (Ouro e Impulso) serão creditadas agora e esta ação não pode ser desfeita.');">
+            {% csrf_token %}
+            <button type="submit" {% if tem_mes_aberto %}disabled title="Feche todos os meses antes de encerrar o ciclo"{% endif %}
+                class="px-4 py-2 rounded-lg text-sm font-medium shadow-sm
+                {% if tem_mes_aberto %}bg-gray-200 text-gray-400 cursor-not-allowed{% else %}bg-emerald-600 text-white hover:bg-emerald-700{% endif %}">
+                <i class="fas fa-flag-checkered mr-1"></i>Encerrar ciclo e pagar C$
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if ciclo.confiancas_creditadas %}
+    <div class="mt-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+        <i class="fas fa-coins mr-1"></i>As confianças deste ciclo já foram creditadas.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Meses -->
+<div class="imp-card p-5 mb-4">
+    <h3 class="text-sm font-semibold text-gray-700 mb-3">Meses do ciclo</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {% for m in meses %}
+        <div class="rounded-xl border p-4 {% if m.is_fechado %}border-orange-200 bg-orange-50/40{% else %}border-gray-200{% endif %}">
+            <div class="flex items-center justify-between mb-2">
+                <a href="{% url 'impulso:mes_detail' m.id %}" class="font-bold text-gray-900 hover:text-orange-600">{{ m.referencia|date:"F/Y"|capfirst }}</a>
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold {% if m.is_fechado %}bg-orange-100 text-orange-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ m.get_status_display }}</span>
+            </div>
+            {% if m.is_fechado %}
+            <p class="text-xs text-gray-500">{{ m.pontuacoes.count }} colaborador(es) pontuado(s)</p>
+            <p class="text-xs text-gray-400">Fechado em {{ m.fechado_em|date:"d/m/Y H:i" }}</p>
+            {% else %}
+            <p class="text-xs text-gray-400">Ainda aberto — a pontuação está sendo calculada ao vivo.</p>
+            {% endif %}
+            <div class="flex gap-2 mt-3">
+                <a href="{% url 'impulso:mes_detail' m.id %}" class="text-xs px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Ver mês</a>
+                {% if is_gestor and not m.is_fechado and ciclo.is_aberto %}
+                <form method="post" action="{% url 'impulso:mes_fechar' m.id %}"
+                      onsubmit="return confirm('Finalizar {{ m.referencia|date:"m/Y" }}? A pontuação de todos será congelada.');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-xs px-3 py-1.5 rounded-lg bg-orange-600 text-white hover:bg-orange-700">Finalizar mês</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-sm text-gray-400">Nenhum mês neste ciclo.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Resumo do ciclo -->
+<div class="imp-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800 text-sm"><i class="fas fa-trophy text-orange-500 mr-2"></i>Nota total e sequência de medalhas</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">#</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Colaborador</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Medalhas do ciclo</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Faixa final</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Média</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Nota total</th>
+                    <th class="text-right px-5 py-2.5 font-medium">C$</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for linha in resumo %}
+                <tr class="hover:bg-orange-50/30">
+                    <td class="px-5 py-2.5 text-gray-400 font-semibold tabular-nums">{{ forloop.counter }}</td>
+                    <td class="px-3 py-2.5">
+                        <a href="{% url 'impulso:detalhe_colaborador' linha.user.id %}" class="text-gray-800 hover:text-orange-600">{{ linha.user.get_full_name|default:linha.user.email }}</a>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <div class="flex gap-1">
+                            {% for p in linha.meses %}
+                            <span class="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px]
+                                {% if p.faixa == 'IMPULSO' %}bg-blue-600{% elif p.faixa == 'OURO' %}bg-amber-500{% elif p.faixa == 'PRATA' %}bg-slate-400{% else %}bg-orange-700{% endif %}"
+                                title="{{ p.mes.referencia|date:'m/Y' }}: {{ p.get_faixa_display }} ({{ p.percentual|floatformat:0 }}%)">
+                                <i class="fas {% if p.faixa == 'IMPULSO' %}fa-bolt{% elif p.faixa == 'OURO' %}fa-trophy{% elif p.faixa == 'PRATA' %}fa-medal{% else %}fa-award{% endif %}"></i>
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold {{ linha.faixa_info.bg }} {{ linha.faixa_info.text }}">
+                            <i class="{{ linha.faixa_info.icon }}"></i>{{ linha.faixa_info.label }}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ linha.media_percentual|floatformat:1 }}%</td>
+                    <td class="px-3 py-2.5 text-right font-bold tabular-nums text-gray-900">{{ linha.total|floatformat:"-1" }}</td>
+                    <td class="px-5 py-2.5 text-right tabular-nums {% if linha.confiancas %}text-emerald-600 font-semibold{% else %}text-gray-300{% endif %}">{{ linha.confiancas }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">Nenhum mês fechado ainda — finalize um mês para ver o resumo.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

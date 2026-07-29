@@ -45,4 +45,14 @@ urlpatterns = [
 
     # ACOMPANHAMENTO
     path('acompanhamento/', views.acompanhamento, name='acompanhamento'),
+    path('acompanhamento/<int:user_id>/', views.detalhe_colaborador, name='detalhe_colaborador'),
+
+    # ACOMPANHAMENTO — ciclos
+    path('ciclos/', views.ciclo_list, name='ciclo_list'),
+    path('ciclos/novo/', views.ciclo_create, name='ciclo_create'),
+    path('ciclos/<int:ciclo_id>/', views.ciclo_detail, name='ciclo_detail'),
+    path('ciclos/<int:ciclo_id>/encerrar/', views.ciclo_encerrar, name='ciclo_encerrar'),
+    path('ciclos/mes/<int:mes_id>/', views.mes_detail, name='mes_detail'),
+    path('ciclos/mes/<int:mes_id>/fechar/', views.mes_fechar, name='mes_fechar'),
+    path('ciclos/mes/<int:mes_id>/reabrir/', views.mes_reabrir, name='mes_reabrir'),
 ]

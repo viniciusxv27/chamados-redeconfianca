@@ -6,10 +6,7 @@
 {% block extra_css %}
 <style>
     .stats-card {
-        @apply bg-wh                <h4 class="font-medium text-gray-900">
-                            <a href="{% url 'projects:project_detail' project.id %}" 
-                               class="hover:text-orange-600">{{ project.name|truncatechars:40 }}</a>
-                        </h4>rounded-lg shadow p-6 border border-gray-200;
+        @apply bg-white rounded-lg shadow p-6 border border-gray-200;
     }
     .stats-number {
         @apply text-3xl font-bold text-gray-900;

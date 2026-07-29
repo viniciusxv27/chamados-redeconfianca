@@ -621,11 +621,11 @@ def activity_detail_api(request, activity_id):
         for comment in activity.comments.select_related('user').order_by('created_at'):
             comments.append({
                 'id': comment.id,
-                'text': comment.text,
+                'text': comment.content,
                 'author_name': comment.user.get_full_name() or comment.user.username,
                 'created_at': comment.created_at.strftime('%d/%m/%Y às %H:%M')
             })
-        
+
         # Buscar subtarefas (simulado - você pode implementar um modelo real)
         subtasks = []
         for sub_activity in activity.sub_activities.all():
@@ -686,15 +686,15 @@ def activity_add_comment(request, activity_id):
         comment = ActivityComment.objects.create(
             activity=activity,
             user=request.user,
-            text=text
+            content=text
         )
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Comentário adicionado com sucesso',
             'comment': {
                 'id': comment.id,
-                'text': comment.text,
+                'text': comment.content,
                 'author_name': comment.user.get_full_name() or comment.user.username,
                 'created_at': comment.created_at.strftime('%d/%m/%Y às %H:%M')
             }

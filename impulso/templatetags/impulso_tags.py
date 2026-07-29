@@ -28,3 +28,25 @@ def impulso_membro(user):
 def faixa_badge(nome):
     """Retorna o dict de estilo da faixa (label, cor, bg, text, icon)."""
     return faixa_info(nome)
+
+
+@register.simple_tag
+def blocos_de(dados):
+    """Blocos (CONFIAR/CONECTAR/INOVAR) formatados para as barras."""
+    from ..scoring import blocos_resumo
+    try:
+        return blocos_resumo(dados)
+    except Exception:
+        return []
+
+
+@register.filter
+def pct_de(valor, maximo):
+    """Percentual seguro para larguras de barra."""
+    try:
+        maximo = float(maximo)
+        if maximo <= 0:
+            return 0
+        return round(float(valor) / maximo * 100, 1)
+    except (TypeError, ValueError):
+        return 0

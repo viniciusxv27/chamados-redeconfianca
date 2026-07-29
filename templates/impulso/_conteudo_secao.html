@@ -4,7 +4,7 @@
     {% if itens %}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {% for c in itens %}
-        <div class="rounded-xl border border-gray-200 p-4 flex flex-col">
+        <div class="imp-card p-4 flex flex-col">
             <div class="flex items-start justify-between gap-2">
                 <a href="{% url 'impulso:conteudo_detail' c.id %}" class="font-medium text-gray-800 hover:text-emerald-600">{{ c.titulo }}</a>
                 {% if c.obrigatorio %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600 flex-shrink-0">Obrigatório</span>{% endif %}

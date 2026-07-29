@@ -64,6 +64,7 @@ class Meta(models.Model):
     """
 
     class Periodicidade(models.TextChoices):
+        DIARIA = 'DIARIA', 'Diária'
         SEMANAL = 'SEMANAL', 'Semanal'
         QUINZENAL = 'QUINZENAL', 'Quinzenal'
         MENSAL = 'MENSAL', 'Mensal'
@@ -422,3 +423,175 @@ class Ideia(models.Model):
 
     def __str__(self):
         return f"Ideia de {self.autor} — {self.setor_impacto}"
+
+
+# ==========================================================================
+# ACOMPANHAMENTO — Ciclos, meses e pontuação
+# ==========================================================================
+class Faixa(models.TextChoices):
+    """Faixas/medalhas. Ordem: Impulso (100%) > Ouro > Prata > Bronze."""
+    IMPULSO = 'IMPULSO', 'Impulso'
+    OURO = 'OURO', 'Ouro'
+    PRATA = 'PRATA', 'Prata'
+    BRONZE = 'BRONZE', 'Bronze'
+
+
+class Ciclo(models.Model):
+    """Ciclo de avaliação do Impulso (normalmente 3 meses).
+
+    Os pontos "reiniciam" a cada mês: cada CicloMes guarda a pontuação daquele
+    mês. No fim do ciclo é possível ver a nota total e a sequência de medalhas,
+    e as confianças acumuladas (Ouro/Impulso) são creditadas.
+    """
+
+    class Status(models.TextChoices):
+        ABERTO = 'ABERTO', 'Aberto'
+        ENCERRADO = 'ENCERRADO', 'Encerrado'
+
+    nome = models.CharField(max_length=120, verbose_name='Nome do ciclo')
+    inicio = models.DateField(verbose_name='Início')
+    fim = models.DateField(verbose_name='Fim')
+    status = models.CharField(
+        max_length=10, choices=Status.choices,
+        default=Status.ABERTO, verbose_name='Status')
+
+    encerrado_em = models.DateTimeField(null=True, blank=True, verbose_name='Encerrado em')
+    encerrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_ciclos_encerrados', verbose_name='Encerrado por')
+    # Trava de idempotência: garante que as confianças do ciclo só são pagas 1x.
+    confiancas_creditadas = models.BooleanField(
+        default=False, verbose_name='Confianças já creditadas')
+
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name='impulso_ciclos_criados', verbose_name='Criado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Ciclo'
+        verbose_name_plural = 'Ciclos'
+        ordering = ['-inicio']
+
+    def __str__(self):
+        return self.nome
+
+    @property
+    def is_aberto(self):
+        return self.status == self.Status.ABERTO
+
+
+class CicloMes(models.Model):
+    """Um mês dentro do ciclo. Ao ser fechado, congela a pontuação de todos."""
+
+    class Status(models.TextChoices):
+        ABERTO = 'ABERTO', 'Aberto'
+        FECHADO = 'FECHADO', 'Fechado'
+
+    ciclo = models.ForeignKey(
+        Ciclo, on_delete=models.CASCADE, related_name='meses', verbose_name='Ciclo')
+    referencia = models.DateField(
+        verbose_name='Mês de referência',
+        help_text='Primeiro dia do mês de referência.')
+    status = models.CharField(
+        max_length=10, choices=Status.choices,
+        default=Status.ABERTO, verbose_name='Status')
+
+    fechado_em = models.DateTimeField(null=True, blank=True, verbose_name='Fechado em')
+    fechado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_meses_fechados', verbose_name='Fechado por')
+
+    class Meta:
+        verbose_name = 'Mês do Ciclo'
+        verbose_name_plural = 'Meses do Ciclo'
+        ordering = ['referencia']
+        unique_together = ('ciclo', 'referencia')
+
+    def __str__(self):
+        return f"{self.referencia:%m/%Y} — {self.ciclo.nome}"
+
+    @property
+    def is_fechado(self):
+        return self.status == self.Status.FECHADO
+
+
+class PontuacaoMensal(models.Model):
+    """Snapshot da pontuação de um colaborador em um mês (total 100 pontos).
+
+    CONFIAR 40 = metas 20 (10 qualidade + 10 conclusão) + feedback 10 + assiduidade 10
+    CONECTAR 40 = curso 10 + vídeos/POPs 10 + projeto foco 20
+    INOVAR 20 = 3 ideias 10 + 1 ideia aprovada 10
+    """
+
+    mes = models.ForeignKey(
+        CicloMes, on_delete=models.CASCADE, related_name='pontuacoes', verbose_name='Mês')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='impulso_pontuacoes', verbose_name='Colaborador')
+    setor = models.ForeignKey(
+        'users.Sector', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_pontuacoes', verbose_name='Setor principal',
+        help_text='Setor do colaborador no momento do fechamento (para o Setor Destaque).')
+
+    # CONFIAR (40)
+    p_metas_qualidade = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                            verbose_name='Metas — qualidade (0-10)')
+    p_metas_conclusao = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                            verbose_name='Metas — conclusão (0-10)')
+    p_feedback = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                     verbose_name='Feedback (0-10)')
+    p_assiduidade = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                        verbose_name='Assiduidade (0-10)')
+    # CONECTAR (40)
+    p_curso = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                  verbose_name='Curso do mês (0-10)')
+    p_videos_pops = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                        verbose_name='Vídeos e POPs (0-10)')
+    p_projeto_foco = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                         verbose_name='Projeto foco (0-20)')
+    # INOVAR (20)
+    p_ideias = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                   verbose_name='Ideias propostas (0-10)')
+    p_ideia_aprovada = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                           verbose_name='Ideia aprovada (0-10)')
+
+    total = models.DecimalField(max_digits=6, decimal_places=2, default=0,
+                                verbose_name='Total (0-100)')
+    pontos_aplicaveis = models.DecimalField(
+        max_digits=6, decimal_places=2, default=100,
+        verbose_name='Pontos aplicáveis',
+        help_text='Máximo possível no mês (itens sem nada configurado não contam).')
+    percentual = models.DecimalField(max_digits=6, decimal_places=2, default=0,
+                                     verbose_name='Percentual (%)')
+    faixa = models.CharField(max_length=10, choices=Faixa.choices,
+                             default=Faixa.BRONZE, verbose_name='Faixa')
+    confiancas_previstas = models.PositiveIntegerField(
+        default=0, verbose_name='Confianças previstas',
+        help_text='Creditadas ao encerrar o ciclo (Ouro e Impulso).')
+    # Métricas cruas usadas no cálculo, para a tela de detalhamento.
+    detalhes = models.JSONField(default=dict, blank=True, verbose_name='Detalhes do cálculo')
+
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Pontuação Mensal'
+        verbose_name_plural = 'Pontuações Mensais'
+        ordering = ['-total']
+        unique_together = ('mes', 'user')
+
+    def __str__(self):
+        return f"{self.user} — {self.mes.referencia:%m/%Y}: {self.total}"
+
+    @property
+    def total_confiar(self):
+        return (self.p_metas_qualidade + self.p_metas_conclusao
+                + self.p_feedback + self.p_assiduidade)
+
+    @property
+    def total_conectar(self):
+        return self.p_curso + self.p_videos_pops + self.p_projeto_foco
+
+    @property
+    def total_inovar(self):
+        return self.p_ideias + self.p_ideia_aprovada

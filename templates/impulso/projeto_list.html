@@ -10,7 +10,7 @@
 
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
     {% for p in projetos %}
-    <a href="{% url 'impulso:projeto_foco_detail' p.id %}" class="rounded-xl border border-gray-200 p-4 hover:border-emerald-300 hover:shadow-sm transition block">
+    <a href="{% url 'impulso:projeto_foco_detail' p.id %}" class="imp-card p-4 hover:border-emerald-300 hover:shadow-sm transition block">
         <div class="flex items-start justify-between gap-2">
             <span class="font-medium text-gray-800">{{ p.nome }}</span>
             {% if not p.ativo %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Inativo</span>{% endif %}

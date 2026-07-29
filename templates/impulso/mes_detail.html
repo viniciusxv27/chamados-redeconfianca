@@ -1,0 +1,136 @@
+{% extends 'impulso/base_impulso.html' %}
+{% load impulso_tags l10n %}
+
+{% block impulso_content %}
+<div class="mb-4">
+    <a href="{% url 'impulso:ciclo_detail' ciclo.id %}" class="text-sm text-gray-500 hover:text-gray-900"><i class="fas fa-arrow-left mr-1"></i>Voltar ao ciclo {{ ciclo.nome }}</a>
+</div>
+
+<!-- Cabeçalho do mês -->
+<div class="imp-card p-5 mb-4">
+    <div class="flex items-start justify-between flex-wrap gap-3">
+        <div>
+            <div class="flex items-center gap-2">
+                <h2 class="text-xl font-bold text-gray-900">{{ mes.referencia|date:"F Y"|capfirst }}</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                    {% if mes.is_fechado %}bg-orange-100 text-orange-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">{{ mes.get_status_display }}</span>
+            </div>
+            {% if mes.is_fechado %}
+            <p class="text-xs text-gray-400 mt-1">Fechado em {{ mes.fechado_em|date:"d/m/Y H:i" }}{% if mes.fechado_por %} por {{ mes.fechado_por.get_full_name|default:mes.fechado_por.email }}{% endif %}</p>
+            {% else %}
+            <p class="text-sm text-gray-500 mt-1">Mês aberto — finalize para congelar a pontuação e ver o Setor Destaque.</p>
+            {% endif %}
+        </div>
+
+        {% if is_gestor %}
+        <div class="flex gap-2">
+            {% if not mes.is_fechado %}
+            <form method="post" action="{% url 'impulso:mes_fechar' mes.id %}"
+                  onsubmit="return confirm('Finalizar este mês? A pontuação de todos os colaboradores será congelada.');">
+                {% csrf_token %}
+                <button type="submit" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm">
+                    <i class="fas fa-lock mr-1"></i>Finalizar mês
+                </button>
+            </form>
+            {% elif ciclo.is_aberto %}
+            <form method="post" action="{% url 'impulso:mes_reabrir' mes.id %}"
+                  onsubmit="return confirm('Reabrir este mês? A pontuação congelada será recalculada quando você finalizar novamente.');">
+                {% csrf_token %}
+                <button type="submit" class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50">
+                    <i class="fas fa-lock-open mr-1"></i>Reabrir mês
+                </button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if mes.is_fechado %}
+<!-- Setor Destaque -->
+<div class="imp-card p-5 mb-4">
+    <h3 class="text-sm font-semibold text-gray-700 mb-1"><i class="fas fa-star text-amber-500 mr-2"></i>Setor Destaque</h3>
+    <p class="text-xs text-gray-400 mb-4">Soma das notas dos colaboradores de cada setor principal.</p>
+
+    {% if setores %}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        {% for s in setores|slice:":3" %}
+        <div class="rounded-xl p-4 border {% if forloop.first %}border-amber-300 bg-amber-50{% else %}border-gray-200{% endif %}">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold {% if forloop.first %}text-amber-700{% else %}text-gray-500{% endif %}">
+                    {% if forloop.first %}<i class="fas fa-crown mr-1"></i>1º lugar{% else %}{{ forloop.counter }}º lugar{% endif %}
+                </span>
+                <span class="text-xs text-gray-400">{{ s.pessoas }} pessoa(s)</span>
+            </div>
+            <p class="text-lg font-bold text-gray-900 mt-1 truncate">{{ s.setor }}</p>
+            <p class="text-sm text-gray-600 tabular-nums">{{ s.soma|floatformat:"-1" }} pts <span class="text-gray-400">· média {{ s.media|floatformat:1 }}%</span></p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="space-y-2">
+        {% for s in setores %}
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-600 w-40 truncate flex-shrink-0">{{ s.setor }}</span>
+            <div class="imp-bar-track h-2 flex-1">
+                <div class="imp-bar-fill h-full bg-amber-500" style="width: {{ s.soma|pct_de:setores.0.soma|unlocalize }}%;"></div>
+            </div>
+            <span class="text-xs tabular-nums text-gray-500 w-24 text-right flex-shrink-0">{{ s.soma|floatformat:"-1" }} pts</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-400">Sem dados de setor neste mês.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Pontuações do mês -->
+<div class="imp-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800 text-sm"><i class="fas fa-list-ol text-orange-500 mr-2"></i>Pontuação dos colaboradores</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">#</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Colaborador</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Setor</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Faixa</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Confiar</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Conectar</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Inovar</th>
+                    <th class="text-right px-3 py-2.5 font-medium">%</th>
+                    <th class="text-right px-5 py-2.5 font-medium">C$</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for item in pontuacoes %}
+                <tr class="hover:bg-orange-50/30">
+                    <td class="px-5 py-2.5 text-gray-400 font-semibold tabular-nums">{{ forloop.counter }}</td>
+                    <td class="px-3 py-2.5">
+                        <a href="{% url 'impulso:detalhe_colaborador' item.p.user.id %}?mes={{ mes.id }}" class="text-gray-800 hover:text-orange-600">{{ item.p.user.get_full_name|default:item.p.user.email }}</a>
+                    </td>
+                    <td class="px-3 py-2.5 text-gray-500">{{ item.p.setor.name|default:"—" }}</td>
+                    <td class="px-3 py-2.5">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold {{ item.faixa.bg }} {{ item.faixa.text }}">
+                            <i class="{{ item.faixa.icon }}"></i>{{ item.faixa.label }}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ item.p.total_confiar|floatformat:"-1" }}</td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ item.p.total_conectar|floatformat:"-1" }}</td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ item.p.total_inovar|floatformat:"-1" }}</td>
+                    <td class="px-3 py-2.5 text-right font-bold tabular-nums text-gray-900">{{ item.p.percentual|floatformat:0 }}%</td>
+                    <td class="px-5 py-2.5 text-right tabular-nums {% if item.p.confiancas_previstas %}text-emerald-600 font-semibold{% else %}text-gray-300{% endif %}">{{ item.p.confiancas_previstas }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" class="px-5 py-10 text-center text-gray-400">
+                    {% if mes.is_fechado %}Nenhuma pontuação registrada.{% else %}Finalize o mês para congelar e listar as pontuações.{% endif %}
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

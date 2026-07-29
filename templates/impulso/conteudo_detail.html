@@ -6,7 +6,7 @@
         <a href="{% url 'impulso:conectar_list' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar</a>
     </div>
 
-    <div class="rounded-xl border border-gray-200 p-5 mb-4">
+    <div class="imp-card p-5 mb-4">
         <div class="flex items-start justify-between gap-2">
             <h2 class="text-xl font-bold text-gray-900">{{ conteudo.titulo }}</h2>
             <span class="text-xs uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{{ conteudo.get_tipo_display }}</span>
@@ -19,7 +19,7 @@
     </div>
 
     <!-- Conclusão do usuário -->
-    <div class="rounded-xl border border-gray-200 p-5 mb-4">
+    <div class="imp-card p-5 mb-4">
         <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-circle-check text-emerald-500 mr-2"></i>Minha conclusão</h3>
         {% if conclusao and conclusao.concluido %}
         <p class="text-sm text-emerald-600 mb-2"><i class="fas fa-check mr-1"></i>Concluído em {{ conclusao.concluido_em|date:"d/m/Y" }}</p>
@@ -35,7 +35,7 @@
 
     <!-- Visão do gestor -->
     {% if is_gestor and conclusoes is not None %}
-    <div class="rounded-xl border border-gray-200 p-5">
+    <div class="imp-card p-5">
         <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-users mr-2"></i>Conclusões da equipe</h3>
         <ul class="divide-y divide-gray-100">
             {% for cc in conclusoes %}

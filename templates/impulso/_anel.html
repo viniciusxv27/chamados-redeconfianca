@@ -1,0 +1,13 @@
+{# Anel de pontuação (hero number). Params: pct, cor, sub, tamanho #}
+{# unlocalize é obrigatório: com pt-BR o Django escreveria "37,5" e o CSS quebraria. #}
+{% load l10n %}
+{% with size=tamanho|default:"9rem" %}
+<div class="relative flex-shrink-0" style="width: {{ size }}; height: {{ size }};">
+    <div class="w-full h-full rounded-full transition-all duration-700"
+         style="background: conic-gradient({{ cor }} {{ pct|unlocalize }}%, #E9E9EC 0);"></div>
+    <div class="absolute inset-[11px] bg-white rounded-full shadow-inner flex flex-col items-center justify-center">
+        <span class="text-3xl font-bold leading-none tabular-nums text-gray-900">{{ pct|floatformat:0 }}<span class="text-base text-gray-400">%</span></span>
+        {% if sub %}<span class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">{{ sub }}</span>{% endif %}
+    </div>
+</div>
+{% endwith %}

@@ -16,10 +16,12 @@ from django.views.decorators.http import require_POST
 from core.models import NotificationMixin
 
 from .ai import generate_feedback_summary
+from . import ciclos as ciclos_service
 from .models import (
-    ConclusaoConteudo, ConteudoConectar, Ideia, ImpulsoFeedback, Meta,
-    MetaAnexo, MetaComentario, ProjetoFoco, TarefaProjeto,
+    Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, Ideia, ImpulsoFeedback,
+    Meta, MetaAnexo, MetaComentario, PontuacaoMensal, ProjetoFoco, TarefaProjeto,
 )
+from .scoring import calcular_pontuacao, linhas_detalhadas
 from .utils import (
     FAIXAS, calcular_faixa, faixa_info, get_colaboradores, is_impulso_manager,
     impulso_manager_required, impulso_member_required,
@@ -82,7 +84,7 @@ def dashboard(request):
     atrasadas = [m for m in minhas_metas.exclude(status=Meta.Status.CONCLUIDA)
                  if m.is_overdue]
 
-    dados_faixa = calcular_faixa(user)
+    dados_faixa = calcular_pontuacao(user)
 
     context = {
         'is_gestor': gestor,
@@ -92,6 +94,8 @@ def dashboard(request):
         'proximas_atividades': proximas,
         'atrasadas': atrasadas,
         'minha_faixa': dados_faixa,
+        'minhas_linhas': linhas_detalhadas(dados_faixa),
+        'ciclo_ativo': Ciclo.objects.filter(status=Ciclo.Status.ABERTO).first(),
         'faixa_info': faixa_info(dados_faixa['faixa']),
         'feedbacks_recebidos': ImpulsoFeedback.objects.filter(colaborador=user).count(),
         'minhas_ideias': Ideia.objects.filter(autor=user).count(),
@@ -716,28 +720,180 @@ def ideia_update_status(request, ideia_id):
 
 
 # ---------------------------------------------------------------------------
-# ACOMPANHAMENTO — Faixas
+# ACOMPANHAMENTO — Faixas, ranking e detalhamento
 # ---------------------------------------------------------------------------
 @impulso_member_required
 def acompanhamento(request):
+    """Pontuação do mês corrente (ao vivo) + ranking + faixas."""
     colaboradores = get_colaboradores()
     ranking = []
     for c in colaboradores:
-        dados = calcular_faixa(c)
-        ranking.append({
-            'user': c,
-            'dados': dados,
-            'faixa': faixa_info(dados['faixa']),
-        })
-    ranking.sort(key=lambda r: r['dados']['score'], reverse=True)
+        dados = calcular_pontuacao(c)
+        ranking.append({'user': c, 'dados': dados, 'faixa': faixa_info(dados['faixa'])})
+    ranking.sort(key=lambda r: float(r['dados']['percentual']), reverse=True)
 
-    minha = calcular_faixa(request.user)
+    minha = calcular_pontuacao(request.user)
     context = {
         'ranking': ranking,
-        'minha_faixa': minha,
+        'minha': minha,
         'minha_faixa_info': faixa_info(minha['faixa']),
+        'minhas_linhas': linhas_detalhadas(minha),
         'faixas': FAIXAS,
+        'ciclo_ativo': Ciclo.objects.filter(status=Ciclo.Status.ABERTO).first(),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'acompanhamento',
     }
     return render(request, 'impulso/acompanhamento.html', context)
+
+
+@impulso_member_required
+def detalhe_colaborador(request, user_id):
+    """Detalhamento da pontuação de um colaborador (por medalha/mês)."""
+    alvo = get_object_or_404(get_colaboradores(), id=user_id)
+    if not (is_impulso_manager(request.user) or alvo.id == request.user.id):
+        messages.error(request, 'Você só pode ver o seu próprio detalhamento.')
+        return redirect('impulso:acompanhamento')
+
+    # Mês corrente ao vivo
+    atual = calcular_pontuacao(alvo)
+    # Histórico já fechado
+    historico = (PontuacaoMensal.objects.filter(user=alvo)
+                 .select_related('mes', 'mes__ciclo', 'setor')
+                 .order_by('-mes__referencia'))
+
+    mes_id = _int_or_none(request.GET.get('mes'))
+    snapshot = historico.filter(mes_id=mes_id).first() if mes_id else None
+
+    context = {
+        'alvo': alvo,
+        'atual': atual,
+        'atual_faixa': faixa_info(atual['faixa']),
+        'linhas': linhas_detalhadas(atual),
+        'historico': historico,
+        'snapshot': snapshot,
+        'snapshot_faixa': faixa_info(snapshot.faixa) if snapshot else None,
+        'medalhas': [{'p': p, 'faixa': faixa_info(p.faixa)} for p in historico],
+        'is_gestor': is_impulso_manager(request.user),
+        'active_tab': 'acompanhamento',
+    }
+    return render(request, 'impulso/detalhe_colaborador.html', context)
+
+
+# ---------------------------------------------------------------------------
+# ACOMPANHAMENTO — Ciclos
+# ---------------------------------------------------------------------------
+@impulso_member_required
+def ciclo_list(request):
+    context = {
+        'ciclos': Ciclo.objects.prefetch_related('meses'),
+        'is_gestor': is_impulso_manager(request.user),
+        'active_tab': 'acompanhamento',
+    }
+    return render(request, 'impulso/ciclo_list.html', context)
+
+
+@impulso_manager_required
+def ciclo_create(request):
+    if request.method == 'POST':
+        nome = (request.POST.get('nome') or '').strip()
+        inicio = parse_date(request.POST.get('inicio') or '')
+        fim = parse_date(request.POST.get('fim') or '')
+        if not (nome and inicio and fim):
+            messages.error(request, 'Informe nome, início e fim do ciclo.')
+            return redirect('impulso:ciclo_create')
+        if fim < inicio:
+            messages.error(request, 'O fim do ciclo não pode ser anterior ao início.')
+            return redirect('impulso:ciclo_create')
+
+        ciclo = Ciclo.objects.create(
+            nome=nome, inicio=inicio, fim=fim, criado_por=request.user)
+        qtd = ciclos_service.criar_meses(ciclo)
+        messages.success(request, f'Ciclo "{ciclo.nome}" iniciado com {qtd} mês(es).')
+        return redirect('impulso:ciclo_detail', ciclo_id=ciclo.id)
+
+    hoje = timezone.localdate()
+    context = {
+        'hoje': hoje,
+        'sugestao_nome': f'Ciclo {hoje:%m/%Y}',
+        'active_tab': 'acompanhamento',
+    }
+    return render(request, 'impulso/ciclo_form.html', context)
+
+
+@impulso_member_required
+def ciclo_detail(request, ciclo_id):
+    ciclo = get_object_or_404(Ciclo.objects.prefetch_related('meses'), id=ciclo_id)
+    meses = list(ciclo.meses.all())
+    resumo = ciclos_service.resumo_ciclo(ciclo)
+    context = {
+        'ciclo': ciclo,
+        'meses': meses,
+        'resumo': [{**linha, 'faixa_info': faixa_info(linha['faixa'])} for linha in resumo],
+        'tem_mes_aberto': any(not m.is_fechado for m in meses),
+        'is_gestor': is_impulso_manager(request.user),
+        'active_tab': 'acompanhamento',
+    }
+    return render(request, 'impulso/ciclo_detail.html', context)
+
+
+@impulso_member_required
+def mes_detail(request, mes_id):
+    mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
+    pontuacoes = (mes.pontuacoes.select_related('user', 'setor').order_by('-percentual'))
+    context = {
+        'mes': mes,
+        'ciclo': mes.ciclo,
+        'pontuacoes': [{'p': p, 'faixa': faixa_info(p.faixa)} for p in pontuacoes],
+        'setores': ciclos_service.setores_do_mes(mes),
+        'is_gestor': is_impulso_manager(request.user),
+        'active_tab': 'acompanhamento',
+    }
+    return render(request, 'impulso/mes_detail.html', context)
+
+
+@require_POST
+@impulso_manager_required
+def mes_fechar(request, mes_id):
+    mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
+    if mes.is_fechado:
+        messages.info(request, 'Este mês já está fechado.')
+    else:
+        qtd = ciclos_service.fechar_mes(mes, request.user)
+        messages.success(
+            request, f'Mês {mes.referencia:%m/%Y} fechado — {qtd} colaborador(es) pontuado(s).')
+    return redirect('impulso:mes_detail', mes_id=mes.id)
+
+
+@require_POST
+@impulso_manager_required
+def mes_reabrir(request, mes_id):
+    mes = get_object_or_404(CicloMes, id=mes_id)
+    if mes.ciclo.status == Ciclo.Status.ENCERRADO:
+        messages.error(request, 'Não é possível reabrir um mês de ciclo encerrado.')
+    else:
+        ciclos_service.reabrir_mes(mes)
+        messages.success(request, f'Mês {mes.referencia:%m/%Y} reaberto para recálculo.')
+    return redirect('impulso:mes_detail', mes_id=mes.id)
+
+
+@require_POST
+@impulso_manager_required
+def ciclo_encerrar(request, ciclo_id):
+    ciclo = get_object_or_404(Ciclo, id=ciclo_id)
+    if not ciclo.is_aberto:
+        messages.info(request, 'Este ciclo já está encerrado.')
+        return redirect('impulso:ciclo_detail', ciclo_id=ciclo.id)
+    if ciclo.meses.filter(status=CicloMes.Status.ABERTO).exists():
+        messages.error(request, 'Feche todos os meses antes de encerrar o ciclo.')
+        return redirect('impulso:ciclo_detail', ciclo_id=ciclo.id)
+
+    creditados = ciclos_service.encerrar_ciclo(ciclo, request.user)
+    total = sum(c['valor'] for c in creditados) if creditados else 0
+    messages.success(
+        request,
+        f'Ciclo encerrado. {len(creditados)} colaborador(es) receberam {total} C$ no total.')
+    for item in creditados:
+        _notify([item['user']], 'Prêmio do Impulso',
+                f"Você recebeu {item['valor']} C$ pelo ciclo {ciclo.nome}. Parabéns!",
+                '/impulso/acompanhamento/')
+    return redirect('impulso:ciclo_detail', ciclo_id=ciclo.id)

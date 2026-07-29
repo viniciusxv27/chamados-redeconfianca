@@ -1,0 +1,45 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+    <div>
+        <h2 class="font-semibold text-gray-800"><i class="fas fa-calendar-check text-orange-500 mr-2"></i>Ciclos</h2>
+        <p class="text-xs text-gray-500">Um ciclo dura normalmente 3 meses. Os pontos reiniciam a cada mês.</p>
+    </div>
+    {% if is_gestor %}
+    <a href="{% url 'impulso:ciclo_create' %}" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm"><i class="fas fa-plus mr-1"></i>Iniciar ciclo</a>
+    {% endif %}
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for c in ciclos %}
+    <a href="{% url 'impulso:ciclo_detail' c.id %}" class="imp-card imp-card-hover p-5 block">
+        <div class="flex items-start justify-between gap-2 mb-2">
+            <h3 class="font-bold text-gray-900">{{ c.nome }}</h3>
+            <span class="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0
+                {% if c.status == 'ABERTO' %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+                {{ c.get_status_display }}
+            </span>
+        </div>
+        <p class="text-xs text-gray-500"><i class="far fa-calendar mr-1"></i>{{ c.inicio|date:"d/m/Y" }} — {{ c.fim|date:"d/m/Y" }}</p>
+
+        <div class="flex gap-1.5 mt-4">
+            {% for m in c.meses.all %}
+            <span class="flex-1 h-1.5 rounded-full {% if m.status == 'FECHADO' %}bg-orange-500{% else %}bg-gray-200{% endif %}" title="{{ m.referencia|date:'m/Y' }}"></span>
+            {% endfor %}
+        </div>
+        <p class="text-xs text-gray-400 mt-2">{{ c.meses.all|length }} mês(es) no ciclo</p>
+
+        {% if c.confiancas_creditadas %}
+        <p class="text-xs text-emerald-600 mt-2"><i class="fas fa-coins mr-1"></i>Confianças creditadas</p>
+        {% endif %}
+    </a>
+    {% empty %}
+    <div class="imp-card p-10 text-center col-span-full">
+        <i class="fas fa-calendar-plus text-3xl text-gray-300 mb-3"></i>
+        <p class="text-sm text-gray-500">Nenhum ciclo criado ainda.</p>
+        {% if is_gestor %}<a href="{% url 'impulso:ciclo_create' %}" class="inline-block mt-3 text-sm text-orange-600 hover:underline">Iniciar o primeiro ciclo</a>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

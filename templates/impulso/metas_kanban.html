@@ -3,59 +3,84 @@
 {% block impulso_content %}
 
 <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-wrap">
         {% if is_gestor and colaboradores is not None %}
         <form method="get" class="flex items-center gap-2">
-            <select name="colaborador" onchange="this.form.submit()"
-                    class="text-sm border border-gray-300 rounded-lg px-3 py-1.5">
-                <option value="">Todos os colaboradores</option>
-                {% for c in colaboradores %}
-                <option value="{{ c.id }}" {% if colaborador_id == c.id %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
-                {% endfor %}
-            </select>
+            <div class="relative">
+                <i class="fas fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                <select name="colaborador" onchange="this.form.submit()"
+                        class="text-sm border border-gray-300 rounded-lg pl-8 pr-3 py-2 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400">
+                    <option value="">Todos os colaboradores</option>
+                    {% for c in colaboradores %}
+                    <option value="{{ c.id }}" {% if colaborador_id == c.id %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </form>
         {% endif %}
     </div>
     {% if is_gestor %}
-    <a href="{% url 'impulso:meta_create' %}" class="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm hover:bg-amber-600"><i class="fas fa-plus mr-1"></i>Nova meta</a>
+    <a href="{% url 'impulso:meta_create' %}" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm"><i class="fas fa-plus mr-1"></i>Nova meta</a>
     {% endif %}
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
     {% for col in colunas %}
-    <div class="bg-gray-50 rounded-xl border border-gray-200 flex flex-col">
-        <div class="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
-            <span class="text-sm font-semibold text-gray-700">{{ col.label }}</span>
-            <span class="text-xs bg-gray-200 text-gray-600 rounded-full px-2 py-0.5">{{ col.metas|length }}</span>
+    <div class="rounded-2xl bg-gray-50/80 border border-gray-100 flex flex-col min-h-[180px]">
+        <div class="px-4 py-3 flex items-center justify-between border-b border-gray-200/70">
+            <span class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full
+                    {% if col.status == 'A_FAZER' %}bg-gray-400
+                    {% elif col.status == 'EM_ANDAMENTO' %}bg-blue-500
+                    {% elif col.status == 'ENTREGUE' %}bg-orange-500
+                    {% else %}bg-emerald-500{% endif %}"></span>
+                {{ col.label }}
+            </span>
+            <span class="text-xs font-semibold bg-white text-gray-500 rounded-full px-2 py-0.5 border border-gray-200">{{ col.metas|length }}</span>
         </div>
-        <div class="p-2 space-y-2 min-h-[120px] kanban-dropzone" data-status="{{ col.status }}"
+
+        <div class="p-2.5 space-y-2.5 flex-1 kanban-dropzone" data-status="{{ col.status }}"
              {% if col.status == 'CONCLUIDA' %}data-droppable="false"{% else %}data-droppable="true"{% endif %}>
             {% for m in col.metas %}
-            <div class="kanban-card bg-white rounded-lg border border-gray-200 p-3 shadow-sm cursor-move"
+            <div class="kanban-card imp-card p-3.5 {% if col.status != 'CONCLUIDA' %}cursor-grab active:cursor-grabbing{% endif %}"
                  draggable="{% if col.status == 'CONCLUIDA' %}false{% else %}true{% endif %}" data-meta-id="{{ m.id }}">
                 <div class="flex items-start justify-between gap-2">
-                    <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-medium text-gray-800 hover:text-amber-600">{{ m.titulo }}</a>
+                    <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 leading-snug">{{ m.titulo }}</a>
                     <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{{ m.get_periodicidade_display }}</span>
                 </div>
+
                 {% if is_gestor %}
-                <p class="text-xs text-gray-500 mt-1"><i class="fas fa-user mr-1"></i>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</p>
+                <div class="flex items-center gap-1.5 mt-2">
+                    <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">{{ m.colaborador.get_full_name|default:m.colaborador.email|slice:":1"|upper }}</span>
+                    <span class="text-xs text-gray-500 truncate">{{ m.colaborador.get_full_name|default:m.colaborador.email }}</span>
+                </div>
                 {% endif %}
-                <div class="flex items-center justify-between mt-2">
-                    <span class="text-xs {% if m.is_overdue %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}"><i class="fas fa-clock mr-1"></i>{{ m.prazo|date:"d/m" }}</span>
+
+                <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-50">
+                    <span class="text-xs tabular-nums {% if m.is_overdue %}text-red-600 font-semibold{% else %}text-gray-400{% endif %}">
+                        <i class="far fa-clock mr-1"></i>{{ m.prazo|date:"d/m" }}
+                        {% if m.is_overdue %}<span class="ml-1">atrasada</span>{% endif %}
+                    </span>
                     {% if m.is_avaliada %}
-                    <span class="text-xs text-emerald-600" title="Qualidade / Prazo"><i class="fas fa-star mr-0.5"></i>{{ m.nota_qualidade }} · <i class="fas fa-clock mr-0.5"></i>{{ m.nota_prazo }}</span>
+                    <span class="flex items-center gap-1.5 text-xs" title="Qualidade / Prazo">
+                        <span class="inline-flex items-center gap-0.5 text-emerald-600 font-semibold"><i class="fas fa-star text-[10px]"></i>{{ m.nota_qualidade }}</span>
+                        <span class="inline-flex items-center gap-0.5 text-emerald-600 font-semibold"><i class="fas fa-clock text-[10px]"></i>{{ m.nota_prazo }}</span>
+                    </span>
                     {% endif %}
                 </div>
             </div>
             {% empty %}
-            <p class="text-xs text-gray-400 text-center py-4">—</p>
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+                <i class="fas fa-inbox text-gray-200 text-xl mb-1"></i>
+                <p class="text-xs text-gray-300">Vazio</p>
+            </div>
             {% endfor %}
         </div>
     </div>
     {% endfor %}
 </div>
 
-<p class="text-xs text-gray-400 mt-3"><i class="fas fa-circle-info mr-1"></i>Arraste os cartões para mudar o status. A conclusão é feita pelo gestor na avaliação da meta.</p>
+<p class="text-xs text-gray-400 mt-3"><i class="fas fa-circle-info mr-1"></i>Arraste os cartões para mudar o status. A conclusão acontece quando o gestor dá o check com as notas.</p>
 
 {% endblock %}
 
@@ -71,21 +96,31 @@
             dragged = card;
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', card.dataset.metaId);
-            setTimeout(() => card.classList.add('opacity-50'), 0);
+            setTimeout(() => card.classList.add('opacity-40', 'rotate-1'), 0);
         });
-        card.addEventListener('dragend', () => { if (dragged) dragged.classList.remove('opacity-50'); dragged = null; });
+        card.addEventListener('dragend', () => {
+            if (dragged) dragged.classList.remove('opacity-40', 'rotate-1');
+            dragged = null;
+            document.querySelectorAll('.kanban-dropzone').forEach(z => z.classList.remove('ring-2', 'ring-orange-300', 'bg-orange-50/40'));
+        });
     });
 
     document.querySelectorAll('.kanban-dropzone[data-droppable="true"]').forEach(zone => {
-        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('ring-2', 'ring-amber-300'); });
-        zone.addEventListener('dragleave', () => zone.classList.remove('ring-2', 'ring-amber-300'));
+        zone.addEventListener('dragover', e => {
+            e.preventDefault();
+            zone.classList.add('ring-2', 'ring-orange-300', 'bg-orange-50/40');
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('ring-2', 'ring-orange-300', 'bg-orange-50/40'));
         zone.addEventListener('drop', e => {
             e.preventDefault();
-            zone.classList.remove('ring-2', 'ring-amber-300');
+            zone.classList.remove('ring-2', 'ring-orange-300', 'bg-orange-50/40');
             if (!dragged) return;
-            const metaId = dragged.dataset.metaId;
-            const newStatus = zone.dataset.status;
             const card = dragged;
+            const metaId = card.dataset.metaId;
+            const newStatus = zone.dataset.status;
+            const origem = card.parentElement;
+            zone.appendChild(card);   // move otimista
+
             fetch(`/impulso/metas/${metaId}/status/`, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -93,13 +128,15 @@
             })
             .then(r => r.json())
             .then(data => {
-                if (data.ok) {
-                    zone.appendChild(card);
-                } else {
+                if (!data.ok) {
+                    origem.appendChild(card);   // desfaz
                     alert(data.error || 'Não foi possível mover a meta.');
                 }
             })
-            .catch(() => alert('Erro de conexão ao mover a meta.'));
+            .catch(() => {
+                origem.appendChild(card);
+                alert('Erro de conexão ao mover a meta.');
+            });
         });
     });
 })();

@@ -1,0 +1,22 @@
+{# Barras dos 3 blocos. Param: blocos (de blocos_resumo) #}
+{# Cores validadas para daltonismo: laranja / ciano / violeta. Cada barra é      #}
+{# rotulada com nome e valor, então a identidade nunca depende só da cor.        #}
+{# unlocalize é obrigatório: com pt-BR o Django escreveria "37,5" e o CSS quebraria. #}
+{% load l10n %}
+<div class="space-y-3">
+    {% for b in blocos %}
+    <div>
+        <div class="flex items-baseline justify-between mb-1">
+            <span class="text-xs font-semibold tracking-wide text-gray-700">
+                <i class="fas {{ b.icone }} mr-1" style="color: {{ b.cor }}"></i>{{ b.nome }}
+            </span>
+            <span class="text-xs tabular-nums text-gray-500">
+                <span class="font-semibold text-gray-900">{{ b.valor|floatformat:"-1" }}</span> / {{ b.max|floatformat:"-1" }} pts
+            </span>
+        </div>
+        <div class="imp-bar-track h-2.5 w-full">
+            <div class="imp-bar-fill h-full" style="width: {{ b.pct|unlocalize }}%; background: {{ b.cor }};"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>

@@ -1,74 +1,115 @@
 {% extends 'impulso/base_impulso.html' %}
-{% load impulso_tags %}
+{% load impulso_tags l10n %}
 
 {% block impulso_content %}
 
-<!-- Minha faixa -->
-<div class="rounded-xl border border-gray-200 p-5 mb-4 flex items-center gap-5 {{ minha_faixa_info.bg }}">
-    <div class="w-16 h-16 rounded-full bg-white/70 flex items-center justify-center">
-        <i class="{{ minha_faixa_info.icon }} text-3xl" style="color: {{ minha_faixa_info.cor }}"></i>
-    </div>
-    <div class="flex-1">
-        <p class="text-xs uppercase tracking-wide {{ minha_faixa_info.text }}">Sua faixa atual</p>
-        <p class="text-3xl font-bold {{ minha_faixa_info.text }}">{{ minha_faixa_info.label }}</p>
-        <p class="text-sm {{ minha_faixa_info.text }}">Pontuação {{ minha_faixa.score }}/100 · {{ minha_faixa.avaliadas }} meta(s) avaliada(s) · {{ minha_faixa.concluidas }} concluída(s)</p>
-    </div>
-</div>
-
-<!-- Legenda de faixas -->
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-    {% for f in faixas %}
-    <div class="rounded-xl border border-gray-200 p-3 flex items-center gap-3">
-        <i class="{{ f.icon }} text-xl" style="color: {{ f.cor }}"></i>
-        <div>
-            <p class="text-sm font-semibold text-gray-800">{{ f.label }}</p>
-            <p class="text-xs text-gray-500">
-                {% if f.nome == 'IMPULSO' %}Abaixo de 60 pts{% else %}A partir de {{ f.min }} pts{% endif %}
-            </p>
+<!-- Minha pontuação -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <div class="imp-card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-sm font-semibold text-gray-700">Minha pontuação — mês corrente</h2>
+                <p class="text-xs text-gray-400">{{ minha.inicio|date:"d/m/Y" }} a {{ minha.fim|date:"d/m/Y" }}</p>
+            </div>
+            <a href="{% url 'impulso:detalhe_colaborador' user.id %}" class="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">Ver detalhamento</a>
+        </div>
+        <div class="flex flex-col sm:flex-row items-center gap-6">
+            {% include 'impulso/_anel.html' with pct=minha.percentual cor=minha_faixa_info.cor sub="do mês" %}
+            <div class="flex-1 w-full">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold text-white shadow-sm bg-gradient-to-r {{ minha_faixa_info.grad }}">
+                        <i class="{{ minha_faixa_info.icon }}"></i>{{ minha_faixa_info.label }}
+                    </span>
+                    <span class="text-sm text-gray-500 tabular-nums">{{ minha.total|floatformat:"-1" }} / {{ minha.aplicavel|floatformat:"-1" }} pts</span>
+                </div>
+                {% blocos_de minha as blocos %}
+                {% include 'impulso/_blocos.html' %}
+            </div>
         </div>
     </div>
-    {% endfor %}
+
+    <!-- Legenda de faixas -->
+    <div class="imp-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Faixas</h2>
+        <ul class="space-y-2">
+            {% for f in faixas %}
+            <li class="flex items-center gap-3 p-2 rounded-lg {% if f.nome == minha.faixa %}ring-2 {{ f.ring }} {{ f.bg }}{% endif %}">
+                <span class="w-9 h-9 rounded-full flex items-center justify-center text-white bg-gradient-to-br {{ f.grad }} flex-shrink-0">
+                    <i class="{{ f.icon }} text-sm"></i>
+                </span>
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold text-gray-800">{{ f.label }}</p>
+                    <p class="text-xs text-gray-500">{{ f.regra }}{% if f.premiada %} · 100 C$/mês{% endif %}</p>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        <p class="text-[11px] text-gray-400 mt-3 leading-relaxed">
+            <i class="fas fa-circle-info mr-1"></i>As confianças de Ouro e Impulso são acumuladas por mês e creditadas ao encerrar o ciclo.
+        </p>
+    </div>
 </div>
 
 <!-- Ranking -->
-<div class="rounded-xl border border-gray-200 overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800"><i class="fas fa-ranking-star text-amber-500 mr-2"></i>Ranking da equipe</h2>
+<div class="imp-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-ranking-star text-orange-500 mr-2"></i>Ranking do mês</h2>
+        <span class="text-xs text-gray-400">Pontuação ao vivo — congelada ao finalizar o mês</span>
     </div>
-    <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
-            <tr>
-                <th class="text-left px-4 py-2">#</th>
-                <th class="text-left px-4 py-2">Colaborador</th>
-                <th class="text-left px-4 py-2">Faixa</th>
-                <th class="text-right px-4 py-2">Pontuação</th>
-                <th class="text-right px-4 py-2">Qualidade</th>
-                <th class="text-right px-4 py-2">Prazo</th>
-                <th class="text-right px-4 py-2">Avaliadas</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-            {% for r in ranking %}
-            <tr class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-gray-400 font-semibold">{{ forloop.counter }}</td>
-                <td class="px-4 py-2 text-gray-800">{{ r.user.get_full_name|default:r.user.email }}</td>
-                <td class="px-4 py-2">
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold {{ r.faixa.bg }} {{ r.faixa.text }}">
-                        <i class="{{ r.faixa.icon }}"></i>{{ r.faixa.label }}
-                    </span>
-                </td>
-                <td class="px-4 py-2 text-right font-semibold text-gray-800">{{ r.dados.score }}</td>
-                <td class="px-4 py-2 text-right text-gray-600">{{ r.dados.media_qualidade|default:"—" }}</td>
-                <td class="px-4 py-2 text-right text-gray-600">{{ r.dados.media_prazo|default:"—" }}</td>
-                <td class="px-4 py-2 text-right text-gray-600">{{ r.dados.avaliadas }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Nenhum colaborador no Escritório (ADM) ainda.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">#</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Colaborador</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Faixa</th>
+                    <th class="text-left px-3 py-2.5 font-medium w-48">Progresso</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Confiar</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Conectar</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Inovar</th>
+                    <th class="text-right px-5 py-2.5 font-medium">Total</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for r in ranking %}
+                <tr class="hover:bg-orange-50/30 transition-colors {% if r.user.id == user.id %}bg-orange-50/50{% endif %}">
+                    <td class="px-5 py-2.5 text-gray-400 font-semibold tabular-nums">{{ forloop.counter }}</td>
+                    <td class="px-3 py-2.5">
+                        <a href="{% url 'impulso:detalhe_colaborador' r.user.id %}" class="flex items-center gap-2 group">
+                            <span class="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-semibold flex-shrink-0">{{ r.user.get_full_name|default:r.user.email|slice:":1"|upper }}</span>
+                            <span class="text-gray-800 group-hover:text-orange-600 truncate max-w-[180px]">{{ r.user.get_full_name|default:r.user.email }}</span>
+                        </a>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold {{ r.faixa.bg }} {{ r.faixa.text }}">
+                            <i class="{{ r.faixa.icon }}"></i>{{ r.faixa.label }}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <div class="flex items-center gap-2">
+                            <div class="imp-bar-track h-2 flex-1 min-w-[70px]">
+                                <div class="imp-bar-fill h-full" style="width: {{ r.dados.percentual|unlocalize }}%; background: {{ r.faixa.cor }};"></div>
+                            </div>
+                            <span class="text-xs tabular-nums text-gray-500 w-10 text-right">{{ r.dados.percentual|floatformat:0 }}%</span>
+                        </div>
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ r.dados.confiar|floatformat:"-1" }}</td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ r.dados.conectar|floatformat:"-1" }}</td>
+                    <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ r.dados.inovar|floatformat:"-1" }}</td>
+                    <td class="px-5 py-2.5 text-right font-bold tabular-nums text-gray-900">{{ r.dados.total|floatformat:"-1" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="px-5 py-10 text-center text-gray-400">Nenhum colaborador no Escritório (ADM) ainda.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
-<p class="text-xs text-gray-400 mt-3"><i class="fas fa-circle-info mr-1"></i>A pontuação é a média das notas do gestor (qualidade + prazo, 0-5 cada) nas metas avaliadas, em escala de 0 a 100.</p>
+<p class="text-xs text-gray-400 mt-3 leading-relaxed">
+    <i class="fas fa-circle-info mr-1"></i>
+    Total de 100 pontos: Confiar 40 (metas 20 · feedback 10 · assiduidade 10) · Conectar 40 (curso 10 · vídeos e POPs 10 · projeto foco 20) · Inovar 20 (3 ideias 10 · ideia aprovada 10).
+    Itens sem nada configurado no mês saem do total possível.
+</p>
 
 {% endblock %}

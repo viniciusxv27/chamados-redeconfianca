@@ -1,0 +1,3 @@
+{# Pílula de sub-navegação. Params: url, rotulo, ativos (lista separada por vírgula), un #}
+<a href="{% url url %}" class="px-3.5 py-1.5 rounded-full font-medium transition-colors
+   {% if un in ativos %}bg-orange-600 text-white shadow-sm{% else %}bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900{% endif %}">{{ rotulo }}</a>
