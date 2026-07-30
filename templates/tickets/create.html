@@ -178,6 +178,7 @@
                                 <option value="{{ sector.name }}" {% if sector.name == store_location %}selected{% endif %}>{{ sector.name }}</option>
                             {% endif %}
                         {% endfor %}
+                        <option value="Escritório" {% if store_location == 'Escritório' %}selected{% endif %}>Escritório</option>
                     </select>
                 </div>
                 

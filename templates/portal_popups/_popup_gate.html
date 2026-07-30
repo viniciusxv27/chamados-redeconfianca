@@ -1,3 +1,4 @@
+{% load comunicados_popup %}
 {% if portal_popup %}
 <div id="portal-popup-modal"
      class="rc-modal hidden fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4"
@@ -22,6 +23,36 @@
       </div>
       {% endif %}
       <p class="text-sm text-gray-600 whitespace-pre-line">{{ portal_popup.message }}</p>
+
+      {% if portal_popup.external_check_key == 'comunicados_pendentes' %}
+        {% comunicados_para_ler user as pendentes %}
+        {% if pendentes.itens %}
+        <ul class="mt-4 space-y-2">
+          {% for c in pendentes.itens %}
+          <li>
+            <a href="{% url 'communications:communication_detail' c.id %}"
+               class="flex items-start gap-3 rounded-lg border border-gray-200 px-3 py-2.5 hover:border-primary hover:bg-orange-50 transition-colors group">
+              <i class="fas fa-envelope-open-text text-gray-400 group-hover:text-primary mt-0.5"></i>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-medium text-gray-800 group-hover:text-primary truncate">{{ c.title }}</span>
+                <span class="block text-xs text-gray-400">
+                  {{ c.created_at|date:"d/m/Y" }}{% if c.sender %} · {{ c.sender.full_name|default:c.sender.email }}{% endif %}
+                </span>
+              </span>
+              <i class="fas fa-chevron-right text-xs text-gray-300 group-hover:text-primary mt-1"></i>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+
+        {% if pendentes.extras %}
+        <a href="{% url 'communications:communications_list' %}"
+           class="mt-2 inline-block text-xs font-semibold text-primary hover:underline">
+          +{{ pendentes.extras }} outro{{ pendentes.extras|pluralize }} comunicado{{ pendentes.extras|pluralize }}
+        </a>
+        {% endif %}
+        {% endif %}
+      {% endif %}
     </div>
     <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3">
       {% if not portal_popup_blocking %}

@@ -19,13 +19,19 @@ from portal_popups.checkers import register_popup_checker
 REGRA_ATIVA_DESDE = date(2026, 7, 27)
 
 
-@register_popup_checker('comunicados_pendentes', 'Comunicados: todos com "Estou Ciente"')
-def comunicados_todos_cientes(user):
-    """Concluído (True) quando o usuário não tem comunicado ativo (publicado a
-    partir de REGRA_ATIVA_DESDE) sem 'de acordo'."""
+def comunicados_pendentes(user):
+    """Comunicados ativos direcionados ao usuário que ainda aguardam o "de acordo".
+
+    Fonte única usada tanto pelo checker do popup quanto pela listagem exibida
+    dentro dele.
+    """
     from .models import Communication
+
+    if not getattr(user, 'is_authenticated', False):
+        return Communication.objects.none()
+
     now = timezone.now()
-    pendentes = (
+    return (
         Communication.objects
         .filter(created_at__date__gte=REGRA_ATIVA_DESDE)
         .filter(Q(recipients=user) | Q(send_to_all=True))
@@ -36,5 +42,11 @@ def comunicados_todos_cientes(user):
             communicationread__status='ESTOU_CIENTE',
         )
         .distinct()
+        .order_by('-is_pinned', '-created_at')
     )
-    return not pendentes.exists()
+
+
+@register_popup_checker('comunicados_pendentes', 'Comunicados: todos com "Estou Ciente"')
+def comunicados_todos_cientes(user):
+    """Concluído (True) quando não há comunicado pendente de "de acordo"."""
+    return not comunicados_pendentes(user).exists()
