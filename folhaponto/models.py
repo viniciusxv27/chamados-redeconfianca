@@ -73,6 +73,16 @@ class FolhaPonto(models.Model):
     pdf_page_number = models.PositiveIntegerField(null=True, blank=True,
         verbose_name='Página inicial no PDF original')
 
+    # Override manual da classificação semanal/mensal (que é calculada em runtime).
+    # Quando marcado, a folha é sempre tratada como mensal (assinável), ignorando a
+    # regra automática. Usado quando a folha não deve seguir a periodicidade padrão.
+    force_mensal = models.BooleanField(
+        default=False,
+        verbose_name='Forçar como Mensal',
+        help_text='Trata a folha sempre como mensal (assinável), ignorando a '
+                  'classificação automática semanal/mensal.',
+    )
+
     # Assinatura digital
     signed_at = models.DateTimeField(null=True, blank=True, verbose_name='Assinado em')
     signature_image = models.TextField(blank=True, verbose_name='Assinatura (base64)')

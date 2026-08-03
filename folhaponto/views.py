@@ -171,7 +171,10 @@ def folha_detail(request, pk):
 
     annotate_periodicity([folha])
 
-    return render(request, 'folhaponto/folha_detail.html', {'folha': folha})
+    return render(request, 'folhaponto/folha_detail.html', {
+        'folha': folha,
+        'can_manage_folha': can_manage_folhaponto(request.user),
+    })
 
 
 @login_required
@@ -726,6 +729,35 @@ def admin_delete_folha(request, pk):
     folha.delete()
     messages.success(request, f'Folha de ponto excluída: {info}')
     return redirect('folhaponto:admin_folhas')
+
+
+@login_required
+def admin_set_periodicity(request, pk):
+    """Define/limpa o override manual de periodicidade da folha.
+
+    ``action=mensal`` força a folha como mensal (assinável), ignorando a
+    classificação automática; ``action=auto`` volta ao cálculo automático.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método não permitido'}, status=405)
+    if not can_manage_folhaponto(request.user):
+        return JsonResponse({'error': 'Acesso restrito'}, status=403)
+
+    folha = get_object_or_404(FolhaPonto, pk=pk)
+    action = (request.POST.get('action') or '').strip()
+
+    if action == 'mensal':
+        folha.force_mensal = True
+        folha.save(update_fields=['force_mensal', 'updated_at'])
+        messages.success(request, f'Folha definida como mensal — assinatura liberada ({folha.period_display}).')
+    elif action == 'auto':
+        folha.force_mensal = False
+        folha.save(update_fields=['force_mensal', 'updated_at'])
+        messages.success(request, f'Classificação voltou ao automático ({folha.period_display}).')
+    else:
+        messages.error(request, 'Ação inválida.')
+
+    return redirect('folhaponto:folha_detail', pk=folha.pk)
 
 
 @login_required

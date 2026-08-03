@@ -12,8 +12,12 @@ colaborador sem nada assinável (a prévia nunca vira fechamento porque a folha
 seguinte pode não ser importada). Por isso, quando é a única folha do
 colaborador, ela já é classificada como mensal (fechamento) e pode ser assinada.
 
-A classificação é feita em tempo de execução, a partir de (year, month): não há
-campo novo no banco.
+Override manual: o gestor pode marcar ``folha.force_mensal`` (botão na tela de
+detalhe) para forçar a folha como mensal (assinável), ignorando a regra
+automática. É a saída para folhas que não devem seguir a periodicidade padrão.
+
+A classificação é feita em tempo de execução, a partir de (year, month); o único
+estado persistido é o override ``force_mensal``.
 """
 
 from .models import FolhaPonto
@@ -94,7 +98,10 @@ def annotate_periodicity(folhas, stats=None):
         stats = stats_by_user({f.user_id for f in folhas})
 
     for folha in folhas:
-        is_semanal_val = _classify_semanal(folha.year, folha.month, folha.user_id, stats)
+        if getattr(folha, 'force_mensal', False):
+            is_semanal_val = False  # override manual: sempre mensal (assinável)
+        else:
+            is_semanal_val = _classify_semanal(folha.year, folha.month, folha.user_id, stats)
         folha.is_semanal = is_semanal_val
         folha.periodicity = SEMANAL if is_semanal_val else MENSAL
         folha.periodicity_label = PERIODICITY_LABELS[folha.periodicity]
@@ -104,5 +111,7 @@ def annotate_periodicity(folhas, stats=None):
 
 def is_semanal(folha):
     """Classificação de uma folha isolada (1 consulta)."""
+    if getattr(folha, 'force_mensal', False):
+        return False  # override manual: sempre mensal (assinável)
     stats = stats_by_user([folha.user_id])
     return _classify_semanal(folha.year, folha.month, folha.user_id, stats)

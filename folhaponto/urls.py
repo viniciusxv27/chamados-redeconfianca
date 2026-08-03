@@ -16,6 +16,7 @@ urlpatterns = [
     path('admin/acessos/', views.admin_access, name='admin_access'),
     path('admin/excluir/<int:pk>/', views.admin_delete_folha, name='admin_delete_folha'),
     path('admin/reenviar-pdf/<int:pk>/', views.admin_reupload_folha_pdf, name='admin_reupload_folha_pdf'),
+    path('admin/definir-periodicidade/<int:pk>/', views.admin_set_periodicity, name='admin_set_periodicity'),
     path('admin/relatorio-assinaturas/', views.export_signature_report, name='export_signature_report'),
 
     # APIs

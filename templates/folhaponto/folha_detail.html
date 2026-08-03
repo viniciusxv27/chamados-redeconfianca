@@ -39,6 +39,44 @@
             </div>
         </div>
 
+        <!-- Gestão: override manual da periodicidade (apenas gestores) -->
+        {% if can_manage_folha %}
+        <div class="px-5 py-4 border-b bg-gray-50">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase mb-1"><i class="fas fa-user-shield text-gray-400 mr-1"></i> Gestão da Folha</h3>
+                    {% if folha.force_mensal %}
+                        <p class="text-sm text-gray-700"><i class="fas fa-calendar-check text-teal-600 mr-1"></i> Classificação <strong>definida manualmente como Mensal</strong> — assinatura liberada.</p>
+                    {% elif folha.is_semanal %}
+                        <p class="text-sm text-gray-700">Esta folha está como <strong>Semanal</strong> (período em aberto) e não pode ser assinada.</p>
+                        <p class="text-xs text-gray-500">Se ela não deve seguir a classificação automática, defina como mensal para liberar a assinatura.</p>
+                    {% else %}
+                        <p class="text-sm text-gray-700"><i class="fas fa-calendar-check text-teal-600 mr-1"></i> Mensal (classificação automática) — assinável.</p>
+                    {% endif %}
+                </div>
+                <div class="flex-shrink-0">
+                    {% if folha.force_mensal %}
+                    <form method="post" action="{% url 'folhaponto:admin_set_periodicity' folha.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="auto">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50">
+                            <i class="fas fa-rotate-left mr-2"></i> Voltar ao automático
+                        </button>
+                    </form>
+                    {% elif folha.is_semanal %}
+                    <form method="post" action="{% url 'folhaponto:admin_set_periodicity' folha.pk %}" onsubmit="return confirm('Definir esta folha como mensal? Isso libera a assinatura pelo colaborador.');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="mensal">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-md hover:bg-teal-700">
+                            <i class="fas fa-calendar-check mr-2"></i> Definir como Mensal
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Dados do colaborador -->
         <div class="px-5 py-4 border-b">
             <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3">Dados do Colaborador</h3>
