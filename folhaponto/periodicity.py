@@ -6,11 +6,15 @@ colaborador, é uma prévia — não deve ser assinada. Quando chega a folha do
 período seguinte, a anterior passa a ser o fechamento mensal e aí sim é
 assinada.
 
+Exceção da folha isolada: se o colaborador tem uma ÚNICA folha, não existe um
+período anterior fechado para assinar. Tratá-la como semanal deixaria o
+colaborador sem nada assinável (a prévia nunca vira fechamento porque a folha
+seguinte pode não ser importada). Por isso, quando é a única folha do
+colaborador, ela já é classificada como mensal (fechamento) e pode ser assinada.
+
 A classificação é feita em tempo de execução, a partir de (year, month): não há
 campo novo no banco.
 """
-
-from django.db.models import Max
 
 from .models import FolhaPonto
 
@@ -29,8 +33,8 @@ def period_key(year, month):
     return (year or 0) * 12 + (month or 0)
 
 
-def latest_key_by_user(user_ids=None):
-    """``{user_id: competência mais recente}`` de cada colaborador.
+def stats_by_user(user_ids=None):
+    """``{user_id: (competência mais recente, total de folhas)}`` por colaborador.
 
     Calculado sempre sobre a tabela inteira, nunca sobre a listagem já
     filtrada: se o admin filtra por Maio, a folha de Maio continua sendo
@@ -43,23 +47,42 @@ def latest_key_by_user(user_ids=None):
             return {}
         qs = qs.filter(user_id__in=user_ids)
 
-    # Max de (year, month) por usuário. Feito em Python sobre os pares
-    # distintos porque a expressão year*12+month não é indexada e o volume
-    # de competências distintas é pequeno.
-    latest = {}
+    # Max de (year, month) e contagem de folhas por usuário, em Python sobre os
+    # pares distintos: o volume de competências é pequeno e a expressão
+    # year*12+month não é indexada.
+    stats = {}
     for user_id, year, month in qs.values_list('user_id', 'year', 'month'):
         key = period_key(year, month)
-        if key > latest.get(user_id, -1):
-            latest[user_id] = key
-    return latest
+        latest, count = stats.get(user_id, (-1, 0))
+        stats[user_id] = (key if key > latest else latest, count + 1)
+    return stats
 
 
-def annotate_periodicity(folhas, latest_map=None):
+def latest_key_by_user(user_ids=None):
+    """``{user_id: competência mais recente}`` de cada colaborador (compat)."""
+    return {user_id: latest for user_id, (latest, _count) in stats_by_user(user_ids).items()}
+
+
+def _classify_semanal(year, month, user_id, stats):
+    """Decide se a folha é semanal a partir das estatísticas do colaborador.
+
+    Semanal = é a folha mais recente do colaborador (período em aberto) E o
+    colaborador tem mais de uma folha. Folha única nunca é semanal: sem período
+    anterior fechado, ela já é o fechamento mensal (assinável).
+    """
+    latest, count = stats.get(user_id, (-1, 0))
+    if count <= 1:
+        return False
+    return period_key(year, month) >= latest
+
+
+def annotate_periodicity(folhas, stats=None):
     """Marca cada folha com ``periodicity``, ``is_semanal`` e ``can_sign``.
 
     Devolve a lista de folhas (materializa o queryset). Atributos anexados:
 
     - ``is_semanal``: é a folha mais recente do colaborador (período em aberto)
+      e ele tem mais de uma folha
     - ``periodicity_label``: "Semanal" ou "Mensal", para exibição
     - ``can_sign``: assinável agora (mensal e ainda não assinada)
 
@@ -67,19 +90,19 @@ def annotate_periodicity(folhas, latest_map=None):
     só deixam de aceitar novas assinaturas.
     """
     folhas = list(folhas)
-    if latest_map is None:
-        latest_map = latest_key_by_user({f.user_id for f in folhas})
+    if stats is None:
+        stats = stats_by_user({f.user_id for f in folhas})
 
     for folha in folhas:
-        is_semanal = period_key(folha.year, folha.month) >= latest_map.get(folha.user_id, -1)
-        folha.is_semanal = is_semanal
-        folha.periodicity = SEMANAL if is_semanal else MENSAL
+        is_semanal_val = _classify_semanal(folha.year, folha.month, folha.user_id, stats)
+        folha.is_semanal = is_semanal_val
+        folha.periodicity = SEMANAL if is_semanal_val else MENSAL
         folha.periodicity_label = PERIODICITY_LABELS[folha.periodicity]
-        folha.can_sign = (not is_semanal) and (not folha.is_signed)
+        folha.can_sign = (not is_semanal_val) and (not folha.is_signed)
     return folhas
 
 
 def is_semanal(folha):
     """Classificação de uma folha isolada (1 consulta)."""
-    latest = latest_key_by_user([folha.user_id]).get(folha.user_id, -1)
-    return period_key(folha.year, folha.month) >= latest
+    stats = stats_by_user([folha.user_id])
+    return _classify_semanal(folha.year, folha.month, folha.user_id, stats)
