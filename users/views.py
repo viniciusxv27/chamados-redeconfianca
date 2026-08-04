@@ -2401,14 +2401,16 @@ def create_sector_view(request):
     if request.method == 'POST':
         name = request.POST.get('name')
         description = request.POST.get('description', '')
-        
+        adabas = request.POST.get('adabas', '').strip()
+
         try:
             if Sector.objects.filter(name=name).exists():
                 messages.error(request, 'Setor com este nome já existe.')
             else:
                 sector = Sector.objects.create(
                     name=name,
-                    description=description
+                    description=description,
+                    adabas=adabas
                 )
                 
                 log_action(
@@ -2442,7 +2444,8 @@ def edit_sector_view(request, sector_id):
     if request.method == 'POST':
         name = request.POST.get('name')
         description = request.POST.get('description', '')
-        
+        adabas = request.POST.get('adabas', '').strip()
+
         try:
             if Sector.objects.filter(name=name).exclude(id=sector_id).exists():
                 messages.error(request, 'Setor com este nome já existe.')
@@ -2450,6 +2453,7 @@ def edit_sector_view(request, sector_id):
                 old_name = sector.name
                 sector.name = name
                 sector.description = description
+                sector.adabas = adabas
                 sector.save()
                 
                 log_action(

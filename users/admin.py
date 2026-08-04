@@ -30,9 +30,10 @@ class AParteCommissionConfigAdmin(admin.ModelAdmin):
 
 @admin.register(Sector)
 class SectorAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description', 'created_at')
+    list_display = ('name', 'adabas', 'description', 'created_at')
     list_filter = ('created_at',)
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'adabas')
+    list_editable = ('adabas',)
     ordering = ('name',)
 
 

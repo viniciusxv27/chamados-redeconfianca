@@ -421,6 +421,10 @@ def upload_user_document(instance, filename):
 class Sector(models.Model):
     name = models.CharField(max_length=100, verbose_name="Nome")
     description = models.TextField(blank=True, verbose_name="Descrição")
+    adabas = models.CharField(
+        max_length=30, blank=True, default='', verbose_name="ADABAS",
+        help_text="Código ADABAS da loja (ex.: ESD0267-013). Vazio para setores que não possuem."
+    )
     team_logo = models.ImageField(
         upload_to=upload_sector_team_logo,
         storage=get_media_storage(),

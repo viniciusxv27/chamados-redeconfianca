@@ -310,6 +310,12 @@ def get_support_chat(request, chat_id):
                 'login_code': getattr(chat.user, 'login_code', '') or '',
                 'pdv': getattr(chat.user, 'pdv', '') or ''
             },
+            # Setor de abertura (de quem abriu) — origem do ADABAS da loja.
+            'origem': {
+                'id': chat.user.sector.id,
+                'name': chat.user.sector.name,
+                'adabas': chat.user.sector.adabas,
+            } if chat.user.sector_id else None,
             'sector': {
                 'id': chat.sector.id,
                 'name': chat.sector.name
@@ -1289,7 +1295,9 @@ def support_admin_dashboard(request):
     from datetime import timedelta
     recent_chats = SupportChat.objects.filter(base_filter).exclude(
         status='FECHADO', closed_at__lt=timezone.now() - timedelta(days=30)
-    ).select_related('user', 'assigned_to', 'sector', 'category').order_by('-created_at')
+    ).select_related(
+        'user', 'user__sector', 'assigned_to', 'sector', 'category'
+    ).order_by('-created_at')
     
     # Agentes de suporte (filtrados por setor)
     if request.user.is_superuser:
@@ -1342,6 +1350,13 @@ def support_admin_dashboard(request):
                 'id': chat.user.id,
                 'get_full_name': chat.user.get_full_name()
             },
+            # Setor de abertura: o setor do colaborador que abriu o chamado
+            # (é dele que vem o ADABAS da loja).
+            'origem': {
+                'id': chat.user.sector.id,
+                'name': chat.user.sector.name,
+                'adabas': chat.user.sector.adabas,
+            } if chat.user.sector_id else None,
             'sector': {
                 'id': chat.sector.id,
                 'name': chat.sector.name

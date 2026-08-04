@@ -439,6 +439,7 @@
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Abertura / ADABAS</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridade</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -1324,6 +1325,10 @@ function createTicketElement(ticket) {
         <div class="text-xs text-gray-600 space-y-1 mb-2">
             <div><span class="font-medium">Cliente:</span> ${escapeHtml(ticket.user.get_full_name)}</div>
             <div><span class="font-medium">Setor:</span> ${ticket.sector ? escapeHtml(ticket.sector.name) : 'N/A'}</div>
+            ${ticket.origem ? `<div class="flex items-center gap-1 flex-wrap">
+                <span class="font-medium">Abertura:</span> ${escapeHtml(ticket.origem.name)}
+                ${ticket.origem.adabas ? `<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono text-[10px]" title="Código ADABAS">${escapeHtml(ticket.origem.adabas)}</span>` : ''}
+            </div>` : ''}
             ${ticket.assigned_to ? `<div><span class="font-medium">Atendente:</span> ${escapeHtml(ticket.assigned_to.get_full_name)}</div>` : ''}
         </div>
         
@@ -1570,6 +1575,9 @@ function renderListView(tickets) {
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(ticket.user.get_full_name)}</td>
                 <td class="px-4 py-3 text-sm text-gray-600">${ticket.sector ? escapeHtml(ticket.sector.name) : '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                    ${ticket.origem ? `${escapeHtml(ticket.origem.name)}${ticket.origem.adabas ? ` <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono text-xs" title="Código ADABAS">${escapeHtml(ticket.origem.adabas)}</span>` : ''}` : '-'}
+                </td>
                 <td class="px-4 py-3 text-sm text-gray-600">${ticket.category ? escapeHtml(ticket.category.name) : '-'}</td>
                 <td class="px-4 py-3">
                     <span class="px-2 py-1 text-xs rounded-full ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
@@ -1853,6 +1861,14 @@ function renderTicketDetails(data, forceScroll = false) {
                             <div>
                                 <label class="block text-xs font-medium text-gray-700">Setor</label>
                                 <p class="text-sm text-gray-900">${data.chat.sector ? data.chat.sector.name : 'N/A'}</p>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Setor de abertura</label>
+                                <p class="text-sm text-gray-900 flex items-center gap-2 flex-wrap">
+                                    ${data.chat.origem ? escapeHtml(data.chat.origem.name) : 'N/A'}
+                                    ${data.chat.origem && data.chat.origem.adabas ? `<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono text-xs" title="Código ADABAS">${escapeHtml(data.chat.origem.adabas)}</span>` : ''}
+                                </p>
                             </div>
 
                             ${data.chat.category ? `

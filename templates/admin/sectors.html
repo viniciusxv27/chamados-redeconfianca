@@ -79,6 +79,9 @@
                     </div>
                     <div>
                         <h3 class="text-lg font-semibold text-gray-900">{{ sector.name }}</h3>
+                        {% if sector.adabas %}
+                        <span class="inline-block mt-0.5 px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-mono" title="Código ADABAS">{{ sector.adabas }}</span>
+                        {% endif %}
                         <p class="text-sm text-gray-500">Criado em {{ sector.created_at|date:"d/m/Y" }}</p>
                     </div>
                 </div>
