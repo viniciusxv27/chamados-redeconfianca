@@ -150,6 +150,7 @@ class ActivityCommentAdmin(admin.ModelAdmin):
 class SupportTransferRequestAdmin(admin.ModelAdmin):
     list_display = (
         'product_name',
+        'material',
         'imei',
         'sending_sector',
         'receiving_sector',

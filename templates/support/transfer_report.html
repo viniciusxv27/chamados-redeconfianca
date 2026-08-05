@@ -200,7 +200,7 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Criado em</th>
-                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Produto / IMEI</th>
+                            <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Produto / Material / IMEI</th>
                             <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Envia</th>
                             <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Recebe</th>
                             <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Criado por</th>
@@ -320,7 +320,7 @@ function renderReport(report) {
     // Detalhado
     renderRows('repDetailTable', report.transfers, 6, t => `
         <td class="px-3 py-2.5 text-left whitespace-nowrap">${escapeHtmlRep(t.created_at)}</td>
-        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.product_name)}<div class="text-xs text-gray-400 font-mono">${escapeHtmlRep(t.imei)}</div></td>
+        <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.product_name)}${t.material ? `<div class="text-xs text-gray-400 font-mono">Material: ${escapeHtmlRep(t.material)}</div>` : ''}<div class="text-xs text-gray-400 font-mono">${escapeHtmlRep(t.imei)}</div></td>
         <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.sending_sector)}<div class="text-xs text-gray-400">${escapeHtmlRep(t.sending_manager)}</div></td>
         <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.receiving_sector)}<div class="text-xs text-gray-400">${escapeHtmlRep(t.receiving_manager)}</div></td>
         <td class="px-3 py-2.5 text-left">${escapeHtmlRep(t.created_by)}</td>

@@ -347,6 +347,8 @@ class SupportTransferRequest(models.Model):
         related_name='incoming_transfer_requests',
         verbose_name="Gerente/ADM responsável por receber",
     )
+    material = models.CharField(
+        max_length=60, blank=True, default='', verbose_name="Material")
     imei = models.CharField(max_length=40, verbose_name="IMEI")
     product_name = models.CharField(max_length=200, verbose_name="Nome do Produto")
     status = models.CharField(
