@@ -508,6 +508,80 @@ class User(AbstractUser):
         verbose_name="Cor/Raça"
     )
 
+    # --- Dados pessoais complementares (ficha cadastral) ---
+    SEX_CHOICES = [
+        ('MASCULINO', 'Masculino'),
+        ('FEMININO', 'Feminino'),
+        ('INTERSEXO', 'Intersexo'),
+    ]
+    GENDER_CHOICES = [
+        ('HOMEM', 'Homem'),
+        ('MULHER', 'Mulher'),
+        ('NAO_BINARIO', 'Não binário'),
+        ('OUTRO', 'Outro'),
+        ('NAO_INFORMAR', 'Prefiro não informar'),
+    ]
+    MARITAL_STATUS_CHOICES = [
+        ('SOLTEIRO', 'Solteiro(a)'),
+        ('CASADO', 'Casado(a)'),
+        ('UNIAO_ESTAVEL', 'União estável'),
+        ('SEPARADO', 'Separado(a)'),
+        ('DIVORCIADO', 'Divorciado(a)'),
+        ('VIUVO', 'Viúvo(a)'),
+    ]
+    EDUCATION_LEVEL_CHOICES = [
+        ('FUND_INCOMPLETO', 'Ensino Fundamental incompleto'),
+        ('FUND_COMPLETO', 'Ensino Fundamental completo'),
+        ('MEDIO_INCOMPLETO', 'Ensino Médio incompleto'),
+        ('MEDIO_COMPLETO', 'Ensino Médio completo'),
+        ('SUPERIOR_INCOMPLETO', 'Ensino Superior incompleto'),
+        ('SUPERIOR_COMPLETO', 'Ensino Superior completo'),
+        ('POS', 'Pós-graduação'),
+        ('MESTRADO', 'Mestrado'),
+        ('DOUTORADO', 'Doutorado'),
+    ]
+    STATE_CHOICES = [
+        ('AC', 'AC'), ('AL', 'AL'), ('AP', 'AP'), ('AM', 'AM'), ('BA', 'BA'),
+        ('CE', 'CE'), ('DF', 'DF'), ('ES', 'ES'), ('GO', 'GO'), ('MA', 'MA'),
+        ('MT', 'MT'), ('MS', 'MS'), ('MG', 'MG'), ('PA', 'PA'), ('PB', 'PB'),
+        ('PR', 'PR'), ('PE', 'PE'), ('PI', 'PI'), ('RJ', 'RJ'), ('RN', 'RN'),
+        ('RS', 'RS'), ('RO', 'RO'), ('RR', 'RR'), ('SC', 'SC'), ('SP', 'SP'),
+        ('SE', 'SE'), ('TO', 'TO'),
+    ]
+
+    sex = models.CharField(max_length=12, choices=SEX_CHOICES, blank=True,
+                           default='', verbose_name="Sexo")
+    gender = models.CharField(max_length=14, choices=GENDER_CHOICES, blank=True,
+                              default='', verbose_name="Gênero")
+    marital_status = models.CharField(max_length=15, choices=MARITAL_STATUS_CHOICES,
+                                      blank=True, default='', verbose_name="Estado Civil")
+    birthplace = models.CharField(max_length=100, blank=True, default='',
+                                  verbose_name="Naturalidade")
+    nationality = models.CharField(max_length=60, blank=True, default='',
+                                   verbose_name="Nacionalidade")
+    education_level = models.CharField(max_length=22, choices=EDUCATION_LEVEL_CHOICES,
+                                       blank=True, default='',
+                                       verbose_name="Grau de Instrução")
+    address = models.CharField(max_length=200, blank=True, default='',
+                               verbose_name="Endereço")
+    address_number = models.CharField(max_length=20, blank=True, default='',
+                                      verbose_name="Número")
+    address_complement = models.CharField(max_length=100, blank=True, default='',
+                                          verbose_name="Complemento")
+    state = models.CharField(max_length=2, choices=STATE_CHOICES, blank=True,
+                             default='', verbose_name="Estado")
+
+    # --- Vínculo / contratação ---
+    CONTRACT_TYPE_CHOICES = [
+        ('CLT', 'CLT'),
+        ('PJ', 'PJ'),
+    ]
+    contract_type = models.CharField(max_length=3, choices=CONTRACT_TYPE_CHOICES,
+                                     blank=True, default='',
+                                     verbose_name="Modelo de Contratação")
+    branch_cnpj = models.CharField(max_length=20, blank=True, default='',
+                                   verbose_name="CNPJ Filial")
+
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
@@ -1019,3 +1093,34 @@ class UserSession(models.Model):
     @property
     def location_display(self):
         return self.location or 'Localização desconhecida'
+
+
+class EmergencyContact(models.Model):
+    """Contato de emergência do colaborador (até 3 por pessoa).
+
+    Preenchido pelo próprio colaborador no pré-cadastro.
+    """
+
+    MAX_POR_USUARIO = 3
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='emergency_contacts',
+        verbose_name="Colaborador",
+    )
+    name = models.CharField(max_length=150, verbose_name="Nome")
+    phone = models.CharField(max_length=20, verbose_name="Telefone")
+    relationship = models.CharField(
+        max_length=60, verbose_name="Grau",
+        help_text="Grau de parentesco/relação (ex.: mãe, cônjuge, irmão).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Contato de Emergência"
+        verbose_name_plural = "Contatos de Emergência"
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.name} ({self.relationship}) - {self.phone}"

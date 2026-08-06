@@ -1,0 +1,88 @@
+{# Contatos de emergência do pré-cadastro (1 obrigatório, até 3).             #}
+{# Param: emergency_rows (montado em users.views._emergency_rows).            #}
+<div class="mt-8">
+    <div class="flex items-center justify-between mb-1">
+        <h3 class="text-base font-semibold text-gray-900">
+            <i class="fas fa-phone-volume text-primary mr-2"></i>Contato de Emergência
+        </h3>
+        <button type="button" id="addEmergencyBtn"
+                class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">
+            <i class="fas fa-plus mr-1"></i>Adicionar contato
+        </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">Informe ao menos um contato. Você pode cadastrar até 3.</p>
+
+    <div id="emergencyList" class="space-y-4">
+        {% for row in emergency_rows %}
+        <div class="emergency-item border border-gray-200 rounded-lg p-4 {% if not row.obrigatorio and not row.preenchido %}hidden{% endif %}">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-gray-700">
+                    Contato {{ row.idx }}{% if row.obrigatorio %} <span class="text-red-500">*</span>{% endif %}
+                </span>
+                {% if not row.obrigatorio %}
+                <button type="button" class="removeEmergencyBtn text-xs text-red-600 hover:underline">
+                    <i class="fas fa-times mr-1"></i>Remover
+                </button>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome{% if row.obrigatorio %} *{% endif %}</label>
+                    <input type="text" name="emergency_name_{{ row.idx }}" maxlength="150" value="{{ row.name }}"
+                           {% if row.obrigatorio %}required{% endif %}
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Telefone{% if row.obrigatorio %} *{% endif %}</label>
+                    <input type="text" name="emergency_phone_{{ row.idx }}" maxlength="20" value="{{ row.phone }}"
+                           placeholder="(00) 00000-0000"
+                           {% if row.obrigatorio %}required{% endif %}
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Grau{% if row.obrigatorio %} *{% endif %}</label>
+                    <input type="text" name="emergency_relationship_{{ row.idx }}" maxlength="60" value="{{ row.relationship }}"
+                           placeholder="Ex.: mãe, cônjuge"
+                           {% if row.obrigatorio %}required{% endif %}
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+(function () {
+    var lista = document.getElementById('emergencyList');
+    var addBtn = document.getElementById('addEmergencyBtn');
+    if (!lista || !addBtn) return;
+    var itens = Array.prototype.slice.call(lista.querySelectorAll('.emergency-item'));
+
+    function atualizarBotao() {
+        var ocultos = itens.filter(function (it) { return it.classList.contains('hidden'); });
+        addBtn.classList.toggle('hidden', ocultos.length === 0);
+    }
+
+    addBtn.addEventListener('click', function () {
+        for (var i = 0; i < itens.length; i++) {
+            if (itens[i].classList.contains('hidden')) {
+                itens[i].classList.remove('hidden');
+                break;
+            }
+        }
+        atualizarBotao();
+    });
+
+    lista.addEventListener('click', function (e) {
+        var btn = e.target.closest('.removeEmergencyBtn');
+        if (!btn) return;
+        var item = btn.closest('.emergency-item');
+        Array.prototype.forEach.call(item.querySelectorAll('input'), function (inp) { inp.value = ''; });
+        item.classList.add('hidden');
+        atualizarBotao();
+    });
+
+    atualizarBotao();
+})();
+</script>

@@ -186,7 +186,10 @@
                                value="{% if form_data %}{{ form_data.uniform_size_pants }}{% else %}{{ target.uniform_size_pants }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
+                    {% include 'users/_pre_register_extra_fields.html' %}
                 </div>
+
+                {% include 'users/_pre_register_emergency.html' %}
             </div>
 
             <!-- Documentos solicitados -->

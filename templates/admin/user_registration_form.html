@@ -337,6 +337,30 @@
                 <span class="value {% if not target.birth_date %}empty{% endif %}">{{ target.birth_date|date:"d/m/Y"|default:"—" }}</span>
             </div>
             <div class="field">
+                <span class="label">Sexo</span>
+                <span class="value {% if not target.sex %}empty{% endif %}">{{ target.get_sex_display|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Gênero</span>
+                <span class="value {% if not target.gender %}empty{% endif %}">{{ target.get_gender_display|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Estado civil</span>
+                <span class="value {% if not target.marital_status %}empty{% endif %}">{{ target.get_marital_status_display|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Naturalidade</span>
+                <span class="value {% if not target.birthplace %}empty{% endif %}">{{ target.birthplace|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Nacionalidade</span>
+                <span class="value {% if not target.nationality %}empty{% endif %}">{{ target.nationality|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Grau de instrução</span>
+                <span class="value {% if not target.education_level %}empty{% endif %}">{{ target.get_education_level_display|default:"—" }}</span>
+            </div>
+            <div class="field">
                 <span class="label">Nome do pai</span>
                 <span class="value {% if not target.father_name %}empty{% endif %}">{{ target.father_name|default:"—" }}</span>
             </div>
@@ -364,9 +388,23 @@
                 <span class="label">E-mail</span>
                 <span class="value">{{ target.email }}</span>
             </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Endereço</h2>
+        <div class="grid">
+            <div class="field span-2">
+                <span class="label">Logradouro</span>
+                <span class="value {% if not target.address %}empty{% endif %}">{{ target.address|default:"—" }}</span>
+            </div>
             <div class="field">
-                <span class="label">CEP</span>
-                <span class="value {% if not target.cep %}empty{% endif %}">{{ target.cep|default:"—" }}</span>
+                <span class="label">Nº</span>
+                <span class="value {% if not target.address_number %}empty{% endif %}">{{ target.address_number|default:"—" }}</span>
+            </div>
+            <div class="field span-2">
+                <span class="label">Complemento</span>
+                <span class="value {% if not target.address_complement %}empty{% endif %}">{{ target.address_complement|default:"—" }}</span>
             </div>
             <div class="field">
                 <span class="label">Bairro</span>
@@ -376,6 +414,38 @@
                 <span class="label">Cidade</span>
                 <span class="value {% if not target.city %}empty{% endif %}">{{ target.city|default:"—" }}</span>
             </div>
+            <div class="field">
+                <span class="label">Estado</span>
+                <span class="value {% if not target.state %}empty{% endif %}">{{ target.state|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">CEP</span>
+                <span class="value {% if not target.cep %}empty{% endif %}">{{ target.cep|default:"—" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Contato de Emergência</h2>
+        <div class="grid">
+            {% for contato in target.emergency_contacts.all %}
+            <div class="field">
+                <span class="label">Nome</span>
+                <span class="value">{{ contato.name }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Telefone</span>
+                <span class="value">{{ contato.phone }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Grau</span>
+                <span class="value">{{ contato.relationship }}</span>
+            </div>
+            {% empty %}
+            <div class="field span-2">
+                <span class="value empty">Nenhum contato de emergência informado</span>
+            </div>
+            {% endfor %}
         </div>
     </div>
 
@@ -415,6 +485,14 @@
             <div class="field">
                 <span class="label">Cargo</span>
                 <span class="value {% if not target.job_title %}empty{% endif %}">{{ target.job_title|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Modelo de contratação</span>
+                <span class="value {% if not target.contract_type %}empty{% endif %}">{{ target.get_contract_type_display|default:"—" }}</span>
+            </div>
+            <div class="field">
+                <span class="label">CNPJ filial</span>
+                <span class="value {% if not target.branch_cnpj %}empty{% endif %}">{{ target.branch_cnpj|default:"—" }}</span>
             </div>
             <div class="field">
                 <span class="label">Data de admissão</span>

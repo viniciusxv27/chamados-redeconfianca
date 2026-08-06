@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument
+from .models import User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument, EmergencyContact
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
 import json
@@ -887,6 +887,8 @@ def create_user_view(request):
         city = request.POST.get('city', '')
         cep = request.POST.get('cep', '').strip()
         rg = request.POST.get('rg', '').strip()
+        contract_type = request.POST.get('contract_type', '').strip()
+        branch_cnpj = request.POST.get('branch_cnpj', '').strip()
 
         context = {
             'sectors': Sector.objects.all(),
@@ -956,6 +958,8 @@ def create_user_view(request):
                 city=city,
                 cep=cep,
                 rg=rg,
+                contract_type=contract_type,
+                branch_cnpj=branch_cnpj,
             )
             
             # Anexo de afastamento (somente quando a situação é "Afastado")
@@ -1113,7 +1117,9 @@ def edit_user_view(request, user_id):
                 user_to_edit.pdv = pdv
                 user_to_edit.neighborhood = neighborhood
                 user_to_edit.city = city
-                
+                user_to_edit.contract_type = request.POST.get('contract_type', '').strip()
+                user_to_edit.branch_cnpj = request.POST.get('branch_cnpj', '').strip()
+
                 user_to_edit.save()
                 
                 # Atualizar setores múltiplos
@@ -1375,6 +1381,19 @@ def _read_pre_registration_personal_data(request):
         'father_name': data.get('father_name', '').strip(),
         'mother_name': data.get('mother_name', '').strip(),
         'skin_color': data.get('skin_color', '').strip(),
+        # Dados pessoais complementares
+        'sex': data.get('sex', '').strip(),
+        'gender': data.get('gender', '').strip(),
+        'marital_status': data.get('marital_status', '').strip(),
+        'birthplace': data.get('birthplace', '').strip(),
+        'nationality': data.get('nationality', '').strip(),
+        'education_level': data.get('education_level', '').strip(),
+        'address': data.get('address', '').strip(),
+        'address_number': data.get('address_number', '').strip(),
+        'address_complement': data.get('address_complement', '').strip(),
+        'state': data.get('state', '').strip(),
+        # Contatos de emergência (até 3)
+        'emergency_contacts': _read_emergency_contacts(data),
     }
 
     errors = []
@@ -1393,7 +1412,74 @@ def _read_pre_registration_personal_data(request):
     if values['skin_color'] not in {c[0] for c in User.SKIN_COLOR_CHOICES}:
         errors.append('Selecione a cor/raça.')
 
+    # Novos campos obrigatórios (complemento segue opcional).
+    if values['sex'] not in {c[0] for c in User.SEX_CHOICES}:
+        errors.append('Selecione o sexo.')
+    if values['gender'] not in {c[0] for c in User.GENDER_CHOICES}:
+        errors.append('Selecione o gênero.')
+    if values['marital_status'] not in {c[0] for c in User.MARITAL_STATUS_CHOICES}:
+        errors.append('Selecione o estado civil.')
+    if values['education_level'] not in {c[0] for c in User.EDUCATION_LEVEL_CHOICES}:
+        errors.append('Selecione o grau de instrução.')
+    if values['state'] not in {c[0] for c in User.STATE_CHOICES}:
+        errors.append('Selecione o estado (UF).')
+    if not values['birthplace']:
+        errors.append('Informe a naturalidade.')
+    if not values['nationality']:
+        errors.append('Informe a nacionalidade.')
+    if not values['address']:
+        errors.append('Informe o endereço.')
+    if not values['address_number']:
+        errors.append('Informe o número do endereço.')
+    if not values['emergency_contacts']:
+        errors.append('Informe ao menos um contato de emergência (nome, telefone e grau).')
+
     return values, errors
+
+
+def _emergency_rows(request, target):
+    """As 3 linhas de contato de emergência já preenchidas para o formulário.
+
+    Prioriza o que veio no POST (para não perder o que foi digitado quando a
+    validação falha) e, no GET, usa o que já está salvo no banco.
+    """
+    existentes = []
+    if target and target.pk:
+        existentes = list(target.emergency_contacts.all()[:EmergencyContact.MAX_POR_USUARIO])
+
+    linhas = []
+    for i in range(1, EmergencyContact.MAX_POR_USUARIO + 1):
+        if request.method == 'POST':
+            nome = (request.POST.get(f'emergency_name_{i}') or '').strip()
+            telefone = (request.POST.get(f'emergency_phone_{i}') or '').strip()
+            grau = (request.POST.get(f'emergency_relationship_{i}') or '').strip()
+        else:
+            atual = existentes[i - 1] if len(existentes) >= i else None
+            nome = atual.name if atual else ''
+            telefone = atual.phone if atual else ''
+            grau = atual.relationship if atual else ''
+        linhas.append({
+            'idx': i, 'name': nome, 'phone': telefone, 'relationship': grau,
+            'obrigatorio': i == 1,
+            'preenchido': bool(nome or telefone or grau),
+        })
+    return linhas
+
+
+def _read_emergency_contacts(data):
+    """Lê os contatos de emergência do formulário (até 3).
+
+    Considera preenchido apenas o contato com nome, telefone e grau.
+    """
+    contatos = []
+    for i in range(1, EmergencyContact.MAX_POR_USUARIO + 1):
+        nome = (data.get(f'emergency_name_{i}') or '').strip()
+        telefone = (data.get(f'emergency_phone_{i}') or '').strip()
+        grau = (data.get(f'emergency_relationship_{i}') or '').strip()
+        if nome and telefone and grau:
+            contatos.append({'name': nome[:150], 'phone': telefone[:20],
+                             'relationship': grau[:60]})
+    return contatos
 
 
 def _apply_pre_registration_personal_data(target, values):
@@ -1422,6 +1508,26 @@ def _apply_pre_registration_personal_data(target, values):
     target.father_name = values['father_name']
     target.mother_name = values['mother_name']
     target.skin_color = values['skin_color']
+    target.sex = values['sex']
+    target.gender = values['gender']
+    target.marital_status = values['marital_status']
+    target.birthplace = values['birthplace']
+    target.nationality = values['nationality']
+    target.education_level = values['education_level']
+    target.address = values['address']
+    target.address_number = values['address_number']
+    target.address_complement = values['address_complement']
+    target.state = values['state']
+
+    # Contatos de emergência: substitui a lista pela informada no formulário
+    # (o colaborador pode reenviar o formulário no fluxo de ajuste).
+    contatos = values.get('emergency_contacts') or []
+    if contatos:
+        target.emergency_contacts.all().delete()
+        EmergencyContact.objects.bulk_create([
+            EmergencyContact(user=target, **c)
+            for c in contatos[:EmergencyContact.MAX_POR_USUARIO]
+        ])
 
 
 def complete_pre_registration_view(request, token):
@@ -1465,6 +1571,12 @@ def complete_pre_registration_view(request, token):
                 'target': target,
                 'required_documents': required_documents,
                 'skin_color_choices': User.SKIN_COLOR_CHOICES,
+                'sex_choices': User.SEX_CHOICES,
+                'gender_choices': User.GENDER_CHOICES,
+                'marital_status_choices': User.MARITAL_STATUS_CHOICES,
+                'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
+                'state_choices': User.STATE_CHOICES,
+                'emergency_rows': _emergency_rows(request, target),
                 'form_data': request.POST,
             }
             return render(request, 'users/pre_register_complete.html', context)
@@ -1495,6 +1607,12 @@ def complete_pre_registration_view(request, token):
         'target': target,
         'required_documents': required_documents,
         'skin_color_choices': User.SKIN_COLOR_CHOICES,
+                'sex_choices': User.SEX_CHOICES,
+                'gender_choices': User.GENDER_CHOICES,
+                'marital_status_choices': User.MARITAL_STATUS_CHOICES,
+                'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
+                'state_choices': User.STATE_CHOICES,
+                'emergency_rows': _emergency_rows(request, target),
         'form_data': None,
     }
     return render(request, 'users/pre_register_complete.html', context)
@@ -1668,6 +1786,12 @@ def adjust_pre_registration_view(request):
                 'requested_documents': requested_documents,
                 'other_documents': other_documents,
                 'skin_color_choices': User.SKIN_COLOR_CHOICES,
+                'sex_choices': User.SEX_CHOICES,
+                'gender_choices': User.GENDER_CHOICES,
+                'marital_status_choices': User.MARITAL_STATUS_CHOICES,
+                'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
+                'state_choices': User.STATE_CHOICES,
+                'emergency_rows': _emergency_rows(request, target),
                 'form_data': request.POST,
             }
             return render(request, 'users/pre_register_adjust.html', context)
@@ -1700,6 +1824,12 @@ def adjust_pre_registration_view(request):
         'requested_documents': requested_documents,
         'other_documents': other_documents,
         'skin_color_choices': User.SKIN_COLOR_CHOICES,
+                'sex_choices': User.SEX_CHOICES,
+                'gender_choices': User.GENDER_CHOICES,
+                'marital_status_choices': User.MARITAL_STATUS_CHOICES,
+                'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
+                'state_choices': User.STATE_CHOICES,
+                'emergency_rows': _emergency_rows(request, target),
         'form_data': None,
     }
     return render(request, 'users/pre_register_adjust.html', context)

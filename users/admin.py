@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Sector, CommissionMonthlyTotal, AParteCommissionConfig, UserSession
+from .models import User, Sector, CommissionMonthlyTotal, AParteCommissionConfig, UserSession, EmergencyContact
 
 
 @admin.register(UserSession)
@@ -61,3 +61,10 @@ class CustomUserAdmin(UserAdmin):
     def primary_sector(self, obj):
         return obj.primary_sector
     primary_sector.short_description = 'Setor Principal'
+
+
+@admin.register(EmergencyContact)
+class EmergencyContactAdmin(admin.ModelAdmin):
+    list_display = ('user', 'name', 'phone', 'relationship', 'created_at')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'name', 'phone')
+    raw_id_fields = ('user',)
