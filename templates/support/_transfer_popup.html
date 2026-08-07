@@ -1,0 +1,169 @@
+{# Popup de transferência aguardando resposta do usuário logado.               #}
+{# Aparece na home quando existe transferência direcionada a ele               #}
+{# (is_receiver + status AGUARDANDO_RECEBIMENTO). Usa o mesmo endpoint dos     #}
+{# cards: window.respondTransfer(id, 'ACEITAR'|'RECUSAR').                     #}
+<div id="transfer-pending-modal"
+     class="hidden fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white">
+      <div class="flex items-center gap-3">
+        <i class="fas fa-exchange-alt text-2xl"></i>
+        <div>
+          <h3 class="text-lg font-bold leading-tight">Transferência aguardando você</h3>
+          <p class="text-xs text-white/80" id="transferPendingCount"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-6 py-5">
+      <p class="text-sm text-gray-600 mb-4">
+        A loja abaixo quer transferir um produto para você. Aceite ou recuse para continuar.
+      </p>
+      <div class="rounded-lg border border-gray-200 divide-y divide-gray-100" id="transferPendingBody"></div>
+    </div>
+
+    <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3 flex-wrap">
+      <button type="button" id="transferPendingLater"
+              class="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">
+        Decidir depois
+      </button>
+      <button type="button" id="transferPendingRefuse"
+              class="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold">
+        <i class="fas fa-times mr-1"></i>Recusar
+      </button>
+      <button type="button" id="transferPendingAccept"
+              class="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold">
+        <i class="fas fa-check mr-1"></i>Aceitar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.__transferPendingInit) return;
+  window.__transferPendingInit = true;
+
+  var modal = document.getElementById('transfer-pending-modal');
+  if (!modal) return;
+
+  var pendentes = [];
+  var atual = null;
+
+  function esc(t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, function (m) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+    });
+  }
+
+  function getCsrf() {
+    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+  }
+
+  // Não empilha em cima de um popup bloqueante do portal (comunicados/trilhas).
+  function portalPopupAberto() {
+    var p = document.getElementById('portal-popup-modal');
+    return !!p && !p.classList.contains('hidden');
+  }
+
+  function linha(rotulo, valor) {
+    if (!valor) return '';
+    return '<div class="px-4 py-2.5 flex justify-between gap-3 text-sm">' +
+           '<span class="text-gray-500">' + esc(rotulo) + '</span>' +
+           '<span class="text-gray-900 font-medium text-right">' + esc(valor) + '</span></div>';
+  }
+
+  function render() {
+    if (!atual) return;
+    document.getElementById('transferPendingCount').textContent =
+      pendentes.length > 1 ? (pendentes.length + ' transferências aguardando') : '1 transferência aguardando';
+    document.getElementById('transferPendingBody').innerHTML =
+      linha('Produto', atual.product_name) +
+      linha('IMEI', atual.imei) +
+      linha('Faturamento 87', atual.faturamento_87) +
+      linha('Número da NF', atual.nf_number) +
+      linha('Loja que envia', atual.sending_sector && atual.sending_sector.name) +
+      linha('Responsável por enviar', atual.sending_manager && atual.sending_manager.name) +
+      linha('Solicitado em', atual.created_at);
+  }
+
+  function abrir() {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function fechar() {
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function proxima() {
+    pendentes.shift();
+    atual = pendentes[0] || null;
+    if (!atual) { fechar(); return; }
+    render();
+  }
+
+  function responder(acao) {
+    if (!atual) return;
+    var botoes = [document.getElementById('transferPendingAccept'),
+                  document.getElementById('transferPendingRefuse')];
+    botoes.forEach(function (b) { b.disabled = true; });
+
+    var body = new FormData();
+    body.append('action', acao);
+    body.append('csrfmiddlewaretoken', getCsrf());
+
+    fetch('/projects/support/transfer/' + atual.id + '/respond/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+      body: body
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      botoes.forEach(function (b) { b.disabled = false; });
+      if (!data.success) {
+        alert(data.error || 'Não foi possível responder a transferência.');
+        return;
+      }
+      // Atualiza a listinha de cards, se estiver na tela.
+      if (typeof window.loadTransferRequests === 'function') {
+        try { window.loadTransferRequests(); } catch (e) {}
+      }
+      proxima();
+    })
+    .catch(function () {
+      botoes.forEach(function (b) { b.disabled = false; });
+      alert('Erro de conexão ao responder a transferência.');
+    });
+  }
+
+  document.getElementById('transferPendingAccept').addEventListener('click', function () { responder('ACEITAR'); });
+  document.getElementById('transferPendingRefuse').addEventListener('click', function () { responder('RECUSAR'); });
+  document.getElementById('transferPendingLater').addEventListener('click', fechar);
+
+  function carregar() {
+    if (portalPopupAberto()) return;   // volta a aparecer no próximo acesso
+    fetch('/projects/support/transfer/list/')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.success) return;
+        pendentes = (data.transfers || []).filter(function (t) {
+          return t.is_receiver && t.status === 'AGUARDANDO_RECEBIMENTO';
+        });
+        atual = pendentes[0] || null;
+        if (!atual) return;
+        render();
+        abrir();
+      })
+      .catch(function () { /* silencioso: nunca atrapalha a home */ });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', carregar);
+  } else {
+    carregar();
+  }
+})();
+</script>

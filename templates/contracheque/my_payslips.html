@@ -33,7 +33,7 @@
     {% if payslips %}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for ps in payslips %}
-        <a href="{% url 'contracheque:payslip_detail' ps.pk %}" class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition group {% if not ps.is_signed %}ring-1 ring-red-200{% endif %}">
+        <a href="{% url 'contracheque:payslip_detail' ps.pk %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="bg-white shadow rounded-lg overflow-hidden hover:shadow-md transition group {% if not ps.is_signed %}ring-1 ring-red-200{% endif %}">
             <div class="px-4 py-3 border-b flex items-center justify-between {% if ps.is_signed %}bg-green-50{% else %}bg-red-50{% endif %}">
                 <span class="text-sm font-bold {% if ps.is_signed %}text-green-800{% else %}text-red-800{% endif %}">{{ ps.month_name }}/{{ ps.year }}</span>
                 <i class="fas fa-chevron-right group-hover:translate-x-1 transition-transform {% if ps.is_signed %}text-green-400{% else %}text-red-400{% endif %}"></i>

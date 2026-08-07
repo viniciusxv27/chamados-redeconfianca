@@ -4,12 +4,20 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
-    <nav class="flex mb-4">
-        <ol class="inline-flex items-center space-x-1 md:space-x-3">
-            <li><a href="{% url 'contracheque:my_payslips' %}" class="text-sm text-gray-500 hover:text-green-600"><i class="fas fa-file-invoice-dollar mr-1"></i> Contracheques</a></li>
-            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">{{ payslip.period_display }}</span></div></li>
-        </ol>
-    </nav>
+    {% with voltar_url=request.GET.urlencode %}
+    <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <nav class="flex">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li><a href="{% url 'contracheque:my_payslips' %}{% if voltar_url %}?{{ voltar_url }}{% endif %}" class="text-sm text-gray-500 hover:text-green-600"><i class="fas fa-file-invoice-dollar mr-1"></i> Contracheques</a></li>
+                <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">{{ payslip.period_display }}</span></div></li>
+            </ol>
+        </nav>
+        <a href="{% url 'contracheque:my_payslips' %}{% if voltar_url %}?{{ voltar_url }}{% endif %}"
+           class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i> Voltar
+        </a>
+    </div>
+    {% endwith %}
 
     <!-- Header -->
     <div class="bg-white shadow rounded-lg overflow-hidden mb-4">

@@ -347,10 +347,12 @@ class SupportTransferRequest(models.Model):
         related_name='incoming_transfer_requests',
         verbose_name="Gerente/ADM responsável por receber",
     )
-    material = models.CharField(
-        max_length=60, blank=True, default='', verbose_name="Material")
     imei = models.CharField(max_length=40, verbose_name="IMEI")
     product_name = models.CharField(max_length=200, verbose_name="Nome do Produto")
+    faturamento_87 = models.CharField(
+        max_length=60, blank=True, default='', verbose_name="Faturamento 87")
+    nf_number = models.CharField(
+        max_length=40, blank=True, default='', verbose_name="Número da NF")
     status = models.CharField(
         max_length=30,
         choices=STATUS_CHOICES,

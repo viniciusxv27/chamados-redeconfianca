@@ -53,7 +53,8 @@ def _serialize_transfer(transfer, user):
             'id': transfer.receiving_manager_id,
             'name': transfer.receiving_manager.get_full_name() or transfer.receiving_manager.username,
         },
-        'material': transfer.material,
+        'faturamento_87': transfer.faturamento_87,
+        'nf_number': transfer.nf_number,
         'imei': transfer.imei,
         'product_name': transfer.product_name,
         'status': transfer.status,
@@ -64,6 +65,8 @@ def _serialize_transfer(transfer, user):
         'responded_at': timezone.localtime(transfer.responded_at).strftime('%d/%m/%Y %H:%M') if transfer.responded_at else '',
         'responded_by': transfer.responded_by.get_full_name() if transfer.responded_by else '',
         'can_respond': transfer.receiving_manager_id == user.id or _user_is_supervisor_or_higher(user),
+        # Direcionada a mim: usado pelo popup da home (só quem precisa responder).
+        'is_receiver': transfer.receiving_manager_id == user.id,
         'can_cancel': transfer.created_by_id == user.id and transfer.status == 'AGUARDANDO_RECEBIMENTO',
     }
 
@@ -784,7 +787,8 @@ def create_support_transfer(request):
         sending_manager=sending_manager,
         receiving_sector=receiving_sector,
         receiving_manager=receiving_manager,
-        material=request.POST.get('material', '').strip(),
+        faturamento_87=request.POST.get('faturamento_87', '').strip(),
+        nf_number=request.POST.get('nf_number', '').strip(),
         imei=request.POST.get('imei', '').strip(),
         product_name=request.POST.get('product_name', '').strip(),
     )
@@ -940,7 +944,8 @@ def support_transfer_report_api(request):
         {
             'created_at': timezone.localtime(t.created_at).strftime('%d/%m/%Y %H:%M'),
             'product_name': t.product_name,
-            'material': t.material,
+            'faturamento_87': t.faturamento_87,
+            'nf_number': t.nf_number,
             'imei': t.imei,
             'sending_sector': t.sending_sector.name if t.sending_sector_id else 'N/A',
             'sending_manager': (t.sending_manager.get_full_name() or t.sending_manager.username) if t.sending_manager_id else 'N/A',
@@ -1072,7 +1077,7 @@ def export_transfer_report(request):
     # ===== Aba 3: Detalhado =====
     ws_det = wb.create_sheet('Detalhado')
     det_headers = [
-        'Criado em', 'Produto', 'Material', 'IMEI', 'Loja envia', 'Resp. envia',
+        'Criado em', 'Produto', 'IMEI', 'Faturamento 87', 'Número da NF', 'Loja envia', 'Resp. envia',
         'Loja recebe', 'Resp. recebe', 'Criado por', 'Status', 'Respondido por', 'Respondido em',
     ]
     for col, h in enumerate(det_headers, start=1):
@@ -1085,17 +1090,18 @@ def export_transfer_report(request):
     for i, t in enumerate(detail_qs, start=2):
         ws_det.cell(row=i, column=1, value=timezone.localtime(t.created_at).strftime('%d/%m/%Y %H:%M'))
         ws_det.cell(row=i, column=2, value=t.product_name)
-        ws_det.cell(row=i, column=3, value=t.material)
-        ws_det.cell(row=i, column=4, value=t.imei)
-        ws_det.cell(row=i, column=5, value=t.sending_sector.name if t.sending_sector_id else 'N/A')
-        ws_det.cell(row=i, column=6, value=(t.sending_manager.get_full_name() or t.sending_manager.username) if t.sending_manager_id else 'N/A')
-        ws_det.cell(row=i, column=7, value=t.receiving_sector.name if t.receiving_sector_id else 'N/A')
-        ws_det.cell(row=i, column=8, value=(t.receiving_manager.get_full_name() or t.receiving_manager.username) if t.receiving_manager_id else 'N/A')
-        ws_det.cell(row=i, column=9, value=t.created_by.get_full_name() or t.created_by.username)
-        ws_det.cell(row=i, column=10, value=status_labels.get(t.status, t.status))
-        ws_det.cell(row=i, column=11, value=(t.responded_by.get_full_name() or t.responded_by.username) if t.responded_by_id else '')
-        ws_det.cell(row=i, column=12, value=timezone.localtime(t.responded_at).strftime('%d/%m/%Y %H:%M') if t.responded_at else '')
-    for col, width in zip('ABCDEFGHIJKL', [17, 24, 18, 18, 20, 20, 20, 20, 22, 20, 20, 17]):
+        ws_det.cell(row=i, column=3, value=t.imei)
+        ws_det.cell(row=i, column=4, value=t.faturamento_87)
+        ws_det.cell(row=i, column=5, value=t.nf_number)
+        ws_det.cell(row=i, column=6, value=t.sending_sector.name if t.sending_sector_id else 'N/A')
+        ws_det.cell(row=i, column=7, value=(t.sending_manager.get_full_name() or t.sending_manager.username) if t.sending_manager_id else 'N/A')
+        ws_det.cell(row=i, column=8, value=t.receiving_sector.name if t.receiving_sector_id else 'N/A')
+        ws_det.cell(row=i, column=9, value=(t.receiving_manager.get_full_name() or t.receiving_manager.username) if t.receiving_manager_id else 'N/A')
+        ws_det.cell(row=i, column=10, value=t.created_by.get_full_name() or t.created_by.username)
+        ws_det.cell(row=i, column=11, value=status_labels.get(t.status, t.status))
+        ws_det.cell(row=i, column=12, value=(t.responded_by.get_full_name() or t.responded_by.username) if t.responded_by_id else '')
+        ws_det.cell(row=i, column=13, value=timezone.localtime(t.responded_at).strftime('%d/%m/%Y %H:%M') if t.responded_at else '')
+    for col, width in zip('ABCDEFGHIJKLM', [17, 24, 18, 18, 16, 20, 20, 20, 20, 22, 20, 20, 17]):
         ws_det.column_dimensions[col].width = width
 
     response = HttpResponse(

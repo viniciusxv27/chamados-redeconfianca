@@ -2166,22 +2166,28 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Material</label>
-                            <input type="text" id="transferMaterial" maxlength="60"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                   placeholder="Informe o material">
-                        </div>
-                        <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">IMEI</label>
                             <input type="text" id="transferImei" required maxlength="40"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                    placeholder="Informe o IMEI">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Nome Produto</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Produto</label>
                             <input type="text" id="transferProductName" required maxlength="200"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                    placeholder="Informe o produto">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Faturamento 87</label>
+                            <input type="text" id="transferFaturamento87" maxlength="60"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Informe o faturamento 87">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Número da NF</label>
+                            <input type="text" id="transferNfNumber" maxlength="40"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Informe o número da NF">
                         </div>
                         <button type="submit"
                                 class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium transition-colors">
@@ -3066,8 +3072,9 @@
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0">
                                 <h5 class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(transfer.product_name)}</h5>
-                                ${transfer.material ? `<p class="text-xs text-gray-500 font-mono">Material: ${escapeHtml(transfer.material)}</p>` : ''}
                                 <p class="text-xs text-gray-500 font-mono">IMEI: ${escapeHtml(transfer.imei)}</p>
+                                ${transfer.faturamento_87 ? `<p class="text-xs text-gray-500 font-mono">Faturamento 87: ${escapeHtml(transfer.faturamento_87)}</p>` : ''}
+                                ${transfer.nf_number ? `<p class="text-xs text-gray-500 font-mono">NF: ${escapeHtml(transfer.nf_number)}</p>` : ''}
                             </div>
                             <span class="text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${transferStatusClass(transfer.status)}">${escapeHtml(transfer.status_display)}</span>
                         </div>
@@ -3273,9 +3280,10 @@
                     formData.append('sending_manager_id', document.getElementById('transferSendingManager').value);
                     formData.append('receiving_sector_id', document.getElementById('transferReceivingSector').value);
                     formData.append('receiving_manager_id', document.getElementById('transferReceivingManager').value);
-                    formData.append('material', document.getElementById('transferMaterial').value.trim());
                     formData.append('imei', document.getElementById('transferImei').value.trim());
                     formData.append('product_name', document.getElementById('transferProductName').value.trim());
+                    formData.append('faturamento_87', document.getElementById('transferFaturamento87').value.trim());
+                    formData.append('nf_number', document.getElementById('transferNfNumber').value.trim());
                     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]')?.value || '');
 
                     fetch('/projects/support/transfer/create/', {
@@ -3854,6 +3862,9 @@
     </script>
     {% include 'feedback/_reminder_popup.html' %}
     {% include 'portal_popups/_popup_gate.html' %}
+    {% if user.is_authenticated and request.resolver_match.url_name == 'home' %}
+    {% include 'support/_transfer_popup.html' %}
+    {% endif %}
 
     <!-- Responsividade global: envolve tabelas "soltas" em um container rolável
          para evitar overflow horizontal em celulares/tablets. -->
