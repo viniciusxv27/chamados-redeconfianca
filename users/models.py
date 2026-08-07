@@ -581,6 +581,11 @@ class User(AbstractUser):
                                      verbose_name="Modelo de Contratação")
     branch_cnpj = models.CharField(max_length=20, blank=True, default='',
                                    verbose_name="CNPJ Filial")
+    salary = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name="Salário",
+        help_text="Salário do colaborador. Visível apenas para quem gerencia usuários.",
+    )
 
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)

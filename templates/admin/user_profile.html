@@ -181,6 +181,11 @@
                 {% include 'admin/_profile_field.html' with label='Cor/Raça' value=target.get_skin_color_display %}
                 {% include 'admin/_profile_field.html' with label='CEP' value=target.cep %}
                 {% include 'admin/_profile_field.html' with label='Cargo' value=target.job_title %}
+                {% include 'admin/_profile_field.html' with label='Modelo de contratação' value=target.get_contract_type_display %}
+                {% include 'admin/_profile_field.html' with label='CNPJ filial' value=target.branch_cnpj %}
+                {% if target.salary is not None %}
+                {% include 'admin/_profile_field.html' with label='Salário' value=target.salary %}
+                {% endif %}
                 {% include 'admin/_profile_field.html' with label='Setor principal' value=target.primary_sector %}
                 {% include 'admin/_profile_field.html' with label='Setores' value=target.sectors_display %}
                 {% include 'admin/_profile_field.html' with label='Situação' value=target.get_status_display %}

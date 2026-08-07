@@ -889,6 +889,7 @@ def create_user_view(request):
         rg = request.POST.get('rg', '').strip()
         contract_type = request.POST.get('contract_type', '').strip()
         branch_cnpj = request.POST.get('branch_cnpj', '').strip()
+        salary = _parse_salary(request.POST.get('salary'))
 
         context = {
             'sectors': Sector.objects.all(),
@@ -960,6 +961,7 @@ def create_user_view(request):
                 rg=rg,
                 contract_type=contract_type,
                 branch_cnpj=branch_cnpj,
+                salary=salary,
             )
             
             # Anexo de afastamento (somente quando a situação é "Afastado")
@@ -1119,6 +1121,7 @@ def edit_user_view(request, user_id):
                 user_to_edit.city = city
                 user_to_edit.contract_type = request.POST.get('contract_type', '').strip()
                 user_to_edit.branch_cnpj = request.POST.get('branch_cnpj', '').strip()
+                user_to_edit.salary = _parse_salary(request.POST.get('salary'))
 
                 user_to_edit.save()
                 
@@ -1239,6 +1242,7 @@ def pre_register_user_view(request):
         job_title = request.POST.get('job_title', '').strip()
         phone = request.POST.get('phone', '').strip()
         admission_date = request.POST.get('admission_date', '').strip()
+        salary = _parse_salary(request.POST.get('salary'))
 
         context = {
             'sectors': Sector.objects.all(),
@@ -1296,6 +1300,7 @@ def pre_register_user_view(request):
                 job_title=job_title,
                 phone=phone,
                 admission_date=admission_date if admission_date else None,
+                salary=salary,
                 is_active=False,  # inativo até o colaborador concluir o pré-cadastro
                 pre_registration_status=User.PRE_REG_PENDING,
                 pre_registration_token=token,
@@ -1435,6 +1440,39 @@ def _read_pre_registration_personal_data(request):
         errors.append('Informe ao menos um contato de emergência (nome, telefone e grau).')
 
     return values, errors
+
+
+def _parse_salary(valor):
+    """Converte o salário digitado em Decimal. Aceita os formatos usuais.
+
+    'R$ 3.500,00' / '3.500,00' / '3500.00' / '3500' -> Decimal('3500.00').
+    Vazio ou inválido -> None (campo é opcional).
+    """
+    from decimal import Decimal, InvalidOperation
+
+    texto = (valor or '').strip()
+    if not texto:
+        return None
+
+    texto = texto.replace('R$', '').replace(' ', '').replace('\xa0', '')
+    if ',' in texto and '.' in texto:
+        # 3.500,00 -> ponto é separador de milhar
+        texto = texto.replace('.', '').replace(',', '.')
+    elif ',' in texto:
+        texto = texto.replace(',', '.')
+    elif '.' in texto:
+        # "3.500" (milhar) vs "3500.00" (decimal): 3 dígitos após o ponto = milhar
+        inteiro, _, resto = texto.rpartition('.')
+        if len(resto) == 3 and inteiro:
+            texto = inteiro.replace('.', '') + resto
+
+    try:
+        salario = Decimal(texto)
+    except (InvalidOperation, ValueError):
+        return None
+    if salario < 0:
+        return None
+    return salario.quantize(Decimal('0.01'))
 
 
 def _emergency_rows(request, target):
