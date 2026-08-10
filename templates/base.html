@@ -2178,10 +2178,10 @@
                                    placeholder="Informe o produto">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Faturamento 87</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Fornecimento 87</label>
                             <input type="text" id="transferFaturamento87" maxlength="60"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                   placeholder="Informe o faturamento 87">
+                                   placeholder="Informe o Fornecimento 87">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Número da NF</label>
@@ -3073,7 +3073,7 @@
                             <div class="min-w-0">
                                 <h5 class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(transfer.product_name)}</h5>
                                 <p class="text-xs text-gray-500 font-mono">IMEI: ${escapeHtml(transfer.imei)}</p>
-                                ${transfer.faturamento_87 ? `<p class="text-xs text-gray-500 font-mono">Faturamento 87: ${escapeHtml(transfer.faturamento_87)}</p>` : ''}
+                                ${transfer.faturamento_87 ? `<p class="text-xs text-gray-500 font-mono">Fornecimento 87: ${escapeHtml(transfer.faturamento_87)}</p>` : ''}
                                 ${transfer.nf_number ? `<p class="text-xs text-gray-500 font-mono">NF: ${escapeHtml(transfer.nf_number)}</p>` : ''}
                             </div>
                             <span class="text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${transferStatusClass(transfer.status)}">${escapeHtml(transfer.status_display)}</span>
