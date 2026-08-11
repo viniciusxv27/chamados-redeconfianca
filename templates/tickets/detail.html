@@ -307,12 +307,12 @@ select[multiple] option:hover {
                                             name="new_attachments" 
                                             id="new_attachments"
                                             multiple
-                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.zip,.rar"
+                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.zip,.rar,.mp4,.mov,.avi,.mkv,.webm,.mpeg,.mpg,.3gp,.m4v,video/*"
                                             class="w-full px-3 py-2 border border-blue-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600"
                                             onchange="updateFileInfo(this)"
                                         >
                                         <p class="text-xs text-blue-600 mt-1">
-                                            Tipos aceitos: PDF, DOC, DOCX, XLS, XLSX, TXT, JPG, PNG, GIF, ZIP, RAR (máx. 50MB por arquivo)
+                                            Tipos aceitos: PDF, DOC, DOCX, XLS, XLSX, TXT, JPG, PNG, GIF, ZIP, RAR, MP4, MOV, AVI, MKV, WEBM (vídeos máx. 100MB, demais máx. 50MB)
                                         </p>
                                     </div>
                                     
@@ -1070,8 +1070,12 @@ function updateFileInfo(input) {
             const fileItem = document.createElement('div');
             fileItem.className = 'flex items-center justify-between text-xs text-blue-800';
             
+            const ehVideo = file.type.startsWith('video/') ||
+                /\.(mp4|mov|avi|mkv|webm|mpeg|mpg|3gp|m4v)$/i.test(file.name);
+
             let fileIcon = 'fas fa-file';
-            if (file.type.includes('image/')) fileIcon = 'fas fa-image';
+            if (ehVideo) fileIcon = 'fas fa-file-video';
+            else if (file.type.includes('image/')) fileIcon = 'fas fa-image';
             else if (file.type.includes('pdf')) fileIcon = 'fas fa-file-pdf';
             else if (file.type.includes('word') || file.name.endsWith('.doc') || file.name.endsWith('.docx')) fileIcon = 'fas fa-file-word';
             else if (file.type.includes('excel') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) fileIcon = 'fas fa-file-excel';

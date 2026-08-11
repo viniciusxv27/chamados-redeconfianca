@@ -21,6 +21,19 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 
+# Extensões de vídeo aceitas nos anexos (mesma lista usada na abertura do chamado).
+VIDEO_EXTENSIONS = ('.mp4', '.mov', '.avi', '.mkv', '.webm', '.mpeg', '.mpg', '.3gp', '.m4v')
+
+
+def _arquivo_e_video(arquivo):
+    """Detecta vídeo pela extensão (o MIME vem vazio/errado em vários navegadores)."""
+    nome = (getattr(arquivo, 'name', '') or '').lower()
+    if nome.endswith(VIDEO_EXTENSIONS):
+        return True
+    tipo = (getattr(arquivo, 'content_type', '') or '').lower()
+    return tipo.startswith('video/')
+
+
 @login_required
 def tickets_list_view(request):
     user = request.user
@@ -845,11 +858,18 @@ def ticket_detail_view(request, ticket_id):
         
         uploaded_count = 0
         for attachment in attachments:
-            # Verificar tamanho do arquivo (limite de 50MB por exemplo)
-            if attachment.size > 50 * 1024 * 1024:  # 50MB
-                messages.warning(request, f'Arquivo "{attachment.name}" é muito grande (máximo 50MB). Arquivo ignorado.')
+            # Vídeo tem limite maior (mesma regra da abertura do chamado).
+            eh_video = _arquivo_e_video(attachment)
+            limite = (100 if eh_video else 50) * 1024 * 1024
+            if attachment.size > limite:
+                messages.warning(
+                    request,
+                    f'Arquivo "{attachment.name}" é muito grande '
+                    f'(máximo {100 if eh_video else 50}MB). Arquivo ignorado.'
+                )
                 continue
-                
+
+
             TicketAttachment.objects.create(
                 ticket=ticket,
                 file=attachment,
