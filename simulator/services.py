@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 import calendar
+import functools
 import logging
 import os
 import unicodedata
@@ -8,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.db import transaction
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -20,6 +21,45 @@ from .sql_realizado import get_realized_sales_from_mysql, get_network_realized_s
 
 
 logger = logging.getLogger(__name__)
+
+
+def _local_cache():
+    """Cache em memória local (por processo). Os helpers pequenos e muito
+    frequentes NÃO devem ir ao Redis remoto (~200ms/op seria mais lento que a
+    própria consulta). Cai no cache padrão se 'local' não estiver configurado."""
+    try:
+        return caches['local']
+    except Exception:
+        return cache
+
+
+def _ttl_cache(ttl: int):
+    """Cache leve por processo para lookups puros e repetidos.
+
+    Muitos helpers de papel/grupo são chamados dezenas de vezes por request
+    (ex.: ``get_user_role`` por usuário ao montar a lista de alvos). Eles só
+    dependem de leituras que não mudam no meio do request, então um cache curto
+    elimina as consultas duplicadas. Usa o cache LOCAL (memória do processo),
+    nunca o Redis remoto. NÃO usar em funções cujo resultado precise refletir
+    uma escrita imediata. Não afeta os valores de comissão calculados.
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args):
+            local = _local_cache()
+            cache_key = 'simsvc:%s:%s' % (
+                fn.__name__,
+                ':'.join(str(getattr(a, 'id', a)) for a in args),
+            )
+            sentinel = object()
+            hit = local.get(cache_key, sentinel)
+            if hit is not sentinel:
+                return hit
+            value = fn(*args)
+            local.set(cache_key, value, ttl)
+            return value
+        return wrapper
+    return decorator
 
 
 ROLE_CONSULTOR = 'consultor'
@@ -526,13 +566,6 @@ def find_row_by_name(df: pd.DataFrame, col: str, name: str) -> Optional[pd.Serie
     return None
 
 
-def xlookup(df: pd.DataFrame, key_col: str, key: str, target_col: str) -> float:
-    row = find_row_by_name(df, key_col, key)
-    if row is None:
-        return 0.0
-    return to_float(row.get(target_col))
-
-
 def sumifs(df: pd.DataFrame, sum_col: str, filter_col: str, filter_value: str) -> float:
     if sum_col not in df.columns or filter_col not in df.columns:
         return 0.0
@@ -597,12 +630,21 @@ def pdv_threshold_rate(table: List[List[Optional[float]]], col_index: int) -> Tu
     return threshold, rate
 
 
-def get_aparte_group() -> Optional['CommunicationGroup']:
-    """Retorna o grupo de comunicação 'A PARTE' (comissionamento à parte)."""
+@_ttl_cache(60)
+def get_aparte_group_id() -> Optional[int]:
+    """ID do grupo 'A PARTE' (cacheável; o objeto em si é recarregado sob demanda)."""
     group = CommunicationGroup.objects.filter(name__iexact=APARTE_GROUP_NAME).first()
     if not group:
         group = CommunicationGroup.objects.filter(name__icontains=APARTE_GROUP_NAME).first()
-    return group
+    return group.id if group else None
+
+
+def get_aparte_group() -> Optional['CommunicationGroup']:
+    """Retorna o grupo de comunicação 'A PARTE' (comissionamento à parte)."""
+    group_id = get_aparte_group_id()
+    if not group_id:
+        return None
+    return CommunicationGroup.objects.filter(id=group_id).first()
 
 
 def is_aparte_user(user: User) -> bool:
@@ -626,6 +668,7 @@ def get_all_aparte_users() -> List[User]:
     )
 
 
+@_ttl_cache(60)
 def get_user_role(user: User) -> str:
     if user.is_superuser or getattr(user, 'hierarchy', None) == 'SUPERADMIN':
         return ROLE_SUPERADMIN
@@ -680,6 +723,7 @@ def _group_member_ids(name_filter: str, exact: bool = False) -> List[int]:
     return list(group.members.values_list('id', flat=True))
 
 
+@_ttl_cache(60)
 def get_simulator_excluded_user_ids() -> set:
     """IDs de usuários que devem ser ocultados na seleção do /simulator:
     - PADRÃO que pertencem aos grupos ADMINS ou RECEPCIONISTAS
@@ -2397,3 +2441,81 @@ def update_factor_sets_from_post(post_data: Dict[str, Any], updated_by: User) ->
             factor_set.data = data
             factor_set.updated_by = updated_by
             factor_set.save()
+
+
+# ---------------------------------------------------------------------------
+# Pré-preenchimento do Simulador a partir do realizado + metas p/ meta-diária
+# ---------------------------------------------------------------------------
+
+# Pilar de exibição do formulário do Simulador → chave da row calculada.
+_PREFILL_DISPLAY_TO_ROW = {
+    'movel': 'movel', 'fixa': 'fixa', 'smartphones': 'smartphones',
+    'eletronicos_a': 'eletronicos', 'essenciais_a': 'essenciais',
+    'seguros': 'seguros', 'sva': 'sva',
+}
+
+
+def _prefill_num(value) -> str:
+    """Número para preencher input: sem separador de milhar, ponto decimal, '' se 0."""
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return ''
+    if not v:
+        return ''
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return f'{v:.2f}'
+
+
+def build_simulador_prefill(simulation: Dict[str, Any], target_role: str) -> Dict[str, str]:
+    """De uma simulação em modo REALIZADO → valores para pré-preencher o Simulador.
+
+    Individual/"carteira" → ``<pilar>__real``; PDV/"loja" → ``<pilar>__realpdv``
+    (apenas consultor); Fixa → ``fixa__qty`` (quantidade) e ``fixa__receita`` (R$).
+    Campos ignorados pelo cálculo (coordenação do gerente, qtypdv da Fixa) não são
+    preenchidos. Devolve ``{'<pilar>__<campo>': 'valor'}``.
+    """
+    prefill: Dict[str, str] = {}
+    if not simulation or simulation.get('error'):
+        return prefill
+    rows_by_key = {r.get('key'): r for r in simulation.get('rows', [])}
+    for disp, rk in _PREFILL_DISPLAY_TO_ROW.items():
+        row = rows_by_key.get(rk)
+        if not row:
+            continue
+        if rk == 'fixa':
+            qty = _prefill_num(row.get('quantity'))
+            if qty:
+                prefill['fixa__qty'] = qty
+            rev = _prefill_num(row.get('revenue'))
+            if rev:
+                prefill['fixa__receita'] = rev
+        else:
+            real = _prefill_num(row.get('proj'))
+            if real:
+                prefill[f'{disp}__real'] = real
+            if target_role == ROLE_CONSULTOR:
+                realpdv = _prefill_num(row.get('pdv_proj'))
+                if realpdv:
+                    prefill[f'{disp}__realpdv'] = realpdv
+    return prefill
+
+
+def build_simulador_metas(simulation: Dict[str, Any]) -> Dict[str, float]:
+    """Metas por pilar de exibição, para o cálculo de meta-diária ao vivo.
+
+    ``{'<pilar_display>': meta_float}`` — o JS usa (meta − real)/dias_úteis_restantes.
+    """
+    metas: Dict[str, float] = {}
+    if not simulation or simulation.get('error'):
+        return metas
+    rows_by_key = {r.get('key'): r for r in simulation.get('rows', [])}
+    for disp, rk in _PREFILL_DISPLAY_TO_ROW.items():
+        row = rows_by_key.get(rk)
+        if row and row.get('meta'):
+            try:
+                metas[disp] = float(row.get('meta'))
+            except (TypeError, ValueError):
+                continue
+    return metas

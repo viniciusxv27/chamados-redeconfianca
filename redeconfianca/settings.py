@@ -134,6 +134,45 @@ DATABASES = {
 # DATABASE_URL=postgresql://user:password@localhost:5432/redeconfianca_db
 
 
+# Cache
+# ---------------------------------------------------------------------------
+# 'default' -> Redis compartilhado (django-redis). Usado pelos caches caros e
+# entre processos (mapas de realizado do Simulador, fatores do Excel), o que
+# permite que o comando `warm_realized_cache` aqueça também os workers web.
+# IGNORE_EXCEPTIONS faz o cache degradar para "miss" se o Redis estiver
+# indisponível — nunca quebra a página, apenas perde a aceleração.
+#
+# 'local' -> LocMemCache por processo, para lookups pequenos e MUITO frequentes
+# (ex.: get_user_role por usuário na lista de alvos). Como o Redis é remoto
+# (~200ms por operação), cachear esses lookups no Redis seria mais lento que a
+# própria consulta — por isso ficam em memória local.
+REDIS_URL = config(
+    'REDIS_URL',
+    default='redis://default:redeconfianca2025@painel.dev.redeconfianca.com.br:2543',
+)
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': REDIS_URL,
+        'KEY_PREFIX': 'rc',
+        'TIMEOUT': 900,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'IGNORE_EXCEPTIONS': True,
+            'SOCKET_CONNECT_TIMEOUT': 3,
+            'SOCKET_TIMEOUT': 3,
+        },
+    },
+    'local': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'simulator-local',
+        'TIMEOUT': 300,
+    },
+}
+# Loga (em vez de silenciar totalmente) as exceções de Redis ignoradas.
+DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 

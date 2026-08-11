@@ -7,9 +7,7 @@ from .models import CoordinatorStoreAccess, SniperAssignment
 from .services import (
     FACTOR_RANGE_SPECS,
     DEFAULT_META_BY_ROLE,
-    PILLAR_ORDER,
     HUNTER_PILLARS,
-    SIMULATOR_INPUT_PILLARS,
     SIMULATOR_INPUT_PILLARS_DISPLAY,
     VIEW_CHOICES,
     VIEW_PROJECAO,
@@ -29,16 +27,18 @@ from .services import (
     get_factor_set,
     get_hunter_levels_from_request,
     get_simulator_excluded_user_ids,
-    get_sniper_coordinator,
     get_user_role,
     is_sniper_user,
-    is_aparte_user,
     compute_consultor_simulation,
     compute_gerente_simulation,
     compute_coordenador_simulation,
     compute_aparte_simulation,
     update_factor_sets_from_post,
+    get_business_days_info,
+    build_simulador_prefill,
+    build_simulador_metas,
 )
+from .sql_realizado import realized_prefetch
 
 
 def is_superadmin(user: User) -> bool:
@@ -210,41 +210,100 @@ def simulator_dashboard(request):
             target_user = current_user
             target_role = ROLE_CONSULTOR
 
+    # ------------------------------------------------------------------
+    # Split shell / fragmento assíncrono.
+    # O cálculo pesado (compute_* + MySQL) só roda no fragmento; o shell abre
+    # instantâneo com skeleton e o JS busca o fragmento em seguida.
+    # ------------------------------------------------------------------
+    is_fragment = (
+        request.GET.get('fragment') == 'results'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+
+    # Dias úteis restantes no mês (base da meta-diária) — barato; serve os dois.
+    passed_du, total_du = get_business_days_info()
+    remaining_business_days = max(total_du - passed_du, 0)
+
+    has_target = bool(target_user and target_role) and not show_summary_only
+
+    if not is_fragment:
+        # SHELL: sem cálculo pesado.
+        context = {
+            'user': current_user,
+            'role': role,
+            'available_targets': available_targets,
+            'target_user': target_user,
+            'target_role': target_role,
+            'simulation': None,
+            'show_summary_only': show_summary_only,
+            'is_superadmin': is_superadmin(current_user),
+            'hunter_levels': hunter_levels,
+            'pillars': HUNTER_PILLARS,
+            'view_mode': view_mode,
+            'view_choices': VIEW_CHOICES,
+            'simulator_input_pillars': SIMULATOR_INPUT_PILLARS_DISPLAY,
+            'simulator_inputs': simulator_inputs,
+            'remaining_business_days': remaining_business_days,
+            'load_async': has_target,
+        }
+        return render(request, 'simulator/dashboard.html', context)
+
+    # FRAGMENTO: calcula dentro do prefetch (colapsa as chamadas MySQL
+    # redundantes e cacheia o mês inteiro por 15 min).
     simulation = None
-    if target_user and target_role == ROLE_APART:
-        from users.models import AParteCommissionConfig
-        aparte_config = AParteCommissionConfig.objects.filter(user=target_user).first()
-        simulation = compute_aparte_simulation(
-            target_user, aparte_config, hunter_levels,
-            view_mode=view_mode, simulator_inputs=simulator_inputs,
-        )
-    elif target_user and target_role:
-        factor_set = get_factor_set(target_role)
-        if target_role == ROLE_CONSULTOR:
-            simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)
-        elif target_role == ROLE_GERENTE:
-            simulation = compute_gerente_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)
-        elif target_role == ROLE_COORDENADOR:
-            simulation = compute_coordenador_simulation(target_user, factor_set.data, hunter_levels, view_mode=view_mode, simulator_inputs=simulator_inputs)
+    prefill = None
+    daily_metas = {}
+    standard_role = target_role in (ROLE_CONSULTOR, ROLE_GERENTE, ROLE_COORDENADOR)
+    # 1ª entrada no Simulador (sem valores digitados): calcula o REALIZADO — ele
+    # serve tanto para exibir quanto para pré-preencher os campos (editáveis).
+    first_sim_load = view_mode == VIEW_SIMULADOR and not simulator_inputs and standard_role
+    compute_view = VIEW_REALIZADO if first_sim_load else view_mode
+
+    if has_target:
+        with realized_prefetch():
+            if target_role == ROLE_APART:
+                from users.models import AParteCommissionConfig
+                aparte_config = AParteCommissionConfig.objects.filter(user=target_user).first()
+                simulation = compute_aparte_simulation(
+                    target_user, aparte_config, hunter_levels,
+                    view_mode=compute_view, simulator_inputs=simulator_inputs,
+                )
+            else:
+                factor_set = get_factor_set(target_role)
+                if target_role == ROLE_CONSULTOR:
+                    simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels, view_mode=compute_view, simulator_inputs=simulator_inputs)
+                elif target_role == ROLE_GERENTE:
+                    simulation = compute_gerente_simulation(target_user, factor_set.data, hunter_levels, view_mode=compute_view, simulator_inputs=simulator_inputs)
+                elif target_role == ROLE_COORDENADOR:
+                    simulation = compute_coordenador_simulation(target_user, factor_set.data, hunter_levels, view_mode=compute_view, simulator_inputs=simulator_inputs)
+
+        # Meta-diária (display-only) em cada pilar: quanto falta por dia útil
+        # restante para bater 100% da meta. Não altera nenhum valor de comissão.
+        if simulation and not simulation.get('error') and simulation.get('rows'):
+            for row in simulation['rows']:
+                meta_v = row.get('meta') or 0
+                real_v = (row.get('quantity') if row.get('key') == 'fixa' else row.get('proj')) or 0
+                gap = meta_v - real_v
+                row['daily_needed'] = (gap / remaining_business_days) if (remaining_business_days > 0 and gap > 0) else 0
+
+        if view_mode == VIEW_SIMULADOR and standard_role and simulation and not simulation.get('error'):
+            daily_metas = build_simulador_metas(simulation)
+            if first_sim_load:
+                prefill = build_simulador_prefill(simulation, target_role)
 
     context = {
-        'user': current_user,
         'role': role,
-        'available_targets': available_targets,
         'target_user': target_user,
         'target_role': target_role,
         'simulation': simulation,
-        'show_summary_only': show_summary_only,
         'is_superadmin': is_superadmin(current_user),
-        'hunter_levels': hunter_levels,
-        'pillars': HUNTER_PILLARS,
         'view_mode': view_mode,
         'view_choices': VIEW_CHOICES,
-        'simulator_input_pillars': SIMULATOR_INPUT_PILLARS_DISPLAY,
-        'simulator_inputs': simulator_inputs,
+        'remaining_business_days': remaining_business_days,
+        'simulator_prefill': prefill or {},
+        'simulator_daily_metas': daily_metas,
     }
-
-    return render(request, 'simulator/dashboard.html', context)
+    return render(request, 'simulator/_results.html', context)
 
 
 @login_required

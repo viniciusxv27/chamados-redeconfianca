@@ -70,7 +70,6 @@
   </div>
   {% endif %}
 
-  <!-- Messages -->
   {% if show_summary_only %}
   <div class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 flex items-start gap-3">
     <i class="fas fa-info-circle mt-0.5"></i>
@@ -79,67 +78,7 @@
       <p class="mt-1">Selecione um usuário acima para visualizar o simulador completo de comissionamento.</p>
     </div>
   </div>
-  {% elif not simulation %}
-  <div class="mb-8 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 flex items-start gap-3">
-    <i class="fas fa-exclamation-circle mt-0.5"></i>
-    <div>
-      <strong>Dados não disponíveis</strong>
-      <p class="mt-1">Nenhuma simulação disponível para este usuário. Verifique se há dados carregados.</p>
-    </div>
-  </div>
-  {% elif simulation.error %}
-  <div class="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-start gap-3">
-    <i class="fas fa-times-circle mt-0.5"></i>
-    <div>
-      <strong>Erro:</strong> {{ simulation.error }}
-    </div>
-  </div>
   {% else %}
-
-  <!-- User Info Cards -->
-  <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6 md:mb-8">
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-      <div class="flex items-center justify-between">
-        <div class="min-w-0 flex-1">
-          <p class="text-xs sm:text-sm text-gray-600">Usuário</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate" title="{{ simulation.user_name }}">{{ simulation.first_name|default:simulation.user_name|first_word }}</p>
-        </div>
-        <i class="fas fa-user text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
-      </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-      <div class="flex items-center justify-between">
-        <div class="min-w-0 flex-1">
-          <p class="text-xs sm:text-sm text-gray-600">PDV</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.pdv|default:"—" }}</p>
-        </div>
-        <i class="fas fa-store text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
-      </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-      <div class="flex items-center justify-between">
-        <div class="min-w-0 flex-1">
-          <p class="text-xs sm:text-sm text-gray-600">Coordenador</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.coordinator|default:"—"|first_word }}</p>
-        </div>
-        <i class="fas fa-user-tie text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
-      </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-      <div class="flex items-center justify-between">
-        <div class="min-w-0 flex-1">
-          <p class="text-xs sm:text-sm text-gray-600">Papel</p>
-          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">
-            {% if simulation.is_sniper %}Sniper{% elif target_role == "consultor" %}Consultor{% elif target_role == "gerente" %}Gerente{% elif target_role == "coordenador" %}Coordenador{% endif %}
-          </p>
-        </div>
-        <i class="fas fa-id-badge text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
-      </div>
-    </div>
-  </div>
 
   <!-- View Tabs (Realizado / Projeção / Simulador) -->
   <div class="mb-4 sm:mb-6 md:mb-8">
@@ -211,7 +150,7 @@
         <i class="fas fa-flask text-primary"></i>
         Simulador — informe os valores para projetar
       </h2>
-      <p class="text-sm text-gray-600 mb-4">Preencha o realizado por pilar (individual e PDV). Em branco = 0.</p>
+      <p class="text-sm text-gray-600 mb-4">Os campos vêm preenchidos com o realizado do mês — ajuste o que quiser. Abaixo de cada valor aparece quanto falta por dia útil para bater a meta.</p>
 
       <form method="get" class="space-y-4">
         {% if target_user %}<input type="hidden" name="user_id" value="{{ target_user.id }}">{% endif %}
@@ -251,9 +190,11 @@
                     <div>
                       <label class="block text-[10px] text-gray-500 text-left leading-tight">Qtd (atingimento)</label>
                       <input type="number" inputmode="numeric" step="1" min="0" name="sim__fixa__qty"
+                             data-daily-real="fixa"
                              value="{{ simulator_inputs.fixa__qty|default:'' }}"
                              placeholder="0"
                              class="w-full px-2 py-1 border border-gray-300 rounded text-right">
+                      <div class="sim-daily-hint text-[10px] text-teal-700 mt-0.5 text-left leading-tight" data-pillar="fixa"></div>
                     </div>
                     <div>
                       <label class="block text-[10px] text-gray-500 text-left leading-tight">Receita (base do %)</label>
@@ -292,10 +233,12 @@
                   <div class="relative inline-block w-36">
                     <span class="absolute inset-y-0 left-2 flex items-center text-gray-500 text-xs font-semibold pointer-events-none">R$</span>
                     <input type="text" inputmode="decimal" name="sim__{{ pilar_key }}__real"
+                           data-daily-real="{{ pilar_key }}"
                            value="{{ simulator_inputs|get_dict_item:real_key|default:'' }}"
                            placeholder="0,00"
                            class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
                   </div>
+                  <div class="sim-daily-hint text-[10px] text-teal-700 mt-0.5 text-right leading-tight" data-pillar="{{ pilar_key }}"></div>
                 </td>
                 {% if target_role != 'coordenador' %}
                 <td class="px-3 py-2 text-right">
@@ -327,281 +270,33 @@
   </div>
   {% endif %}
 
-  <!-- Results Table -->
-  {% if target_role == "aparte" %}
-  <!-- A parte Results -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-    <div class="bg-gradient-to-r from-indigo-600 to-indigo-800 px-6 py-4 flex items-center justify-between">
-      <h3 class="text-lg font-bold text-white flex items-center gap-2">
-        <i class="fas fa-user-cog"></i>
-        Comissionamento A parte — {% for k,l in view_choices %}{% if k == view_mode %}{{ l }}{% endif %}{% endfor %}
-      </h3>
-      <span class="text-sm text-white opacity-90">Salário base: {{ simulation.base_salary|brl }}</span>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full border border-gray-200">
-        <thead class="bg-gray-100 border-b border-gray-200">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Pilar</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Meta da Rede</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">{% if view_mode == 'realizado' %}Realizado{% elif view_mode == 'simulador' %}Simulado{% else %}Projeção{% endif %} da Rede</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700 border-r-2 border-gray-500">Atingimento</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">% Fator</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">R$ Comissão</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200">
-          {% for row in simulation.rows %}
-          <tr class="hover:bg-gray-50 transition-colors">
-            <td class="px-4 py-3 text-sm font-semibold text-gray-900">{{ row.label }}</td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">
-              {% if row.key == 'fixa' %}{{ row.meta|number_br:0 }}{% else %}{{ row.meta|brl }}{% endif %}
-            </td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">
-              {% if row.key == 'fixa' %}
-                <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
-                {% if row.revenue %}<div class="text-xs text-gray-500">{{ row.revenue|brl }}</div>{% endif %}
-              {% else %}
-                {{ row.proj|brl }}
-              {% endif %}
-            </td>
-            <td class="px-4 py-3 text-sm text-right border-r-2 border-gray-500">
-              <span class="px-3 py-1 rounded-full text-xs font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.85 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.attainment|pct_br:1 }}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
-            <td class="px-4 py-3 text-sm text-right font-bold text-gray-900">{{ row.commission_value|brl }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold">Salário Base</p>
-          <p class="text-lg font-bold text-gray-900">{{ simulation.base_salary|brl }}</p>
-        </div>
-        <div class="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-lg p-4 text-white">
-          <p class="text-xs uppercase font-semibold opacity-90">Total da Comissão A parte</p>
-          <p class="text-xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
+  <!-- Resultados (carregados de forma assíncrona) -->
+  <div id="sim-results" data-load-async="{{ load_async|yesno:'1,0' }}" data-remaining-du="{{ remaining_business_days }}">
+    {% if load_async %}
+    <!-- Skeleton -->
+    <div class="animate-pulse">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div class="h-20 bg-gray-200 rounded-lg"></div>
+        <div class="h-20 bg-gray-200 rounded-lg"></div>
+        <div class="h-20 bg-gray-200 rounded-lg"></div>
+        <div class="h-20 bg-gray-200 rounded-lg"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="h-14 bg-gray-200"></div>
+        <div class="p-4 space-y-3">
+          <div class="h-6 bg-gray-100 rounded"></div>
+          <div class="h-6 bg-gray-100 rounded"></div>
+          <div class="h-6 bg-gray-100 rounded"></div>
+          <div class="h-6 bg-gray-100 rounded"></div>
+          <div class="h-6 bg-gray-100 rounded"></div>
+          <div class="h-6 bg-gray-100 rounded"></div>
+          <div class="h-6 bg-gray-100 rounded"></div>
         </div>
       </div>
+      <p class="text-center text-sm text-gray-400 mt-4"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando resultados...</p>
     </div>
+    {% endif %}
   </div>
-
-  {% elif target_role == "coordenador" %}
-  <!-- Coordenador Results -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-    <div class="bg-gradient-to-r from-primary to-orange-600 px-6 py-4">
-      <h3 class="text-lg font-bold text-white flex items-center gap-2">
-        <i class="fas fa-chart-line"></i>
-        Comissionamento por Pilar — {% for k,l in view_choices %}{% if k == view_mode %}{{ l }}{% endif %}{% endfor %}
-      </h3>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full border border-gray-200">
-        <thead class="bg-gray-100 border-b border-gray-200">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Pilar</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Meta</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">{% if view_mode == 'realizado' %}Realizado{% elif view_mode == 'simulador' %}Simulado{% else %}Projeção{% endif %}</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700 border-r-2 border-gray-500">Atingimento</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">% Comissão</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700 border-r-2 border-gray-500">R$ Comissão</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Hunter 2</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Hunter 3</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200">
-          {% for row in simulation.rows %}
-          <tr class="hover:bg-gray-50 transition-colors">
-            <td class="px-4 py-3 text-sm font-semibold text-gray-900">{{ row.label }}</td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">
-              {% if row.key == 'fixa' %}{{ row.meta|number_br:0 }}{% else %}{{ row.meta|brl }}{% endif %}
-            </td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">
-              {% if row.key == 'fixa' %}
-                <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
-                {% if row.revenue %}<div class="text-xs text-gray-500">{{ row.revenue|brl }}</div>{% endif %}
-              {% else %}
-                {{ row.proj|brl }}
-              {% endif %}
-            </td>
-            <td class="px-4 py-3 text-sm text-right border-r-2 border-gray-500">
-              <span class="px-3 py-1 rounded-full text-xs font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.attainment|pct_br:1 }}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
-            <td class="px-4 py-3 text-sm text-right font-bold text-gray-900 border-r-2 border-gray-500">{{ row.commission_value|brl }}</td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.hunter2_value|brl }}</td>
-            <td class="px-4 py-3 text-sm text-right text-gray-600">{{ row.hunter3_value|brl }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Summary for Coordenador -->
-    <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold">Total de Comissão</p>
-          <p class="text-lg font-bold text-gray-900">{{ simulation.totals.total_commission|brl }}</p>
-        </div>
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold">Hunter 2</p>
-          <p class="text-lg font-bold text-gray-900">{{ simulation.totals.hunter2|brl }}</p>
-        </div>
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold">Hunter 3</p>
-          <p class="text-lg font-bold text-gray-900">{{ simulation.totals.hunter3|brl }}</p>
-        </div>
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold">Bônus 6/7</p>
-          <p class="text-lg font-bold text-success">{{ simulation.totals.bonus_6_7|brl }}</p>
-        </div>
-        <div class="bg-gradient-to-br from-primary to-orange-600 rounded-lg p-4 text-white">
-          <p class="text-xs uppercase font-semibold opacity-90">Ganho Total{% if simulation.is_sniper %} (Sniper 75%){% endif %}</p>
-          <p class="text-xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
-          {% if simulation.is_sniper and simulation.sniper_coordinator %}
-          <p class="text-xs opacity-90 mt-1">Base: {{ simulation.sniper_coordinator }}</p>
-          {% elif simulation.totals.ganho_total_sniper and not simulation.is_sniper %}
-          <p class="text-xs opacity-90 mt-1">Sniper: {{ simulation.totals.ganho_total_sniper|brl }}</p>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {% else %}
-  <!-- Consultor/Gerente Results -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-    <div class="bg-gradient-to-r from-primary to-orange-600 px-6 py-4">
-      <h3 class="text-lg font-bold text-white flex items-center gap-2">
-        <i class="fas fa-chart-line"></i>
-        Comissionamento Detalhado por Pilar — {% for k,l in view_choices %}{% if k == view_mode %}{{ l }}{% endif %}{% endfor %}
-      </h3>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs border border-gray-200">
-        <thead class="bg-gray-100 border-b border-gray-200 sticky top-0">
-          <tr>
-            <th class="px-2 py-2 text-left font-semibold text-gray-700">Pilar</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">Meta</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">{% if view_mode == 'realizado' %}Real{% elif view_mode == 'simulador' %}Simul.{% else %}Proj.{% endif %}</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Ating.</th>
-            {% if target_role == 'consultor' %}
-            <th class="px-2 py-2 text-right font-semibold text-blue-700 bg-blue-50">Meta PDV</th>
-            <th class="px-2 py-2 text-right font-semibold text-blue-700 bg-blue-50">{% if view_mode == 'realizado' %}Real PDV{% else %}Proj. PDV{% endif %}</th>
-            <th class="px-2 py-2 text-right font-semibold text-blue-700 bg-blue-50 border-r-2 border-gray-500">Ating. PDV</th>
-            {% endif %}
-            {% if target_role != 'consultor' %}
-            <th class="px-2 py-2 text-right font-semibold text-purple-700 bg-purple-50">Meta Coord.</th>
-            <th class="px-2 py-2 text-right font-semibold text-purple-700 bg-purple-50">{% if view_mode == 'realizado' %}Real Coord.{% else %}Proj. Coord.{% endif %}</th>
-            <th class="px-2 py-2 text-right font-semibold text-purple-700 bg-purple-50 border-r-2 border-gray-500">Ating. Coord.</th>
-            {% endif %}
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">% Com.</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Comissão</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">% Prêm.</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700 border-r-2 border-gray-500">Premiação</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">Total Indiv.</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">{% if target_role == 'gerente' %}Prêm. Coord.{% else %}Prêm. PDV{% endif %}</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">{% if target_role == 'gerente' %}Total+Coord.{% else %}Total+PDV{% endif %}</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">Hunter2</th>
-            <th class="px-2 py-2 text-right font-semibold text-gray-700">Hunter3</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200">
-          {% for row in simulation.rows %}
-          <tr class="hover:bg-gray-50 transition-colors">
-            <td class="px-2 py-2 font-semibold text-gray-900">{{ row.label }}</td>
-            <td class="px-2 py-2 text-right text-gray-600">
-              {% if row.key == 'fixa' %}{{ row.meta|number_br:0 }}{% else %}{{ row.meta|brl }}{% endif %}
-            </td>
-            <td class="px-2 py-2 text-right text-gray-600">
-              {% if row.key == 'fixa' %}
-                <div class="font-semibold text-gray-900">{{ row.quantity|number_br:0 }}</div>
-                {% if row.revenue %}<div class="text-[10px] text-gray-500">{{ row.revenue|brl }}</div>{% endif %}
-              {% else %}
-                {{ row.proj|brl }}
-              {% endif %}
-            </td>
-            <td class="px-2 py-2 text-right border-r-2 border-gray-500">
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if row.attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.attainment|pct_br:1 }}
-              </span>
-            </td>
-            {% if target_role == 'consultor' %}
-            <td class="px-2 py-2 text-right text-blue-700 bg-blue-50">{% if row.pdv_meta is not None %}{% if row.key == 'fixa' %}{{ row.pdv_meta|number_br:0 }}{% else %}{{ row.pdv_meta|brl }}{% endif %}{% else %}—{% endif %}</td>
-            <td class="px-2 py-2 text-right text-blue-700 bg-blue-50">{% if row.pdv_proj is not None %}{% if row.key == 'fixa' %}{{ row.pdv_proj|number_br:0 }}{% else %}{{ row.pdv_proj|brl }}{% endif %}{% else %}—{% endif %}</td>
-            <td class="px-2 py-2 text-right bg-blue-50 border-r-2 border-gray-500">
-              {% if row.pdv_attainment is not None %}
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if row.pdv_attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.pdv_attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.pdv_attainment|pct_br:1 }}
-              </span>
-              {% else %}—{% endif %}
-            </td>
-            {% endif %}
-            {% if target_role != 'consultor' %}
-            <td class="px-2 py-2 text-right text-purple-700 bg-purple-50">{% if row.coord_meta is not None %}{% if row.key == 'fixa' %}{{ row.coord_meta|number_br:0 }}{% else %}{{ row.coord_meta|brl }}{% endif %}{% else %}—{% endif %}</td>
-            <td class="px-2 py-2 text-right text-purple-700 bg-purple-50">{% if row.coord_proj is not None %}{% if row.key == 'fixa' %}{{ row.coord_proj|number_br:0 }}{% else %}{{ row.coord_proj|brl }}{% endif %}{% else %}—{% endif %}</td>
-            <td class="px-2 py-2 text-right bg-purple-50 border-r-2 border-gray-500">
-              {% if row.coord_attainment is not None %}
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if row.coord_attainment >= 1 %}bg-success bg-opacity-20 text-success{% elif row.coord_attainment >= 0.695 %}bg-warning bg-opacity-20 text-warning{% else %}bg-danger bg-opacity-20 text-danger{% endif %}">
-                {{ row.coord_attainment|pct_br:1 }}
-              </span>
-              {% else %}—{% endif %}
-            </td>
-            {% endif %}
-            <td class="px-2 py-2 text-right text-gray-600">{{ row.commission_rate|pct_br:2 }}</td>
-            <td class="px-2 py-2 text-right font-semibold text-gray-900 border-r-2 border-gray-500">{{ row.commission_value|brl }}</td>
-            <td class="px-2 py-2 text-right text-gray-600">{{ row.premium_rate|pct_br:2 }}</td>
-            <td class="px-2 py-2 text-right font-semibold text-gray-900 border-r-2 border-gray-500">{{ row.premium_value|brl }}</td>
-            <td class="px-2 py-2 text-right font-bold text-primary">{{ row.total_individual|brl }}</td>
-            <td class="px-2 py-2 text-right text-gray-600">{{ row.pdv_premium_value|brl }}</td>
-            <td class="px-2 py-2 text-right font-bold text-success">{{ row.total_with_pdv|brl }}</td>
-            <td class="px-2 py-2 text-right text-gray-600">{{ row.hunter2_value|brl }}</td>
-            <td class="px-2 py-2 text-right text-gray-600">{{ row.hunter3_value|brl }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Summary for Consultor/Gerente -->
-    <div class="bg-gray-50 px-6 py-6 border-t border-gray-200">
-      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">{% if target_role == 'gerente' %}Total com Coord.{% else %}Total com PDV{% endif %}</p>
-          <p class="text-xl font-bold text-gray-900">{{ simulation.totals.total_with_pdv|brl }}</p>
-        </div>
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Hunter 2</p>
-          <p class="text-xl font-bold text-gray-900">{{ simulation.totals.hunter2|brl }}</p>
-        </div>
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Hunter 3</p>
-          <p class="text-xl font-bold text-gray-900">{{ simulation.totals.hunter3|brl }}</p>
-        </div>
-        <div class="bg-white rounded-lg p-4 border border-gray-200">
-          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Bônus 6/7</p>
-          <p class="text-xl font-bold text-success">{{ simulation.totals.bonus_6_7|brl }}</p>
-        </div>
-        <div class="bg-gradient-to-br from-primary to-orange-600 rounded-lg p-4 text-white">
-          <p class="text-xs uppercase font-semibold mb-1 opacity-90">Ganho Total</p>
-          <p class="text-2xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
   {% endif %}
 </div>
@@ -614,10 +309,10 @@
 
 <script>
 (function () {
+  // ---------- Máscara BRL ----------
   function formatBRL(value) {
     var digits = String(value || '').replace(/\D/g, '');
     if (!digits) return '';
-    // remove zeros à esquerda mantendo ao menos 1 dígito
     digits = digits.replace(/^0+(?=\d)/, '');
     while (digits.length < 3) digits = '0' + digits;
     var intPart = digits.slice(0, digits.length - 2);
@@ -625,56 +320,137 @@
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return intPart + ',' + decPart;
   }
-
   function toFloatStr(value) {
     if (!value) return '';
     return String(value).replace(/\./g, '').replace(',', '.');
   }
-
   function initialFormat(raw) {
     if (raw === null || raw === undefined) return '';
     var s = String(raw).trim();
     if (!s) return '';
-    // se vier "1234.56" ou "1234,56" ou "1.234,56"
     if (/^\d+(\.\d+)?$/.test(s)) {
-      // formato numérico simples (ex: vindo do backend)
       var n = parseFloat(s);
       if (isNaN(n)) return '';
       return formatBRL(Math.round(n * 100).toString());
     }
-    // já vem em formato brl ou apenas dígitos
     return formatBRL(s);
   }
-
-  function attach(el) {
+  function attachBRL(el) {
     el.value = initialFormat(el.value);
-
     el.addEventListener('input', function () {
       var caretAtEnd = (el.selectionStart === el.value.length);
       el.value = formatBRL(el.value);
-      if (caretAtEnd) {
-        try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
-      }
+      if (caretAtEnd) { try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} }
     });
-
     el.addEventListener('focus', function () {
-      // posiciona o cursor no fim para facilitar digitação
-      setTimeout(function () {
-        try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
-      }, 0);
+      setTimeout(function () { try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} }, 0);
     });
   }
 
-  document.querySelectorAll('input.brl-mask').forEach(attach);
+  // ---------- Números / meta-diária ----------
+  var SIM_METAS = {};
+  var REMAINING = 0;
 
-  // Antes do submit, converte para formato numérico (1234.56) — backend amigável
-  document.querySelectorAll('form').forEach(function (form) {
-    form.addEventListener('submit', function () {
-      form.querySelectorAll('input.brl-mask').forEach(function (el) {
-        if (el.value) el.value = toFloatStr(el.value);
+  function parseFieldNumber(el) {
+    if (!el || !el.value) return 0;
+    var s = String(el.value).replace(/\./g, '').replace(',', '.');
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+  function fmtMoney(v) {
+    return 'R$ ' + formatBRL(Math.round(v * 100).toString());
+  }
+  function fmtQty(v) {
+    return (Math.round(v * 10) / 10).toLocaleString('pt-BR');
+  }
+  function updateDaily(input) {
+    var pillar = input.getAttribute('data-daily-real');
+    var hint = document.querySelector('.sim-daily-hint[data-pillar="' + pillar + '"]');
+    if (!hint) return;
+    var isFixa = (pillar === 'fixa');
+    var real = parseFieldNumber(input);
+    var metaField = document.querySelector('[name="sim__' + pillar + '__meta"]');
+    var meta = (metaField && metaField.value) ? parseFieldNumber(metaField) : (SIM_METAS[pillar] || 0);
+    if (!meta || REMAINING <= 0) { hint.textContent = ''; return; }
+    var gap = meta - real;
+    if (gap <= 0) { hint.innerHTML = '<span class="text-green-600 font-semibold">meta batida ✓</span>'; return; }
+    var perDay = gap / REMAINING;
+    hint.textContent = 'faltam ' + (isFixa ? fmtQty(perDay) : fmtMoney(perDay)) + '/dia · ' + REMAINING + ' dias úteis';
+  }
+  function attachDaily() {
+    document.querySelectorAll('[data-daily-real]').forEach(function (inp) {
+      inp.addEventListener('input', function () { updateDaily(inp); });
+    });
+    // Recalcula quando a meta opcional muda também.
+    document.querySelectorAll('[name$="__meta"]').forEach(function (mInp) {
+      mInp.addEventListener('input', function () {
+        var name = mInp.getAttribute('name') || '';
+        var pillar = name.replace(/^sim__/, '').replace(/__meta$/, '');
+        var realInp = document.querySelector('[data-daily-real="' + pillar + '"]');
+        if (realInp) updateDaily(realInp);
       });
     });
+  }
+  function refreshAllDaily() {
+    document.querySelectorAll('[data-daily-real]').forEach(function (inp) { updateDaily(inp); });
+  }
+
+  // ---------- Prefill + metas (vindos do fragmento) ----------
+  function readJson(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    try { return JSON.parse(el.textContent || 'null'); } catch (e) { return null; }
+  }
+  function applyPrefillAndMetas() {
+    var metas = readJson('sim-metas');
+    if (metas) SIM_METAS = metas;
+    var prefill = readJson('sim-prefill');
+    if (prefill) {
+      Object.keys(prefill).forEach(function (key) {
+        var input = document.querySelector('[name="sim__' + key + '"]');
+        if (!input) return;
+        if (input.value && input.value.trim() !== '') return; // não sobrescreve o que já está preenchido
+        var raw = prefill[key];
+        input.value = input.classList.contains('brl-mask') ? initialFormat(raw) : String(raw);
+      });
+    }
+    refreshAllDaily();
+  }
+
+  // ---------- Carregamento assíncrono do fragmento ----------
+  function loadFragment() {
+    var container = document.getElementById('sim-results');
+    if (!container || container.getAttribute('data-load-async') !== '1') return;
+    REMAINING = parseInt(container.getAttribute('data-remaining-du') || '0', 10) || 0;
+    var params = new URLSearchParams(window.location.search);
+    params.set('fragment', 'results');
+    fetch(window.location.pathname + '?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        container.innerHTML = html;
+        applyPrefillAndMetas();
+      })
+      .catch(function () {
+        container.innerHTML = '<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700"><i class="fas fa-exclamation-circle mr-2"></i>Erro ao carregar os resultados. Recarregue a página.</div>';
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('input.brl-mask').forEach(attachBRL);
+    var container = document.getElementById('sim-results');
+    if (container) REMAINING = parseInt(container.getAttribute('data-remaining-du') || '0', 10) || 0;
+    attachDaily();
+    loadFragment();
   });
+
+  // Antes do submit, converte brl-mask para número (backend amigável).
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || !form.querySelectorAll) return;
+    form.querySelectorAll('input.brl-mask').forEach(function (el) {
+      if (el.value) el.value = toFloatStr(el.value);
+    });
+  }, true);
 })();
 </script>
 {% endblock %}
