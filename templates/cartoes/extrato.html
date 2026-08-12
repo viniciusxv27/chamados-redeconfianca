@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Extrato — {{ cartao.titulo }}{% endblock %}
+
+{% block content %}
+{% include "cartoes/_card_css.html" %}
+<div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+  <nav class="mb-4 text-sm">
+    <a href="{% url 'cartoes:dashboard' %}" class="text-gray-500 hover:text-purple-600">
+      <i class="fas fa-arrow-left mr-1"></i> Cartões
+    </a>
+  </nav>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Cartão -->
+    <div class="lg:col-span-1">
+      {% include "cartoes/_card.html" %}
+    </div>
+
+    <!-- Resumo + ação -->
+    <div class="lg:col-span-2 flex flex-col justify-between gap-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <p class="text-xs text-gray-500 uppercase font-semibold">Total lançado</p>
+          <p class="text-2xl font-bold text-gray-900">R$ {{ total|floatformat:2 }}</p>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <p class="text-xs text-gray-500 uppercase font-semibold">Responsável</p>
+          <p class="text-base font-bold text-gray-900 truncate">{{ cartao.responsavel.get_full_name|default:cartao.responsavel.email }}</p>
+          <p class="text-xs text-gray-500">Validade {{ cartao.validade_display }}</p>
+        </div>
+      </div>
+      <a href="{% url 'cartoes:gasto_create' cartao.pk %}"
+         class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
+        <i class="fas fa-plus"></i> Lançar gasto
+      </a>
+    </div>
+  </div>
+
+  <!-- Extrato -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b bg-gray-50">
+      <h2 class="font-bold text-gray-900"><i class="fas fa-receipt text-gray-400 mr-2"></i>Extrato de gastos</h2>
+    </div>
+    {% if gastos %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-100 text-gray-600">
+          <tr>
+            <th class="px-4 py-2 text-left font-semibold">Data</th>
+            <th class="px-4 py-2 text-left font-semibold">Estabelecimento</th>
+            <th class="px-4 py-2 text-left font-semibold">Categoria</th>
+            <th class="px-4 py-2 text-right font-semibold">Valor</th>
+            <th class="px-4 py-2 text-center font-semibold">Chamado</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for g in gastos %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ g.data_gasto|date:"d/m/Y" }}</td>
+            <td class="px-4 py-2 text-gray-900">
+              {{ g.estabelecimento|default:"—" }}
+              {% if g.descricao %}<div class="text-xs text-gray-500 truncate max-w-xs" title="{{ g.descricao }}">{{ g.descricao }}</div>{% endif %}
+            </td>
+            <td class="px-4 py-2 text-gray-600">{{ g.categoria_gasto|default:"—" }}</td>
+            <td class="px-4 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ {{ g.valor|floatformat:2 }}</td>
+            <td class="px-4 py-2 text-center">
+              {% if g.ticket_id %}
+              <a href="{% url 'ticket_detail' g.ticket_id %}" class="text-purple-600 hover:text-purple-800" title="Ver chamado">
+                <i class="fas fa-external-link-alt"></i> #{{ g.ticket_id }}
+              </a>
+              {% else %}<span class="text-gray-300">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-8 text-center text-gray-500">
+      <i class="fas fa-receipt text-3xl text-gray-300 mb-2"></i>
+      <p>Nenhum gasto lançado ainda.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

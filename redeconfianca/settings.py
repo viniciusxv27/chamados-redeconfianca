@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'portal_popups',  # Popups configuráveis do portal
     'documentos',  # Documentos para assinatura digital
     'impulso',  # Impulso ADM (metas, conexão, inovação, faixas)
+    'cartoes',  # Cartões de crédito corporativos
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -110,6 +111,7 @@ TEMPLATES = [
                 'feedback.context_processors.survey_menu',
                 'portal_popups.context_processors.portal_popup_gate',
                 'impulso.context_processors.impulso_menu',
+                'cartoes.context_processors.cartoes_menu',
             ],
         },
     },

@@ -1,0 +1,36 @@
+{% comment %}Um cartão flip 3D. Recebe `cartao`. A dashboard envolve num <a> para o extrato.{% endcomment %}
+<div class="cc-card" tabindex="0" aria-label="Cartão {{ cartao.get_bandeira_display }} final {{ cartao.last4 }}">
+  <div class="cc-inner">
+    <!-- Frente -->
+    <div class="cc-face cc-front cc-{{ cartao.bandeira }}">
+      {% if not cartao.ativo %}<span class="cc-inactive">Inativo</span>{% endif %}
+      <div class="cc-top">
+        <span class="cc-apelido">{{ cartao.apelido|default:"Cartão corporativo" }}</span>
+        <span class="cc-brand">{% include 'cartoes/_bandeira.html' with bandeira=cartao.bandeira %}</span>
+      </div>
+      <div>
+        <div class="cc-chip"></div>
+        <div class="cc-number">{{ cartao.numero_mascarado }}</div>
+      </div>
+      <div class="cc-bottom">
+        <div class="cc-holder">
+          <div class="cc-label">Titular</div>
+          <div class="cc-value">{{ cartao.responsavel.get_full_name|default:cartao.responsavel.email }}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="cc-label">Validade</div>
+          <div class="cc-value">{{ cartao.validade_display }}</div>
+        </div>
+      </div>
+    </div>
+    <!-- Verso -->
+    <div class="cc-face cc-back cc-{{ cartao.bandeira }}">
+      <div class="cc-stripe"></div>
+      <div class="cc-sign">{{ cartao.responsavel.get_full_name|default:cartao.responsavel.email }}</div>
+      <div class="cc-bottom">
+        <span class="cc-apelido">{{ cartao.get_bandeira_display }} ••••{{ cartao.last4 }}</span>
+        <span class="cc-brand" style="font-size:1.6rem">{% include 'cartoes/_bandeira.html' with bandeira=cartao.bandeira %}</span>
+      </div>
+    </div>
+  </div>
+</div>

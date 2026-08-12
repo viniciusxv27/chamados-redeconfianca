@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Cartões de Crédito{% endblock %}
+
+{% block content %}
+{% include "cartoes/_card_css.html" %}
+<div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+  <!-- Cabeçalho -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
+        <i class="fas fa-credit-card text-purple-600"></i>
+        Cartões de Crédito
+      </h1>
+      <p class="text-gray-600 mt-1">
+        {% if is_superadmin %}Gestão de todos os cartões corporativos.{% else %}Seus cartões e gastos.{% endif %}
+      </p>
+    </div>
+    {% if is_superadmin %}
+    <a href="{% url 'cartoes:cartao_create' %}"
+       class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
+      <i class="fas fa-plus"></i> Novo cartão
+    </a>
+    {% endif %}
+  </div>
+
+  {% if is_superadmin and cartoes %}
+  <div class="mb-6 inline-flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-5 py-3 shadow-sm">
+    <i class="fas fa-coins text-amber-500 text-xl"></i>
+    <div>
+      <p class="text-xs text-gray-500 uppercase font-semibold">Total lançado (todos os cartões)</p>
+      <p class="text-xl font-bold text-gray-900">R$ {{ total_geral|floatformat:2 }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if cartoes %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+    {% for cartao in cartoes %}
+    <div>
+      <a href="{% url 'cartoes:extrato' cartao.pk %}" style="display:block; text-decoration:none;" title="Ver extrato de {{ cartao.titulo }}">
+        {% include "cartoes/_card.html" %}
+      </a>
+      <div class="mt-3 flex items-center justify-between text-sm px-1">
+        <span class="text-gray-700 font-medium truncate" title="{{ cartao.titulo }}">
+          <i class="fas fa-receipt text-gray-400 mr-1"></i>{{ cartao.num_gastos }} gasto{{ cartao.num_gastos|pluralize }}
+        </span>
+        <span class="font-bold text-gray-900">R$ {{ cartao.total_gasto|default:0|floatformat:2 }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500">
+    <i class="fas fa-credit-card text-4xl text-gray-300 mb-3"></i>
+    <p class="font-medium">Nenhum cartão {% if not is_superadmin %}vinculado a você{% else %}cadastrado{% endif %}.</p>
+    {% if is_superadmin %}
+    <a href="{% url 'cartoes:cartao_create' %}" class="mt-3 inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 font-semibold">
+      <i class="fas fa-plus"></i> Criar o primeiro cartão
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

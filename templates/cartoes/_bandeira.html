@@ -1,0 +1,10 @@
+{% comment %}
+Marca da bandeira. Usa os glifos de marca do FontAwesome já carregado
+(fab fa-cc-*) para Visa/Mastercard/Amex; selo de texto simples para a Elo
+(o FontAwesome não tem glifo de Elo). Recebe a variável `bandeira` (código).
+{% endcomment %}
+{% if bandeira == 'VISA' %}<i class="fab fa-cc-visa" title="Visa"></i>
+{% elif bandeira == 'MASTERCARD' %}<i class="fab fa-cc-mastercard" title="Mastercard"></i>
+{% elif bandeira == 'AMEX' %}<i class="fab fa-cc-amex" title="American Express"></i>
+{% elif bandeira == 'ELO' %}<span class="cc-elo-badge" title="Elo">elo</span>
+{% else %}<i class="fas fa-credit-card"></i>{% endif %}

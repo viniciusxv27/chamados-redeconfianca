@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Lançar gasto — {{ cartao.titulo }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
+  <nav class="mb-4 text-sm">
+    <a href="{% url 'cartoes:extrato' cartao.pk %}" class="text-gray-500 hover:text-purple-600">
+      <i class="fas fa-arrow-left mr-1"></i> Extrato do cartão
+    </a>
+  </nav>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-6 py-4 border-b bg-purple-50">
+      <h1 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <i class="fas fa-plus-circle text-purple-600"></i> Lançar gasto
+      </h1>
+      <p class="text-sm text-gray-600 mt-1">{{ cartao.get_bandeira_display }} ••••{{ cartao.last4 }} — {{ cartao.responsavel.get_full_name|default:cartao.responsavel.email }}</p>
+    </div>
+
+    <form id="gasto-form" method="post" action="{% url 'cartoes:gasto_create' cartao.pk %}" enctype="multipart/form-data" class="p-6 space-y-6">
+      {% csrf_token %}
+
+      <!-- FASE 1: captura -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 text-sm font-bold text-gray-700">
+          <span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">1</span>
+          Comprovante ou descrição
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-camera text-gray-400 mr-1"></i> Foto do comprovante</label>
+          <input type="file" name="foto" id="foto" accept="image/*" capture="environment"
+                 class="w-full text-sm border border-gray-300 rounded-lg file:mr-3 file:py-2 file:px-4 file:border-0 file:bg-purple-50 file:text-purple-700 file:font-semibold hover:file:bg-purple-100 cursor-pointer">
+          <img id="foto-preview" class="hidden mt-3 max-h-56 rounded-lg border border-gray-200" alt="Prévia do comprovante">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-pen text-gray-400 mr-1"></i> Ou descreva o gasto (opcional)</label>
+          <textarea name="manual_text" id="manual_text" rows="2" placeholder="Ex.: Almoço com fornecedor no Restaurante X, R$ 120,00 em 10/08"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"></textarea>
+        </div>
+
+        <button type="button" id="btn-analisar"
+                class="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-black text-white font-semibold rounded-lg transition-colors">
+          <i class="fas fa-robot"></i> Analisar com IA
+        </button>
+        <div id="ia-status" class="hidden text-sm mt-2"></div>
+      </div>
+
+      <hr class="border-gray-200">
+
+      <!-- FASE 2: revisão -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 text-sm font-bold text-gray-700">
+          <span class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">2</span>
+          Revise e confirme
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
+            <input type="number" step="0.01" min="0" name="valor" id="f-valor" required
+                   value="{{ form.valor|default:'' }}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-purple-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data do gasto</label>
+            <input type="date" name="data_gasto" id="f-data"
+                   value="{{ form.data_gasto|default:today }}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Estabelecimento</label>
+          <input type="text" name="estabelecimento" id="f-estabelecimento" maxlength="200"
+                 value="{{ form.estabelecimento|default:'' }}"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Categoria do gasto</label>
+          <input type="text" name="categoria_gasto" id="f-categoria" maxlength="120"
+                 value="{{ form.categoria_gasto|default:'' }}" placeholder="Ex.: Alimentação, Combustível..."
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+          <textarea name="descricao" id="f-descricao" rows="3"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">{{ form.descricao|default:'' }}</textarea>
+        </div>
+
+        <input type="hidden" name="ia_dados" id="f-iadados" value="">
+      </div>
+
+      <div class="flex items-center justify-between gap-3 pt-2 border-t">
+        <p class="text-xs text-gray-500"><i class="fas fa-info-circle mr-1"></i> Ao confirmar, será aberto um chamado no Financeiro com estes dados.</p>
+        <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
+          <i class="fas fa-paper-plane"></i> Abrir chamado
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  var fotoInput = document.getElementById('foto');
+  var preview = document.getElementById('foto-preview');
+  var btn = document.getElementById('btn-analisar');
+  var status = document.getElementById('ia-status');
+  var csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  var analyzeUrl = "{% url 'cartoes:gasto_analyze' cartao.pk %}";
+
+  fotoInput.addEventListener('change', function () {
+    var f = fotoInput.files[0];
+    if (f) {
+      preview.src = URL.createObjectURL(f);
+      preview.classList.remove('hidden');
+    } else {
+      preview.classList.add('hidden');
+    }
+  });
+
+  function setStatus(msg, kind) {
+    status.className = 'text-sm mt-2 ' + (kind === 'error' ? 'text-red-600' : (kind === 'ok' ? 'text-green-600' : 'text-gray-600'));
+    status.innerHTML = msg;
+    status.classList.remove('hidden');
+  }
+
+  function setIf(id, value) {
+    if (value === undefined || value === null || value === '') return;
+    document.getElementById(id).value = value;
+  }
+
+  btn.addEventListener('click', function () {
+    var foto = fotoInput.files[0];
+    var manual = document.getElementById('manual_text').value.trim();
+    if (!foto && !manual) {
+      setStatus('Envie a foto do comprovante ou descreva o gasto antes de analisar.', 'error');
+      return;
+    }
+    var fd = new FormData();
+    if (foto) fd.append('foto', foto);
+    fd.append('manual_text', manual);
+    fd.append('csrfmiddlewaretoken', csrf);
+
+    btn.disabled = true;
+    var original = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analisando...';
+    setStatus('Analisando o gasto com a IA...', 'info');
+
+    fetch(analyzeUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          setStatus('IA indisponível (' + data.error + '). Preencha os campos manualmente abaixo.', 'error');
+          return;
+        }
+        setIf('f-valor', data.valor);
+        setIf('f-estabelecimento', data.estabelecimento);
+        setIf('f-categoria', data.categoria);
+        setIf('f-descricao', data.descricao);
+        if (data.data && /^\d{4}-\d{2}-\d{2}$/.test(data.data)) setIf('f-data', data.data);
+        document.getElementById('f-iadados').value = JSON.stringify(data);
+        var extra = data.observacoes ? ' Observações: ' + data.observacoes : '';
+        setStatus('<i class="fas fa-check-circle"></i> Campos preenchidos pela IA (confiança: ' + (data.confianca || '—') + '). Revise antes de confirmar.' + extra, 'ok');
+      })
+      .catch(function () {
+        setStatus('Erro ao chamar a IA. Preencha os campos manualmente.', 'error');
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      });
+  });
+})();
+</script>
+{% endblock %}
