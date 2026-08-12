@@ -41,6 +41,7 @@ urlpatterns = [
     # INOVAR
     path('inovar/', views.inovar_list, name='inovar_list'),
     path('inovar/nova/', views.ideia_create, name='ideia_create'),
+    path('inovar/<int:ideia_id>/editar/', views.ideia_edit, name='ideia_edit'),
     path('inovar/<int:ideia_id>/status/', views.ideia_update_status, name='ideia_update_status'),
 
     # ACOMPANHAMENTO

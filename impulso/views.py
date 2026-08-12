@@ -703,6 +703,39 @@ def ideia_create(request):
     return render(request, 'impulso/ideia_form.html', {'active_tab': 'inovar'})
 
 
+@impulso_member_required
+def ideia_edit(request, ideia_id):
+    """O autor edita a própria ideia enquanto ela não foi decidida."""
+    ideia = get_object_or_404(Ideia, id=ideia_id)
+
+    if ideia.autor_id != request.user.id and not request.user.is_superuser:
+        messages.error(request, 'Você só pode editar as suas próprias ideias.')
+        return redirect('impulso:inovar_list')
+    if not ideia.editavel:
+        messages.error(
+            request,
+            f'Esta ideia já foi {ideia.get_status_display().lower()} e não pode mais ser editada.')
+        return redirect('impulso:inovar_list')
+
+    if request.method == 'POST':
+        descricao = (request.POST.get('descricao') or '').strip()
+        setor_impacto = (request.POST.get('setor_impacto') or '').strip()
+        motivo = (request.POST.get('motivo') or '').strip()
+        if not (descricao and setor_impacto and motivo):
+            messages.error(request, 'Preencha a ideia, o setor de impacto e o motivo.')
+            return redirect('impulso:ideia_edit', ideia_id=ideia.id)
+
+        ideia.descricao = descricao
+        ideia.setor_impacto = setor_impacto
+        ideia.motivo = motivo
+        ideia.save(update_fields=['descricao', 'setor_impacto', 'motivo', 'atualizado_em'])
+        messages.success(request, 'Ideia atualizada.')
+        return redirect('impulso:inovar_list')
+
+    return render(request, 'impulso/ideia_form.html',
+                  {'ideia': ideia, 'active_tab': 'inovar'})
+
+
 @require_POST
 @impulso_manager_required
 def ideia_update_status(request, ideia_id):

@@ -424,6 +424,22 @@ class Ideia(models.Model):
     def __str__(self):
         return f"Ideia de {self.autor} — {self.setor_impacto}"
 
+    @property
+    def editavel(self):
+        """O autor só edita enquanto o gestor não decidiu.
+
+        Depois de aprovada ou arquivada, o texto fica travado — senão a decisão
+        do gestor passaria a valer para uma ideia diferente da que ele leu.
+        """
+        return self.status in (self.Status.NOVA, self.Status.EM_ANALISE)
+
+    def pode_editar(self, user):
+        if not user or not user.is_authenticated:
+            return False
+        if not self.editavel:
+            return False
+        return self.autor_id == user.id or user.is_superuser
+
 
 # ==========================================================================
 # ACOMPANHAMENTO — Ciclos, meses e pontuação
