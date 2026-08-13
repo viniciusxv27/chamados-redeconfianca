@@ -555,6 +555,11 @@ def api_bulk_import(request):
     if not month or not year or not files:
         return JsonResponse({'error': 'Informe mês, ano e selecione os arquivos.'}, status=400)
 
+    # Periodicidade escolhida na tela: vazio mantém a classificação automática.
+    periodicidade = (request.POST.get('periodicity') or '').strip().lower()
+    if periodicidade not in ('semanal', 'mensal'):
+        periodicidade = ''
+
     month = int(month)
     year = int(year)
     overwrite = _wants_overwrite(request)
@@ -590,6 +595,7 @@ def api_bulk_import(request):
                 continue
 
             fields = _model_fields(record)
+            fields['periodicity_override'] = periodicidade
             safe_name = f"folha_ponto_{target_user.pk}_{year}_{month:02d}.pdf"
 
             if len(all_folhas) == 1 and len(pages) <= 1:
@@ -747,12 +753,16 @@ def admin_set_periodicity(request, pk):
     action = (request.POST.get('action') or '').strip()
 
     if action == 'mensal':
-        folha.force_mensal = True
-        folha.save(update_fields=['force_mensal', 'updated_at'])
+        folha.periodicity_override = 'mensal'
+        folha.save(update_fields=['periodicity_override', 'updated_at'])
         messages.success(request, f'Folha definida como mensal — assinatura liberada ({folha.period_display}).')
+    elif action == 'semanal':
+        folha.periodicity_override = 'semanal'
+        folha.save(update_fields=['periodicity_override', 'updated_at'])
+        messages.success(request, f'Folha definida como semanal — prévia, sem assinatura ({folha.period_display}).')
     elif action == 'auto':
-        folha.force_mensal = False
-        folha.save(update_fields=['force_mensal', 'updated_at'])
+        folha.periodicity_override = ''
+        folha.save(update_fields=['periodicity_override', 'updated_at'])
         messages.success(request, f'Classificação voltou ao automático ({folha.period_display}).')
     else:
         messages.error(request, 'Ação inválida.')

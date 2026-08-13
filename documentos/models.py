@@ -85,6 +85,15 @@ class Document(models.Model):
         verbose_name='Arquivo PDF',
     )
 
+    # Controla se os signatários já enxergam o documento. Desmarcado, ele fica
+    # apenas com o administrador (nem aparece na lista, nem pode ser aberto ou
+    # assinado) até ser liberado.
+    is_visible = models.BooleanField(
+        default=True,
+        verbose_name='Visível para os signatários',
+        help_text='Desmarque para preparar o documento sem que as pessoas o vejam.',
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

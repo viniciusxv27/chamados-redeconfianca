@@ -895,6 +895,7 @@ def create_user_view(request):
             'sectors': Sector.objects.all(),
             'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
+            'job_title_choices': _job_title_choices(),
         }
 
         # CEP e RG são obrigatórios no cadastro.
@@ -995,6 +996,7 @@ def create_user_view(request):
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
+        'job_title_choices': _job_title_choices(),
     }
     return render(request, 'admin/create_user.html', context)
 
@@ -1152,6 +1154,7 @@ def edit_user_view(request, user_id):
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
+        'job_title_choices': _job_title_choices(user_to_edit.job_title),
     }
     return render(request, 'admin/edit_user.html', context)
 
@@ -1440,6 +1443,32 @@ def _read_pre_registration_personal_data(request):
         errors.append('Informe ao menos um contato de emergência (nome, telefone e grau).')
 
     return values, errors
+
+
+def _job_title_choices(atual=''):
+    """Cargos distintos já cadastrados, para o select de Cargo.
+
+    Normaliza espaços e caixa para não repetir variações do mesmo cargo
+    ("AUXILIAR ADMINISTRATIVO" vs "AUXILIAR  ADMINISTRATIVO " etc.).
+    Garante que o cargo atual do usuário apareça na lista mesmo que seja único.
+    """
+    import re
+
+    vistos = {}
+    brutos = list(
+        User.objects.exclude(job_title='').exclude(job_title__isnull=True)
+        .values_list('job_title', flat=True)
+    )
+    if atual:
+        brutos.append(atual)
+
+    for bruto in brutos:
+        limpo = re.sub(r'\s+', ' ', (bruto or '')).strip()
+        if not limpo:
+            continue
+        vistos.setdefault(limpo.upper(), limpo)
+
+    return sorted(vistos.values(), key=lambda s: s.upper())
 
 
 def _parse_salary(valor):

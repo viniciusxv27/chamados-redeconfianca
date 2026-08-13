@@ -12,12 +12,12 @@ colaborador sem nada assinável (a prévia nunca vira fechamento porque a folha
 seguinte pode não ser importada). Por isso, quando é a única folha do
 colaborador, ela já é classificada como mensal (fechamento) e pode ser assinada.
 
-Override manual: o gestor pode marcar ``folha.force_mensal`` (botão na tela de
-detalhe) para forçar a folha como mensal (assinável), ignorando a regra
-automática. É a saída para folhas que não devem seguir a periodicidade padrão.
+Override manual: o gestor pode definir ``folha.periodicity_override`` como
+'mensal' (assinável) ou 'semanal' (prévia), na importação em lote ou pelo botão
+da tela de detalhe, ignorando a regra automática. Vazio = regra automática.
 
 A classificação é feita em tempo de execução, a partir de (year, month); o único
-estado persistido é o override ``force_mensal``.
+estado persistido é o override ``periodicity_override``.
 """
 
 from .models import FolhaPonto
@@ -98,8 +98,9 @@ def annotate_periodicity(folhas, stats=None):
         stats = stats_by_user({f.user_id for f in folhas})
 
     for folha in folhas:
-        if getattr(folha, 'force_mensal', False):
-            is_semanal_val = False  # override manual: sempre mensal (assinável)
+        override = getattr(folha, 'periodicity_override', '') or ''
+        if override:
+            is_semanal_val = (override == SEMANAL)   # escolha manual do gestor
         else:
             is_semanal_val = _classify_semanal(folha.year, folha.month, folha.user_id, stats)
         folha.is_semanal = is_semanal_val
@@ -111,7 +112,8 @@ def annotate_periodicity(folhas, stats=None):
 
 def is_semanal(folha):
     """Classificação de uma folha isolada (1 consulta)."""
-    if getattr(folha, 'force_mensal', False):
-        return False  # override manual: sempre mensal (assinável)
+    override = getattr(folha, 'periodicity_override', '') or ''
+    if override:
+        return override == SEMANAL   # escolha manual do gestor
     stats = stats_by_user([folha.user_id])
     return _classify_semanal(folha.year, folha.month, folha.user_id, stats)

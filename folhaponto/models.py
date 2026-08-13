@@ -74,13 +74,19 @@ class FolhaPonto(models.Model):
         verbose_name='Página inicial no PDF original')
 
     # Override manual da classificação semanal/mensal (que é calculada em runtime).
-    # Quando marcado, a folha é sempre tratada como mensal (assinável), ignorando a
-    # regra automática. Usado quando a folha não deve seguir a periodicidade padrão.
-    force_mensal = models.BooleanField(
-        default=False,
-        verbose_name='Forçar como Mensal',
-        help_text='Trata a folha sempre como mensal (assinável), ignorando a '
-                  'classificação automática semanal/mensal.',
+    # Vazio = segue a regra automática. Definido na importação ou na tela de
+    # detalhe, vale sobre a regra: 'mensal' libera a assinatura, 'semanal' trata
+    # como prévia (não assinável).
+    PERIODICITY_OVERRIDE_CHOICES = [
+        ('semanal', 'Semanal (prévia, não assinável)'),
+        ('mensal', 'Mensal (fechamento, assinável)'),
+    ]
+    periodicity_override = models.CharField(
+        max_length=10, blank=True, default='',
+        choices=PERIODICITY_OVERRIDE_CHOICES,
+        verbose_name='Periodicidade (manual)',
+        help_text='Vazio segue a classificação automática. Preenchido, força a '
+                  'periodicidade da folha.',
     )
 
     # Assinatura digital

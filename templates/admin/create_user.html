@@ -177,13 +177,20 @@
                             </div>
                             
                             <div>
-                                <label for="job_title" class="block text-sm font-medium text-gray-700 mb-2">Cargo *</label>
-                                <input type="text"
-                                       id="job_title"
-                                       name="job_title"
-                                       maxlength="100"
-                                       required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <label for="job_title_select" class="block text-sm font-medium text-gray-700 mb-2">Cargo *</label>
+                                <select id="job_title_select"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Selecione o cargo...</option>
+                                    {% for cargo in job_title_choices %}
+                                    <option value="{{ cargo }}" {% if cargo == '' %}selected{% endif %}>{{ cargo }}</option>
+                                    {% endfor %}
+                                    <option value="__novo__">+ Outro (digitar novo cargo)</option>
+                                </select>
+                                <input type="text" id="job_title" name="job_title" maxlength="100" required
+                                       value="{{ '' }}"
+                                       placeholder="Digite o novo cargo"
+                                       class="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent hidden">
+                                <p id="job_title_hint" class="text-xs text-gray-500 mt-1 hidden">Digite o nome do novo cargo.</p>
                             </div>
 
                             <div>
@@ -653,5 +660,37 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+</script>
+
+<script>
+// Cargo: select dos cargos existentes + opção de digitar um novo.
+(function () {
+    var sel = document.getElementById('job_title_select');
+    var input = document.getElementById('job_title');
+    var hint = document.getElementById('job_title_hint');
+    if (!sel || !input) return;
+
+    function modoNovo(ativo) {
+        input.classList.toggle('hidden', !ativo);
+        if (hint) hint.classList.toggle('hidden', !ativo);
+        if (ativo) { input.value = ''; input.focus(); }
+    }
+
+    // Se o cargo atual não está entre as opções, já abre em modo "novo".
+    var atual = input.value.trim();
+    var achou = Array.prototype.some.call(sel.options, function (o) { return o.value === atual; });
+    if (atual && !achou) { sel.value = '__novo__'; modoNovo(true); input.value = atual; }
+
+    sel.addEventListener('change', function () {
+        if (sel.value === '__novo__') { modoNovo(true); }
+        else { modoNovo(false); input.value = sel.value; }
+    });
+
+    // Garante que o valor enviado seja o do select quando não for "novo".
+    var form = sel.closest('form');
+    if (form) form.addEventListener('submit', function () {
+        if (sel.value !== '__novo__') input.value = sel.value;
+    });
+})();
 </script>
 {% endblock %}

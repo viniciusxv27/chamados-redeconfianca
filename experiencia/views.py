@@ -1,7 +1,7 @@
 import csv
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import models
+from django.db import models, transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -436,56 +436,72 @@ def fill_todo(request, todo_id):
     if request.method == 'POST':
         action = request.POST.get('action', 'submit')
 
-        for question in questions:
-            response = request.POST.get(f'response_{question.id}', '')
-            if response not in ('sim', 'nao', 'nao_se_aplica'):
-                if action == 'draft':
-                    response = ''
-                else:
-                    response = 'nao'
-            observation = request.POST.get(f'observation_{question.id}', '').strip()
-            ticket_number = request.POST.get(f'ticket_number_{question.id}', '').strip()
-            photos = request.FILES.getlist(f'photos_{question.id}')
-
-            # Número do chamado só faz sentido quando a resposta é "Não"
-            effective_response = response or 'nao'
-            if effective_response != 'nao':
-                ticket_number = ''
-
-            # Skip empty answers in draft mode
-            if action == 'draft' and not response and not observation and not ticket_number and not photos:
-                continue
-
-            answer, created = ExperienciaAnswer.objects.get_or_create(
-                todo=todo,
-                question=question,
-                defaults={
-                    'response': response or 'nao',
-                    'observation': observation,
-                    'ticket_number': ticket_number,
-                    'answered_by': user,
-                    'answered_at': timezone.now(),
-                    'status': 'pendente',
-                },
-            )
-            if not created:
-                if response:
-                    answer.response = response
-                answer.observation = observation
-                answer.ticket_number = ticket_number if answer.response == 'nao' else ''
-                answer.answered_by = user
-                answer.answered_at = timezone.now()
-                if action != 'draft':
-                    answer.status = 'pendente'
-                    answer.rejection_reason = ''
-                answer.save()
-
-            # Save multiple photos
-            for photo_file in photos:
-                ExperienciaAnswerPhoto.objects.create(
-                    answer=answer,
-                    photo=photo_file,
+        # Envio definitivo exige todas as respostas. Antes, a resposta que não
+        # chegasse virava "nao" silenciosamente — e "nao" DESCONTA pontos do
+        # setor. Se algo se perder no caminho, é melhor recusar o envio.
+        if action == 'submit':
+            sem_resposta = [
+                q for q in questions
+                if request.POST.get(f'response_{q.id}', '') not in ('sim', 'nao', 'nao_se_aplica')
+            ]
+            if sem_resposta:
+                messages.error(
+                    request,
+                    f'{len(sem_resposta)} pergunta(s) ficaram sem resposta e o envio foi '
+                    'cancelado. Nada foi perdido: responda todas e envie novamente.'
                 )
+                return redirect('experiencia:fill_todo', todo_id=todo.id)
+
+        # Tudo ou nada: um timeout no meio do loop deixaria metade das respostas
+        # salvas e o to-do ainda aberto, e o reenvio duplicaria as fotos.
+        with transaction.atomic():
+          for question in questions:
+              response = request.POST.get(f'response_{question.id}', '')
+              if response not in ('sim', 'nao', 'nao_se_aplica'):
+                  response = ''   # rascunho: deixa em branco, nunca assume "nao"
+              observation = request.POST.get(f'observation_{question.id}', '').strip()
+              ticket_number = request.POST.get(f'ticket_number_{question.id}', '').strip()
+              photos = request.FILES.getlist(f'photos_{question.id}')
+
+              # Número do chamado só faz sentido quando a resposta é "Não"
+              effective_response = response or 'nao'
+              if effective_response != 'nao':
+                  ticket_number = ''
+
+              # Skip empty answers in draft mode
+              if action == 'draft' and not response and not observation and not ticket_number and not photos:
+                  continue
+
+              answer, created = ExperienciaAnswer.objects.get_or_create(
+                  todo=todo,
+                  question=question,
+                  defaults={
+                      'response': response or 'nao',
+                      'observation': observation,
+                      'ticket_number': ticket_number,
+                      'answered_by': user,
+                      'answered_at': timezone.now(),
+                      'status': 'pendente',
+                  },
+              )
+              if not created:
+                  if response:
+                      answer.response = response
+                  answer.observation = observation
+                  answer.ticket_number = ticket_number if answer.response == 'nao' else ''
+                  answer.answered_by = user
+                  answer.answered_at = timezone.now()
+                  if action != 'draft':
+                      answer.status = 'pendente'
+                      answer.rejection_reason = ''
+                  answer.save()
+
+              # Save multiple photos
+              for photo_file in photos:
+                  ExperienciaAnswerPhoto.objects.create(
+                      answer=answer,
+                      photo=photo_file,
+                  )
 
         if action == 'draft':
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -493,9 +509,10 @@ def fill_todo(request, todo_id):
             messages.success(request, 'Rascunho salvo com sucesso!')
             return redirect('experiencia:fill_todo', todo_id=todo.id)
 
-        todo.status = 'enviado'
-        todo.submitted_by = user
-        todo.save()
+        with transaction.atomic():
+            todo.status = 'enviado'
+            todo.submitted_by = user
+            todo.save()
 
         messages.success(request, 'To-do enviado para avaliação!')
         return redirect('experiencia:dashboard')

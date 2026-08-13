@@ -6,8 +6,8 @@ from .models import FolhaPonto, FolhaPontoManagerPermission
 @admin.register(FolhaPonto)
 class FolhaPontoAdmin(admin.ModelAdmin):
     list_display = ['user', 'month', 'year', 'total_trabalhadas', 'total_saldo',
-                    'force_mensal', 'signed_at', 'uploaded_by', 'created_at']
-    list_filter = ['year', 'month', 'signed_at', 'force_mensal']
+                    'periodicity_override', 'signed_at', 'uploaded_by', 'created_at']
+    list_filter = ['year', 'month', 'signed_at', 'periodicity_override']
     search_fields = ['user__first_name', 'user__last_name', 'employee_name', 'cpf']
     raw_id_fields = ['user', 'uploaded_by']
     readonly_fields = ['created_at', 'updated_at']

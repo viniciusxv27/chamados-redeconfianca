@@ -163,9 +163,16 @@
                     </div>
                     {% endif %}
 
-                    <input type="file" name="photos_{{ item.question.id }}" accept="image/*" multiple capture="environment"
-                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 file:text-sm"
-                           onchange="previewPhotos(this, 'previews_{{ item.question.id }}')">
+                    {# Sem `capture`: no celular isso abria a câmera direto e devolvia UMA foto só,   #}
+                    {# anulando o `multiple`. As fotos são acumuladas via JS (o input sozinho        #}
+                    {# substitui a seleção anterior a cada toque).                                    #}
+                    <input type="file" name="photos_{{ item.question.id }}" accept="image/*" multiple
+                           data-question="{{ item.question.id }}"
+                           class="foto-input w-full text-sm border border-gray-300 rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 file:text-sm">
+                    <p class="text-xs text-gray-500 mt-1">
+                        Pode adicionar várias fotos, uma de cada vez — elas vão se somando.
+                        As imagens são reduzidas no aparelho antes do envio.
+                    </p>
                     <div id="previews_{{ item.question.id }}" class="flex flex-wrap gap-2 mt-2"></div>
                 </div>
             </div>
@@ -177,10 +184,22 @@
             <button type="button" onclick="saveDraft()" class="bg-yellow-500 text-white px-6 py-2.5 rounded-lg hover:bg-yellow-600 transition font-medium">
                 <i class="fas fa-save mr-1"></i>Salvar Rascunho
             </button>
-            <button type="submit" class="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium"
-                    onclick="document.getElementById('formAction').value='submit'; return confirm('Tem certeza que deseja enviar? Após o envio, não será possível alterar até a avaliação.')">
+            <button type="button" id="btnEnviar" onclick="enviarFormulario()"
+                    class="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed">
                 <i class="fas fa-paper-plane mr-1"></i>Enviar para Avaliação
             </button>
+        </div>
+
+        <!-- Progresso do envio (fica visível durante o upload) -->
+        <div id="envioProgresso" class="hidden mt-4 p-4 rounded-lg border border-blue-200 bg-blue-50">
+            <div class="flex items-center justify-between text-sm text-blue-900 mb-2">
+                <span id="envioTexto"><i class="fas fa-spinner fa-spin mr-1"></i>Enviando…</span>
+                <span id="envioPercent" class="tabular-nums font-semibold">0%</span>
+            </div>
+            <div class="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                <div id="envioBarra" class="bg-blue-600 h-2 rounded-full transition-all" style="width:0%"></div>
+            </div>
+            <p class="text-xs text-blue-800 mt-2">Não feche a página nem toque novamente no botão.</p>
         </div>
     </form>
 </div>
@@ -193,22 +212,188 @@
 
 {% block extra_js %}
 <script>
-function previewPhotos(input, containerId) {
-    const container = document.getElementById(containerId);
+// ---------------------------------------------------------------------------
+// Fotos: acumula as seleções e reduz a imagem no próprio aparelho.
+// Sem isso, cada toque no seletor descartava as fotos anteriores e o envio
+// levava vários arquivos de 3-8 MB de uma vez (o que derrubava o envio no 4G).
+// ---------------------------------------------------------------------------
+var fotosPorPergunta = {};              // { questionId: [File, ...] }
+var LADO_MAXIMO = 1600;                 // px no maior lado
+var QUALIDADE_JPEG = 0.82;
+
+function comprimirImagem(file) {
+    return new Promise(function (resolve) {
+        if (!file.type || file.type.indexOf('image/') !== 0) { resolve(file); return; }
+        var url = URL.createObjectURL(file);
+        var img = new Image();
+        img.onload = function () {
+            try {
+                var escala = Math.min(1, LADO_MAXIMO / Math.max(img.width, img.height));
+                var w = Math.round(img.width * escala);
+                var h = Math.round(img.height * escala);
+                var canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                canvas.toBlob(function (blob) {
+                    URL.revokeObjectURL(url);
+                    // Só troca se realmente ficou menor.
+                    if (blob && blob.size < file.size) {
+                        var nome = (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
+                        resolve(new File([blob], nome, { type: 'image/jpeg' }));
+                    } else {
+                        resolve(file);
+                    }
+                }, 'image/jpeg', QUALIDADE_JPEG);
+            } catch (e) {
+                URL.revokeObjectURL(url);
+                resolve(file);     // qualquer falha: envia o original
+            }
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+    });
+}
+
+function renderPreviews(qid) {
+    var container = document.getElementById('previews_' + qid);
+    if (!container) return;
+    var lista = fotosPorPergunta[qid] || [];
     container.innerHTML = '';
-    if (input.files) {
-        Array.from(input.files).forEach(function(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = document.createElement('img');
-                img.src = e.target.result;
-                img.className = 'w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer';
-                img.onclick = function() { openImageModal(this.src); };
-                container.appendChild(img);
-            };
-            reader.readAsDataURL(file);
-        });
+    lista.forEach(function (file, idx) {
+        var wrap = document.createElement('div');
+        wrap.className = 'relative';
+        var img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.className = 'w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer';
+        img.onclick = function () { openImageModal(this.src); };
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerHTML = '&times;';
+        btn.title = 'Remover foto';
+        btn.className = 'absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white text-xs leading-none shadow';
+        btn.onclick = function () {
+            fotosPorPergunta[qid].splice(idx, 1);
+            renderPreviews(qid);
+        };
+        wrap.appendChild(img);
+        wrap.appendChild(btn);
+        container.appendChild(wrap);
+    });
+    if (lista.length) {
+        var info = document.createElement('span');
+        info.className = 'self-center text-xs text-gray-500';
+        info.textContent = lista.length + (lista.length > 1 ? ' fotos anexadas' : ' foto anexada');
+        container.appendChild(info);
     }
+}
+
+document.querySelectorAll('.foto-input').forEach(function (input) {
+    input.addEventListener('change', function () {
+        var qid = input.dataset.question;
+        var novos = Array.from(input.files || []);
+        if (!novos.length) return;
+        input.disabled = true;
+        Promise.all(novos.map(comprimirImagem)).then(function (comprimidos) {
+            fotosPorPergunta[qid] = (fotosPorPergunta[qid] || []).concat(comprimidos);
+            input.value = '';           // libera o seletor para a próxima foto
+            input.disabled = false;
+            renderPreviews(qid);
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Envio: valida as respostas, mostra progresso e impede envio duplicado.
+// ---------------------------------------------------------------------------
+var enviando = false;
+
+function perguntasSemResposta() {
+    var faltando = [];
+    document.querySelectorAll('[data-question-id]').forEach(function (bloco) {
+        var qid = bloco.dataset.questionId;
+        var marcada = bloco.querySelector('input[name="response_' + qid + '"]:checked');
+        if (!marcada) faltando.push(bloco);
+    });
+    return faltando;
+}
+
+function enviarFormulario() {
+    if (enviando) return;
+
+    // 1) Nenhuma resposta em branco pode passar: em branco o servidor
+    //    registraria "Não", que desconta pontos do setor.
+    var faltando = perguntasSemResposta();
+    if (faltando.length) {
+        var primeiro = faltando[0];
+        primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        primeiro.classList.add('ring-2', 'ring-red-400', 'rounded-lg');
+        setTimeout(function () { primeiro.classList.remove('ring-2', 'ring-red-400'); }, 4000);
+        alert('Faltam ' + faltando.length + ' pergunta(s) sem resposta. Responda todas antes de enviar.');
+        return;
+    }
+
+    if (!confirm('Tem certeza que deseja enviar? Após o envio, não será possível alterar até a avaliação.')) return;
+
+    var form = document.getElementById('todoForm');
+    var dados = new FormData(form);
+    dados.set('action', 'submit');
+
+    // Substitui os arquivos do input pelas fotos acumuladas/comprimidas.
+    document.querySelectorAll('.foto-input').forEach(function (input) {
+        dados.delete(input.name);
+    });
+    Object.keys(fotosPorPergunta).forEach(function (qid) {
+        (fotosPorPergunta[qid] || []).forEach(function (file) {
+            dados.append('photos_' + qid, file);
+        });
+    });
+
+    enviando = true;
+    var btn = document.getElementById('btnEnviar');
+    var painel = document.getElementById('envioProgresso');
+    var barra = document.getElementById('envioBarra');
+    var pct = document.getElementById('envioPercent');
+    var texto = document.getElementById('envioTexto');
+    btn.disabled = true;
+    painel.classList.remove('hidden');
+    painel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', window.location.href, true);
+    xhr.setRequestHeader('X-CSRFToken', '{{ csrf_token }}');
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+    xhr.upload.onprogress = function (e) {
+        if (!e.lengthComputable) return;
+        var p = Math.round((e.loaded / e.total) * 100);
+        barra.style.width = p + '%';
+        pct.textContent = p + '%';
+        if (p >= 100) texto.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Processando no servidor…';
+    };
+
+    xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 400) {
+            formSubmitting = true;                       // não dispara o aviso de saída
+            window.location.href = xhr.responseURL || '{% url "experiencia:dashboard" %}';
+            return;
+        }
+        falhaNoEnvio('O servidor recusou o envio (código ' + xhr.status + ').');
+    };
+    xhr.onerror = function () { falhaNoEnvio('Falha de conexão durante o envio.'); };
+    xhr.ontimeout = function () { falhaNoEnvio('O envio demorou demais e foi interrompido.'); };
+
+    function falhaNoEnvio(msg) {
+        enviando = false;
+        btn.disabled = false;
+        barra.style.width = '0%';
+        pct.textContent = '0%';
+        texto.innerHTML = '<i class="fas fa-triangle-exclamation text-red-600 mr-1"></i>' +
+                          msg + ' Nada foi perdido — toque em enviar novamente.';
+        painel.classList.remove('border-blue-200', 'bg-blue-50');
+        painel.classList.add('border-red-200', 'bg-red-50');
+    }
+
+    xhr.send(dados);
 }
 
 function openImageModal(src) {

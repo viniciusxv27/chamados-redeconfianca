@@ -75,7 +75,7 @@ def my_documents(request):
     """Lista os documentos atribuídos ao usuário logado (pendentes e assinados)."""
     signatures = (
         DocumentSignature.objects
-        .filter(user=request.user)
+        .filter(user=request.user, document__is_visible=True)
         .select_related('document', 'document__category')
         .order_by('-created_at')
     )
@@ -107,6 +107,10 @@ def document_detail(request, pk):
         DocumentSignature.objects.select_related('document', 'document__category'),
         pk=pk,
     )
+
+    if not signature.document.is_visible and not is_superadmin(request.user):
+        messages.error(request, 'Este documento ainda não foi liberado para visualização.')
+        return redirect('documentos:my_documents')
 
     if signature.user != request.user and not is_superadmin(request.user):
         messages.error(request, 'Você não tem permissão para acessar este documento.')
@@ -214,6 +218,10 @@ def api_sign_document(request, pk):
 
     signature = get_object_or_404(
         DocumentSignature.objects.select_related('document', 'user'), pk=pk)
+
+    if not signature.document.is_visible:
+        return JsonResponse(
+            {'success': False, 'error': 'Este documento ainda não foi liberado.'}, status=403)
 
     if signature.user != request.user:
         return JsonResponse({'error': 'Sem permissão para assinar este documento.'}, status=403)
@@ -332,6 +340,7 @@ def admin_document_create(request):
         description = (request.POST.get('description') or '').strip()
         pdf_file = request.FILES.get('pdf_file')
         user_ids = request.POST.getlist('users')
+        is_visible = request.POST.get('is_visible') == 'on'
 
         errors = []
         if not title:
@@ -360,6 +369,7 @@ def admin_document_create(request):
             category_id=category_id,
             description=description,
             pdf_file=pdf_file,
+            is_visible=is_visible,
             created_by=request.user,
         )
 
@@ -369,11 +379,16 @@ def admin_document_create(request):
                 document=document, user=u, assigned_by=request.user)
             for u in selected
         ]
-        _notify_assignment(created_sigs, document, request.user)
+        # Só avisa quem já pode abrir o documento — notificar sobre algo
+        # invisível levaria a pessoa a uma tela de "não liberado".
+        if document.is_visible:
+            _notify_assignment(created_sigs, document, request.user)
 
         messages.success(
             request,
-            f'Documento "{document.title}" criado e atribuído a {len(created_sigs)} signatário(s).',
+            f'Documento "{document.title}" criado e atribuído a {len(created_sigs)} signatário(s).'
+            + ('' if document.is_visible
+               else ' Ele está oculto: os signatários só verão quando você liberar.'),
         )
         return redirect('documentos:admin_document_detail', pk=document.pk)
 
