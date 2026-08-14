@@ -858,6 +858,15 @@
                                 </div>
                             </div>
 
+                            <!-- Multitarefa: abre outra janela do portal. O cookie de sessão
+                                 é do navegador, então a nova janela já nasce logada. -->
+                            <button id="multiJanelaBtn" type="button"
+                                    class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors rounded-lg hover:bg-gray-100"
+                                    title="Abrir outra janela do portal (multitarefa)"
+                                    aria-label="Abrir outra janela do portal">
+                                <i class="fas fa-window-restore text-base sm:text-lg"></i>
+                            </button>
+
                             <!-- Notifications -->
                             <div class="relative">
                                 <button id="notification-bell" class="relative p-2 text-gray-600 hover:text-primary focus:outline-none transition-colors rounded-lg hover:bg-gray-100">
@@ -931,7 +940,79 @@
                         </div>
                     </div>
                 </header>
-                
+
+                <!-- Multitarefa (botão ao lado do sino).
+                     Nada a fazer no servidor: a sessão vive no cookie do navegador,
+                     então qualquer janela nova do mesmo site já abre autenticada. -->
+                <script>
+                (function () {
+                    var btn = document.getElementById('multiJanelaBtn');
+                    if (!btn || btn.dataset.multiInit) return;
+                    btn.dataset.multiInit = '1';
+
+                    var abertas = 0;
+
+                    // Aviso não bloqueante. Usa o showToast do portal quando existir;
+                    // senão monta um próprio (alert() travaria a página do usuário).
+                    function aviso(msg) {
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(msg, 'info');
+                            return;
+                        }
+                        var t = document.createElement('div');
+                        t.className = 'fixed bottom-4 right-4 z-50 max-w-xs px-4 py-3 rounded-lg ' +
+                                      'text-white text-sm shadow-lg bg-gray-800';
+                        t.textContent = msg;
+                        document.body.appendChild(t);
+                        setTimeout(function () { t.remove(); }, 7000);
+                    }
+
+                    btn.addEventListener('click', function () {
+                        var url = '{% url "home" %}';
+
+                        // Nome único por clique: sem isso o navegador reaproveitaria a
+                        // janela anterior em vez de abrir mais uma.
+                        var nome = 'portalRC_' + abertas + '_' + (new Date()).getTime();
+
+                        // Janela solta (não aba), em cascata para não cobrir esta.
+                        // availLeft/availTop mantêm a nova janela no mesmo monitor.
+                        var baseX = screen.availLeft || 0;
+                        var baseY = screen.availTop || 0;
+                        var larg = Math.min(screen.availWidth, Math.max(1024, Math.round(screen.availWidth * 0.72)));
+                        var alt = Math.min(screen.availHeight, Math.max(640, Math.round(screen.availHeight * 0.86)));
+                        var desloc = (abertas % 6) * 34;
+                        var esq = baseX + Math.max(0, Math.round((screen.availWidth - larg) / 2) + desloc);
+                        var topo = baseY + Math.max(0, Math.round((screen.availHeight - alt) / 2) + desloc);
+
+                        var jan = window.open(url, nome,
+                            'width=' + larg + ',height=' + alt + ',left=' + esq + ',top=' + topo +
+                            ',location=yes,resizable=yes,scrollbars=yes,menubar=no,toolbar=no,status=no');
+
+                        if (jan) {
+                            abertas++;
+                            try { jan.focus(); } catch (e) {}
+                            return;
+                        }
+
+                        // Pop-up bloqueado. Cai para aba nova usando um link: um segundo
+                        // window.open pode trocar a página ATUAL em alguns navegadores, e
+                        // aí o usuário perderia o que estava fazendo aqui. O <a target=
+                        // "_blank"> nunca faz isso.
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.target = '_blank';
+                        a.rel = 'noopener';
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        abertas++;
+                        aviso('Seu navegador bloqueou a janela separada, então o portal abriu em uma aba. '
+                              + 'Libere os pop-ups deste site para abrir em janela.');
+                    });
+                })();
+                </script>
+
                 <!-- Page Content -->
                 <div class="p-2 sm:p-4 lg:p-6 min-h-screen">
                     {% if messages %}
