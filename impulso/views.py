@@ -130,6 +130,12 @@ def metas_kanban(request):
     if colaborador_id:
         metas = metas.filter(colaborador_id=colaborador_id)
 
+    # O template não passa argumentos para métodos, então a permissão de
+    # exclusão é resolvida aqui, uma vez por card.
+    metas = list(metas)
+    for m in metas:
+        m.pode_apagar = m.pode_excluir(user)
+
     colunas = []
     for status in Meta.KANBAN_STATUSES:
         colunas.append({
@@ -254,6 +260,38 @@ def meta_decidir(request, meta_id):
     _notify([meta.colaborador], aviso[0], aviso[1], f'/impulso/metas/{meta.id}/')
     messages.success(request, retorno)
     return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_excluir(request, meta_id):
+    """Apaga a meta. Só o gestor que a criou ou aprovou.
+
+    A permissão é conferida no servidor, não só escondendo o ícone: sem isso,
+    um POST direto apagaria meta alheia.
+    """
+    meta = get_object_or_404(Meta, id=meta_id)
+    if not meta.pode_excluir(request.user):
+        messages.error(request, 'Você só pode excluir metas que criou ou aprovou.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    titulo = meta.titulo
+    colaborador = meta.colaborador
+    era_avaliada = meta.is_avaliada
+    meta.delete()          # anexos e comentários caem junto (CASCADE)
+
+    _notify([colaborador], 'Meta removida',
+            f'A meta "{titulo}" foi removida por '
+            f'{request.user.get_full_name() or request.user.email}.',
+            '/impulso/metas/')
+    if era_avaliada:
+        messages.warning(
+            request,
+            f'Meta "{titulo}" excluída. Ela já estava avaliada, então a pontuação '
+            f'do mês de {colaborador.get_full_name() or colaborador.email} foi recalculada.')
+    else:
+        messages.success(request, f'Meta "{titulo}" excluída.')
+    return redirect('impulso:metas_kanban')
 
 
 @impulso_member_required

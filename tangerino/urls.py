@@ -15,7 +15,9 @@ urlpatterns = [
     path('ferias/equipe/', views.ferias_equipe, name='ferias_equipe'),
     path('ferias/em-ferias/', views.em_ferias, name='em_ferias'),
 
-    # Administração do vínculo
+    # Administração
+    path('ponto/configuracao/', views.configuracao, name='configuracao'),
+    path('ponto/configuracao/sincronizar/', views.sincronizar_dados, name='sincronizar_dados'),
     path('ponto/vinculos/', views.vinculos, name='vinculos'),
     path('ponto/vinculos/sincronizar/', views.sincronizar, name='sincronizar'),
     path('ponto/vinculos/vincular/', views.vincular_manual, name='vincular_manual'),

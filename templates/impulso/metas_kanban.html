@@ -55,7 +55,24 @@
                  draggable="{% if col.status == 'CONCLUIDA' %}false{% else %}true{% endif %}" data-meta-id="{{ m.id }}">
                 <div class="flex items-start justify-between gap-2">
                     <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 leading-snug">{{ m.titulo }}</a>
-                    <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{{ m.get_recorrencia_display }}</span>
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                        <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ m.get_recorrencia_display }}</span>
+                        {% if m.pode_apagar %}
+                        {% with imp=m.impacto_da_exclusao %}
+                        <button type="button" class="imp-excluir w-6 h-6 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
+                                title="Excluir meta"
+                                data-id="{{ m.id }}"
+                                data-titulo="{{ m.titulo }}"
+                                data-colaborador="{{ m.colaborador.get_full_name|default:m.colaborador.email }}"
+                                data-anexos="{{ imp.anexos }}"
+                                data-comentarios="{{ imp.comentarios }}"
+                                data-ocorrencias="{{ imp.ocorrencias }}"
+                                data-avaliada="{% if imp.avaliada %}1{% else %}0{% endif %}">
+                            <i class="fas fa-trash-can text-xs"></i>
+                        </button>
+                        {% endwith %}
+                        {% endif %}
+                    </div>
                 </div>
 
                 {% if is_gestor %}
@@ -148,6 +165,75 @@
             });
         });
     });
+})();
+</script>
+
+<!-- Confirmação de exclusão: mostra o que vai junto antes de apagar -->
+<div id="impModalExcluir" class="hidden fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4">
+    <form method="post" id="impFormExcluir" class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        {% csrf_token %}
+        <div class="px-6 py-4 bg-red-600 text-white">
+            <h3 class="font-bold"><i class="fas fa-trash-can mr-2"></i>Excluir meta</h3>
+        </div>
+        <div class="px-6 py-5">
+            <p class="text-sm text-gray-600">Você vai excluir definitivamente:</p>
+            <p class="text-base font-semibold text-gray-900 mt-1" id="impExcTitulo"></p>
+            <p class="text-xs text-gray-500" id="impExcColaborador"></p>
+
+            <ul class="mt-4 space-y-1.5 text-sm text-gray-600" id="impExcImpacto"></ul>
+
+            <p class="text-xs text-gray-400 mt-4">Esta ação não pode ser desfeita.</p>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <button type="button" id="impExcCancelar" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button type="submit" class="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold">
+                Excluir meta
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('impModalExcluir');
+    var form = document.getElementById('impFormExcluir');
+    if (!modal || !form) return;
+
+    function linha(icone, cor, texto) {
+        return '<li class="flex items-start gap-2"><i class="fas ' + icone + ' ' + cor + ' mt-0.5"></i><span>' + texto + '</span></li>';
+    }
+
+    document.querySelectorAll('.imp-excluir').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();          // não dispara o arrastar do card
+            form.action = '/impulso/metas/' + b.dataset.id + '/excluir/';
+            document.getElementById('impExcTitulo').textContent = b.dataset.titulo;
+            document.getElementById('impExcColaborador').textContent = 'Colaborador: ' + b.dataset.colaborador;
+
+            var partes = [];
+            var anexos = parseInt(b.dataset.anexos || '0', 10);
+            var comentarios = parseInt(b.dataset.comentarios || '0', 10);
+            var ocorrencias = parseInt(b.dataset.ocorrencias || '0', 10);
+
+            if (anexos) partes.push(linha('fa-paperclip', 'text-gray-400',
+                anexos + (anexos === 1 ? ' anexo será apagado' : ' anexos serão apagados')));
+            if (comentarios) partes.push(linha('fa-comments', 'text-gray-400',
+                comentarios + (comentarios === 1 ? ' comentário será apagado' : ' comentários serão apagados')));
+            if (ocorrencias) partes.push(linha('fa-repeat', 'text-gray-400',
+                'A próxima ocorrência já criada <strong>continua existindo</strong>.'));
+            if (b.dataset.avaliada === '1') partes.push(linha('fa-triangle-exclamation', 'text-amber-500',
+                'Esta meta já foi avaliada e <strong>conta pontos</strong>. Excluir muda a pontuação do mês.'));
+            if (!partes.length) partes.push(linha('fa-circle-info', 'text-gray-300', 'Nada mais é afetado.'));
+
+            document.getElementById('impExcImpacto').innerHTML = partes.join('');
+            modal.classList.remove('hidden');
+        });
+    });
+
+    document.getElementById('impExcCancelar').addEventListener('click', function () {
+        modal.classList.add('hidden');
+    });
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.add('hidden'); });
 })();
 </script>
 {% endblock %}

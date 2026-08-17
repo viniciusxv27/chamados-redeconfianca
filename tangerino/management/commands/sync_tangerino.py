@@ -20,11 +20,19 @@ class Command(BaseCommand):
                             help='Refaz também quem já tem employeeId.')
         parser.add_argument('--simular', action='store_true',
                             help='Mostra o resultado sem gravar nada.')
+        parser.add_argument('--dados', action='store_true',
+                            help='Sincroniza marcações e férias para as tabelas locais.')
+        parser.add_argument('--dias', type=int, default=30,
+                            help='Janela de dias de ponto para trás (padrão: 30).')
 
     def handle(self, *args, **opcoes):
         if not integracao_ativa():
             self.stderr.write(self.style.ERROR(
                 'Integração desligada: configure TANGERINO_TOKEN e TANGERINO_ENABLED.'))
+            return
+
+        if opcoes['dados']:
+            self._sincronizar_dados(opcoes['dias'])
             return
 
         try:
@@ -51,3 +59,27 @@ class Command(BaseCommand):
 
         for pendente in resultado['pendentes']:
             self.stdout.write(f"  - {pendente['nome']} ({pendente['cpf'] or 'sem CPF'})")
+
+    def _sincronizar_dados(self, dias):
+        """Espelha marcações e férias nas tabelas locais (bom para cron)."""
+        from tangerino.sync import sincronizar_ferias, sincronizar_marcacoes
+
+        for tipo, rotulo, funcao in (
+                (SincronizacaoTangerino.Tipo.PONTO, 'Marcações',
+                 lambda: sincronizar_marcacoes(dias=dias)),
+                (SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias)):
+            registro = SincronizacaoTangerino(tipo=tipo)
+            try:
+                resultado = funcao()
+                registro.criados = resultado['criados']
+                registro.atualizados = resultado['atualizados']
+                registro.sucesso = True
+                registro.save()
+                self.stdout.write(self.style.SUCCESS(
+                    f"{rotulo}: {resultado['lidos']} lidos, {resultado['criados']} novos, "
+                    f"{resultado['atualizados']} atualizados."))
+            except TangerinoError as exc:
+                registro.sucesso = False
+                registro.detalhe = str(exc)[:2000]
+                registro.save()
+                self.stderr.write(self.style.ERROR(f'{rotulo}: {exc}'))

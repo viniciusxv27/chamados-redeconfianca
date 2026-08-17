@@ -209,6 +209,33 @@ class Meta(models.Model):
             return False
         return user.is_superuser or self.gestor_id == user.id
 
+    def pode_excluir(self, user):
+        """Quem apaga a meta: só gestor, e só o que ele criou ou aprovou.
+
+        Colaborador nunca apaga — nem a meta dele, nem a que ele mesmo pediu:
+        seria uma saída fácil para sumir com tarefa ruim antes da avaliação.
+        Uma solicitação ainda pendente também não é apagável pelo gestor que a
+        recebeu: para essa existe o "recusar", que avisa quem pediu.
+        """
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser:
+            return True
+        from .utils import is_impulso_manager     # tardio: utils importa models
+        if not is_impulso_manager(user):
+            return False
+        return self.created_by_id == user.id or self.decidida_por_id == user.id
+
+    @property
+    def impacto_da_exclusao(self):
+        """O que some junto — usado no aviso de confirmação."""
+        return {
+            'anexos': self.anexos.count(),
+            'comentarios': self.comentarios.count(),
+            'avaliada': self.is_avaliada,
+            'ocorrencias': self.ocorrencias.count(),
+        }
+
     # ── Recorrência ────────────────────────────────────────────────────────
     @property
     def repete(self):

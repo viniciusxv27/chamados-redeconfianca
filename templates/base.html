@@ -584,6 +584,7 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% if tangerino_liberado %}
                                 <li>
                                     <a href="{% url 'tangerino:meu_ponto' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meu Ponto">
                                         <i class="fas fa-stopwatch text-cyan-400 flex-shrink-0"></i>
@@ -598,6 +599,7 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% endif %}
                                 {% if can_access_cartoes %}
                                 <li>
                                     <a href="{% url 'cartoes:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Cartões de Crédito">
@@ -1038,7 +1040,7 @@
                     {% endif %}
 
                     {# Ponto do dia: só na home, carregado em segundo plano. #}
-                    {% if request.resolver_match.url_name == 'home' %}
+                    {% if request.resolver_match.url_name == 'home' and tangerino_widget_home %}
                         {% include 'tangerino/_widget_ponto.html' %}
                     {% endif %}
 
@@ -3973,7 +3975,7 @@
     {% include 'portal_popups/_popup_gate.html' %}
     {% if user.is_authenticated and request.resolver_match.url_name == 'home' %}
     {% include 'support/_transfer_popup.html' %}
-    {% include 'tangerino/_popup_ferias.html' %}
+    {% if tangerino_popup_ferias %}{% include 'tangerino/_popup_ferias.html' %}{% endif %}
     {% endif %}
 
     <!-- Responsividade global: envolve tabelas "soltas" em um container rolável

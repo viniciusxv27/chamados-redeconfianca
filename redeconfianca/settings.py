@@ -121,6 +121,7 @@ TEMPLATES = [
                 'portal_popups.context_processors.portal_popup_gate',
                 'impulso.context_processors.impulso_menu',
                 'cartoes.context_processors.cartoes_menu',
+                'tangerino.context_processors.tangerino_gate',
             ],
         },
     },

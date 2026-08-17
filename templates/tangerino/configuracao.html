@@ -1,0 +1,224 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Configuração{% endblock %}
+{% block tg_cabecalho %}Configuração do módulo{% endblock %}
+{% block tg_subtitulo %}Liga e desliga cada função sem precisar de deploy{% endblock %}
+
+{% block tg_conteudo %}
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+
+    <!-- Quem enxerga -->
+    <div class="tg-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-1">
+            <i class="fas fa-users-gear text-cyan-600 mr-1.5"></i>Quem enxerga o módulo
+        </h2>
+        <p class="text-xs text-gray-400 mb-4">
+            Superusuários sempre enxergam. Fora deles, vale o que estiver marcado aqui.
+        </p>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="ativo" class="mt-1 rounded border-gray-300" {% if config.ativo %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Módulo Ponto e Férias ativo</span>
+                <span class="block text-xs text-gray-500">Desmarcado, as telas somem para todo mundo. Superusuários continuam entrando — senão não haveria como religar.</span>
+            </span>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="restrito_ao_grupo" class="mt-1 rounded border-gray-300" {% if config.restrito_ao_grupo %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Liberar apenas para o grupo escolhido</span>
+                <span class="block text-xs text-gray-500">Desmarque quando quiser abrir para o portal inteiro.</span>
+            </span>
+        </label>
+
+        <div class="p-3">
+            <label class="block text-sm text-gray-600 mb-1">Grupo liberado</label>
+            <select name="grupo" class="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">— nenhum —</option>
+                {% for g in grupos %}
+                <option value="{{ g.id }}" {% if config.grupo_id == g.id %}selected{% endif %}>
+                    #{{ g.id }} · {{ g.name }} ({{ g.members.count }} membro{{ g.members.count|pluralize }})
+                </option>
+                {% endfor %}
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Gerenciado em <a href="/users/manage/groups/" class="underline">/users/manage/groups/</a>.</p>
+        </div>
+    </div>
+
+    <!-- Registro de ponto -->
+    <div class="tg-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-1">
+            <i class="fas fa-fingerprint text-cyan-600 mr-1.5"></i>Registro de ponto pelo portal
+        </h2>
+        <p class="text-xs text-gray-400 mb-4">
+            Desligado, as telas de ponto ficam apenas informativas e a marcação segue pelo app do Tangerino.
+        </p>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="permitir_bater_ponto" class="mt-1 rounded border-gray-300" {% if config.permitir_bater_ponto %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Permitir bater ponto pelo portal</span>
+                <span class="block text-xs text-gray-500">Mostra o botão de marcação em /ponto/ e no cartão da home.</span>
+            </span>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="exigir_foto" class="mt-1 rounded border-gray-300" {% if config.exigir_foto %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Exigir foto ao bater ponto</span>
+                <span class="block text-xs text-gray-500">
+                    O Tangerino desta empresa recusa marcação web sem foto — a mensagem exata que ele devolveu foi
+                    <em>"O Colaborador não está autorizado a registrar Ponto pela Web sem envio de Foto"</em>.
+                    Desmarque só se a configuração lá mudar.
+                </span>
+            </span>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="permitir_ponto_atrasado" class="mt-1 rounded border-gray-300" {% if config.permitir_ponto_atrasado %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Permitir marcação retroativa pelo portal</span>
+                <span class="block text-xs text-gray-500">Para os dias com ponto em aberto, com justificativa.</span>
+            </span>
+        </label>
+    </div>
+
+    <!-- Avisos -->
+    <div class="tg-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-4">
+            <i class="fas fa-bell text-cyan-600 mr-1.5"></i>Avisos no portal
+        </h2>
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="mostrar_widget_home" class="mt-1 rounded border-gray-300" {% if config.mostrar_widget_home %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Cartão de ponto na home</span>
+                <span class="block text-xs text-gray-500">Situação do dia, cronômetro e aviso de ponto em aberto.</span>
+            </span>
+        </label>
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="mostrar_popup_ferias" class="mt-1 rounded border-gray-300" {% if config.mostrar_popup_ferias %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Popup de férias</span>
+                <span class="block text-xs text-gray-500">Uma vez por dia, com vencidas, vencendo e programadas.</span>
+            </span>
+        </label>
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="bloquear_navegacao_ferias" class="mt-1 rounded border-gray-300" {% if config.bloquear_navegacao_ferias %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Bloquear o portal para quem está de férias</span>
+                <span class="block text-xs text-gray-500">
+                    Cuidado: com isto ligado, quem estiver em férias aprovadas não navega no portal.
+                    Superusuários nunca são bloqueados.
+                </span>
+            </span>
+        </label>
+    </div>
+
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+        <p class="text-xs text-gray-400">
+            {% if config.atualizado_por %}Última alteração por {{ config.atualizado_por.full_name }}{% endif %}
+            {% if config.atualizado_em %}em {{ config.atualizado_em|date:"d/m/Y H:i" }}{% endif %}
+        </p>
+        <button class="px-5 py-2.5 bg-cyan-600 text-white rounded-xl text-sm font-semibold hover:bg-cyan-700">
+            <i class="fas fa-floppy-disk mr-1.5"></i>Salvar configuração
+        </button>
+    </div>
+</form>
+
+<!-- Sincronização para o banco -->
+<div class="tg-card p-5 mt-4">
+    <h2 class="text-sm font-semibold text-gray-700 mb-1">
+        <i class="fas fa-database text-cyan-600 mr-1.5"></i>Espelho no banco
+    </h2>
+    <p class="text-xs text-gray-400 mb-4">
+        As telas leem a API ao vivo. Estas tabelas guardam o histórico no banco, para relatório
+        e para consulta quando o Tangerino estiver fora do ar. Reprocessar o mesmo período atualiza
+        os registros — nunca duplica.
+    </p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-xs text-gray-500">Marcações gravadas</p>
+            <p class="text-3xl font-bold text-gray-900 tabular">{{ marcacoes_no_banco }}</p>
+            {% if ultima_ponto %}
+            <p class="text-xs text-gray-400 mt-1">
+                última em {{ ultima_ponto.executada_em|date:"d/m/Y H:i" }}
+                {% if ultima_ponto.sucesso %}· {{ ultima_ponto.criados }} novas, {{ ultima_ponto.atualizados }} atualizadas
+                {% else %}· <span class="text-red-600">falhou</span>{% endif %}
+            </p>
+            {% else %}
+            <p class="text-xs text-gray-400 mt-1">nunca sincronizado</p>
+            {% endif %}
+        </div>
+        <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-xs text-gray-500">Lançamentos de férias gravados</p>
+            <p class="text-3xl font-bold text-gray-900 tabular">{{ ferias_no_banco }}</p>
+            {% if ultima_ferias %}
+            <p class="text-xs text-gray-400 mt-1">
+                última em {{ ultima_ferias.executada_em|date:"d/m/Y H:i" }}
+                {% if ultima_ferias.sucesso %}· {{ ultima_ferias.criados }} novos, {{ ultima_ferias.atualizados }} atualizados
+                {% else %}· <span class="text-red-600">falhou</span>{% endif %}
+            </p>
+            {% else %}
+            <p class="text-xs text-gray-400 mt-1">nunca sincronizado</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'tangerino:sincronizar_dados' %}" class="flex items-end gap-2 flex-wrap">
+        {% csrf_token %}
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">O que sincronizar</label>
+            <select name="alvo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="tudo">Marcações e férias</option>
+                <option value="ponto">Somente marcações</option>
+                <option value="ferias">Somente férias</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Dias de ponto para trás</label>
+            <input type="number" name="dias" value="30" min="1" max="365"
+                   class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <button class="px-5 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-black">
+            <i class="fas fa-rotate mr-1.5"></i>Sincronizar agora
+        </button>
+    </form>
+    <p class="text-xs text-gray-400 mt-2">
+        Também dá para agendar: <code class="bg-gray-100 px-1.5 py-0.5 rounded">manage.py sync_tangerino --dados</code>
+    </p>
+</div>
+
+<!-- Diagnóstico das tentativas de marcação -->
+{% if tentativas_ponto %}
+<div class="tg-card overflow-hidden mt-4">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-clipboard-list text-gray-400 mr-1.5"></i>Últimas tentativas de bater ponto pelo portal
+        </h2>
+        <p class="text-xs text-gray-400 mt-0.5">Guarda a resposta exata do Tangerino — é por aqui que se descobre o motivo de uma recusa.</p>
+    </div>
+    <div class="divide-y divide-gray-50">
+        {% for t in tentativas_ponto %}
+        <div class="px-5 py-2.5 flex items-start justify-between gap-3 flex-wrap text-sm">
+            <div class="min-w-0">
+                <span class="text-gray-800">{{ t.usuario.full_name|default:"—" }}</span>
+                <span class="text-xs text-gray-400 ml-1">{{ t.criado_em|date:"d/m/Y H:i" }}</span>
+                {% if t.com_foto %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1">com foto</span>{% endif %}
+                {% if t.atrasado %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 ml-1">retroativa</span>{% endif %}
+                {% if not t.sucesso %}<p class="text-xs text-red-600 mt-0.5">{{ t.retorno|truncatechars:160 }}</p>{% endif %}
+            </div>
+            <span class="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0
+                {% if t.sucesso %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">
+                {% if t.sucesso %}registrado{% else %}recusado{% endif %}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

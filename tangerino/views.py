@@ -17,8 +17,10 @@ from . import ponto as ponto_svc
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
                      registrar_ponto, registrar_ponto_atrasado, testar_conexao)
-from .models import RegistroPontoPortal, SincronizacaoTangerino
-from .sync import funcionarios_disponiveis, sincronizar_vinculos
+from .models import (ConfiguracaoTangerino, FeriasLancamento, MarcacaoPonto,
+                     RegistroPontoPortal, SincronizacaoTangerino)
+from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_marcacoes,
+                   sincronizar_vinculos)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -29,6 +31,26 @@ def e_gestor(user):
     return bool(user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN')
 
 
+def modulo_liberado(view_func):
+    """Fecha a view para quem não está no grupo liberado.
+
+    O módulo nasce restrito: só superusuários e membros do grupo configurado
+    enxergam ponto e férias. Abrir para o portal inteiro é uma decisão que se
+    toma na tela de configuração, não no código.
+    """
+    from functools import wraps
+
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        if not ConfiguracaoTangerino.get().libera(request.user):
+            messages.error(request, 'O módulo de Ponto e Férias não está liberado para você.')
+            return redirect('home')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
 def _ip(request):
     encaminhado = request.META.get('HTTP_X_FORWARDED_FOR')
     return (encaminhado.split(',')[0].strip() if encaminhado
@@ -37,13 +59,17 @@ def _ip(request):
 
 # ─── Ponto ───────────────────────────────────────────────────────────────────
 
+@modulo_liberado
 @login_required
 def meu_ponto(request):
     """Painel de ponto do próprio colaborador."""
     hoje = timezone.localdate()
     inicio = hoje - timedelta(days=hoje.weekday())      # segunda desta semana
+    config = ConfiguracaoTangerino.get()
     contexto = {
         'aba': 'ponto',
+        'config': config,
+        'pode_bater_ponto': config.permitir_bater_ponto,
         'integracao_ativa': integracao_ativa(),
         'vinculado': bool(request.user.tangerino_employee_id),
         'e_gestor': e_gestor(request.user),
@@ -106,6 +132,7 @@ def _dias_com_marcacoes(pares, inicio, fim):
     return dias
 
 
+@modulo_liberado
 @login_required
 def ponto_equipe(request):
     """Painel de ponto de todos — só para SuperAdmin."""
@@ -154,6 +181,7 @@ def ponto_equipe(request):
     return render(request, 'tangerino/ponto_equipe.html', contexto)
 
 
+@modulo_liberado
 @login_required
 def api_ponto_status(request):
     """JSON do widget da home. Sempre 200: a home não pode quebrar por causa disto."""
@@ -161,8 +189,10 @@ def api_ponto_status(request):
     if not resumo.get('disponivel'):
         return JsonResponse({'disponivel': False, 'motivo': resumo.get('motivo')})
 
+    config = ConfiguracaoTangerino.get()
     return JsonResponse({
         'disponivel': True,
+        'pode_bater': config.permitir_bater_ponto,
         'situacao': resumo['situacao'],
         'rotulo': resumo['rotulo'],
         'bateu_entrada': resumo['bateu_entrada'],
@@ -183,10 +213,17 @@ def api_ponto_status(request):
     })
 
 
+@modulo_liberado
 @login_required
 @require_POST
 def api_bater_ponto(request):
     """Registra a marcação no Tangerino a partir do portal."""
+    config = ConfiguracaoTangerino.get()
+    if not config.permitir_bater_ponto:
+        return JsonResponse(
+            {'sucesso': False,
+             'erro': 'O registro de ponto pelo portal está desligado. Use o app do Tangerino.'},
+            status=403)
     if not request.user.tangerino_employee_id:
         return JsonResponse({'sucesso': False,
                              'erro': 'Seu usuário ainda não está vinculado ao Tangerino.'}, status=400)
@@ -198,9 +235,24 @@ def api_bater_ponto(request):
 
     latitude, longitude = corpo.get('latitude'), corpo.get('longitude')
     atrasado = bool(corpo.get('atrasado'))
+    foto = corpo.get('foto') or ''
+
+    if atrasado and not config.permitir_ponto_atrasado:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'A marcação retroativa pelo portal está desligada.'},
+            status=403)
+    # O Tangerino desta empresa recusa marcação web sem foto. Barrar aqui evita
+    # uma ida à API só para receber a recusa de volta.
+    if config.exigir_foto and not foto:
+        return JsonResponse(
+            {'sucesso': False,
+             'erro': 'Esta empresa exige foto para registrar ponto pela web. '
+                     'Autorize a câmera e tente de novo.'},
+            status=400)
+
     registro = RegistroPontoPortal(
         usuario=request.user, employee_id=request.user.tangerino_employee_id,
-        momento=timezone.localtime(), atrasado=atrasado,
+        momento=timezone.localtime(), atrasado=atrasado, com_foto=bool(foto),
         ip=_ip(request), user_agent=request.META.get('HTTP_USER_AGENT', '')[:500])
 
     try:
@@ -219,12 +271,12 @@ def api_bater_ponto(request):
             registro.justificativa = str(corpo.get('justificativa_texto', ''))[:200]
             resposta = registrar_ponto_atrasado(
                 request.user.tangerino_employee_id, quando, justificativa_id,
-                observacao=corpo.get('observacao', ''))
+                observacao=corpo.get('observacao', ''), foto_base64=foto)
         else:
             resposta = registrar_ponto(
                 request.user.tangerino_employee_id,
                 latitude=latitude, longitude=longitude,
-                endereco=corpo.get('endereco', ''))
+                endereco=corpo.get('endereco', ''), foto_base64=foto)
 
         registro.sucesso = True
         registro.retorno = json.dumps(resposta, ensure_ascii=False)[:2000]
@@ -250,6 +302,7 @@ def api_bater_ponto(request):
 
 # ─── Férias ──────────────────────────────────────────────────────────────────
 
+@modulo_liberado
 @login_required
 def minhas_ferias(request):
     contexto = {
@@ -263,6 +316,7 @@ def minhas_ferias(request):
     return render(request, 'tangerino/minhas_ferias.html', contexto)
 
 
+@modulo_liberado
 @login_required
 def ferias_equipe(request):
     if not e_gestor(request.user):
@@ -290,6 +344,7 @@ def em_ferias(request):
     })
 
 
+@modulo_liberado
 @login_required
 def api_ferias_popup(request):
     """Conteúdo do popup de férias (JSON), consultado uma vez por dia."""
@@ -322,6 +377,7 @@ def api_ferias_popup(request):
 
 # ─── Folhas sincronizadas ────────────────────────────────────────────────────
 
+@modulo_liberado
 @login_required
 def folhas_sincronizadas(request):
     """Folha de ponto montada ao vivo a partir do Tangerino.
@@ -385,6 +441,7 @@ def folhas_sincronizadas(request):
 
 # ─── Administração do vínculo ────────────────────────────────────────────────
 
+@modulo_liberado
 @login_required
 def vinculos(request):
     if not e_gestor(request.user):
@@ -411,6 +468,7 @@ def vinculos(request):
     return render(request, 'tangerino/vinculos.html', contexto)
 
 
+@modulo_liberado
 @login_required
 @require_POST
 def sincronizar(request):
@@ -440,6 +498,92 @@ def sincronizar(request):
     return redirect('tangerino:vinculos')
 
 
+@modulo_liberado
+@login_required
+def configuracao(request):
+    """Liga/desliga do módulo — só superusuário."""
+    if not request.user.is_superuser:
+        messages.error(request, 'Apenas superusuários alteram a configuração do módulo.')
+        return redirect('tangerino:meu_ponto')
+
+    from communications.models import CommunicationGroup
+    config = ConfiguracaoTangerino.get()
+
+    if request.method == 'POST':
+        for campo in ('ativo', 'restrito_ao_grupo', 'permitir_bater_ponto', 'exigir_foto',
+                      'permitir_ponto_atrasado', 'mostrar_widget_home',
+                      'mostrar_popup_ferias', 'bloquear_navegacao_ferias'):
+            setattr(config, campo, request.POST.get(campo) == 'on')
+        grupo_id = request.POST.get('grupo') or ''
+        config.grupo_id = int(grupo_id) if grupo_id.isdigit() else None
+        config.atualizado_por = request.user
+        config.save()
+        messages.success(request, 'Configuração salva.')
+        return redirect('tangerino:configuracao')
+
+    contexto = {
+        'aba': 'configuracao',
+        'e_gestor': True,
+        'config': config,
+        'grupos': CommunicationGroup.objects.all().order_by('name'),
+        'marcacoes_no_banco': MarcacaoPonto.objects.count(),
+        'ferias_no_banco': FeriasLancamento.objects.count(),
+        'ultima_ponto': SincronizacaoTangerino.objects.filter(
+            tipo=SincronizacaoTangerino.Tipo.PONTO).first(),
+        'ultima_ferias': SincronizacaoTangerino.objects.filter(
+            tipo=SincronizacaoTangerino.Tipo.FERIAS).first(),
+        'tentativas_ponto': RegistroPontoPortal.objects.all()[:10],
+    }
+    return render(request, 'tangerino/configuracao.html', contexto)
+
+
+@modulo_liberado
+@login_required
+@require_POST
+def sincronizar_dados(request):
+    """Puxa marcações e/ou férias da API para as tabelas locais."""
+    if not e_gestor(request.user):
+        messages.error(request, 'Apenas administradores podem sincronizar.')
+        return redirect('tangerino:meu_ponto')
+
+    alvo = request.POST.get('alvo')
+    try:
+        dias = max(1, min(365, int(request.POST.get('dias') or 30)))
+    except ValueError:
+        dias = 30
+
+    tarefas = []
+    if alvo in ('ponto', 'tudo'):
+        tarefas.append((SincronizacaoTangerino.Tipo.PONTO, 'Marcações',
+                        lambda: sincronizar_marcacoes(dias=dias)))
+    if alvo in ('ferias', 'tudo'):
+        tarefas.append((SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias))
+    if not tarefas:
+        messages.error(request, 'Escolha o que sincronizar.')
+        return redirect('tangerino:configuracao')
+
+    for tipo, rotulo, funcao in tarefas:
+        registro = SincronizacaoTangerino(tipo=tipo, executada_por=request.user)
+        try:
+            resultado = funcao()
+            registro.criados = resultado['criados']
+            registro.atualizados = resultado['atualizados']
+            registro.sucesso = True
+            registro.save()
+            messages.success(
+                request,
+                f"{rotulo}: {resultado['lidos']} lidos, {resultado['criados']} novos, "
+                f"{resultado['atualizados']} atualizados.")
+        except TangerinoError as exc:
+            registro.sucesso = False
+            registro.detalhe = str(exc)[:2000]
+            registro.save()
+            messages.error(request, f'{rotulo}: falha na sincronização — {exc}')
+
+    return redirect('tangerino:configuracao')
+
+
+@modulo_liberado
 @login_required
 @require_POST
 def vincular_manual(request):

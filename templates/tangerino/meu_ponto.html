@@ -50,16 +50,29 @@
             </div>
 
             <div class="text-right">
+                {% if pode_bater_ponto %}
                 <button type="button" id="tgBaterPonto"
                         data-acao="{{ status.proxima_acao }}"
+                        data-foto="{% if config.exigir_foto %}1{% else %}0{% endif %}"
                         class="px-6 py-3.5 rounded-xl text-white font-semibold shadow-sm transition-colors
                                {% if status.proxima_acao == 'ENTRADA' %}bg-emerald-600 hover:bg-emerald-700{% else %}bg-red-600 hover:bg-red-700{% endif %}">
-                    <i class="fas fa-fingerprint mr-2"></i>
+                    <i class="fas fa-camera mr-2"></i>
                     Bater {% if status.proxima_acao == 'ENTRADA' %}entrada{% else %}saída{% endif %}
                 </button>
                 <p class="text-[11px] text-gray-400 mt-2 max-w-[190px]">
-                    Registra no Tangerino agora, com o horário do servidor.
+                    {% if config.exigir_foto %}Abre a câmera: esta empresa exige foto na marcação pela web.
+                    {% else %}Registra no Tangerino agora, com o horário do servidor.{% endif %}
                 </p>
+                {% else %}
+                {# Registro pelo portal desligado: a tela vira só consulta. #}
+                <div class="px-5 py-3 rounded-xl bg-gray-50 border border-gray-200 max-w-[230px]">
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        <i class="fas fa-circle-info mr-1"></i>
+                        Esta tela é apenas informativa. Para bater o ponto, use o
+                        <strong>aplicativo do Tangerino</strong>.
+                    </p>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -114,7 +127,8 @@
         {{ pendencias|length }} dia{{ pendencias|length|pluralize }} com ponto em aberto
     </h2>
     <p class="text-xs text-amber-700/80 mb-3">
-        Você bateu a entrada e não bateu a saída nesses dias. Registre a marcação que faltou:
+        Você bateu a entrada e não bateu a saída nesses dias.
+        {% if config.permitir_ponto_atrasado %}Registre a marcação que faltou:{% else %}Ajuste pelo aplicativo do Tangerino:{% endif %}
     </p>
     <div class="space-y-2">
         {% for p in pendencias %}
@@ -123,11 +137,15 @@
                 <p class="text-sm font-medium text-gray-800">{{ p.dia|date:"d/m/Y" }} — {{ p.dia|date:"l" }}</p>
                 <p class="text-xs text-gray-500">Entrada às {{ p.entrada|date:"H:i" }}, sem saída</p>
             </div>
+            {% if config.permitir_ponto_atrasado %}
             <button type="button"
                     class="tg-abrir-atrasado px-3 py-1.5 text-xs rounded-lg bg-amber-600 text-white hover:bg-amber-700"
                     data-dia="{{ p.dia|date:'Y-m-d' }}">
                 <i class="fas fa-clock-rotate-left mr-1"></i>Registrar marcação
             </button>
+            {% else %}
+            <span class="text-xs text-amber-700">Ajuste pelo app do Tangerino</span>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
@@ -190,6 +208,7 @@
 </div>
 
 <!-- Modal de marcação retroativa -->
+{% if config.permitir_ponto_atrasado %}
 <div id="tgModalAtrasado" class="hidden fixed inset-0 z-[9995] bg-black/60 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
         <div class="px-6 py-4 bg-amber-500 text-white">
@@ -229,6 +248,41 @@
         </div>
     </div>
 </div>
+{% endif %}
+
+{% if pode_bater_ponto %}
+<!-- Câmera: o Tangerino desta empresa recusa marcação web sem foto -->
+<div id="tgModalCamera" class="hidden fixed inset-0 z-[9996] bg-black/80 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div class="px-6 py-4 bg-gray-900 text-white flex items-center justify-between">
+            <h3 class="font-bold"><i class="fas fa-camera mr-2"></i><span id="tgCamTitulo">Foto da marcação</span></h3>
+            <button type="button" id="tgCamFechar" class="text-white/70 hover:text-white"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="bg-black relative" style="aspect-ratio: 4/3;">
+            <video id="tgCamVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            <canvas id="tgCamCanvas" class="hidden"></canvas>
+            <img id="tgCamPreview" alt="Prévia da foto" class="hidden w-full h-full object-cover">
+            <div id="tgCamErro" class="hidden absolute inset-0 flex items-center justify-center p-6 text-center">
+                <p class="text-sm text-white/90"></p>
+            </div>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs text-gray-500" id="tgCamAjuda">Enquadre o rosto e toque em tirar foto.</p>
+            <div class="flex items-center gap-2">
+                <button type="button" id="tgCamRefazer" class="hidden px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Refazer</button>
+                <button type="button" id="tgCamTirar"
+                        class="px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-black text-sm font-semibold">
+                    <i class="fas fa-camera mr-1"></i>Tirar foto
+                </button>
+                <button type="button" id="tgCamConfirmar"
+                        class="hidden px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-semibold">
+                    <i class="fas fa-check mr-1"></i>Registrar ponto
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <script>
 (function () {
@@ -258,52 +312,135 @@
         alert(msg);
     }
 
-    // ── Bater ponto agora ───────────────────────────────────────────────────
+{% if pode_bater_ponto %}
+    // ── Bater ponto: foto obrigatória ───────────────────────────────────────
+    // O Tangerino recusa marcação pela web sem foto ("O Colaborador não está
+    // autorizado a registrar Ponto pela Web sem envio de Foto"), então o fluxo
+    // é: abrir a câmera, tirar a foto, e só então enviar.
     var botao = document.getElementById('tgBaterPonto');
-    if (botao) {
-        botao.addEventListener('click', function () {
-            var acao = botao.dataset.acao === 'ENTRADA' ? 'entrada' : 'saída';
-            if (!confirm('Registrar ' + acao + ' agora no Tangerino?')) return;
+    var modalCam = document.getElementById('tgModalCamera');
+    var stream = null, fotoBase64 = '';
 
-            botao.disabled = true;
-            var original = botao.innerHTML;
-            botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Registrando…';
-
-            // A localização é opcional: se o navegador negar, manda sem.
-            function enviar(coords) {
-                fetch('{% url "tangerino:api_bater_ponto" %}', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-                    body: JSON.stringify(coords || {})
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.sucesso) {
-                        avisar('Ponto registrado às ' + d.hora + (d.nsr ? ' (NSR ' + d.nsr + ')' : ''), 'success');
-                        setTimeout(function () { location.reload(); }, 900);
-                    } else {
-                        botao.disabled = false; botao.innerHTML = original;
-                        avisar(d.erro || 'Não foi possível registrar.', 'error');
-                    }
-                })
-                .catch(function () {
-                    botao.disabled = false; botao.innerHTML = original;
-                    avisar('Erro de conexão. O ponto NÃO foi registrado.', 'error');
-                });
-            }
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function (pos) { enviar({latitude: pos.coords.latitude, longitude: pos.coords.longitude}); },
-                    function () { enviar({}); },
-                    {timeout: 6000, maximumAge: 60000}
-                );
-            } else {
-                enviar({});
-            }
-        });
+    function pararCamera() {
+        if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
     }
 
+    function fecharCamera() {
+        pararCamera();
+        modalCam.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function mostrarErroCamera(msg) {
+        var caixa = document.getElementById('tgCamErro');
+        caixa.querySelector('p').textContent = msg;
+        caixa.classList.remove('hidden');
+        document.getElementById('tgCamTirar').classList.add('hidden');
+    }
+
+    function abrirCamera() {
+        fotoBase64 = '';
+        document.getElementById('tgCamPreview').classList.add('hidden');
+        document.getElementById('tgCamVideo').classList.remove('hidden');
+        document.getElementById('tgCamErro').classList.add('hidden');
+        document.getElementById('tgCamTirar').classList.remove('hidden');
+        document.getElementById('tgCamRefazer').classList.add('hidden');
+        document.getElementById('tgCamConfirmar').classList.add('hidden');
+        document.getElementById('tgCamAjuda').textContent = 'Enquadre o rosto e toque em tirar foto.';
+        modalCam.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            mostrarErroCamera('Este navegador não permite usar a câmera. Bata o ponto pelo aplicativo do Tangerino.');
+            return;
+        }
+        navigator.mediaDevices.getUserMedia({video: {facingMode: 'user', width: {ideal: 640}}, audio: false})
+            .then(function (s) {
+                stream = s;
+                document.getElementById('tgCamVideo').srcObject = s;
+            })
+            .catch(function () {
+                mostrarErroCamera('Não foi possível acessar a câmera. Autorize o acesso no navegador e tente de novo.');
+            });
+    }
+
+    function tirarFoto() {
+        var video = document.getElementById('tgCamVideo');
+        var canvas = document.getElementById('tgCamCanvas');
+        var largura = 480;
+        var altura = Math.round(largura * (video.videoHeight || 3) / (video.videoWidth || 4));
+        canvas.width = largura; canvas.height = altura;
+        canvas.getContext('2d').drawImage(video, 0, 0, largura, altura);
+        // JPEG comprimido: a foto vai como base64 dentro do JSON, então
+        // mandar a imagem crua da câmera estouraria o tamanho do POST.
+        fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+
+        var preview = document.getElementById('tgCamPreview');
+        preview.src = fotoBase64;
+        preview.classList.remove('hidden');
+        video.classList.add('hidden');
+        pararCamera();
+
+        document.getElementById('tgCamTirar').classList.add('hidden');
+        document.getElementById('tgCamRefazer').classList.remove('hidden');
+        document.getElementById('tgCamConfirmar').classList.remove('hidden');
+        document.getElementById('tgCamAjuda').textContent = 'Confira a foto e confirme o registro.';
+    }
+
+    function enviarPonto() {
+        var confirmar = document.getElementById('tgCamConfirmar');
+        confirmar.disabled = true;
+        confirmar.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Registrando…';
+
+        function enviar(coords) {
+            var corpo = coords || {};
+            corpo.foto = fotoBase64;
+            fetch('{% url "tangerino:api_bater_ponto" %}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                body: JSON.stringify(corpo)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.sucesso) {
+                    fecharCamera();
+                    avisar('Ponto registrado às ' + d.hora + (d.nsr ? ' (NSR ' + d.nsr + ')' : ''), 'success');
+                    setTimeout(function () { location.reload(); }, 900);
+                } else {
+                    confirmar.disabled = false;
+                    confirmar.innerHTML = '<i class="fas fa-check mr-1"></i>Registrar ponto';
+                    avisar(d.erro || 'Não foi possível registrar.', 'error');
+                }
+            })
+            .catch(function () {
+                confirmar.disabled = false;
+                confirmar.innerHTML = '<i class="fas fa-check mr-1"></i>Registrar ponto';
+                avisar('Erro de conexão. O ponto NÃO foi registrado.', 'error');
+            });
+        }
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) { enviar({latitude: pos.coords.latitude, longitude: pos.coords.longitude}); },
+                function () { enviar({}); },
+                {timeout: 6000, maximumAge: 60000}
+            );
+        } else { enviar({}); }
+    }
+
+    if (botao && modalCam) {
+        botao.addEventListener('click', function () {
+            var acao = botao.dataset.acao === 'ENTRADA' ? 'entrada' : 'saída';
+            document.getElementById('tgCamTitulo').textContent = 'Foto para bater ' + acao;
+            abrirCamera();
+        });
+        document.getElementById('tgCamTirar').addEventListener('click', tirarFoto);
+        document.getElementById('tgCamRefazer').addEventListener('click', abrirCamera);
+        document.getElementById('tgCamConfirmar').addEventListener('click', enviarPonto);
+        document.getElementById('tgCamFechar').addEventListener('click', fecharCamera);
+    }
+
+{% endif %}
     // ── Marcação retroativa ─────────────────────────────────────────────────
     var modal = document.getElementById('tgModalAtrasado');
     document.querySelectorAll('.tg-abrir-atrasado').forEach(function (b) {

@@ -171,9 +171,26 @@ def justificativas_edicao():
     return itens
 
 
+def limpar_base64(valor):
+    """Tira o prefixo "data:image/jpeg;base64," que o canvas do navegador manda.
+
+    A API espera o conteúdo puro em base64; com o prefixo ela rejeita a foto.
+    """
+    if not valor:
+        return ''
+    texto = str(valor).strip()
+    if texto.startswith('data:'):
+        _, _, texto = texto.partition(',')
+    return texto.strip()
+
+
 def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
-                    endereco='', origem='PORTAL RC'):
+                    endereco='', origem='PORTAL RC', foto_base64=''):
     """Registra uma marcação AGORA (ou no horário informado).
+
+    A foto não é enfeite: esta empresa tem o Tangerino configurado para recusar
+    marcação pela web sem ela — "O Colaborador não está autorizado a registrar
+    Ponto pela Web sem envio de Foto". Sem `photoContent` a marcação falha.
 
     Escrita: propaga erro de propósito. A API responde 200 mesmo quando recusa,
     sinalizando em ``success`` — por isso o resultado é inspecionado aqui.
@@ -187,6 +204,9 @@ def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
         'validTimezone': True,
         'platform': 'WEB',
     }
+    foto = limpar_base64(foto_base64)
+    if foto:
+        corpo['photoContent'] = foto
     if latitude is not None and longitude is not None:
         corpo.update({'latitude': latitude, 'longitude': longitude, 'gpsDisable': False})
     else:
@@ -200,7 +220,8 @@ def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
     return resposta
 
 
-def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao=''):
+def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao='',
+                             foto_base64=''):
     """Marcação retroativa (ponto esquecido), que exige justificativa."""
     corpo = {
         'employeeId': employee_id,
@@ -212,6 +233,9 @@ def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao='
         'gpsDisable': True,
         'timezoneId': str(timezone.get_current_timezone()),
     }
+    foto = limpar_base64(foto_base64)
+    if foto:
+        corpo['photoContent'] = foto
     if observacao:
         corpo['observationEmployee'] = observacao[:250]
     resposta = _post(PUNCH_BASE, '/register/late/1.1', corpo) or {}

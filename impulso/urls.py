@@ -12,6 +12,7 @@ urlpatterns = [
     path('metas/nova/', views.meta_create, name='meta_create'),
     path('metas/solicitacoes/', views.meta_solicitacoes, name='meta_solicitacoes'),
     path('metas/<int:meta_id>/decidir/', views.meta_decidir, name='meta_decidir'),
+    path('metas/<int:meta_id>/excluir/', views.meta_excluir, name='meta_excluir'),
     path('metas/<int:meta_id>/', views.meta_detail, name='meta_detail'),
     path('metas/<int:meta_id>/status/', views.meta_update_status, name='meta_update_status'),
     path('metas/<int:meta_id>/entregar/', views.meta_entregar, name='meta_entregar'),

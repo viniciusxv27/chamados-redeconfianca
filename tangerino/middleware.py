@@ -43,6 +43,13 @@ class BloqueioFeriasMiddleware:
             return self.get_response(request)
 
         try:
+            # O bloqueio é opcional e vale apenas para quem tem o módulo
+            # liberado — quem está fora do grupo nem sabe que ele existe.
+            from .models import ConfiguracaoTangerino
+            config = ConfiguracaoTangerino.get()
+            if not (config.bloquear_navegacao_ferias and config.libera(usuario)):
+                return self.get_response(request)
+
             if esta_de_ferias(usuario):
                 return redirect(reverse('tangerino:em_ferias'))
         except Exception as exc:                     # nunca derruba a navegação

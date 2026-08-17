@@ -21,10 +21,10 @@
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
-        <button type="button" id="tgwBater"
-                class="hidden px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm bg-emerald-600 hover:bg-emerald-700">
-          <i class="fas fa-fingerprint mr-1.5"></i><span id="tgwBaterTexto">Bater ponto</span>
-        </button>
+        <a href="/ponto/" id="tgwBater"
+           class="hidden px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm bg-emerald-600 hover:bg-emerald-700">
+          <i class="fas fa-camera mr-1.5"></i><span id="tgwBaterTexto">Bater ponto</span>
+        </a>
         <a href="/ponto/" class="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
           Ver meu ponto
         </a>
@@ -103,16 +103,21 @@
       mostrador.textContent = d.trabalhado_hhmm;
     }
 
+    // O botão leva para /ponto/, onde fica a câmera — a marcação exige foto.
+    // Com o registro pelo portal desligado, o cartão é só informativo.
     var botao = document.getElementById('tgwBater');
-    botao.classList.remove('hidden', 'bg-emerald-600', 'hover:bg-emerald-700', 'bg-red-600', 'hover:bg-red-700');
-    if (d.proxima_acao === 'ENTRADA') {
-      botao.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
-      document.getElementById('tgwBaterTexto').textContent = 'Bater entrada';
+    if (d.pode_bater) {
+      botao.classList.remove('hidden', 'bg-emerald-600', 'hover:bg-emerald-700', 'bg-red-600', 'hover:bg-red-700');
+      if (d.proxima_acao === 'ENTRADA') {
+        botao.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        document.getElementById('tgwBaterTexto').textContent = 'Bater entrada';
+      } else {
+        botao.classList.add('bg-red-600', 'hover:bg-red-700');
+        document.getElementById('tgwBaterTexto').textContent = 'Bater saída';
+      }
     } else {
-      botao.classList.add('bg-red-600', 'hover:bg-red-700');
-      document.getElementById('tgwBaterTexto').textContent = 'Bater saída';
+      botao.classList.add('hidden');
     }
-    botao.dataset.acao = d.proxima_acao;
 
     if (d.pendencias && d.pendencias.length) {
       document.getElementById('tgwPendenciasTexto').textContent =
@@ -125,48 +130,6 @@
     caixa.classList.remove('hidden');
   }
 
-  function bater() {
-    var botao = document.getElementById('tgwBater');
-    var acao = botao.dataset.acao === 'ENTRADA' ? 'entrada' : 'saída';
-    if (!confirm('Registrar ' + acao + ' agora no Tangerino?')) return;
-
-    botao.disabled = true;
-    var antes = botao.innerHTML;
-    botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Registrando…';
-
-    function enviar(corpo) {
-      fetch('/api/tangerino/ponto/bater/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-        body: JSON.stringify(corpo || {})
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        botao.disabled = false; botao.innerHTML = antes;
-        if (d.sucesso) {
-          if (typeof window.showToast === 'function') {
-            window.showToast('Ponto registrado às ' + d.hora + (d.nsr ? ' (NSR ' + d.nsr + ')' : ''), 'success');
-          }
-          carregar();
-        } else {
-          alert(d.erro || 'Não foi possível registrar o ponto.');
-        }
-      })
-      .catch(function () {
-        botao.disabled = false; botao.innerHTML = antes;
-        alert('Erro de conexão. O ponto NÃO foi registrado — confira antes de tentar de novo.');
-      });
-    }
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        function (p) { enviar({latitude: p.coords.latitude, longitude: p.coords.longitude}); },
-        function () { enviar({}); },
-        {timeout: 6000, maximumAge: 60000}
-      );
-    } else { enviar({}); }
-  }
-
   function carregar() {
     fetch('/api/tangerino/ponto/status/', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(function (r) { return r.json(); })
@@ -174,7 +137,6 @@
       .catch(function () { /* silencioso: a home nunca sofre por causa do ponto */ });
   }
 
-  document.getElementById('tgwBater').addEventListener('click', bater);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', carregar);
   } else {
