@@ -1,0 +1,214 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Minhas férias{% endblock %}
+{% block tg_cabecalho %}Minhas férias{% endblock %}
+{% block tg_subtitulo %}Períodos aquisitivos, saldo e programação{% endblock %}
+
+{% block tg_conteudo %}
+
+{% if not situacao.disponivel %}
+<div class="tg-card p-6 text-center">
+    <i class="fas fa-umbrella-beach text-3xl text-gray-300 mb-3"></i>
+    {% if situacao.motivo == 'sem_vinculo' %}
+    <p class="text-gray-700 font-medium">Seu usuário ainda não está vinculado ao Tangerino.</p>
+    <p class="text-sm text-gray-500 mt-1">Fale com o RH para ligar seu cadastro do portal ao do ponto.</p>
+    {% else %}
+    <p class="text-gray-700 font-medium">Não foi possível consultar suas férias agora.</p>
+    <p class="text-sm text-gray-500 mt-1">Tente de novo em alguns minutos.</p>
+    {% endif %}
+</div>
+{% else %}
+
+<!-- Destaques -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    {% if situacao.em_gozo %}
+    <div class="tg-card p-5 lg:col-span-2 border-cyan-200 bg-gradient-to-br from-cyan-50/60 to-white">
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-cyan-600 text-white">
+            <i class="fas fa-umbrella-beach"></i>Você está de férias
+        </span>
+        <p class="text-2xl font-bold text-gray-900 mt-3">
+            {{ situacao.em_gozo.inicio|date:"d/m/Y" }} a {{ situacao.em_gozo.fim|date:"d/m/Y" }}
+        </p>
+        <p class="text-sm text-gray-600 mt-1">
+            {{ situacao.dias_em_gozo }} dia{{ situacao.dias_em_gozo|pluralize }} no total ·
+            faltam <strong>{{ situacao.dias_restantes_gozo }}</strong> ·
+            volta em <strong>{{ situacao.volta_em|date:"d/m/Y" }}</strong>
+        </p>
+    </div>
+    {% elif situacao.proxima %}
+    <div class="tg-card p-5 lg:col-span-2 border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white">
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white">
+            <i class="fas fa-calendar-check"></i>Férias programadas
+        </span>
+        <p class="text-2xl font-bold text-gray-900 mt-3">
+            {{ situacao.proxima.inicio|date:"d/m/Y" }} a {{ situacao.proxima.fim|date:"d/m/Y" }}
+        </p>
+        <p class="text-sm text-gray-600 mt-1">
+            {{ situacao.proxima.dias|default_if_none:"" }}
+            {% with d=situacao.proxima.fim|timeuntil:situacao.proxima.inicio %}{% endwith %}
+            Status: {{ situacao.proxima.status|title }}
+        </p>
+    </div>
+    {% else %}
+    <div class="tg-card p-5 lg:col-span-2">
+        <p class="text-sm text-gray-500">Situação atual</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">Sem férias programadas</p>
+        <p class="text-sm text-gray-500 mt-1">Combine as datas com seu gestor e o RH lança no sistema.</p>
+    </div>
+    {% endif %}
+
+    <div class="tg-card p-5">
+        <p class="text-xs text-gray-500">Saldo de dias a gozar</p>
+        <p class="text-4xl font-bold {% if situacao.dias_vencidos %}text-red-600{% else %}text-gray-900{% endif %} tabular">
+            {{ situacao.saldo_total }}
+        </p>
+        {% if situacao.dias_vencidos %}
+        <p class="text-sm text-red-600 mt-1 font-medium">
+            <i class="fas fa-triangle-exclamation mr-1"></i>{{ situacao.dias_vencidos }} já vencido{{ situacao.dias_vencidos|pluralize }}
+        </p>
+        {% elif situacao.vencendo %}
+        <p class="text-sm text-amber-600 mt-1 font-medium">
+            <i class="fas fa-hourglass-half mr-1"></i>Vencendo em breve
+        </p>
+        {% else %}
+        <p class="text-sm text-gray-400 mt-1">Nada vencido</p>
+        {% endif %}
+        <p class="text-[11px] text-gray-400 mt-3">Admissão: {{ situacao.admissao|date:"d/m/Y"|default:"—" }}</p>
+    </div>
+</div>
+
+<!-- Alertas -->
+{% if situacao.vencidos %}
+<div class="tg-card p-5 mb-4 border-red-200 bg-red-50/40">
+    <h2 class="text-sm font-semibold text-red-800 mb-2">
+        <i class="fas fa-circle-exclamation mr-1.5"></i>Períodos vencidos
+    </h2>
+    <p class="text-xs text-red-700/80 mb-3">
+        O prazo para gozar já passou. Pela CLT, férias não concedidas no período concessivo são pagas em dobro.
+    </p>
+    <div class="space-y-2">
+        {% for p in situacao.vencidos %}
+        <div class="flex items-center justify-between gap-3 text-sm p-2.5 rounded-lg bg-white border border-red-100 flex-wrap">
+            <span class="text-gray-700">
+                Aquisitivo {{ p.inicio|date:"d/m/Y" }} – {{ p.fim|date:"d/m/Y" }}
+            </span>
+            <span class="text-red-700 font-semibold">
+                {{ p.saldo }} dia{{ p.saldo|pluralize }} · venceu em {{ p.concessivo_fim|date:"d/m/Y" }}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if situacao.vencendo %}
+<div class="tg-card p-5 mb-4 border-amber-200 bg-amber-50/40">
+    <h2 class="text-sm font-semibold text-amber-800 mb-2">
+        <i class="fas fa-hourglass-half mr-1.5"></i>Vencendo nos próximos 90 dias
+    </h2>
+    <div class="space-y-2">
+        {% for p in situacao.vencendo %}
+        <div class="flex items-center justify-between gap-3 text-sm p-2.5 rounded-lg bg-white border border-amber-100 flex-wrap">
+            <span class="text-gray-700">Aquisitivo {{ p.inicio|date:"d/m/Y" }} – {{ p.fim|date:"d/m/Y" }}</span>
+            <span class="text-amber-700 font-semibold">
+                {{ p.saldo }} dia{{ p.saldo|pluralize }} · vence em {{ p.concessivo_fim|date:"d/m/Y" }}
+                ({{ p.dias_para_vencer }} dia{{ p.dias_para_vencer|pluralize }})
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Períodos aquisitivos -->
+    <div class="tg-card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-layer-group text-cyan-600 mr-1.5"></i>Períodos aquisitivos
+            </h2>
+        </div>
+        <div class="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+            {% for p in situacao.periodos reversed %}
+            <div class="px-5 py-3 {% if p.sem_dados %}opacity-60{% endif %}">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <span class="text-sm text-gray-800">
+                        {{ p.inicio|date:"d/m/Y" }} – {{ p.fim|date:"d/m/Y" }}
+                    </span>
+                    {% if p.sem_dados %}
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">sem histórico no sistema</span>
+                    {% elif not p.completo %}
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">em andamento</span>
+                    {% elif p.vencido %}
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700">vencido</span>
+                    {% elif p.vencendo %}
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">vencendo</span>
+                    {% elif p.saldo == 0 %}
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">gozado</span>
+                    {% else %}
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">a gozar</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                    {% if p.sem_dados %}
+                        Anterior ao histórico disponível no Tangerino.
+                    {% else %}
+                        {{ p.gozados }} de {{ p.direito }} dias gozados ·
+                        prazo para gozar até {{ p.concessivo_fim|date:"d/m/Y" }}
+                    {% endif %}
+                </p>
+            </div>
+            {% empty %}
+            <p class="px-5 py-8 text-center text-sm text-gray-400">Sem data de admissão para calcular.</p>
+            {% endfor %}
+        </div>
+        {% if situacao.cobertura %}
+        <div class="px-5 py-2.5 bg-gray-50/70 border-t border-gray-100">
+            <p class="text-[11px] text-gray-500">
+                <i class="fas fa-circle-info mr-1"></i>
+                O histórico de férias no Tangerino começa em {{ situacao.cobertura|date:"d/m/Y" }}.
+                Períodos anteriores aparecem como "sem histórico" em vez de vencidos.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lançamentos -->
+    <div class="tg-card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-plane-departure text-cyan-600 mr-1.5"></i>Férias lançadas
+            </h2>
+        </div>
+        <div class="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+            {% for l in situacao.programadas %}
+            <div class="px-5 py-3 flex items-center justify-between gap-2 flex-wrap bg-emerald-50/30">
+                <span class="text-sm text-gray-800">{{ l.inicio|date:"d/m/Y" }} – {{ l.fim|date:"d/m/Y" }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">programada</span>
+            </div>
+            {% endfor %}
+            {% for l in situacao.passadas reversed %}
+            <div class="px-5 py-3 flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                    <span class="text-sm text-gray-800">{{ l.inicio|date:"d/m/Y" }} – {{ l.fim|date:"d/m/Y" }}</span>
+                    {% if l.observacao %}<p class="text-xs text-gray-400">{{ l.observacao }}</p>{% endif %}
+                </div>
+                <span class="text-xs text-gray-400">gozada</span>
+            </div>
+            {% empty %}
+            {% if not situacao.programadas %}
+            <p class="px-5 py-8 text-center text-sm text-gray-400">Nenhuma férias lançada no Tangerino.</p>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<p class="text-xs text-gray-400 mt-4 leading-relaxed">
+    <i class="fas fa-circle-info mr-1"></i>
+    O cálculo considera 30 dias por período aquisitivo e aloca as férias lançadas do período mais antigo
+    para o mais novo. Faltas injustificadas podem reduzir o direito (art. 130 da CLT) e não são informadas
+    pela API — em caso de divergência, vale o cálculo do departamento pessoal.
+</p>
+{% endif %}
+{% endblock %}

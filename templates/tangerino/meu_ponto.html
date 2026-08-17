@@ -1,0 +1,357 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Meu ponto{% endblock %}
+{% block tg_cabecalho %}Meu ponto{% endblock %}
+{% block tg_subtitulo %}{{ hoje|date:"l, d \d\e F \d\e Y" }}{% endblock %}
+
+{% block tg_conteudo %}
+
+{% if not integracao_ativa %}
+<div class="tg-card p-6 text-center">
+    <i class="fas fa-plug-circle-xmark text-3xl text-gray-300 mb-3"></i>
+    <p class="text-gray-600">A integração com o Tangerino está desligada.</p>
+</div>
+{% elif not vinculado %}
+<div class="tg-card p-6 text-center">
+    <i class="fas fa-link-slash text-3xl text-gray-300 mb-3"></i>
+    <p class="text-gray-700 font-medium">Seu usuário ainda não está vinculado ao Tangerino.</p>
+    <p class="text-sm text-gray-500 mt-1">Fale com o RH para ligar seu cadastro do portal ao do ponto.</p>
+</div>
+{% elif status %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <!-- Cartão principal: situação + cronômetro + botão -->
+    <div class="tg-card p-5 lg:col-span-2">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+                <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold
+                    {% if status.situacao == 'TRABALHANDO' %}bg-emerald-50 text-emerald-700
+                    {% elif status.situacao == 'EM_INTERVALO' %}bg-amber-50 text-amber-700
+                    {% elif status.situacao == 'SEM_ENTRADA' %}bg-gray-100 text-gray-600
+                    {% else %}bg-cyan-50 text-cyan-700{% endif %}">
+                    <span class="tg-dot
+                        {% if status.situacao == 'TRABALHANDO' %}bg-emerald-500 animate-pulse
+                        {% elif status.situacao == 'EM_INTERVALO' %}bg-amber-500
+                        {% elif status.situacao == 'SEM_ENTRADA' %}bg-gray-400
+                        {% else %}bg-cyan-500{% endif %}"></span>
+                    {{ status.rotulo }}
+                </span>
+                <p class="text-sm text-gray-500 mt-3">Trabalhado hoje</p>
+                <p class="text-4xl font-bold text-gray-900 tabular" id="tgCronometro"
+                   data-trabalhado="{{ status.trabalhado_segundos }}"
+                   data-correndo="{% if status.dentro %}1{% else %}0{% endif %}">{{ status.trabalhado_hhmm }}</p>
+                {% if status.dentro %}
+                <p class="text-xs text-gray-400 mt-1">
+                    Contando desde as {{ status.desde|date:"H:i" }} — atualiza sozinho
+                </p>
+                {% elif status.ultima %}
+                <p class="text-xs text-gray-400 mt-1">Última marcação às {{ status.ultima|date:"H:i" }}</p>
+                {% endif %}
+            </div>
+
+            <div class="text-right">
+                <button type="button" id="tgBaterPonto"
+                        data-acao="{{ status.proxima_acao }}"
+                        class="px-6 py-3.5 rounded-xl text-white font-semibold shadow-sm transition-colors
+                               {% if status.proxima_acao == 'ENTRADA' %}bg-emerald-600 hover:bg-emerald-700{% else %}bg-red-600 hover:bg-red-700{% endif %}">
+                    <i class="fas fa-fingerprint mr-2"></i>
+                    Bater {% if status.proxima_acao == 'ENTRADA' %}entrada{% else %}saída{% endif %}
+                </button>
+                <p class="text-[11px] text-gray-400 mt-2 max-w-[190px]">
+                    Registra no Tangerino agora, com o horário do servidor.
+                </p>
+            </div>
+        </div>
+
+        <!-- Marcos do dia -->
+        <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-gray-100">
+            {% for rotulo, feito in marcos %}
+            <div class="text-center">
+                <span class="w-9 h-9 mx-auto rounded-full flex items-center justify-center
+                    {% if feito %}bg-emerald-50 text-emerald-600{% else %}bg-gray-100 text-gray-300{% endif %}">
+                    <i class="fas {% if feito %}fa-check{% else %}fa-minus{% endif %}"></i>
+                </span>
+                <p class="text-xs mt-1.5 {% if feito %}text-gray-700 font-medium{% else %}text-gray-400{% endif %}">{{ rotulo }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Linha do tempo de hoje -->
+    <div class="tg-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">
+            <i class="fas fa-clock text-cyan-600 mr-1.5"></i>Marcações de hoje
+        </h2>
+        {% if status.eventos %}
+        <div class="tg-linha space-y-3">
+            {% for e in status.eventos %}
+            <div class="tg-marco {% if e.tipo == 'ENTRADA' %}tg-marco-entrada{% else %}tg-marco-saida{% endif %} relative">
+                <p class="text-sm font-semibold text-gray-800 tabular">{{ e.quando|date:"H:i" }}</p>
+                <p class="text-xs text-gray-500">
+                    {% if e.tipo == 'ENTRADA' %}Entrada{% else %}Saída{% endif %}
+                    {% if e.nsr %}<span class="text-gray-300">· NSR {{ e.nsr }}</span>{% endif %}
+                </p>
+            </div>
+            {% endfor %}
+            {% if status.dentro %}
+            <div class="tg-marco tg-marco-pendente relative">
+                <p class="text-sm font-semibold text-amber-600">agora</p>
+                <p class="text-xs text-gray-500">Saída ainda não registrada</p>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400 py-6 text-center">Nenhuma marcação hoje ainda.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Pendências -->
+{% if pendencias %}
+<div class="tg-card p-5 mb-4 border-amber-200">
+    <h2 class="text-sm font-semibold text-amber-800 mb-1">
+        <i class="fas fa-triangle-exclamation mr-1.5"></i>
+        {{ pendencias|length }} dia{{ pendencias|length|pluralize }} com ponto em aberto
+    </h2>
+    <p class="text-xs text-amber-700/80 mb-3">
+        Você bateu a entrada e não bateu a saída nesses dias. Registre a marcação que faltou:
+    </p>
+    <div class="space-y-2">
+        {% for p in pendencias %}
+        <div class="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-50/60 border border-amber-100 flex-wrap">
+            <div>
+                <p class="text-sm font-medium text-gray-800">{{ p.dia|date:"d/m/Y" }} — {{ p.dia|date:"l" }}</p>
+                <p class="text-xs text-gray-500">Entrada às {{ p.entrada|date:"H:i" }}, sem saída</p>
+            </div>
+            <button type="button"
+                    class="tg-abrir-atrasado px-3 py-1.5 text-xs rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+                    data-dia="{{ p.dia|date:'Y-m-d' }}">
+                <i class="fas fa-clock-rotate-left mr-1"></i>Registrar marcação
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Semana + histórico -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="tg-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Esta semana</h2>
+        <p class="text-3xl font-bold text-gray-900 tabular">{{ total_semana }}</p>
+        <p class="text-xs text-gray-400 mb-4">desde {{ inicio_semana|date:"d/m" }}</p>
+        <div class="space-y-1.5">
+            {% for d in semana %}
+            <div class="flex items-center justify-between text-sm">
+                <span class="{% if d.dia == hoje %}font-semibold text-gray-900{% else %}text-gray-600{% endif %}">
+                    {{ d.dia|date:"D d/m" }}
+                </span>
+                <span class="tabular {% if d.aberto %}text-amber-600{% elif d.segundos %}text-gray-800{% else %}text-gray-300{% endif %}">
+                    {% if d.segundos %}{{ d.horas }}{% else %}—{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tg-card overflow-hidden lg:col-span-2">
+        <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-calendar-days text-cyan-600 mr-1.5"></i>Últimos 28 dias
+            </h2>
+            <a href="{% url 'tangerino:folhas_sincronizadas' %}" class="text-xs text-cyan-700 hover:underline">Ver folha do mês</a>
+        </div>
+        <div class="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+            {% for d in dias %}
+            <div class="px-5 py-2.5 flex items-center gap-3 {% if d.fim_de_semana %}bg-gray-50/50{% endif %}">
+                <span class="text-sm w-28 flex-shrink-0 {% if d.dia == hoje %}font-semibold text-gray-900{% else %}text-gray-600{% endif %}">
+                    {{ d.dia|date:"d/m" }} <span class="text-gray-400 text-xs">{{ d.dia|date:"D" }}</span>
+                </span>
+                <div class="flex-1 min-w-0 flex flex-wrap gap-1.5">
+                    {% for e in d.eventos %}
+                    <span class="px-2 py-0.5 rounded text-xs tabular
+                        {% if e.tipo == 'ENTRADA' %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">
+                        {{ e.quando|date:"H:i" }}
+                    </span>
+                    {% empty %}
+                    <span class="text-xs text-gray-300">sem marcação</span>
+                    {% endfor %}
+                    {% if d.aberto %}
+                    <span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">em aberto</span>
+                    {% endif %}
+                </div>
+                <span class="text-sm tabular flex-shrink-0 {% if d.segundos %}text-gray-800 font-medium{% else %}text-gray-300{% endif %}">
+                    {% if d.segundos %}{{ d.horas }}{% else %}—{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de marcação retroativa -->
+<div id="tgModalAtrasado" class="hidden fixed inset-0 z-[9995] bg-black/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div class="px-6 py-4 bg-amber-500 text-white">
+            <h3 class="font-bold"><i class="fas fa-clock-rotate-left mr-2"></i>Registrar marcação esquecida</h3>
+        </div>
+        <div class="px-6 py-5 space-y-4">
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Data e hora da marcação</label>
+                <input type="datetime-local" id="tgAtrasadoQuando"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Justificativa</label>
+                <select id="tgAtrasadoJustificativa" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Selecione…</option>
+                    {% for j in justificativas %}
+                    <option value="{{ j.id }}">{{ j.description }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Observação (opcional)</label>
+                <textarea id="tgAtrasadoObs" rows="2"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          placeholder="Ex.: esqueci de bater a saída"></textarea>
+            </div>
+            <p class="text-xs text-gray-400">
+                A marcação vai para o Tangerino como retroativa e fica sujeita à aprovação do gestor.
+            </p>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <button type="button" id="tgAtrasadoCancelar" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button type="button" id="tgAtrasadoEnviar"
+                    class="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-semibold">
+                Registrar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // ── Cronômetro ──────────────────────────────────────────────────────────
+    // Conta a partir do total já trabalhado que veio do servidor. Só corre
+    // quando a pessoa está DENTRO (par de ponto aberto).
+    var el = document.getElementById('tgCronometro');
+    if (el && el.dataset.correndo === '1') {
+        var base = parseInt(el.dataset.trabalhado || '0', 10);
+        var inicio = Date.now();
+        setInterval(function () {
+            var s = base + Math.floor((Date.now() - inicio) / 1000);
+            var h = String(Math.floor(s / 3600)).padStart(2, '0');
+            var m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+            var seg = String(s % 60).padStart(2, '0');
+            el.textContent = h + ':' + m + ':' + seg;
+        }, 1000);
+    }
+
+    function csrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function avisar(msg, tipo) {
+        if (typeof window.showToast === 'function') { window.showToast(msg, tipo || 'info'); return; }
+        alert(msg);
+    }
+
+    // ── Bater ponto agora ───────────────────────────────────────────────────
+    var botao = document.getElementById('tgBaterPonto');
+    if (botao) {
+        botao.addEventListener('click', function () {
+            var acao = botao.dataset.acao === 'ENTRADA' ? 'entrada' : 'saída';
+            if (!confirm('Registrar ' + acao + ' agora no Tangerino?')) return;
+
+            botao.disabled = true;
+            var original = botao.innerHTML;
+            botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Registrando…';
+
+            // A localização é opcional: se o navegador negar, manda sem.
+            function enviar(coords) {
+                fetch('{% url "tangerino:api_bater_ponto" %}', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                    body: JSON.stringify(coords || {})
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.sucesso) {
+                        avisar('Ponto registrado às ' + d.hora + (d.nsr ? ' (NSR ' + d.nsr + ')' : ''), 'success');
+                        setTimeout(function () { location.reload(); }, 900);
+                    } else {
+                        botao.disabled = false; botao.innerHTML = original;
+                        avisar(d.erro || 'Não foi possível registrar.', 'error');
+                    }
+                })
+                .catch(function () {
+                    botao.disabled = false; botao.innerHTML = original;
+                    avisar('Erro de conexão. O ponto NÃO foi registrado.', 'error');
+                });
+            }
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) { enviar({latitude: pos.coords.latitude, longitude: pos.coords.longitude}); },
+                    function () { enviar({}); },
+                    {timeout: 6000, maximumAge: 60000}
+                );
+            } else {
+                enviar({});
+            }
+        });
+    }
+
+    // ── Marcação retroativa ─────────────────────────────────────────────────
+    var modal = document.getElementById('tgModalAtrasado');
+    document.querySelectorAll('.tg-abrir-atrasado').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.getElementById('tgAtrasadoQuando').value = b.dataset.dia + 'T18:00';
+            modal.classList.remove('hidden');
+        });
+    });
+    var cancelar = document.getElementById('tgAtrasadoCancelar');
+    if (cancelar) cancelar.addEventListener('click', function () { modal.classList.add('hidden'); });
+
+    var enviarAtrasado = document.getElementById('tgAtrasadoEnviar');
+    if (enviarAtrasado) {
+        enviarAtrasado.addEventListener('click', function () {
+            var quando = document.getElementById('tgAtrasadoQuando').value;
+            var just = document.getElementById('tgAtrasadoJustificativa');
+            if (!quando) { avisar('Informe a data e a hora.', 'error'); return; }
+            if (!just.value) { avisar('Escolha a justificativa.', 'error'); return; }
+
+            enviarAtrasado.disabled = true;
+            enviarAtrasado.textContent = 'Registrando…';
+            fetch('{% url "tangerino:api_bater_ponto" %}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                body: JSON.stringify({
+                    atrasado: true, quando: quando, justificativa_id: just.value,
+                    justificativa_texto: just.options[just.selectedIndex].text,
+                    observacao: document.getElementById('tgAtrasadoObs').value
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.sucesso) {
+                    avisar('Marcação retroativa registrada.', 'success');
+                    setTimeout(function () { location.reload(); }, 900);
+                } else {
+                    enviarAtrasado.disabled = false; enviarAtrasado.textContent = 'Registrar';
+                    avisar(d.erro || 'Não foi possível registrar.', 'error');
+                }
+            })
+            .catch(function () {
+                enviarAtrasado.disabled = false; enviarAtrasado.textContent = 'Registrar';
+                avisar('Erro de conexão. Nada foi registrado.', 'error');
+            });
+        });
+    }
+})();
+</script>
+
+{% endif %}
+{% endblock %}

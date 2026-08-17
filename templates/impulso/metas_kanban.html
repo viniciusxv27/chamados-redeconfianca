@@ -19,9 +19,18 @@
         </form>
         {% endif %}
     </div>
-    {% if is_gestor %}
-    <a href="{% url 'impulso:meta_create' %}" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm"><i class="fas fa-plus mr-1"></i>Nova meta</a>
-    {% endif %}
+    <div class="flex items-center gap-2 flex-wrap">
+        <a href="{% url 'impulso:meta_solicitacoes' %}"
+           class="relative px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50">
+            <i class="fas fa-inbox mr-1"></i>{% if is_gestor %}Solicitações{% else %}Minhas solicitações{% endif %}
+            {% if solicitacoes_pendentes %}
+            <span class="absolute -top-1.5 -right-1.5 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{{ solicitacoes_pendentes }}</span>
+            {% endif %}
+        </a>
+        <a href="{% url 'impulso:meta_create' %}" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm">
+            <i class="fas fa-plus mr-1"></i>{% if is_gestor %}Nova meta{% else %}Solicitar meta{% endif %}
+        </a>
+    </div>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -46,7 +55,7 @@
                  draggable="{% if col.status == 'CONCLUIDA' %}false{% else %}true{% endif %}" data-meta-id="{{ m.id }}">
                 <div class="flex items-start justify-between gap-2">
                     <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 leading-snug">{{ m.titulo }}</a>
-                    <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{{ m.get_periodicidade_display }}</span>
+                    <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{{ m.get_recorrencia_display }}</span>
                 </div>
 
                 {% if is_gestor %}

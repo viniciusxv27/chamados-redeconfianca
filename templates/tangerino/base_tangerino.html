@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}{% block tg_titulo %}Ponto e Férias{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tg-card {
+        background: #fff;
+        border: 1px solid #EDEDF0;
+        border-radius: 1rem;
+        box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+    }
+    .tg-hero {
+        background:
+            radial-gradient(1100px 200px at 0% 0%, rgba(8,145,178,.10), transparent 60%),
+            radial-gradient(900px 200px at 100% 0%, rgba(234,88,12,.08), transparent 60%),
+            linear-gradient(180deg, #FFFFFF 0%, #FBFBFC 100%);
+    }
+    .tg-tab { position: relative; white-space: nowrap; transition: color .15s, background-color .15s; }
+    .tg-tab-active { color: #0E7490; background: #ECFEFF; }
+    .tg-tab-active::after {
+        content: ''; position: absolute; left: .75rem; right: .75rem; bottom: -1px;
+        height: 2px; background: #0891B2; border-radius: 2px;
+    }
+    .tg-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tg-dot { width: .5rem; height: .5rem; border-radius: 9999px; display: inline-block; }
+    /* Linha do tempo das marcações do dia */
+    .tg-linha { position: relative; padding-left: 1.6rem; }
+    .tg-linha::before {
+        content: ''; position: absolute; left: .42rem; top: .35rem; bottom: .35rem;
+        width: 2px; background: #E5E7EB; border-radius: 2px;
+    }
+    .tg-marco::before {
+        content: ''; position: absolute; left: 0; margin-top: .3rem;
+        width: .9rem; height: .9rem; border-radius: 9999px;
+        border: 2px solid #fff; box-shadow: 0 0 0 1px #D1D5DB;
+    }
+    .tg-marco-entrada::before { background: #059669; box-shadow: 0 0 0 1px #059669; }
+    .tg-marco-saida::before { background: #DC2626; box-shadow: 0 0 0 1px #DC2626; }
+    .tg-marco-pendente::before { background: #F59E0B; box-shadow: 0 0 0 1px #F59E0B; }
+    .tabular { font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tg-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">{% block tg_cabecalho %}Ponto e Férias{% endblock %}</h1>
+            <p class="text-sm text-gray-500 mt-0.5">{% block tg_subtitulo %}Dados sincronizados com o Tangerino{% endblock %}</p>
+        </div>
+        {% block tg_acoes %}{% endblock %}
+    </div>
+
+    <nav class="flex gap-1 mt-4 tg-scroll-x -mb-px">
+        <a href="{% url 'tangerino:meu_ponto' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ponto' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-fingerprint mr-1.5"></i>Meu ponto
+        </a>
+        <a href="{% url 'tangerino:minhas_ferias' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ferias' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-umbrella-beach mr-1.5"></i>Minhas férias
+        </a>
+        <a href="{% url 'tangerino:folhas_sincronizadas' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'folhas' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-file-lines mr-1.5"></i>Folha sincronizada
+        </a>
+        {% if e_gestor %}
+        <span class="w-px bg-gray-200 mx-1 my-2"></span>
+        <a href="{% url 'tangerino:ponto_equipe' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ponto_equipe' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-users mr-1.5"></i>Ponto da equipe
+        </a>
+        <a href="{% url 'tangerino:ferias_equipe' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ferias_equipe' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-calendar-check mr-1.5"></i>Férias da equipe
+        </a>
+        <a href="{% url 'tangerino:vinculos' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'vinculos' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-link mr-1.5"></i>Vínculos
+        </a>
+        {% endif %}
+    </nav>
+</div>
+
+{% if erro %}
+<div class="tg-card p-4 mb-4 border-amber-200 bg-amber-50">
+    <p class="text-sm text-amber-800">
+        <i class="fas fa-triangle-exclamation mr-1.5"></i>
+        Não foi possível falar com o Tangerino agora. Os dados abaixo podem estar incompletos.
+    </p>
+    <p class="text-xs text-amber-700/80 mt-1">{{ erro }}</p>
+</div>
+{% endif %}
+
+{% block tg_conteudo %}{% endblock %}
+{% endblock %}

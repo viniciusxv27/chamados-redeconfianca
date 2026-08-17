@@ -20,7 +20,7 @@
             <tr class="hover:bg-gray-50">
                 <td class="px-4 py-2"><a href="{% url 'impulso:meta_detail' m.id %}" class="font-medium text-gray-800 hover:text-amber-600">{{ m.titulo }}</a></td>
                 <td class="px-4 py-2 text-gray-600">{{ m.gestor.get_full_name|default:m.gestor.email }}</td>
-                <td class="px-4 py-2 text-gray-600">{{ m.get_periodicidade_display }}</td>
+                <td class="px-4 py-2 text-gray-600">{{ m.get_recorrencia_display }}</td>
                 <td class="px-4 py-2 text-gray-600">{{ m.get_status_display }}</td>
                 <td class="px-4 py-2 {% if m.is_overdue %}text-red-600 font-semibold{% else %}text-gray-600{% endif %}">{{ m.prazo|date:"d/m/Y" }}{% if m.is_overdue %} <span class="text-xs">(atrasada)</span>{% endif %}</td>
             </tr>

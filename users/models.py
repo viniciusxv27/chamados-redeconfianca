@@ -478,6 +478,18 @@ class User(AbstractUser):
     city = models.CharField(max_length=100, blank=True, verbose_name="Cidade")
     cep = models.CharField(max_length=9, blank=True, default='', verbose_name="CEP")
 
+    # Vínculo com o Tangerino (Sólides Ponto). Preenchido pela sincronização,
+    # que casa por CPF e, quando não há CPF dos dois lados, por nome. Vazio
+    # significa "sem espelho lá" — o portal simplesmente não mostra ponto/férias
+    # para essa pessoa, em vez de errar.
+    tangerino_employee_id = models.IntegerField(
+        null=True, blank=True, unique=True, db_index=True,
+        verbose_name="ID do funcionário no Tangerino",
+        help_text="Preenchido automaticamente pela sincronização; pode ser ajustado à mão.",
+    )
+    tangerino_synced_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Vínculo com o Tangerino feito em")
+
     # Documento de identidade (RG)
     rg = models.CharField(max_length=20, blank=True, default='', verbose_name="RG")
     rg_issue_date = models.DateField(null=True, blank=True, verbose_name="Data de Emissão do RG")

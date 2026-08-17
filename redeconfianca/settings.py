@@ -74,8 +74,16 @@ INSTALLED_APPS = [
     'documentos',  # Documentos para assinatura digital
     'impulso',  # Impulso ADM (metas, conexão, inovação, faixas)
     'cartoes',  # Cartões de crédito corporativos
+    'tangerino',  # Integração com o Tangerino / Sólides Ponto
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
+
+# ─── Integração Tangerino (Sólides Ponto) ────────────────────────────────────
+# Token gerado no painel do Tangerino em Empregador -> Integrações. Já vem com
+# o prefixo "Basic ". Sem token a integração se desliga sozinha e o portal
+# segue funcionando normalmente, apenas sem as telas de ponto e férias.
+TANGERINO_TOKEN = config('TANGERINO_TOKEN', default='')
+TANGERINO_ENABLED = config('TANGERINO_ENABLED', default=False, cast=bool)
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -90,6 +98,7 @@ MIDDLEWARE = [
     'core.middleware.LoggingMiddleware',
     'users.session_tracking.ActiveSessionMiddleware',
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
+    'tangerino.middleware.BloqueioFeriasMiddleware',
 ]
 
 ROOT_URLCONF = 'redeconfianca.urls'

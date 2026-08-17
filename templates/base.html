@@ -584,6 +584,20 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                <li>
+                                    <a href="{% url 'tangerino:meu_ponto' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Meu Ponto">
+                                        <i class="fas fa-stopwatch text-cyan-400 flex-shrink-0"></i>
+                                        <span>Meu Ponto</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="{% url 'tangerino:minhas_ferias' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Férias">
+                                        <i class="fas fa-umbrella-beach text-sky-400 flex-shrink-0"></i>
+                                        <span>Férias</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
                                 {% if can_access_cartoes %}
                                 <li>
                                     <a href="{% url 'cartoes:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Cartões de Crédito">
@@ -1022,7 +1036,12 @@
                             </div>
                         {% endfor %}
                     {% endif %}
-                    
+
+                    {# Ponto do dia: só na home, carregado em segundo plano. #}
+                    {% if request.resolver_match.url_name == 'home' %}
+                        {% include 'tangerino/_widget_ponto.html' %}
+                    {% endif %}
+
                     {% block content %}
                     {% endblock %}
                 </div>
@@ -3954,6 +3973,7 @@
     {% include 'portal_popups/_popup_gate.html' %}
     {% if user.is_authenticated and request.resolver_match.url_name == 'home' %}
     {% include 'support/_transfer_popup.html' %}
+    {% include 'tangerino/_popup_ferias.html' %}
     {% endif %}
 
     <!-- Responsividade global: envolve tabelas "soltas" em um container rolável

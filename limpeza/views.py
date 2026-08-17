@@ -21,7 +21,7 @@ from .models import (
 
 def _is_gerente_or_superadmin(user):
     """Verifica se o usuário é gerente (no grupo 'Gerentes') ou superadmin."""
-    if user.hierarchy == 'SUPERADMIN' or user.is_superuser:
+    if user.hierarchy == 'SUPERADMIN' or user.hierarchy == 'ADMINISTRATIVO' or user.is_superuser:
         return True
     return (
         user.groups.filter(name='Gerentes').exists()

@@ -1,0 +1,188 @@
+{# Widget de ponto na home. Carrega em segundo plano: se o Tangerino estiver   #}
+{# lento ou fora do ar, a home aparece normalmente e o cartão simplesmente não #}
+{# se mostra. Nada aqui bloqueia a renderização.                               #}
+<div id="tgWidgetPonto" class="hidden mb-4">
+  <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="p-4 sm:p-5 flex items-center gap-4 flex-wrap">
+
+      <div class="flex items-center gap-3 flex-1 min-w-[220px]">
+        <span id="tgwIcone" class="w-12 h-12 rounded-2xl flex items-center justify-center text-white flex-shrink-0 bg-gray-400">
+          <i class="fas fa-fingerprint text-xl"></i>
+        </span>
+        <div class="min-w-0">
+          <p id="tgwRotulo" class="text-sm font-semibold text-gray-800 truncate">Carregando seu ponto…</p>
+          <p id="tgwDetalhe" class="text-xs text-gray-500 truncate"></p>
+        </div>
+      </div>
+
+      <div class="text-center px-2">
+        <p class="text-[11px] text-gray-400 uppercase tracking-wide">Trabalhado hoje</p>
+        <p id="tgwCronometro" class="text-2xl font-bold text-gray-900" style="font-variant-numeric: tabular-nums;">--:--</p>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <button type="button" id="tgwBater"
+                class="hidden px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm bg-emerald-600 hover:bg-emerald-700">
+          <i class="fas fa-fingerprint mr-1.5"></i><span id="tgwBaterTexto">Bater ponto</span>
+        </button>
+        <a href="/ponto/" class="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
+          Ver meu ponto
+        </a>
+      </div>
+    </div>
+
+    <div id="tgwPendencias" class="hidden px-4 sm:px-5 py-3 bg-amber-50 border-t border-amber-100">
+      <p class="text-sm text-amber-800">
+        <i class="fas fa-triangle-exclamation mr-1.5"></i>
+        <span id="tgwPendenciasTexto"></span>
+        <a href="/ponto/" class="underline font-medium ml-1">resolver agora</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.__tgWidgetInit) return;
+  window.__tgWidgetInit = true;
+
+  var caixa = document.getElementById('tgWidgetPonto');
+  if (!caixa) return;
+
+  var ESTILOS = {
+    TRABALHANDO:  {cor: 'bg-emerald-500', icone: 'fa-fingerprint'},
+    EM_INTERVALO: {cor: 'bg-amber-500',   icone: 'fa-mug-hot'},
+    SEM_ENTRADA:  {cor: 'bg-gray-400',    icone: 'fa-hourglass-start'},
+    ENCERRADO:    {cor: 'bg-cyan-600',    icone: 'fa-circle-check'}
+  };
+
+  var relogio = null;
+
+  function csrf() {
+    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+  }
+
+  function hhmmss(s) {
+    s = Math.max(0, s);
+    return String(Math.floor(s / 3600)).padStart(2, '0') + ':' +
+           String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':' +
+           String(s % 60).padStart(2, '0');
+  }
+
+  function pintar(d) {
+    if (!d.disponivel) return;                 // sem vínculo ou API fora: não mostra nada
+
+    var estilo = ESTILOS[d.situacao] || ESTILOS.SEM_ENTRADA;
+    var icone = document.getElementById('tgwIcone');
+    icone.className = 'w-12 h-12 rounded-2xl flex items-center justify-center text-white flex-shrink-0 ' + estilo.cor;
+    icone.innerHTML = '<i class="fas ' + estilo.icone + ' text-xl"></i>';
+
+    document.getElementById('tgwRotulo').textContent = d.rotulo;
+
+    var partes = [];
+    if (d.eventos && d.eventos.length) {
+      partes.push(d.eventos.map(function (e) {
+        return (e.tipo === 'ENTRADA' ? '↓ ' : '↑ ') + e.hora;
+      }).join('   '));
+    } else {
+      partes.push('Nenhuma marcação registrada hoje');
+    }
+    document.getElementById('tgwDetalhe').textContent = partes.join(' · ');
+
+    // Cronômetro: continua correndo só se a pessoa está dentro.
+    var mostrador = document.getElementById('tgwCronometro');
+    if (relogio) { clearInterval(relogio); relogio = null; }
+    if (d.dentro) {
+      var base = d.trabalhado_segundos, t0 = Date.now();
+      mostrador.textContent = hhmmss(base);
+      relogio = setInterval(function () {
+        mostrador.textContent = hhmmss(base + Math.floor((Date.now() - t0) / 1000));
+      }, 1000);
+    } else {
+      mostrador.textContent = d.trabalhado_hhmm;
+    }
+
+    var botao = document.getElementById('tgwBater');
+    botao.classList.remove('hidden', 'bg-emerald-600', 'hover:bg-emerald-700', 'bg-red-600', 'hover:bg-red-700');
+    if (d.proxima_acao === 'ENTRADA') {
+      botao.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+      document.getElementById('tgwBaterTexto').textContent = 'Bater entrada';
+    } else {
+      botao.classList.add('bg-red-600', 'hover:bg-red-700');
+      document.getElementById('tgwBaterTexto').textContent = 'Bater saída';
+    }
+    botao.dataset.acao = d.proxima_acao;
+
+    if (d.pendencias && d.pendencias.length) {
+      document.getElementById('tgwPendenciasTexto').textContent =
+        d.pendencias.length === 1
+          ? 'Você tem 1 dia com ponto em aberto (' + d.pendencias[0].dia + ') —'
+          : 'Você tem ' + d.pendencias.length + ' dias com ponto em aberto —';
+      document.getElementById('tgwPendencias').classList.remove('hidden');
+    }
+
+    caixa.classList.remove('hidden');
+  }
+
+  function bater() {
+    var botao = document.getElementById('tgwBater');
+    var acao = botao.dataset.acao === 'ENTRADA' ? 'entrada' : 'saída';
+    if (!confirm('Registrar ' + acao + ' agora no Tangerino?')) return;
+
+    botao.disabled = true;
+    var antes = botao.innerHTML;
+    botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Registrando…';
+
+    function enviar(corpo) {
+      fetch('/api/tangerino/ponto/bater/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+        body: JSON.stringify(corpo || {})
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        botao.disabled = false; botao.innerHTML = antes;
+        if (d.sucesso) {
+          if (typeof window.showToast === 'function') {
+            window.showToast('Ponto registrado às ' + d.hora + (d.nsr ? ' (NSR ' + d.nsr + ')' : ''), 'success');
+          }
+          carregar();
+        } else {
+          alert(d.erro || 'Não foi possível registrar o ponto.');
+        }
+      })
+      .catch(function () {
+        botao.disabled = false; botao.innerHTML = antes;
+        alert('Erro de conexão. O ponto NÃO foi registrado — confira antes de tentar de novo.');
+      });
+    }
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function (p) { enviar({latitude: p.coords.latitude, longitude: p.coords.longitude}); },
+        function () { enviar({}); },
+        {timeout: 6000, maximumAge: 60000}
+      );
+    } else { enviar({}); }
+  }
+
+  function carregar() {
+    fetch('/api/tangerino/ponto/status/', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.json(); })
+      .then(pintar)
+      .catch(function () { /* silencioso: a home nunca sofre por causa do ponto */ });
+  }
+
+  document.getElementById('tgwBater').addEventListener('click', bater);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', carregar);
+  } else {
+    carregar();
+  }
+  // Reconfere ao voltar para a aba, para o cartão não ficar velho na tela.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) carregar();
+  });
+})();
+</script>

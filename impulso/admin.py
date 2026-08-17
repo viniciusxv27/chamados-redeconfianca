@@ -18,9 +18,9 @@ class MetaComentarioInline(admin.TabularInline):
 
 @admin.register(Meta)
 class MetaAdmin(admin.ModelAdmin):
-    list_display = ('titulo', 'colaborador', 'gestor', 'periodicidade', 'status',
+    list_display = ('titulo', 'colaborador', 'gestor', 'recorrencia', 'aprovacao', 'status',
                     'prazo', 'nota_qualidade', 'nota_prazo')
-    list_filter = ('status', 'periodicidade', 'prazo')
+    list_filter = ('status', 'aprovacao', 'recorrencia', 'prazo')
     search_fields = ('titulo', 'descricao', 'colaborador__first_name',
                      'colaborador__last_name', 'colaborador__email')
     date_hierarchy = 'created_at'

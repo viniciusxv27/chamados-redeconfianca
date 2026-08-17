@@ -23,8 +23,8 @@ from .models import (
 )
 from .scoring import calcular_pontuacao, linhas_detalhadas
 from .utils import (
-    FAIXAS, calcular_faixa, faixa_info, get_colaboradores, is_impulso_manager,
-    impulso_manager_required, impulso_member_required,
+    FAIXAS, calcular_faixa, faixa_info, get_colaboradores, get_gestores_do_setor,
+    is_impulso_manager, impulso_manager_required, impulso_member_required,
 )
 
 
@@ -53,18 +53,25 @@ def _notify(users, title, message, url):
         pass
 
 
-def _metas_do_usuario(user):
-    """Metas que o usuário pode ver no Kanban."""
+def _metas_do_usuario(user, so_aprovadas=True):
+    """Metas que o usuário pode ver no Kanban.
+
+    Por padrão traz só as aprovadas: solicitação pendente ou recusada não é
+    tarefa, é pedido — vive na tela de solicitações.
+    """
     if user.is_superuser:
-        return Meta.objects.all()
-    if is_impulso_manager(user):
-        return Meta.objects.filter(Q(gestor=user) | Q(colaborador=user))
-    return Meta.objects.filter(colaborador=user)
+        qs = Meta.objects.all()
+    elif is_impulso_manager(user):
+        qs = Meta.objects.filter(Q(gestor=user) | Q(colaborador=user))
+    else:
+        qs = Meta.objects.filter(colaborador=user)
+    return qs.filter(aprovacao=Meta.Aprovacao.APROVADA) if so_aprovadas else qs
 
 
 def _pode_ver_meta(user, meta):
     return (user.is_superuser or meta.gestor_id == user.id
-            or meta.colaborador_id == user.id)
+            or meta.colaborador_id == user.id
+            or meta.solicitada_por_id == user.id)
 
 
 # ---------------------------------------------------------------------------
@@ -131,49 +138,149 @@ def metas_kanban(request):
             'metas': [m for m in metas if m.status == status.value],
         })
 
+    # Contador do sino de solicitações: o gestor vê o que precisa decidir; o
+    # colaborador vê o que ainda está esperando resposta.
+    pendentes = Meta.objects.filter(aprovacao=Meta.Aprovacao.PENDENTE)
+    if gestor:
+        pendentes = pendentes if user.is_superuser else pendentes.filter(gestor=user)
+    else:
+        pendentes = pendentes.filter(solicitada_por=user)
+
     context = {
         'colunas': colunas,
         'is_gestor': gestor,
         'colaboradores': get_colaboradores() if gestor else None,
         'colaborador_id': colaborador_id,
+        'solicitacoes_pendentes': pendentes.count(),
         'active_tab': 'confiar',
     }
     return render(request, 'impulso/metas_kanban.html', context)
 
 
-@impulso_manager_required
+@impulso_member_required
 def meta_create(request):
+    """Cria a meta (gestor) ou solicita uma ao gestor do próprio setor (colaborador)."""
+    sou_gestor = is_impulso_manager(request.user)
+    gestores_do_setor = get_gestores_do_setor(request.user)
+
     if request.method == 'POST':
-        colaborador_id = _int_or_none(request.POST.get('colaborador'))
-        colaborador = get_colaboradores().filter(id=colaborador_id).first()
         titulo = (request.POST.get('titulo') or '').strip()
         descricao = (request.POST.get('descricao') or '').strip()
-        periodicidade = request.POST.get('periodicidade') or Meta.Periodicidade.MENSAL
+        recorrencia = request.POST.get('recorrencia') or Meta.Recorrencia.UNICA
         prazo = parse_date(request.POST.get('prazo') or '')
+        if recorrencia not in Meta.Recorrencia.values:
+            recorrencia = Meta.Recorrencia.UNICA
+
+        if sou_gestor:
+            colaborador = get_colaboradores().filter(
+                id=_int_or_none(request.POST.get('colaborador'))).first()
+            gestor = request.user
+        else:
+            # O colaborador só pode pedir para um gestor do SEU setor, e a meta
+            # é sempre para ele mesmo — não dá para criar tarefa para terceiros.
+            colaborador = request.user
+            gestor = gestores_do_setor.filter(
+                id=_int_or_none(request.POST.get('gestor'))).first()
+            if not gestor:
+                messages.error(request, 'Escolha um gestor do seu setor.')
+                return redirect('impulso:meta_create')
 
         if not (colaborador and titulo and descricao and prazo):
-            messages.error(request, 'Preencha colaborador, título, descrição e prazo.')
+            campo = 'colaborador, título, descrição e prazo' if sou_gestor else 'título, descrição e prazo'
+            messages.error(request, f'Preencha {campo}.')
             return redirect('impulso:meta_create')
-        if periodicidade not in Meta.Periodicidade.values:
-            periodicidade = Meta.Periodicidade.MENSAL
 
         meta = Meta.objects.create(
-            gestor=request.user, colaborador=colaborador, titulo=titulo,
-            descricao=descricao, periodicidade=periodicidade, prazo=prazo,
+            gestor=gestor, colaborador=colaborador, titulo=titulo,
+            descricao=descricao, recorrencia=recorrencia, prazo=prazo,
+            aprovacao=Meta.Aprovacao.APROVADA if sou_gestor else Meta.Aprovacao.PENDENTE,
+            solicitada_por=None if sou_gestor else request.user,
             created_by=request.user,
         )
-        _notify([colaborador], 'Nova meta atribuída',
-                f'"{meta.titulo}" foi atribuída a você.',
-                f'/impulso/metas/{meta.id}/')
-        messages.success(request, 'Meta criada com sucesso.')
+
+        if sou_gestor:
+            _notify([colaborador], 'Nova meta atribuída',
+                    f'"{meta.titulo}" foi atribuída a você.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(request, 'Meta criada com sucesso.')
+        else:
+            _notify([gestor], 'Nova solicitação de meta',
+                    f'{request.user.get_full_name() or request.user.email} pediu a meta '
+                    f'"{meta.titulo}". Aprove ou recuse.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(
+                request, 'Solicitação enviada. Ela entra no seu Kanban assim que o gestor aprovar.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
     context = {
-        'colaboradores': get_colaboradores(),
-        'periodicidades': Meta.Periodicidade.choices,
+        'sou_gestor': sou_gestor,
+        'colaboradores': get_colaboradores() if sou_gestor else None,
+        'gestores_do_setor': gestores_do_setor,
+        'setor': getattr(request.user, 'sector', None),
+        'recorrencias': Meta.Recorrencia.choices,
         'active_tab': 'confiar',
     }
     return render(request, 'impulso/meta_form.html', context)
+
+
+@require_POST
+@impulso_member_required
+def meta_decidir(request, meta_id):
+    """Gestor aprova ou recusa uma solicitação do colaborador."""
+    meta = get_object_or_404(Meta, id=meta_id)
+    if not meta.pode_decidir(request.user):
+        messages.error(request, 'Apenas o gestor escolhido pode decidir esta solicitação.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    decisao = request.POST.get('decisao')
+    if decisao == 'aprovar':
+        meta.aprovacao = Meta.Aprovacao.APROVADA
+        aviso = ('Solicitação aprovada', f'Sua meta "{meta.titulo}" foi aprovada e já está no Kanban.')
+        retorno = 'Solicitação aprovada. A meta entrou no Kanban do colaborador.'
+    elif decisao == 'recusar':
+        meta.aprovacao = Meta.Aprovacao.RECUSADA
+        meta.motivo_recusa = (request.POST.get('motivo_recusa') or '').strip()
+        motivo = f' Motivo: {meta.motivo_recusa}' if meta.motivo_recusa else ''
+        aviso = ('Solicitação recusada', f'Sua meta "{meta.titulo}" foi recusada.{motivo}')
+        retorno = 'Solicitação recusada.'
+    else:
+        messages.error(request, 'Decisão inválida.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    meta.decidida_por = request.user
+    meta.decidida_em = timezone.now()
+    meta.save(update_fields=['aprovacao', 'motivo_recusa', 'decidida_por',
+                             'decidida_em', 'updated_at'])
+    _notify([meta.colaborador], aviso[0], aviso[1], f'/impulso/metas/{meta.id}/')
+    messages.success(request, retorno)
+    return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+@impulso_member_required
+def meta_solicitacoes(request):
+    """Fila de solicitações aguardando decisão."""
+    if is_impulso_manager(request.user):
+        pendentes = Meta.objects.filter(aprovacao=Meta.Aprovacao.PENDENTE)
+        if not request.user.is_superuser:
+            pendentes = pendentes.filter(gestor=request.user)
+        titulo = 'Solicitações para aprovar'
+    else:
+        pendentes = Meta.objects.filter(solicitada_por=request.user,
+                                        aprovacao=Meta.Aprovacao.PENDENTE)
+        titulo = 'Minhas solicitações aguardando aprovação'
+
+    decididas = Meta.objects.filter(
+        aprovacao__in=[Meta.Aprovacao.RECUSADA],
+    ).filter(Q(gestor=request.user) | Q(solicitada_por=request.user))[:20]
+
+    context = {
+        'titulo': titulo,
+        'pendentes': pendentes.select_related('colaborador', 'gestor', 'solicitada_por'),
+        'recusadas': decididas.select_related('colaborador', 'gestor', 'decidida_por'),
+        'is_gestor': is_impulso_manager(request.user),
+        'active_tab': 'confiar',
+    }
+    return render(request, 'impulso/meta_solicitacoes.html', context)
 
 
 @impulso_member_required
@@ -190,6 +297,8 @@ def meta_detail(request, meta_id):
         'comentarios': meta.comentarios.select_related('autor'),
         'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
+        'pode_decidir': meta.pode_decidir(request.user),
+        'proxima_ocorrencia': meta.ocorrencias.first(),
         'notas_range': range(0, 6),
         'active_tab': 'confiar',
     }
@@ -202,6 +311,10 @@ def meta_update_status(request, meta_id):
     meta = get_object_or_404(Meta, id=meta_id)
     if not _pode_ver_meta(request.user, meta):
         return JsonResponse({'ok': False, 'error': 'sem permissão'}, status=403)
+
+    if not meta.vale_pontos:
+        return JsonResponse(
+            {'ok': False, 'error': 'Esta meta ainda não foi aprovada pelo gestor.'}, status=400)
 
     novo = request.POST.get('status') or ''
     permitidos = [Meta.Status.A_FAZER, Meta.Status.EM_ANDAMENTO, Meta.Status.ENTREGUE]
@@ -231,6 +344,9 @@ def meta_entregar(request, meta_id):
     if not (meta.colaborador_id == request.user.id or request.user.is_superuser):
         messages.error(request, 'Apenas o colaborador da meta pode entregá-la.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
+    if not meta.vale_pontos:
+        messages.error(request, 'Esta meta ainda não foi aprovada pelo gestor.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
 
     link = (request.POST.get('entrega_link') or '').strip()
     if link:
@@ -252,6 +368,9 @@ def meta_avaliar(request, meta_id):
     if not (meta.gestor_id == request.user.id or request.user.is_superuser):
         messages.error(request, 'Apenas o gestor da meta pode avaliá-la.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
+    if not meta.vale_pontos:
+        messages.error(request, 'Aprove a solicitação antes de avaliar a meta.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
 
     nota_q = _int_or_none(request.POST.get('nota_qualidade'), 0, 5)
     nota_p = _int_or_none(request.POST.get('nota_prazo'), 0, 5)
@@ -269,7 +388,20 @@ def meta_avaliar(request, meta_id):
     _notify([meta.colaborador], 'Meta avaliada',
             f'Sua meta "{meta.titulo}" foi avaliada: qualidade {nota_q}/5, prazo {nota_p}/5.',
             f'/impulso/metas/{meta.id}/')
-    messages.success(request, 'Avaliação registrada e meta concluída.')
+
+    # Recorrência: concluir uma meta que se repete já abre a próxima ocorrência.
+    proxima = meta.criar_proxima_ocorrencia()
+    if proxima:
+        _notify([meta.colaborador], 'Tarefa recorrente reaberta',
+                f'"{proxima.titulo}" voltou para o Kanban com prazo '
+                f'{proxima.prazo.strftime("%d/%m/%Y")}.',
+                f'/impulso/metas/{proxima.id}/')
+        messages.success(
+            request,
+            f'Avaliação registrada. Como a meta é {meta.get_recorrencia_display().lower()}, '
+            f'a próxima ocorrência já foi criada com prazo {proxima.prazo.strftime("%d/%m/%Y")}.')
+    else:
+        messages.success(request, 'Avaliação registrada e meta concluída.')
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 

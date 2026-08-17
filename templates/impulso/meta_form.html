@@ -5,10 +5,46 @@
     <div class="mb-4">
         <a href="{% url 'impulso:metas_kanban' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar ao Kanban</a>
     </div>
+
+    {% if not sou_gestor and not gestores_do_setor %}
+    {# Sem gestor no setor não há para quem pedir. Explica em vez de mostrar   #}
+    {# um select vazio ou oferecer gestor de outro setor.                      #}
+    <div class="imp-card p-6 text-center">
+        <span class="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
+            <i class="fas fa-user-tie text-2xl"></i>
+        </span>
+        <h2 class="text-lg font-semibold text-gray-800">Ainda não há gestor do Impulso no seu setor</h2>
+        <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">
+            {% if setor %}
+            Seu setor é <strong>{{ setor.name }}</strong> e nenhum gestor do Impulso está cadastrado nele.
+            {% else %}
+            Seu usuário está sem setor definido, então não dá para saber a quem enviar a solicitação.
+            {% endif %}
+            A solicitação de meta só pode ir para um gestor do mesmo setor — fale com o RH para ajustar o cadastro.
+        </p>
+        <a href="{% url 'impulso:metas_kanban' %}" class="inline-block mt-5 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">
+            Voltar ao Kanban
+        </a>
+    </div>
+    {% else %}
+
     <div class="imp-card p-5">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4"><i class="fas fa-bullseye text-orange-500 mr-2"></i>Nova meta</h2>
+        <h2 class="text-lg font-semibold text-gray-800 mb-1">
+            <i class="fas fa-bullseye text-orange-500 mr-2"></i>
+            {% if sou_gestor %}Nova meta{% else %}Solicitar uma meta{% endif %}
+        </h2>
+        <p class="text-sm text-gray-500 mb-4">
+            {% if sou_gestor %}
+            A meta entra direto no Kanban do colaborador.
+            {% else %}
+            O gestor do seu setor precisa aprovar antes de a meta entrar no seu Kanban e valer pontos.
+            {% endif %}
+        </p>
+
         <form method="post" class="space-y-4">
             {% csrf_token %}
+
+            {% if sou_gestor %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Colaborador *</label>
                 <select name="colaborador" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -18,6 +54,23 @@
                     {% endfor %}
                 </select>
             </div>
+            {% else %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Enviar para o gestor *</label>
+                <select name="gestor" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Selecione…</option>
+                    {% for g in gestores_do_setor %}
+                    <option value="{{ g.id }}">{{ g.get_full_name|default:g.email }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-400 mt-1">
+                    <i class="fas fa-circle-info mr-1"></i>
+                    Só aparecem gestores do seu setor{% if setor %} ({{ setor.name }}){% endif %}.
+                    A meta será registrada em seu nome.
+                </p>
+            </div>
+            {% endif %}
+
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
                 <input type="text" name="titulo" required maxlength="200" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: Reduzir tempo de resposta dos chamados">
@@ -28,23 +81,50 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Periodicidade *</label>
-                    <select name="periodicidade" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        {% for value, label in periodicidades %}
-                        <option value="{{ value }}" {% if value == 'MENSAL' %}selected{% endif %}>{{ label }}</option>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Recorrência *</label>
+                    <select name="recorrencia" id="impRecorrencia" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        {% for value, label in recorrencias %}
+                        <option value="{{ value }}" {% if value == 'UNICA' %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
+                    <p class="text-xs text-gray-400 mt-1" id="impRecorrenciaAjuda">
+                        Feita uma vez só; ao concluir, encerra.
+                    </p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Prazo *</label>
                     <input type="date" name="prazo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 </div>
             </div>
+
             <div class="flex justify-end gap-2 pt-2">
                 <a href="{% url 'impulso:metas_kanban' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
-                <button type="submit" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm hover:bg-orange-700">Criar meta</button>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm hover:bg-orange-700">
+                    {% if sou_gestor %}Criar meta{% else %}Enviar solicitação{% endif %}
+                </button>
             </div>
         </form>
     </div>
+    {% endif %}
 </div>
+
+<script>
+(function () {
+    // Explica em uma frase o que a escolha faz, para "Recorrência" não virar
+    // um rótulo decorativo como era a antiga periodicidade.
+    var TEXTOS = {
+        UNICA: 'Feita uma vez só; ao concluir, encerra.',
+        DIARIA: 'Ao ser concluída, volta para o dia seguinte.',
+        SEMANAL: 'Ao ser concluída, volta 7 dias depois.',
+        QUINZENAL: 'Ao ser concluída, volta 15 dias depois.',
+        MENSAL: 'Ao ser concluída, volta no mesmo dia do mês seguinte.'
+    };
+    var sel = document.getElementById('impRecorrencia');
+    var ajuda = document.getElementById('impRecorrenciaAjuda');
+    if (!sel || !ajuda) return;
+    sel.addEventListener('change', function () {
+        ajuda.textContent = TEXTOS[sel.value] || '';
+    });
+})();
+</script>
 {% endblock %}

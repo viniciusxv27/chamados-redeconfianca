@@ -49,6 +49,20 @@ def get_gestores():
             .distinct().order_by('first_name', 'last_name'))
 
 
+def get_gestores_do_setor(user):
+    """Gestores do Impulso que estão no MESMO setor do usuário.
+
+    É a regra de quem pode receber a solicitação de meta de um colaborador.
+    Usuário sem setor, ou setor sem gestor cadastrado, devolve vazio — a tela
+    trata esse caso explicando o que fazer, em vez de oferecer um gestor de
+    outro setor.
+    """
+    setor_id = getattr(user, 'sector_id', None)
+    if not setor_id:
+        return User.objects.none()
+    return get_gestores().filter(sector_id=setor_id).exclude(id=user.id)
+
+
 def impulso_member_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):

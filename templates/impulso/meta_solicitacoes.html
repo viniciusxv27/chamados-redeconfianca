@@ -1,0 +1,141 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+<div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
+    <div>
+        <h2 class="text-lg font-semibold text-gray-800">{{ titulo }}</h2>
+        <p class="text-sm text-gray-500">
+            {% if is_gestor %}
+            Metas pedidas por colaboradores do seu setor. Só entram no Kanban depois da aprovação.
+            {% else %}
+            Enquanto o gestor não decide, a meta não aparece no Kanban nem conta pontos.
+            {% endif %}
+        </p>
+    </div>
+    <a href="{% url 'impulso:metas_kanban' %}" class="text-sm text-gray-500 hover:text-gray-800">
+        <i class="fas fa-arrow-left mr-1"></i>Voltar ao Kanban
+    </a>
+</div>
+
+<div class="imp-card overflow-hidden mb-4">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-hourglass-half text-amber-500 mr-1.5"></i>Aguardando decisão
+            <span class="text-gray-400 font-normal">({{ pendentes|length }})</span>
+        </h3>
+    </div>
+    <div class="divide-y divide-gray-50">
+        {% for m in pendentes %}
+        <div class="px-5 py-4">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+                <div class="min-w-0 flex-1">
+                    <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-900 hover:text-orange-600">{{ m.titulo }}</a>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        {% if is_gestor %}
+                        Pedida por <strong>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</strong>
+                        {% else %}
+                        Enviada para <strong>{{ m.gestor.get_full_name|default:m.gestor.email }}</strong>
+                        {% endif %}
+                        · prazo {{ m.prazo|date:"d/m/Y" }}
+                        · {{ m.get_recorrencia_display }}
+                    </p>
+                    <p class="text-sm text-gray-600 mt-2 line-clamp-2">{{ m.descricao|truncatechars:180 }}</p>
+                </div>
+
+                {% if is_gestor %}
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <form method="post" action="{% url 'impulso:meta_decidir' m.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="decisao" value="aprovar">
+                        <button class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">
+                            <i class="fas fa-check mr-1"></i>Aprovar
+                        </button>
+                    </form>
+                    <button type="button" class="imp-recusar px-4 py-2 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50"
+                            data-id="{{ m.id }}" data-titulo="{{ m.titulo }}">
+                        <i class="fas fa-xmark mr-1"></i>Recusar
+                    </button>
+                </div>
+                {% else %}
+                <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 flex-shrink-0">
+                    aguardando
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <p class="px-5 py-10 text-center text-sm text-gray-400">
+            <i class="fas fa-circle-check text-emerald-500 mr-1"></i>Nenhuma solicitação aguardando.
+        </p>
+        {% endfor %}
+    </div>
+</div>
+
+{% if recusadas %}
+<div class="imp-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-xmark text-red-500 mr-1.5"></i>Recusadas recentemente
+        </h3>
+    </div>
+    <div class="divide-y divide-gray-50">
+        {% for m in recusadas %}
+        <div class="px-5 py-3">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm text-gray-800 hover:text-orange-600">{{ m.titulo }}</a>
+                    <p class="text-xs text-gray-500">
+                        {{ m.colaborador.get_full_name|default:m.colaborador.email }}
+                        {% if m.decidida_em %}· {{ m.decidida_em|date:"d/m/Y" }}{% endif %}
+                    </p>
+                    {% if m.motivo_recusa %}
+                    <p class="text-xs text-red-700 mt-1">Motivo: {{ m.motivo_recusa }}</p>
+                    {% endif %}
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-xs bg-red-50 text-red-700 flex-shrink-0">recusada</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal de recusa: o motivo é opcional, mas fica registrado e vai na notificação -->
+<div id="impModalRecusa" class="hidden fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4">
+    <form method="post" id="impFormRecusa" class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        {% csrf_token %}
+        <input type="hidden" name="decisao" value="recusar">
+        <div class="px-6 py-4 bg-red-600 text-white">
+            <h3 class="font-bold"><i class="fas fa-xmark mr-2"></i>Recusar solicitação</h3>
+        </div>
+        <div class="px-6 py-5">
+            <p class="text-sm text-gray-600 mb-3">Recusando: <strong id="impRecusaTitulo"></strong></p>
+            <label class="block text-sm text-gray-600 mb-1">Motivo (opcional, vai para o colaborador)</label>
+            <textarea name="motivo_recusa" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      placeholder="Ex.: já existe uma meta parecida neste mês"></textarea>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <button type="button" id="impRecusaCancelar" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button type="submit" class="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold">Recusar</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('impModalRecusa');
+    var form = document.getElementById('impFormRecusa');
+    if (!modal || !form) return;
+    document.querySelectorAll('.imp-recusar').forEach(function (b) {
+        b.addEventListener('click', function () {
+            form.action = '/impulso/metas/' + b.dataset.id + '/decidir/';
+            document.getElementById('impRecusaTitulo').textContent = b.dataset.titulo;
+            modal.classList.remove('hidden');
+        });
+    });
+    document.getElementById('impRecusaCancelar').addEventListener('click', function () {
+        modal.classList.add('hidden');
+    });
+})();
+</script>
+{% endblock %}

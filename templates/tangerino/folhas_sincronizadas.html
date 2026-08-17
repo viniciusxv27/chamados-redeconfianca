@@ -1,0 +1,142 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Folha sincronizada{% endblock %}
+{% block tg_cabecalho %}Folha de ponto sincronizada{% endblock %}
+{% block tg_subtitulo %}Direto do Tangerino, sem depender da importação de PDF{% endblock %}
+
+{% block tg_acoes %}
+<form method="get" class="flex items-end gap-2 flex-wrap">
+    {% if e_gestor %}
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Colaborador</label>
+        <select name="usuario" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm max-w-[200px]">
+            {% for p in pessoas %}
+            <option value="{{ p.id }}" {% if p.id == alvo.id %}selected{% endif %}>{{ p.full_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Mês</label>
+        <select name="mes" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for numero, nome in meses %}
+            <option value="{{ numero }}" {% if numero == mes %}selected{% endif %}>{{ nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Ano</label>
+        <select name="ano" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for a in anos %}
+            <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button class="px-4 py-1.5 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700">Ver</button>
+</form>
+{% endblock %}
+
+{% block tg_conteudo %}
+
+<div class="tg-card p-4 mb-4 bg-cyan-50/40 border-cyan-100">
+    <p class="text-sm text-cyan-900">
+        <i class="fas fa-rotate mr-1.5"></i>
+        Esta é uma <strong>visão nova</strong>, montada ao vivo com os dados do Tangerino.
+        A folha assinável, importada por PDF, continua em
+        <a href="/folha-ponto/" class="underline font-medium">Folha de Ponto</a> e não foi alterada.
+    </p>
+</div>
+
+{% if not vinculado %}
+<div class="tg-card p-6 text-center">
+    <i class="fas fa-link-slash text-3xl text-gray-300 mb-3"></i>
+    <p class="text-gray-700 font-medium">{{ alvo.full_name }} ainda não está vinculado ao Tangerino.</p>
+</div>
+{% elif dias %}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Total no mês</p>
+        <p class="text-3xl font-bold text-gray-900 tabular">{{ total_horas }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Dias com marcação</p>
+        <p class="text-3xl font-bold text-cyan-700 tabular">{{ dias_trabalhados }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Dias em aberto</p>
+        <p class="text-3xl font-bold {% if dias_em_aberto %}text-amber-600{% else %}text-gray-300{% endif %} tabular">{{ dias_em_aberto|length }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Atualizado</p>
+        <p class="text-lg font-bold text-gray-700">{{ atualizado_em|date:"d/m H:i" }}</p>
+        <p class="text-[11px] text-gray-400">ao vivo, sem importação</p>
+    </div>
+</div>
+
+<div class="tg-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-calendar text-cyan-600 mr-1.5"></i>
+            {{ alvo.full_name }} — {{ primeiro|date:"F \d\e Y" }}
+        </h2>
+        <span class="text-xs text-gray-400">{{ primeiro|date:"d/m" }} a {{ ultimo|date:"d/m" }}</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">Dia</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Marcações</th>
+                    <th class="text-right px-5 py-2.5 font-medium">Horas</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for d in dias %}
+                <tr class="{% if d.fim_de_semana %}bg-gray-50/60{% endif %} {% if d.dia == hoje %}bg-cyan-50/40{% endif %}">
+                    <td class="px-5 py-2.5 whitespace-nowrap">
+                        <span class="{% if d.dia == hoje %}font-semibold text-gray-900{% else %}text-gray-700{% endif %}">{{ d.dia|date:"d/m" }}</span>
+                        <span class="text-xs text-gray-400 ml-1">{{ d.dia|date:"D" }}</span>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <div class="flex flex-wrap gap-1">
+                            {% for e in d.eventos %}
+                            <span class="px-1.5 py-0.5 rounded text-xs tabular
+                                {% if e.tipo == 'ENTRADA' %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">{{ e.quando|date:"H:i" }}</span>
+                            {% empty %}
+                            <span class="text-xs text-gray-300">sem marcação</span>
+                            {% endfor %}
+                            {% if d.aberto %}
+                            <span class="px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800">em aberto</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-5 py-2.5 text-right tabular {% if d.segundos %}font-medium text-gray-900{% else %}text-gray-300{% endif %}">
+                        {% if d.segundos %}{{ d.horas }}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="bg-gray-50 border-t border-gray-200">
+                <tr>
+                    <td colspan="2" class="px-5 py-3 text-sm font-semibold text-gray-700">Total do período</td>
+                    <td class="px-5 py-3 text-right text-lg font-bold text-gray-900 tabular">{{ total_horas }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<p class="text-xs text-gray-400 mt-3">
+    <i class="fas fa-circle-info mr-1"></i>
+    As horas são calculadas somando cada par entrada/saída do dia. Dias "em aberto" (entrada sem saída)
+    não entram no total — é o mesmo critério do Tangerino para marcação pendente.
+</p>
+
+{% else %}
+<div class="tg-card p-6 text-center">
+    <i class="fas fa-calendar-xmark text-3xl text-gray-300 mb-3"></i>
+    <p class="text-gray-600">Nenhuma marcação encontrada neste mês.</p>
+</div>
+{% endif %}
+{% endblock %}

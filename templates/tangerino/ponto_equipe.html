@@ -1,0 +1,130 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Ponto da equipe{% endblock %}
+{% block tg_cabecalho %}Ponto da equipe{% endblock %}
+{% block tg_subtitulo %}Situação de todos em {{ dia|date:"d/m/Y" }}{% endblock %}
+
+{% block tg_acoes %}
+<form method="get" class="flex items-end gap-2">
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Dia</label>
+        <input type="date" name="dia" value="{{ dia|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}"
+               class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+    </div>
+    <button class="px-4 py-1.5 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700">Ver</button>
+</form>
+{% endblock %}
+
+{% block tg_conteudo %}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Trabalhando agora</p>
+        <p class="text-3xl font-bold text-emerald-600 tabular">{{ total_trabalhando|default:0 }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Em intervalo</p>
+        <p class="text-3xl font-bold text-amber-600 tabular">{{ total_intervalo|default:0 }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Jornada encerrada</p>
+        <p class="text-3xl font-bold text-cyan-700 tabular">{{ total_encerrado|default:0 }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Sem marcação no dia</p>
+        <p class="text-3xl font-bold text-gray-400 tabular">{{ sem_marcacao|length }}</p>
+    </div>
+</div>
+
+<div class="tg-card overflow-hidden mb-4">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-users text-cyan-600 mr-1.5"></i>Com marcação em {{ dia|date:"d/m" }}
+            <span class="text-gray-400 font-normal">({{ linhas|length }})</span>
+        </h2>
+        <input type="text" id="tgFiltro" placeholder="Filtrar por nome…"
+               class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56">
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">Colaborador</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Situação</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Marcações</th>
+                    <th class="text-right px-3 py-2.5 font-medium">Entrada</th>
+                    <th class="text-right px-5 py-2.5 font-medium">Trabalhado</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50" id="tgCorpo">
+                {% for l in linhas %}
+                <tr class="hover:bg-cyan-50/30 tg-linha-pessoa" data-nome="{{ l.nome|lower }}">
+                    <td class="px-5 py-2.5">
+                        <span class="text-gray-800">{{ l.nome }}</span>
+                        {% if not l.usuario %}
+                        <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">sem usuário no portal</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold
+                            {% if l.status.situacao == 'TRABALHANDO' %}bg-emerald-50 text-emerald-700
+                            {% elif l.status.situacao == 'EM_INTERVALO' %}bg-amber-50 text-amber-700
+                            {% else %}bg-cyan-50 text-cyan-700{% endif %}">
+                            <span class="tg-dot {% if l.status.situacao == 'TRABALHANDO' %}bg-emerald-500{% elif l.status.situacao == 'EM_INTERVALO' %}bg-amber-500{% else %}bg-cyan-500{% endif %}"></span>
+                            {% if l.status.situacao == 'TRABALHANDO' %}Trabalhando
+                            {% elif l.status.situacao == 'EM_INTERVALO' %}Intervalo
+                            {% else %}Encerrado{% endif %}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <div class="flex flex-wrap gap-1">
+                            {% for e in l.status.eventos %}
+                            <span class="px-1.5 py-0.5 rounded text-xs tabular
+                                {% if e.tipo == 'ENTRADA' %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">{{ e.quando|date:"H:i" }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular text-gray-600">
+                        {% if l.status.primeira %}{{ l.status.primeira|date:"H:i" }}{% else %}—{% endif %}
+                    </td>
+                    <td class="px-5 py-2.5 text-right tabular font-semibold text-gray-900">{{ l.status.trabalhado_hhmm }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">Nenhuma marcação neste dia.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if sem_marcacao %}
+<div class="tg-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-user-clock text-gray-400 mr-1.5"></i>Sem nenhuma marcação em {{ dia|date:"d/m" }}
+            <span class="text-gray-400 font-normal">({{ sem_marcacao|length }})</span>
+        </h2>
+        <p class="text-xs text-gray-400 mt-0.5">Pode ser folga, férias, afastamento ou ponto esquecido.</p>
+    </div>
+    <div class="p-4 flex flex-wrap gap-2">
+        {% for l in sem_marcacao %}
+        <span class="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-100 text-xs text-gray-600 tg-linha-pessoa"
+              data-nome="{{ l.nome|lower }}">{{ l.nome }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function () {
+    var filtro = document.getElementById('tgFiltro');
+    if (!filtro) return;
+    filtro.addEventListener('input', function () {
+        var termo = filtro.value.trim().toLowerCase();
+        document.querySelectorAll('.tg-linha-pessoa').forEach(function (el) {
+            el.style.display = (!termo || el.dataset.nome.indexOf(termo) !== -1) ? '' : 'none';
+        });
+    });
+})();
+</script>
+{% endblock %}

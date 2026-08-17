@@ -1,0 +1,141 @@
+{# Popup de férias. Informativo, não bloqueante: aparece no máximo uma vez por  #}
+{# dia por usuário e some com um clique. Quem está EM férias nem chega aqui —  #}
+{# esse caso é tratado pelo middleware, que troca o portal pela tela de aviso. #}
+<div id="tgFeriasModal" class="hidden fixed inset-0 z-[9985] bg-black/50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+    <div id="tgFeriasCabecalho" class="px-6 py-5 text-white bg-gradient-to-r from-cyan-600 to-teal-600">
+      <div class="flex items-center gap-3">
+        <i class="fas fa-umbrella-beach text-2xl"></i>
+        <div>
+          <h3 id="tgFeriasTitulo" class="text-lg font-bold leading-tight">Suas férias</h3>
+          <p id="tgFeriasSubtitulo" class="text-xs text-white/85"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-6 py-5">
+      <div id="tgFeriasCorpo" class="space-y-3"></div>
+    </div>
+
+    <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3">
+      <button type="button" id="tgFeriasFechar" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">
+        Entendi
+      </button>
+      <a href="/ferias/" class="px-5 py-2.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 text-sm font-semibold">
+        Ver minhas férias
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.__tgFeriasInit) return;
+  window.__tgFeriasInit = true;
+
+  var modal = document.getElementById('tgFeriasModal');
+  if (!modal) return;
+
+  var HOJE = new Date().toISOString().slice(0, 10);
+  var CHAVE = 'tgFeriasVistoEm';
+
+  function jaViuHoje() {
+    try { return localStorage.getItem(CHAVE) === HOJE; } catch (e) { return false; }
+  }
+  function marcarVisto() {
+    try { localStorage.setItem(CHAVE, HOJE); } catch (e) {}
+  }
+
+  // Não empilha em cima de um popup bloqueante do portal (comunicados/trilhas).
+  function popupBloqueanteAberto() {
+    var p = document.getElementById('portal-popup-modal');
+    return !!p && !p.classList.contains('hidden');
+  }
+
+  function linha(icone, cor, titulo, texto) {
+    return '<div class="flex items-start gap-3 p-3 rounded-xl border ' + cor + '">' +
+             '<i class="fas ' + icone + ' mt-0.5"></i>' +
+             '<div><p class="text-sm font-semibold">' + titulo + '</p>' +
+             '<p class="text-xs opacity-80">' + texto + '</p></div></div>';
+  }
+
+  function montar(d) {
+    var partes = [], titulo = 'Suas férias', sub = '';
+
+    if (d.em_gozo) {
+      titulo = 'Você está de férias';
+      sub = d.em_gozo.inicio + ' a ' + d.em_gozo.fim;
+      partes.push(linha('fa-plane-departure', 'border-cyan-200 bg-cyan-50 text-cyan-900',
+        d.em_gozo.dias + ' dias de férias',
+        'Faltam ' + d.dias_restantes_gozo + ' — você volta em ' + d.volta_em + '.'));
+    } else if (d.proxima) {
+      titulo = 'Férias programadas';
+      sub = d.proxima.inicio + ' a ' + d.proxima.fim;
+      partes.push(linha('fa-calendar-check', 'border-emerald-200 bg-emerald-50 text-emerald-900',
+        d.proxima.dias + ' dias marcados',
+        'Começam em ' + d.proxima.inicio + '.'));
+    }
+
+    if (d.dias_vencidos > 0) {
+      titulo = d.em_gozo || d.proxima ? titulo : 'Atenção às suas férias';
+      partes.push(linha('fa-circle-exclamation', 'border-red-200 bg-red-50 text-red-900',
+        d.dias_vencidos + ' dia(s) já vencidos',
+        'O prazo para gozar passou. Procure seu gestor ou o RH.'));
+    }
+
+    (d.vencendo || []).forEach(function (v) {
+      titulo = d.em_gozo || d.proxima ? titulo : 'Atenção às suas férias';
+      partes.push(linha('fa-hourglass-half', 'border-amber-200 bg-amber-50 text-amber-900',
+        v.saldo + ' dia(s) vencendo',
+        'Precisam ser gozados até ' + v.fim + ' — faltam ' + v.dias + ' dias.'));
+    });
+
+    if (!partes.length && d.saldo_total > 0) {
+      partes.push(linha('fa-suitcase-rolling', 'border-gray-200 bg-gray-50 text-gray-700',
+        d.saldo_total + ' dias de saldo', 'Você tem férias disponíveis para programar.'));
+    }
+    if (!partes.length) return false;
+
+    document.getElementById('tgFeriasTitulo').textContent = titulo;
+    document.getElementById('tgFeriasSubtitulo').textContent = sub;
+    document.getElementById('tgFeriasCorpo').innerHTML = partes.join('');
+
+    // Cabeçalho vermelho quando há dia vencido — o alerta importa mais que o enfeite.
+    if (d.dias_vencidos > 0 && !d.em_gozo) {
+      document.getElementById('tgFeriasCabecalho').className =
+        'px-6 py-5 text-white bg-gradient-to-r from-red-600 to-rose-600';
+    }
+    return true;
+  }
+
+  function abrir() {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  function fechar() {
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+    marcarVisto();
+  }
+  document.getElementById('tgFeriasFechar').addEventListener('click', fechar);
+  modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+
+  function carregar() {
+    if (jaViuHoje() || popupBloqueanteAberto()) return;
+    fetch('/api/tangerino/ferias/popup/', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.mostrar) return;
+        if (montar(d)) abrir();
+      })
+      .catch(function () { /* silencioso */ });
+  }
+
+  // Espera um pouco para não competir com os popups bloqueantes da home.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(carregar, 1800); });
+  } else {
+    setTimeout(carregar, 1800);
+  }
+})();
+</script>

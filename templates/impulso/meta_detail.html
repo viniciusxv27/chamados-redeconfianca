@@ -6,6 +6,61 @@
     <a href="{% url 'impulso:metas_kanban' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar ao Kanban</a>
 </div>
 
+{% if meta.pendente_aprovacao %}
+<div class="imp-card p-5 mb-4 border-amber-200 bg-amber-50/50">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+            <h3 class="text-sm font-bold text-amber-900">
+                <i class="fas fa-hourglass-half mr-1.5"></i>Solicitação aguardando aprovação
+            </h3>
+            <p class="text-sm text-amber-800/90 mt-1">
+                {% if meta.solicitada_por %}Pedida por {{ meta.solicitada_por.get_full_name|default:meta.solicitada_por.email }}{% endif %}
+                para {{ meta.gestor.get_full_name|default:meta.gestor.email }}.
+                Enquanto não for aprovada, ela não entra no Kanban nem conta pontos.
+            </p>
+        </div>
+        {% if pode_decidir %}
+        <div class="flex items-center gap-2">
+            <form method="post" action="{% url 'impulso:meta_decidir' meta.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="decisao" value="aprovar">
+                <button class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">
+                    <i class="fas fa-check mr-1"></i>Aprovar
+                </button>
+            </form>
+            <button type="button" id="impBotaoRecusar" class="px-4 py-2 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-100">
+                <i class="fas fa-xmark mr-1"></i>Recusar
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if pode_decidir %}
+    <form method="post" action="{% url 'impulso:meta_decidir' meta.id %}" id="impFormRecusaDetalhe" class="hidden mt-4 pt-4 border-t border-amber-200">
+        {% csrf_token %}
+        <input type="hidden" name="decisao" value="recusar">
+        <label class="block text-sm text-amber-900 mb-1">Motivo da recusa (opcional)</label>
+        <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" name="motivo_recusa" class="flex-1 border border-amber-200 rounded-lg px-3 py-2 text-sm"
+                   placeholder="Ex.: já existe uma meta parecida neste mês">
+            <button class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 whitespace-nowrap">
+                Confirmar recusa
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% elif meta.recusada %}
+<div class="imp-card p-5 mb-4 border-red-200 bg-red-50/50">
+    <h3 class="text-sm font-bold text-red-900"><i class="fas fa-xmark mr-1.5"></i>Solicitação recusada</h3>
+    <p class="text-sm text-red-800/90 mt-1">
+        {% if meta.decidida_por %}Por {{ meta.decidida_por.get_full_name|default:meta.decidida_por.email }}{% endif %}
+        {% if meta.decidida_em %}em {{ meta.decidida_em|date:"d/m/Y H:i" }}{% endif %}.
+        {% if meta.motivo_recusa %}<br>Motivo: {{ meta.motivo_recusa }}{% endif %}
+    </p>
+</div>
+{% endif %}
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <!-- Coluna principal -->
     <div class="lg:col-span-2 space-y-4">
@@ -19,7 +74,15 @@
                     {% else %}bg-emerald-100 text-emerald-700{% endif %}">{{ meta.get_status_display }}</span>
             </div>
             <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 mt-2">
-                <span><i class="fas fa-repeat mr-1"></i>{{ meta.get_periodicidade_display }}</span>
+                <span>
+                    <i class="fas fa-repeat mr-1"></i>{{ meta.get_recorrencia_display }}
+                    {% if meta.numero_da_ocorrencia > 1 %}
+                    <span class="ml-1 px-1.5 py-0.5 rounded bg-orange-50 text-orange-700">{{ meta.numero_da_ocorrencia }}ª ocorrência</span>
+                    {% endif %}
+                    {% if meta.recorrencia != 'UNICA' and not meta.recorrencia_ativa %}
+                    <span class="ml-1 text-gray-400" title="Meta anterior à recorrência automática">(não gera nova ocorrência)</span>
+                    {% endif %}
+                </span>
                 <span class="{% if meta.is_overdue %}text-red-600 font-semibold{% endif %}"><i class="fas fa-clock mr-1"></i>Prazo: {{ meta.prazo|date:"d/m/Y" }}</span>
                 <span><i class="fas fa-user-tie mr-1"></i>Gestor: {{ meta.gestor.get_full_name|default:meta.gestor.email }}</span>
                 <span><i class="fas fa-user mr-1"></i>Colaborador: {{ meta.colaborador.get_full_name|default:meta.colaborador.email }}</span>
@@ -35,7 +98,7 @@
         </div>
 
         <!-- Entrega (colaborador) -->
-        {% if is_colaborador_da_meta and s != 'CONCLUIDA' %}
+        {% if is_colaborador_da_meta and s != 'CONCLUIDA' and meta.vale_pontos %}
         <div class="imp-card p-5">
             <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-paper-plane text-orange-500 mr-2"></i>Registrar entrega</h3>
             <form method="post" action="{% url 'impulso:meta_entregar' meta.id %}" class="flex flex-col sm:flex-row gap-2">
@@ -65,7 +128,7 @@
             <p class="text-xs text-gray-400 mt-2">Avaliado por {{ meta.avaliado_por.get_full_name|default:meta.avaliado_por.email }} em {{ meta.avaliado_em|date:"d/m/Y H:i" }}</p>
             {% endif %}
 
-            {% if is_gestor_da_meta and not meta.is_avaliada %}
+            {% if is_gestor_da_meta and not meta.is_avaliada and meta.vale_pontos %}
             <form method="post" action="{% url 'impulso:meta_avaliar' meta.id %}" class="space-y-3 {% if meta.is_avaliada %}mt-4{% endif %}">
                 {% csrf_token %}
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -148,5 +211,20 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    // Recusar abre o campo de motivo em vez de recusar direto: o gestor tem a
+    // chance de explicar, e a explicação vai na notificação do colaborador.
+    var botao = document.getElementById('impBotaoRecusar');
+    var form = document.getElementById('impFormRecusaDetalhe');
+    if (!botao || !form) return;
+    botao.addEventListener('click', function () {
+        form.classList.toggle('hidden');
+        var campo = form.querySelector('input[name="motivo_recusa"]');
+        if (campo && !form.classList.contains('hidden')) campo.focus();
+    });
+})();
+</script>
 {% endwith %}
 {% endblock %}

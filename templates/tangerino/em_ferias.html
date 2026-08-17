@@ -1,0 +1,57 @@
+{% load static %}<!doctype html>
+{# Tela de bloqueio: NÃO estende base.html de propósito — quem está de férias   #}
+{# não deve ver o menu do portal, senão o bloqueio não bloqueia nada.           #}
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Você está de férias — Rede Confiança</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="min-h-screen bg-gradient-to-br from-cyan-50 via-white to-orange-50 flex items-center justify-center p-4">
+    <div class="max-w-lg w-full bg-white rounded-3xl shadow-xl overflow-hidden">
+        <div class="bg-gradient-to-r from-cyan-600 to-teal-600 px-8 py-10 text-white text-center">
+            <i class="fas fa-umbrella-beach text-5xl mb-4 opacity-90"></i>
+            <h1 class="text-2xl font-bold">Bom descanso, {{ user.first_name }}!</h1>
+            <p class="text-white/85 mt-1">Você está de férias — o portal fica te esperando.</p>
+        </div>
+
+        <div class="px-8 py-7">
+            <div class="grid grid-cols-3 gap-3 text-center mb-6">
+                <div class="p-3 rounded-xl bg-gray-50">
+                    <p class="text-[11px] text-gray-500 uppercase tracking-wide">Início</p>
+                    <p class="text-lg font-bold text-gray-900">{{ ferias.inicio|date:"d/m" }}</p>
+                </div>
+                <div class="p-3 rounded-xl bg-gray-50">
+                    <p class="text-[11px] text-gray-500 uppercase tracking-wide">Fim</p>
+                    <p class="text-lg font-bold text-gray-900">{{ ferias.fim|date:"d/m" }}</p>
+                </div>
+                <div class="p-3 rounded-xl bg-cyan-50">
+                    <p class="text-[11px] text-cyan-700 uppercase tracking-wide">Faltam</p>
+                    <p class="text-lg font-bold text-cyan-700">{{ dias_restantes }} dia{{ dias_restantes|pluralize }}</p>
+                </div>
+            </div>
+
+            <p class="text-sm text-gray-600 text-center">
+                Seu acesso ao portal volta automaticamente em
+                <strong class="text-gray-900">{{ volta_em|date:"d/m/Y" }}</strong>.
+            </p>
+            <p class="text-xs text-gray-400 text-center mt-2">
+                Se você acha que isso está errado, fale com o RH — as datas vêm do sistema de ponto.
+            </p>
+
+            <div class="mt-7 flex flex-col sm:flex-row gap-3 justify-center">
+                <a href="{% url 'logout' %}"
+                   class="px-5 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold text-center hover:bg-gray-800">
+                    <i class="fas fa-sign-out-alt mr-1.5"></i>Sair da conta
+                </a>
+                <a href="{% url 'tangerino:minhas_ferias' %}"
+                   class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold text-center hover:bg-gray-50">
+                    Ver detalhes das minhas férias
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -10,8 +10,10 @@ Visibilidade do módulo é restrita ao CommunicationGroup "ESCRITÓRIO (ADM)".
 O papel de gestor é definido pelo CommunicationGroup "GESTORES (IMPULSO)".
 Ambos gerenciados em /users/manage/groups/.
 """
+import calendar
 import os
 import uuid
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import models
@@ -63,11 +65,23 @@ class Meta(models.Model):
     Ao concluir, o gestor faz o "check" com notas 0-5 de qualidade e prazo.
     """
 
-    class Periodicidade(models.TextChoices):
+    class Recorrencia(models.TextChoices):
+        """Com que frequência a tarefa volta a ser feita.
+
+        Diferente da antiga "periodicidade", que era só um rótulo: aqui a
+        escolha tem efeito real — ao concluir uma meta recorrente, a próxima
+        ocorrência é criada automaticamente com o prazo avançado.
+        """
+        UNICA = 'UNICA', 'Única vez'
         DIARIA = 'DIARIA', 'Diária'
         SEMANAL = 'SEMANAL', 'Semanal'
         QUINZENAL = 'QUINZENAL', 'Quinzenal'
         MENSAL = 'MENSAL', 'Mensal'
+
+    class Aprovacao(models.TextChoices):
+        APROVADA = 'APROVADA', 'Aprovada'
+        PENDENTE = 'PENDENTE', 'Aguardando aprovação do gestor'
+        RECUSADA = 'RECUSADA', 'Recusada'
 
     class Status(models.TextChoices):
         A_FAZER = 'A_FAZER', 'A Fazer'
@@ -89,10 +103,33 @@ class Meta(models.Model):
     descricao = models.TextField(
         verbose_name='Descrição',
         help_text='Descreva a meta de forma clara, por textos.')
-    periodicidade = models.CharField(
-        max_length=12, choices=Periodicidade.choices,
-        default=Periodicidade.MENSAL, verbose_name='Periodicidade')
+    recorrencia = models.CharField(
+        max_length=12, choices=Recorrencia.choices,
+        default=Recorrencia.UNICA, verbose_name='Recorrência')
+    # As metas criadas antes da recorrência existir nasceram com uma
+    # "periodicidade" que era apenas informativa. Ligar a geração automática
+    # nelas criaria tarefas que ninguém pediu — por isso a migration desliga
+    # este campo no acervo antigo e deixa ligado só do lado novo.
+    recorrencia_ativa = models.BooleanField(
+        default=True, verbose_name='Gerar próxima ocorrência ao concluir')
+    recorrencia_de = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ocorrencias', verbose_name='Ocorrência anterior')
     prazo = models.DateField(verbose_name='Prazo')
+
+    # Solicitação feita pelo colaborador, que o gestor precisa aprovar.
+    # Metas criadas pelo próprio gestor já nascem APROVADA.
+    aprovacao = models.CharField(
+        max_length=10, choices=Aprovacao.choices,
+        default=Aprovacao.APROVADA, verbose_name='Aprovação')
+    solicitada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_metas_solicitadas', verbose_name='Solicitada por')
+    decidida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_metas_decididas', verbose_name='Decidida por')
+    decidida_em = models.DateTimeField(null=True, blank=True, verbose_name='Decidida em')
+    motivo_recusa = models.TextField(blank=True, verbose_name='Motivo da recusa')
 
     status = models.CharField(
         max_length=14, choices=Status.choices,
@@ -146,6 +183,86 @@ class Meta(models.Model):
         if self.status == self.Status.CONCLUIDA or not self.prazo:
             return False
         return self.prazo < timezone.localdate()
+
+    # ── Aprovação ──────────────────────────────────────────────────────────
+    @property
+    def pendente_aprovacao(self):
+        return self.aprovacao == self.Aprovacao.PENDENTE
+
+    @property
+    def recusada(self):
+        return self.aprovacao == self.Aprovacao.RECUSADA
+
+    @property
+    def vale_pontos(self):
+        """Só meta aprovada entra no Kanban e na pontuação.
+
+        Sem isto, uma solicitação recusada (ou ainda parada na fila do gestor)
+        entraria no denominador do CONFIAR e derrubaria a nota de quem apenas
+        pediu uma tarefa.
+        """
+        return self.aprovacao == self.Aprovacao.APROVADA
+
+    def pode_decidir(self, user):
+        """Quem aprova/recusa: o gestor escolhido na solicitação, ou superuser."""
+        if not (user and user.is_authenticated) or not self.pendente_aprovacao:
+            return False
+        return user.is_superuser or self.gestor_id == user.id
+
+    # ── Recorrência ────────────────────────────────────────────────────────
+    @property
+    def repete(self):
+        return (self.recorrencia != self.Recorrencia.UNICA
+                and self.recorrencia_ativa and self.vale_pontos)
+
+    def proximo_prazo(self):
+        """Prazo da próxima ocorrência, ou None se não repete."""
+        if not self.repete or not self.prazo:
+            return None
+        if self.recorrencia == self.Recorrencia.DIARIA:
+            return self.prazo + timedelta(days=1)
+        if self.recorrencia == self.Recorrencia.SEMANAL:
+            return self.prazo + timedelta(days=7)
+        if self.recorrencia == self.Recorrencia.QUINZENAL:
+            return self.prazo + timedelta(days=15)
+        # Mensal: mesmo dia do mês seguinte, encolhendo quando o mês é curto
+        # (31/01 vira 28/02, não 03/03).
+        ano = self.prazo.year + (1 if self.prazo.month == 12 else 0)
+        mes = 1 if self.prazo.month == 12 else self.prazo.month + 1
+        dia = min(self.prazo.day, calendar.monthrange(ano, mes)[1])
+        return date(ano, mes, dia)
+
+    def criar_proxima_ocorrencia(self):
+        """Gera a próxima ocorrência de uma meta recorrente concluída.
+
+        Idempotente: se esta meta já gerou uma continuação, não gera outra —
+        importante porque o gestor pode reabrir e reavaliar a mesma meta.
+        """
+        proximo = self.proximo_prazo()
+        if not proximo or self.ocorrencias.exists():
+            return None
+        return Meta.objects.create(
+            gestor_id=self.gestor_id,
+            colaborador_id=self.colaborador_id,
+            titulo=self.titulo,
+            descricao=self.descricao,
+            recorrencia=self.recorrencia,
+            recorrencia_ativa=True,
+            recorrencia_de=self,
+            prazo=proximo,
+            aprovacao=self.Aprovacao.APROVADA,
+            created_by_id=self.created_by_id,
+        )
+
+    @property
+    def numero_da_ocorrencia(self):
+        """1 para a original, 2 para a primeira repetição, e assim por diante."""
+        numero, atual, guarda = 1, self, 0
+        while atual.recorrencia_de_id and guarda < 200:
+            numero += 1
+            atual = atual.recorrencia_de
+            guarda += 1
+        return numero
 
 
 class MetaAnexo(models.Model):

@@ -68,7 +68,11 @@ def periodo_do_mes(referencia=None):
 # ---------------------------------------------------------------------------
 def _nota_metas(user, inicio, fim):
     """20 pontos: 10 pela qualidade média + 10 pelo percentual de conclusão."""
-    metas = Meta.objects.filter(colaborador=user, prazo__gte=inicio, prazo__lte=fim)
+    # Só meta aprovada conta. Uma solicitação parada na fila do gestor (ou
+    # recusada) não pode entrar no denominador e derrubar a nota de quem
+    # simplesmente pediu uma tarefa.
+    metas = Meta.objects.filter(colaborador=user, prazo__gte=inicio, prazo__lte=fim,
+                                aprovacao=Meta.Aprovacao.APROVADA)
     total = metas.count()
     if not total:
         return ZERO, ZERO, ZERO, ZERO, {'sem_metas': True}
